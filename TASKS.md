@@ -53,10 +53,10 @@
 ## Phase 2: Core API (Week 2)
 
 ### 2.1 Authentication & Authorization
-- [ ] JWT middleware (validate tokens from Zenith Auth)
-- [ ] User model: id, email, name, role, project_id
-- [ ] API key authentication (for CI/CD)
-- [ ] RBAC: Owner, Admin, Developer, Viewer
+- [x] JWT middleware (validate tokens from Zenith Auth)
+- [x] User model: id, email, name, role, project_id
+- [x] API key authentication (for CI/CD)
+- [x] RBAC: Owner, Admin, Developer, Viewer
 - **Files:** services/api/internal/middleware/auth.go, services/api/internal/models/user.go
 
 ### 2.2 Project Management API
