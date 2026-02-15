@@ -895,3 +895,530 @@ func TestAuditLogPopulatedByActions(t *testing.T) {
 		t.Errorf("Expected %d audit entries after create+delete, got %d", expectedCount, len(entries))
 	}
 }
+
+// ---------- Additional Admin Edge Case Tests ----------
+
+func TestListAuditLogEmptyStore(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	k8sClient := k8s.NewMemoryClient()
+	capiClient := capi.NewClient(k8sClient)
+	// Create a store but clear the audit log manually
+	store := capi.NewMemoryStore()
+	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+	app.Use(injectAdmin)
+	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
+
+	// Request with large offset to get empty results
+	req := httptest.NewRequest("GET", "/api/v1/admin/audit?offset=1000", nil)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("Expected 200, got %d", resp.StatusCode)
+	}
+
+	var entries []models.AuditEntry
+	json.NewDecoder(resp.Body).Decode(&entries)
+
+	if len(entries) != 0 {
+		t.Errorf("Expected 0 entries with large offset, got %d", len(entries))
+	}
+}
+
+func TestListAuditLogWithOffset(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
+
+	// offset=2 should skip first 2 seeded entries
+	req := httptest.NewRequest("GET", "/api/v1/admin/audit?offset=2&limit=1", nil)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("Expected 200, got %d", resp.StatusCode)
+	}
+
+	var entries []models.AuditEntry
+	json.NewDecoder(resp.Body).Decode(&entries)
+
+	if len(entries) != 1 {
+		t.Errorf("Expected 1 entry with offset=2 limit=1, got %d", len(entries))
+	}
+}
+
+func TestUpdateSettingsPartialUpdate(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Patch("/api/v1/admin/settings", handler.UpdateSettings)
+	app.Get("/api/v1/admin/settings", handler.GetSettings)
+
+	// Only update baseDomain, everything else should remain
+	body := `{"baseDomain":"newdomain.dev"}`
+	req := httptest.NewRequest("PATCH", "/api/v1/admin/settings", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("Expected 200, got %d", resp.StatusCode)
+	}
+
+	var updated models.PlatformSettings
+	json.NewDecoder(resp.Body).Decode(&updated)
+
+	if updated.BaseDomain != "newdomain.dev" {
+		t.Errorf("Expected baseDomain 'newdomain.dev', got '%s'", updated.BaseDomain)
+	}
+	// PlatformName should remain "Zenith" (unchanged)
+	if updated.PlatformName != "Zenith" {
+		t.Errorf("Expected platformName 'Zenith' (unchanged), got '%s'", updated.PlatformName)
+	}
+	// Provider should remain "Hetzner Cloud" (unchanged)
+	if updated.Provider != "Hetzner Cloud" {
+		t.Errorf("Expected provider 'Hetzner Cloud' (unchanged), got '%s'", updated.Provider)
+	}
+}
+
+func TestUpdateSettingsInvalidBody(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Patch("/api/v1/admin/settings", handler.UpdateSettings)
+
+	req := httptest.NewRequest("PATCH", "/api/v1/admin/settings", bytes.NewBufferString("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateClusterMissingK8sVersion(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/clusters", handler.CreateCluster)
+
+	body := `{"name":"test","region":"fsn1"}`
+	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400 for missing k8sVersion, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateClusterInvalidBody(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/clusters", handler.CreateCluster)
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateClusterDefaultNodes(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/clusters", handler.CreateCluster)
+	app.Get("/api/v1/admin/clusters/:name", handler.GetCluster)
+
+	// Omit nodes - should default to 1
+	body := `{"name":"default-nodes","region":"fsn1","k8sVersion":"v1.30.2"}`
+	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 201 {
+		t.Fatalf("Expected 201, got %d", resp.StatusCode)
+	}
+
+	var cluster models.Cluster
+	json.NewDecoder(resp.Body).Decode(&cluster)
+
+	if cluster.Nodes != 1 {
+		t.Errorf("Expected default nodes 1, got %d", cluster.Nodes)
+	}
+}
+
+func TestCreateClusterDefaultType(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/clusters", handler.CreateCluster)
+
+	// Omit type - should default to "shared"
+	body := `{"name":"default-type","region":"fsn1","k8sVersion":"v1.30.2","nodes":2}`
+	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 201 {
+		t.Fatalf("Expected 201, got %d", resp.StatusCode)
+	}
+
+	var cluster models.Cluster
+	json.NewDecoder(resp.Body).Decode(&cluster)
+
+	if cluster.Type != "shared" {
+		t.Errorf("Expected default type 'shared', got '%s'", cluster.Type)
+	}
+}
+
+func TestUpgradeClusterInvalidBody(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/clusters/:name/upgrade", handler.UpgradeCluster)
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/clusters/some-cluster/upgrade", bytes.NewBufferString("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetTenantNotFound(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Get("/api/v1/admin/tenants/:id", handler.GetTenant)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/tenants/nonexistent", nil)
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 404 {
+		t.Errorf("Expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestSuspendTenantSuccess(t *testing.T) {
+	// We need to use the k8sClient directly to create a project
+	k8sClient := k8s.NewMemoryClient()
+	capiClient := capi.NewClient(k8sClient)
+	store := capi.NewMemoryStore()
+	h := handlers.NewAdminHandler(k8sClient, capiClient, store)
+
+	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	fiberApp.Use(injectAdmin)
+	fiberApp.Post("/api/v1/admin/tenants/:id/suspend", h.SuspendTenant)
+	fiberApp.Get("/api/v1/admin/tenants/:id", h.GetTenant)
+
+	// Create a project CRD
+	projSpec, _ := json.Marshal(map[string]interface{}{
+		"displayName": "Test Tenant",
+		"plan":        "pro",
+	})
+	k8sClient.CreateCRD(nil, &k8s.CRDObject{
+		APIVersion: "zenith.dev/v1alpha1",
+		Kind:       "Project",
+		Metadata:   k8s.ObjectMeta{Name: "test-tenant"},
+		Spec:       projSpec,
+	})
+
+	// Suspend
+	suspendReq := httptest.NewRequest("POST", "/api/v1/admin/tenants/test-tenant/suspend", nil)
+	suspendResp, _ := fiberApp.Test(suspendReq)
+
+	if suspendResp.StatusCode != 200 {
+		b, _ := io.ReadAll(suspendResp.Body)
+		t.Fatalf("Expected 200, got %d: %s", suspendResp.StatusCode, string(b))
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(suspendResp.Body).Decode(&result)
+
+	if result["message"] != "tenant suspended" {
+		t.Errorf("Expected message 'tenant suspended', got '%v'", result["message"])
+	}
+
+	// Verify tenant is now suspended
+	getReq := httptest.NewRequest("GET", "/api/v1/admin/tenants/test-tenant", nil)
+	getResp, _ := fiberApp.Test(getReq)
+
+	var tenant models.Tenant
+	json.NewDecoder(getResp.Body).Decode(&tenant)
+
+	if tenant.Status != "suspended" {
+		t.Errorf("Expected tenant status 'suspended', got '%s'", tenant.Status)
+	}
+}
+
+func TestListTenantsWithProjects(t *testing.T) {
+	k8sClient := k8s.NewMemoryClient()
+	capiClient := capi.NewClient(k8sClient)
+	store := capi.NewMemoryStore()
+	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+
+	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	fiberApp.Use(injectAdmin)
+	fiberApp.Get("/api/v1/admin/tenants", handler.ListTenants)
+
+	// Create project CRDs
+	for _, name := range []string{"tenant-a", "tenant-b"} {
+		projSpec, _ := json.Marshal(map[string]interface{}{
+			"displayName": name,
+			"plan":        "free",
+		})
+		k8sClient.CreateCRD(nil, &k8s.CRDObject{
+			APIVersion: "zenith.dev/v1alpha1",
+			Kind:       "Project",
+			Metadata:   k8s.ObjectMeta{Name: name},
+			Spec:       projSpec,
+		})
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/tenants", nil)
+	resp, _ := fiberApp.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("Expected 200, got %d", resp.StatusCode)
+	}
+
+	var tenants []models.Tenant
+	json.NewDecoder(resp.Body).Decode(&tenants)
+
+	if len(tenants) != 2 {
+		t.Errorf("Expected 2 tenants, got %d", len(tenants))
+	}
+}
+
+func TestApplyUpdateInvalidBody(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/updates/apply", handler.ApplyUpdate)
+
+	req := httptest.NewRequest("POST", "/api/v1/admin/updates/apply", bytes.NewBufferString("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestDashboardStatsWithClusters(t *testing.T) {
+	k8sClient := k8s.NewMemoryClient()
+	capiClient := capi.NewClient(k8sClient)
+	store := capi.NewMemoryStore()
+	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+
+	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	fiberApp.Use(injectAdmin)
+	fiberApp.Get("/api/v1/admin/dashboard/stats", handler.GetDashboardStats)
+
+	// Create a cluster and project to get real stats
+	capiClient.CreateCluster(nil, models.CreateClusterInput{
+		Name:       "test",
+		Region:     "fsn1",
+		K8sVersion: "v1.30.2",
+		Nodes:      3,
+		Type:       "shared",
+	})
+
+	projSpec, _ := json.Marshal(map[string]interface{}{
+		"displayName": "Test",
+	})
+	k8sClient.CreateCRD(nil, &k8s.CRDObject{
+		APIVersion: "zenith.dev/v1alpha1",
+		Kind:       "Project",
+		Metadata:   k8s.ObjectMeta{Name: "proj1"},
+		Spec:       projSpec,
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/dashboard/stats", nil)
+	resp, _ := fiberApp.Test(req)
+	defer resp.Body.Close()
+
+	var stats models.DashboardStats
+	json.NewDecoder(resp.Body).Decode(&stats)
+
+	if stats.ClusterCount != 1 {
+		t.Errorf("Expected 1 cluster, got %d", stats.ClusterCount)
+	}
+	if stats.TenantCount != 1 {
+		t.Errorf("Expected 1 tenant, got %d", stats.TenantCount)
+	}
+	if stats.ActiveToday != 1 {
+		t.Errorf("Expected 1 active today, got %d", stats.ActiveToday)
+	}
+	if !stats.AllHealthy {
+		t.Error("Expected all healthy to be true")
+	}
+}
+
+func TestDashboardStatsWithSuspendedTenant(t *testing.T) {
+	k8sClient := k8s.NewMemoryClient()
+	capiClient := capi.NewClient(k8sClient)
+	store := capi.NewMemoryStore()
+	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+
+	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	fiberApp.Use(injectAdmin)
+	fiberApp.Get("/api/v1/admin/dashboard/stats", handler.GetDashboardStats)
+
+	// Create a suspended project
+	projSpec, _ := json.Marshal(map[string]interface{}{
+		"displayName": "Suspended",
+	})
+	k8sClient.CreateCRD(nil, &k8s.CRDObject{
+		APIVersion: "zenith.dev/v1alpha1",
+		Kind:       "Project",
+		Metadata: k8s.ObjectMeta{
+			Name:        "suspended-proj",
+			Annotations: map[string]string{"zenith.dev/suspended": "true"},
+		},
+		Spec: projSpec,
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/dashboard/stats", nil)
+	resp, _ := fiberApp.Test(req)
+
+	var stats models.DashboardStats
+	json.NewDecoder(resp.Body).Decode(&stats)
+
+	if stats.TenantCount != 1 {
+		t.Errorf("Expected 1 tenant, got %d", stats.TenantCount)
+	}
+	if stats.ActiveToday != 0 {
+		t.Errorf("Expected 0 active today (suspended), got %d", stats.ActiveToday)
+	}
+}
+
+func TestGetPlatformStateUpdateAvailable(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Get("/api/v1/admin/state", handler.GetPlatformState)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/state", nil)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	var state models.PlatformState
+	json.NewDecoder(resp.Body).Decode(&state)
+
+	// Store has current=v1.2.1 and version=v1.3.0, so update is available
+	if state.UpdateAvailable != "v1.3.0" {
+		t.Errorf("Expected update available 'v1.3.0', got '%s'", state.UpdateAvailable)
+	}
+	if state.PlatformVersion != "v1.2.1" {
+		t.Errorf("Expected platform version 'v1.2.1', got '%s'", state.PlatformVersion)
+	}
+	if !state.WildcardTLS {
+		t.Error("Expected wildcard TLS to be true")
+	}
+}
+
+func TestExportStateContentDisposition(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Get("/api/v1/admin/state/export", handler.ExportState)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/state/export", nil)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	cd := resp.Header.Get("Content-Disposition")
+	if cd != "attachment; filename=zenith-state.json" {
+		t.Errorf("Expected specific Content-Disposition, got '%s'", cd)
+	}
+
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("Expected Content-Type 'application/json', got '%s'", ct)
+	}
+}
+
+func TestActorFromContextFallback(t *testing.T) {
+	app, handler := setupAdminApp()
+	// Use middleware with no email/name to test fallback to "admin"
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("role", models.RoleAdmin)
+		return c.Next()
+	})
+	app.Post("/api/v1/admin/modules/:name/install", handler.InstallModule)
+	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
+
+	installReq := httptest.NewRequest("POST", "/api/v1/admin/modules/TestModule/install", nil)
+	app.Test(installReq)
+
+	auditReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
+	auditResp, _ := app.Test(auditReq)
+	defer auditResp.Body.Close()
+
+	var entries []models.AuditEntry
+	json.NewDecoder(auditResp.Body).Decode(&entries)
+
+	// The newest entry should have actor "admin" (fallback)
+	if len(entries) > 0 && entries[0].Actor != "admin" {
+		t.Errorf("Expected actor 'admin' (fallback), got '%s'", entries[0].Actor)
+	}
+}
+
+func TestUninstallModuleAuditEntry(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/modules/:name/uninstall", handler.UninstallModule)
+	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
+
+	// Get initial count
+	initReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
+	initResp, _ := app.Test(initReq)
+	var initEntries []models.AuditEntry
+	json.NewDecoder(initResp.Body).Decode(&initEntries)
+	initialCount := len(initEntries)
+
+	// Uninstall a module
+	uninstallReq := httptest.NewRequest("POST", "/api/v1/admin/modules/SomeModule/uninstall", nil)
+	uninstallResp, _ := app.Test(uninstallReq)
+
+	if uninstallResp.StatusCode != 200 {
+		t.Fatalf("Expected 200, got %d", uninstallResp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(uninstallResp.Body).Decode(&result)
+
+	if result["message"] != "module uninstallation initiated" {
+		t.Errorf("Expected uninstall message, got '%v'", result["message"])
+	}
+
+	// Check audit log grew by 1
+	auditReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
+	auditResp, _ := app.Test(auditReq)
+	var entries []models.AuditEntry
+	json.NewDecoder(auditResp.Body).Decode(&entries)
+
+	if len(entries) != initialCount+1 {
+		t.Errorf("Expected %d audit entries, got %d", initialCount+1, len(entries))
+	}
+}
+
+func TestApplyUpdateAuditEntry(t *testing.T) {
+	app, handler := setupAdminApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/updates/apply", handler.ApplyUpdate)
+	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
+
+	body := `{"version":"v2.0.0"}`
+	applyReq := httptest.NewRequest("POST", "/api/v1/admin/updates/apply", bytes.NewBufferString(body))
+	applyReq.Header.Set("Content-Type", "application/json")
+	applyResp, _ := app.Test(applyReq)
+
+	if applyResp.StatusCode != 200 {
+		t.Fatalf("Expected 200, got %d", applyResp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(applyResp.Body).Decode(&result)
+
+	if result["version"] != "v2.0.0" {
+		t.Errorf("Expected version 'v2.0.0' in response, got '%v'", result["version"])
+	}
+}
