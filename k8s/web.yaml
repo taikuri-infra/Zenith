@@ -29,9 +29,6 @@ spec:
             - containerPort: 3000
               name: http
               protocol: TCP
-          env:
-            - name: NEXT_PUBLIC_API_URL
-              value: "https://api.freezenith.com"
           resources:
             requests:
               memory: "128Mi"
