@@ -725,6 +725,167 @@ func (in *RouteAuth) DeepCopyInto(out *RouteAuth) {
 	}
 }
 
+// GitSync deep copy
+func (in *GitSync) DeepCopyInto(out *GitSync) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	in.Spec.DeepCopyInto(&out.Spec)
+	in.Status.DeepCopyInto(&out.Status)
+}
+
+func (in *GitSync) DeepCopy() *GitSync {
+	if in == nil { return nil }
+	out := new(GitSync)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *GitSync) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil { return c }
+	return nil
+}
+
+func (in *GitSyncList) DeepCopyInto(out *GitSyncList) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	if in.Items != nil {
+		in, out := &in.Items, &out.Items
+		*out = make([]GitSync, len(*in))
+		for i := range *in { (*in)[i].DeepCopyInto(&(*out)[i]) }
+	}
+}
+
+func (in *GitSyncList) DeepCopy() *GitSyncList {
+	if in == nil { return nil }
+	out := new(GitSyncList)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *GitSyncList) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil { return c }
+	return nil
+}
+
+func (in *GitSyncSpec) DeepCopyInto(out *GitSyncSpec) {
+	*out = *in
+	if in.SecretRef != nil {
+		in, out := &in.SecretRef, &out.SecretRef
+		*out = new(SecretKeyRef)
+		**out = **in
+	}
+}
+
+func (in *GitSyncSpec) DeepCopy() *GitSyncSpec {
+	if in == nil { return nil }
+	out := new(GitSyncSpec)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *GitSyncStatus) DeepCopyInto(out *GitSyncStatus) {
+	*out = *in
+	if in.LastSyncTime != nil {
+		in, out := &in.LastSyncTime, &out.LastSyncTime
+		*out = (*in).DeepCopy()
+	}
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]metav1.Condition, len(*in))
+		for i := range *in { (*in)[i].DeepCopyInto(&(*out)[i]) }
+	}
+}
+
+func (in *GitSyncStatus) DeepCopy() *GitSyncStatus {
+	if in == nil { return nil }
+	out := new(GitSyncStatus)
+	in.DeepCopyInto(out)
+	return out
+}
+
+// CrossplaneResource deep copy
+func (in *CrossplaneResource) DeepCopyInto(out *CrossplaneResource) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	in.Spec.DeepCopyInto(&out.Spec)
+	in.Status.DeepCopyInto(&out.Status)
+}
+
+func (in *CrossplaneResource) DeepCopy() *CrossplaneResource {
+	if in == nil { return nil }
+	out := new(CrossplaneResource)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *CrossplaneResource) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil { return c }
+	return nil
+}
+
+func (in *CrossplaneResourceList) DeepCopyInto(out *CrossplaneResourceList) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	if in.Items != nil {
+		in, out := &in.Items, &out.Items
+		*out = make([]CrossplaneResource, len(*in))
+		for i := range *in { (*in)[i].DeepCopyInto(&(*out)[i]) }
+	}
+}
+
+func (in *CrossplaneResourceList) DeepCopy() *CrossplaneResourceList {
+	if in == nil { return nil }
+	out := new(CrossplaneResourceList)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *CrossplaneResourceList) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil { return c }
+	return nil
+}
+
+func (in *CrossplaneResourceSpec) DeepCopyInto(out *CrossplaneResourceSpec) {
+	*out = *in
+	if in.Config != nil {
+		in, out := &in.Config, &out.Config
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in { (*out)[key] = val }
+	}
+	if in.WriteConnectionSecretToRef != nil {
+		in, out := &in.WriteConnectionSecretToRef, &out.WriteConnectionSecretToRef
+		*out = new(SecretKeyRef)
+		**out = **in
+	}
+}
+
+func (in *CrossplaneResourceSpec) DeepCopy() *CrossplaneResourceSpec {
+	if in == nil { return nil }
+	out := new(CrossplaneResourceSpec)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *CrossplaneResourceStatus) DeepCopyInto(out *CrossplaneResourceStatus) {
+	*out = *in
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]metav1.Condition, len(*in))
+		for i := range *in { (*in)[i].DeepCopyInto(&(*out)[i]) }
+	}
+}
+
+func (in *CrossplaneResourceStatus) DeepCopy() *CrossplaneResourceStatus {
+	if in == nil { return nil }
+	out := new(CrossplaneResourceStatus)
+	in.DeepCopyInto(out)
+	return out
+}
+
 func (in *RouteCORS) DeepCopyInto(out *RouteCORS) {
 	*out = *in
 	if in.AllowedOrigins != nil {

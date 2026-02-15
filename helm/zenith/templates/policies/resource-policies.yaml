@@ -1,0 +1,252 @@
+{{- if .Values.rbac.create }}
+# OPA/Kyverno policy templates for enforcing Zenith standards.
+# These are provided as ConfigMaps so they can be consumed by
+# either OPA Gatekeeper or Kyverno depending on the cluster setup.
+
+# Policy: Require resource limits on all containers
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zenith.fullname" . }}-policy-require-resource-limits
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: policy
+    zenith.dev/policy-type: resource
+data:
+  # Kyverno ClusterPolicy template
+  kyverno-policy.yaml: |
+    apiVersion: kyverno.io/v1
+    kind: ClusterPolicy
+    metadata:
+      name: zenith-require-resource-limits
+      annotations:
+        policies.kyverno.io/title: Require Resource Limits
+        policies.kyverno.io/category: Best Practices
+        policies.kyverno.io/description: >-
+          All containers in Zenith-managed namespaces must specify
+          CPU and memory resource limits.
+    spec:
+      validationFailureAction: enforce
+      background: true
+      rules:
+        - name: require-limits
+          match:
+            resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "zenith-*"
+          validate:
+            message: "All containers must specify CPU and memory resource limits."
+            pattern:
+              spec:
+                containers:
+                  - resources:
+                      limits:
+                        memory: "?*"
+                        cpu: "?*"
+  # OPA Gatekeeper ConstraintTemplate
+  opa-template.yaml: |
+    apiVersion: templates.gatekeeper.sh/v1
+    kind: ConstraintTemplate
+    metadata:
+      name: zenithrequireresourcelimits
+    spec:
+      crd:
+        spec:
+          names:
+            kind: ZenithRequireResourceLimits
+      targets:
+        - target: admission.k8s.gatekeeper.sh
+          rego: |
+            package zenithrequireresourcelimits
+            violation[{"msg": msg}] {
+              container := input.review.object.spec.containers[_]
+              not container.resources.limits.cpu
+              msg := sprintf("Container %v must have CPU limits", [container.name])
+            }
+            violation[{"msg": msg}] {
+              container := input.review.object.spec.containers[_]
+              not container.resources.limits.memory
+              msg := sprintf("Container %v must have memory limits", [container.name])
+            }
+---
+# Policy: Require managed-by and project labels
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zenith.fullname" . }}-policy-require-labels
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: policy
+    zenith.dev/policy-type: labels
+data:
+  kyverno-policy.yaml: |
+    apiVersion: kyverno.io/v1
+    kind: ClusterPolicy
+    metadata:
+      name: zenith-require-labels
+      annotations:
+        policies.kyverno.io/title: Require Zenith Labels
+        policies.kyverno.io/category: Best Practices
+        policies.kyverno.io/description: >-
+          All resources in Zenith-managed namespaces must have the
+          app.kubernetes.io/managed-by and zenith.dev/project labels.
+    spec:
+      validationFailureAction: audit
+      background: true
+      rules:
+        - name: require-managed-by-label
+          match:
+            resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Service
+              namespaces:
+                - "zenith-*"
+          validate:
+            message: "Resources must have the 'app.kubernetes.io/managed-by' label."
+            pattern:
+              metadata:
+                labels:
+                  app.kubernetes.io/managed-by: "?*"
+        - name: require-project-label
+          match:
+            resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Service
+              namespaces:
+                - "zenith-*"
+          validate:
+            message: "Resources should have the 'zenith.dev/project' label."
+            pattern:
+              metadata:
+                labels:
+                  zenith.dev/project: "?*"
+  opa-template.yaml: |
+    apiVersion: templates.gatekeeper.sh/v1
+    kind: ConstraintTemplate
+    metadata:
+      name: zenithrequirelabels
+    spec:
+      crd:
+        spec:
+          names:
+            kind: ZenithRequireLabels
+          validation:
+            openAPIV3Schema:
+              type: object
+              properties:
+                labels:
+                  type: array
+                  items:
+                    type: string
+      targets:
+        - target: admission.k8s.gatekeeper.sh
+          rego: |
+            package zenithrequirelabels
+            violation[{"msg": msg}] {
+              required := input.parameters.labels[_]
+              not input.review.object.metadata.labels[required]
+              msg := sprintf("Missing required label: %v", [required])
+            }
+---
+# Policy: Disallow privileged containers
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zenith.fullname" . }}-policy-disallow-privileged
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: policy
+    zenith.dev/policy-type: security
+data:
+  kyverno-policy.yaml: |
+    apiVersion: kyverno.io/v1
+    kind: ClusterPolicy
+    metadata:
+      name: zenith-disallow-privileged
+      annotations:
+        policies.kyverno.io/title: Disallow Privileged Containers
+        policies.kyverno.io/category: Security
+        policies.kyverno.io/severity: high
+        policies.kyverno.io/description: >-
+          Privileged containers are not allowed in Zenith-managed namespaces.
+          Containers must run as non-root with no privilege escalation.
+    spec:
+      validationFailureAction: enforce
+      background: true
+      rules:
+        - name: disallow-privileged
+          match:
+            resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "zenith-*"
+          validate:
+            message: "Privileged containers are not allowed in Zenith namespaces."
+            pattern:
+              spec:
+                containers:
+                  - securityContext:
+                      privileged: "false"
+        - name: disallow-privilege-escalation
+          match:
+            resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "zenith-*"
+          validate:
+            message: "Privilege escalation is not allowed in Zenith namespaces."
+            pattern:
+              spec:
+                containers:
+                  - securityContext:
+                      allowPrivilegeEscalation: "false"
+        - name: require-non-root
+          match:
+            resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "zenith-*"
+          validate:
+            message: "Containers must run as non-root in Zenith namespaces."
+            pattern:
+              spec:
+                containers:
+                  - securityContext:
+                      runAsNonRoot: true
+  opa-template.yaml: |
+    apiVersion: templates.gatekeeper.sh/v1
+    kind: ConstraintTemplate
+    metadata:
+      name: zenithdisallowprivileged
+    spec:
+      crd:
+        spec:
+          names:
+            kind: ZenithDisallowPrivileged
+      targets:
+        - target: admission.k8s.gatekeeper.sh
+          rego: |
+            package zenithdisallowprivileged
+            violation[{"msg": msg}] {
+              container := input.review.object.spec.containers[_]
+              container.securityContext.privileged == true
+              msg := sprintf("Privileged container %v is not allowed", [container.name])
+            }
+            violation[{"msg": msg}] {
+              container := input.review.object.spec.containers[_]
+              container.securityContext.allowPrivilegeEscalation == true
+              msg := sprintf("Privilege escalation for container %v is not allowed", [container.name])
+            }
+{{- end }}

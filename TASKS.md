@@ -241,8 +241,42 @@
 
 ---
 
+## Phase 9: GitOps (Week 10)
+
+### 9.1 GitSync CRD
+- [x] Define GitSync CRD in Go structs (repoURL, branch, path, interval, autoSync, pruneResources)
+- [x] Register GitSync CRD with scheme
+- [x] Add deepcopy methods
+- **Files:** services/operator/api/v1alpha1/gitsync_types.go, services/operator/api/v1alpha1/zz_generated.deepcopy.go
+
+### 9.2 GitSync Controller
+- [x] Watch GitSync CRDs
+- [x] Create sync ConfigMap for tracking state
+- [x] Track last synced commit hash
+- [x] Handle periodic requeue for AutoSync
+- [x] Finalizer pattern for cleanup
+- [x] Manifest parsing utility (ParseManifests)
+- [x] Manifest apply utility (ApplyManifest)
+- **Files:** services/operator/internal/controllers/gitsync_controller.go
+
+### 9.3 CLI GitOps Commands
+- [x] `zen export` - Export Zenith resources to YAML/JSON files
+- [x] `zen apply` - Apply Zenith resource manifests from files/directories
+- [x] `zen diff` - Show diff between local manifests and cluster state
+- [x] Wire commands into root.go
+- **Files:** cli/cmd/export/export.go, cli/cmd/apply/apply.go, cli/cmd/diff/diff.go, cli/cmd/root/root.go
+
+### 9.4 Tests
+- [x] GitSync controller tests (create, defaults, autosync, finalizer, deletion, not found)
+- [x] ParseManifests tests (multi-doc, empty, invalid)
+- [x] Export command tests (YAML/JSON marshal, file parsing, directory collection)
+- [x] Apply command tests (data parsing, directory collection, result types)
+- [x] Diff command tests (compare specs: identical, modified, added, removed, multiple, empty)
+- **Files:** services/operator/internal/controllers/controllers_test.go, cli/cmd/export/export_test.go, cli/cmd/apply/apply_test.go, cli/cmd/diff/diff_test.go
+
+---
+
 ## Future Phases (See docs/PHASES.md for full detail)
-- Phase 9: GitOps (zen export/apply/diff, GitSync CRD)
 - Phase 10: Management Plane (CAPI, Mission Control backend)
 - Phase 11: Landing page (freezenith.com)
 - Phase 12: CNCF integrations (OpenTelemetry, Backstage, Crossplane)

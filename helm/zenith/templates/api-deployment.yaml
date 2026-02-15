@@ -43,6 +43,14 @@ spec:
                   key: jwt-secret
             - name: CORS_ORIGINS
               value: "{{ .Values.api.env.CORS_ORIGINS }}"
+            {{- if .Values.otel.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "{{ include "zenith.fullname" . }}-otel-collector.{{ include "zenith.namespace" . }}.svc.cluster.local:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "zenith-api"
+            - name: OTEL_INSECURE
+              value: "true"
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /health

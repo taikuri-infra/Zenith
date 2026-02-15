@@ -136,6 +136,25 @@ registry:
       region: fsn1
       bucket: zenith-registry
 
+# -- OpenTelemetry Collector
+otel:
+  enabled: true
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.95.0
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+# -- Service Mesh Integration
+serviceMesh:
+  enabled: false
+  provider: istio  # or linkerd
+
 # -- Namespace configuration
 namespace:
   name: zenith-system

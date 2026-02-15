@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/dotechhq/zenith/services/api/internal/capi"
 	"github.com/dotechhq/zenith/services/api/internal/config"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
@@ -74,11 +75,16 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	// K8s client (in-memory for dev, real client for production)
 	k8sClient := k8s.NewMemoryClient()
 
+	// CAPI client and admin store
+	capiClient := capi.NewClient(k8sClient)
+	adminStore := capi.NewMemoryStore()
+
 	// Handlers
 	projectHandler := handlers.NewProjectHandler(k8sClient)
 	appHandler := handlers.NewAppHandler(k8sClient)
 	dbHandler := handlers.NewDatabaseHandler(k8sClient)
 	storageHandler := handlers.NewStorageHandler(k8sClient)
+	adminHandler := handlers.NewAdminHandler(k8sClient, capiClient, adminStore)
 
 	api := app.Group("/api/v1")
 	api.Get("/version", handlers.VersionInfo(Version, BuildTime, GitCommit))
@@ -118,4 +124,49 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	storage.Get("/", storageHandler.List)
 	storage.Get("/:name", storageHandler.Get)
 	storage.Delete("/:name", storageHandler.Delete)
+
+	// Admin routes (Mission Control) - require admin role
+	admin := protected.Group("/admin", middleware.RequireRole(models.RoleAdmin))
+
+	// Dashboard
+	admin.Get("/dashboard/stats", adminHandler.GetDashboardStats)
+
+	// Cluster management (CAPI)
+	admin.Get("/clusters", adminHandler.ListClusters)
+	admin.Post("/clusters", adminHandler.CreateCluster)
+	admin.Get("/clusters/:name", adminHandler.GetCluster)
+	admin.Delete("/clusters/:name", adminHandler.DeleteCluster)
+	admin.Post("/clusters/:name/upgrade", adminHandler.UpgradeCluster)
+
+	// Tenant management
+	admin.Get("/tenants", adminHandler.ListTenants)
+	admin.Get("/tenants/:id", adminHandler.GetTenant)
+	admin.Post("/tenants/:id/suspend", adminHandler.SuspendTenant)
+
+	// Module management
+	admin.Get("/modules", adminHandler.ListModules)
+	admin.Post("/modules/update-all", adminHandler.UpdateAllModules)
+	admin.Post("/modules/:name/install", adminHandler.InstallModule)
+	admin.Post("/modules/:name/uninstall", adminHandler.UninstallModule)
+	admin.Post("/modules/:name/update", adminHandler.UpdateModule)
+
+	// Audit log
+	admin.Get("/audit", adminHandler.ListAuditLog)
+
+	// Platform updates
+	admin.Get("/updates/check", adminHandler.CheckUpdates)
+	admin.Post("/updates/apply", adminHandler.ApplyUpdate)
+	admin.Get("/updates/history", adminHandler.ListUpdateHistory)
+
+	// Infrastructure
+	admin.Get("/infrastructure", adminHandler.GetInfraOverview)
+
+	// Platform state
+	admin.Get("/state", adminHandler.GetPlatformState)
+	admin.Get("/state/export", adminHandler.ExportState)
+
+	// Settings
+	admin.Get("/settings", adminHandler.GetSettings)
+	admin.Put("/settings", adminHandler.UpdateSettings)
+	admin.Patch("/settings", adminHandler.UpdateSettings)
 }
