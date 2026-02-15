@@ -1,0 +1,64 @@
+{{- if .Values.serviceMesh.enabled }}
+{{- if eq .Values.serviceMesh.provider "istio" }}
+# Istio PeerAuthentication for mTLS in the Zenith namespace
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: {{ include "zenith.fullname" . }}-mtls
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: service-mesh
+spec:
+  mtls:
+    mode: STRICT
+---
+# Istio DestinationRule for mTLS between Zenith services
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "zenith.fullname" . }}-mtls
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: service-mesh
+spec:
+  host: "*.{{ include "zenith.namespace" . }}.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+{{- end }}
+{{- if eq .Values.serviceMesh.provider "linkerd" }}
+# Linkerd annotations are applied via namespace labels
+# The namespace must have the linkerd.io/inject annotation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zenith.fullname" . }}-linkerd-config
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: service-mesh
+data:
+  info: |
+    Linkerd service mesh is enabled for the Zenith namespace.
+    Ensure the namespace has the annotation: linkerd.io/inject=enabled
+    Linkerd will automatically inject sidecar proxies into all pods.
+---
+# Server authorization policy for Linkerd
+apiVersion: policy.linkerd.io/v1beta1
+kind: Server
+metadata:
+  name: {{ include "zenith.fullname" . }}-api
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: service-mesh
+spec:
+  podSelector:
+    matchLabels:
+      app: zenith-api
+  port: http
+  proxyProtocol: HTTP/2
+{{- end }}
+{{- end }}

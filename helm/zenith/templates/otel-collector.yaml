@@ -1,0 +1,170 @@
+{{- if .Values.otel.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zenith.fullname" . }}-otel-collector-config
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+          http:
+            endpoint: "0.0.0.0:4318"
+    processors:
+      batch:
+        timeout: 5s
+        send_batch_size: 512
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: {{ .Values.otel.collector.resources.limits.memory | default "256Mi" | trimSuffix "Mi" }}
+        spike_limit_mib: 64
+    exporters:
+      # Export traces to Grafana Tempo
+      otlp/tempo:
+        endpoint: "tempo.{{ include "zenith.namespace" . }}.svc.cluster.local:4317"
+        tls:
+          insecure: true
+      # Export metrics to Prometheus via remote write
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        namespace: zenith
+        const_labels:
+          environment: production
+      # Logging exporter for debugging
+      logging:
+        loglevel: warn
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:13133"
+      zpages:
+        endpoint: "0.0.0.0:55679"
+    service:
+      extensions: [health_check, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/tempo, logging]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheus, logging]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zenith.fullname" . }}-otel-collector
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  replicas: {{ .Values.otel.collector.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: zenith-otel-collector
+      {{- include "zenith.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: zenith-otel-collector
+        {{- include "zenith.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/otel-collector.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "zenith.serviceAccountName" . }}
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.otel.collector.image }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - "/otelcol-contrib"
+            - "--config=/conf/otel-collector-config.yaml"
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: prometheus
+              containerPort: 8889
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+            - name: zpages
+              containerPort: 55679
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.otel.collector.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "zenith.fullname" . }}-otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zenith.fullname" . }}-otel-collector
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+      name: otlp-grpc
+    - port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+      name: otlp-http
+    - port: 8889
+      targetPort: prometheus
+      protocol: TCP
+      name: prometheus
+  selector:
+    app: zenith-otel-collector
+    {{- include "zenith.selectorLabels" . | nindent 4 }}
+---
+{{- if .Values.monitoring.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zenith.fullname" . }}-otel-prometheus-scrape
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    prometheus.io/scrape-config: "true"
+data:
+  otel-collector.yaml: |
+    - job_name: otel-collector
+      static_configs:
+        - targets:
+            - {{ include "zenith.fullname" . }}-otel-collector.{{ include "zenith.namespace" . }}.svc.cluster.local:8889
+{{- end }}
+{{- end }}

@@ -8,7 +8,9 @@
     "dev:mc": "turbo dev --filter=@zenith/mission-control",
     "dev:web": "turbo dev --filter=@zenith/web",
     "build:mc": "turbo build --filter=@zenith/mission-control",
-    "build:web": "turbo build --filter=@zenith/web"
+    "build:web": "turbo build --filter=@zenith/web",
+    "dev:landing": "turbo dev --filter=@zenith/landing",
+    "build:landing": "turbo build --filter=@zenith/landing"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

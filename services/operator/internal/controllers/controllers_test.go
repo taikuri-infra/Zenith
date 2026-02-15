@@ -1339,6 +1339,375 @@ func TestEngineConfig(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// GitSync Controller Tests
+// ============================================================================
+
+func TestGitSyncReconciler_CreatesSyncConfigMap(t *testing.T) {
+	scheme := setupScheme()
+
+	gs := &zenithv1.GitSync{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-sync",
+			Namespace: "zenith-test",
+		},
+		Spec: zenithv1.GitSyncSpec{
+			RepoURL:  "https://github.com/example/repo.git",
+			Branch:   "main",
+			Path:     "/manifests",
+			Interval: "10m",
+			AutoSync: true,
+		},
+	}
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-test"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns, gs).
+		WithStatusSubresource(gs).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewGitSyncReconciler(cl, scheme, recorder)
+
+	// First reconcile adds finalizer
+	reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-sync", Namespace: "zenith-test"},
+	})
+
+	// Second reconcile creates resources
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-sync", Namespace: "zenith-test"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	// Should requeue for periodic sync since AutoSync is true
+	if result.RequeueAfter == 0 {
+		t.Error("Expected RequeueAfter to be set for AutoSync")
+	}
+
+	// Verify finalizer
+	updatedGS := &zenithv1.GitSync{}
+	cl.Get(context.Background(), types.NamespacedName{Name: "my-sync", Namespace: "zenith-test"}, updatedGS)
+	if len(updatedGS.Finalizers) == 0 {
+		t.Error("Expected finalizer to be added")
+	}
+
+	// Verify sync ConfigMap was created
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(context.Background(), types.NamespacedName{Name: "gitsync-my-sync", Namespace: "zenith-test"}, cm); err != nil {
+		t.Fatalf("Expected sync ConfigMap to be created: %v", err)
+	}
+	if cm.Data["repoURL"] != "https://github.com/example/repo.git" {
+		t.Errorf("Expected repoURL in ConfigMap, got '%s'", cm.Data["repoURL"])
+	}
+	if cm.Data["branch"] != "main" {
+		t.Errorf("Expected branch 'main', got '%s'", cm.Data["branch"])
+	}
+	if cm.Data["path"] != "/manifests" {
+		t.Errorf("Expected path '/manifests', got '%s'", cm.Data["path"])
+	}
+	if cm.Data["autoSync"] != "true" {
+		t.Errorf("Expected autoSync 'true', got '%s'", cm.Data["autoSync"])
+	}
+	if cm.Labels["zenith.dev/gitsync"] != "my-sync" {
+		t.Errorf("Expected gitsync label, got '%s'", cm.Labels["zenith.dev/gitsync"])
+	}
+
+	// Verify owner reference
+	if len(cm.OwnerReferences) == 0 {
+		t.Error("Expected owner reference on ConfigMap")
+	}
+
+	// Verify status
+	if updatedGS.Status.Phase != "Synced" {
+		t.Errorf("Expected phase 'Synced', got '%s'", updatedGS.Status.Phase)
+	}
+	if updatedGS.Status.LastSyncTime == nil {
+		t.Error("Expected LastSyncTime to be set")
+	}
+	if updatedGS.Status.LastCommitHash == "" {
+		t.Error("Expected LastCommitHash to be set")
+	}
+}
+
+func TestGitSyncReconciler_DefaultBranchAndInterval(t *testing.T) {
+	scheme := setupScheme()
+
+	gs := &zenithv1.GitSync{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "default-sync",
+			Namespace: "zenith-test",
+		},
+		Spec: zenithv1.GitSyncSpec{
+			RepoURL:  "https://github.com/example/repo.git",
+			AutoSync: true,
+		},
+	}
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-test"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns, gs).
+		WithStatusSubresource(gs).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewGitSyncReconciler(cl, scheme, recorder)
+
+	// Two reconciles
+	reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "default-sync", Namespace: "zenith-test"},
+	})
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "default-sync", Namespace: "zenith-test"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	// Verify ConfigMap uses defaults
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(context.Background(), types.NamespacedName{Name: "gitsync-default-sync", Namespace: "zenith-test"}, cm); err != nil {
+		t.Fatalf("Expected sync ConfigMap: %v", err)
+	}
+	if cm.Data["branch"] != "main" {
+		t.Errorf("Expected default branch 'main', got '%s'", cm.Data["branch"])
+	}
+	if cm.Data["path"] != "/" {
+		t.Errorf("Expected default path '/', got '%s'", cm.Data["path"])
+	}
+}
+
+func TestGitSyncReconciler_NoAutoSyncNoRequeue(t *testing.T) {
+	scheme := setupScheme()
+
+	gs := &zenithv1.GitSync{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "no-auto-sync",
+			Namespace: "zenith-test",
+		},
+		Spec: zenithv1.GitSyncSpec{
+			RepoURL:  "https://github.com/example/repo.git",
+			AutoSync: false,
+		},
+	}
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-test"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns, gs).
+		WithStatusSubresource(gs).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewGitSyncReconciler(cl, scheme, recorder)
+
+	// Two reconciles
+	reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "no-auto-sync", Namespace: "zenith-test"},
+	})
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "no-auto-sync", Namespace: "zenith-test"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	// Should NOT requeue when AutoSync is false
+	if result.RequeueAfter != 0 {
+		t.Errorf("Expected no requeue when AutoSync is false, got %v", result.RequeueAfter)
+	}
+}
+
+func TestGitSyncReconciler_FinalizerAddedOnFirstReconcile(t *testing.T) {
+	scheme := setupScheme()
+
+	gs := &zenithv1.GitSync{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "finalizer-gs",
+			Namespace: "zenith-test",
+		},
+		Spec: zenithv1.GitSyncSpec{
+			RepoURL: "https://github.com/example/repo.git",
+		},
+	}
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-test"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns, gs).
+		WithStatusSubresource(gs).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewGitSyncReconciler(cl, scheme, recorder)
+
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "finalizer-gs", Namespace: "zenith-test"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	updatedGS := &zenithv1.GitSync{}
+	cl.Get(context.Background(), types.NamespacedName{Name: "finalizer-gs", Namespace: "zenith-test"}, updatedGS)
+
+	foundFinalizer := false
+	for _, f := range updatedGS.Finalizers {
+		if f == gitSyncFinalizer {
+			foundFinalizer = true
+			break
+		}
+	}
+	if !foundFinalizer {
+		t.Error("Expected gitsync finalizer to be added on first reconcile")
+	}
+}
+
+func TestGitSyncReconciler_DeletionRemovesFinalizer(t *testing.T) {
+	scheme := setupScheme()
+
+	now := metav1.Now()
+	gs := &zenithv1.GitSync{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "deleting-gs",
+			Namespace:         "zenith-test",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{gitSyncFinalizer},
+		},
+		Spec: zenithv1.GitSyncSpec{
+			RepoURL: "https://github.com/example/repo.git",
+		},
+	}
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-test"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns, gs).
+		WithStatusSubresource(gs).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewGitSyncReconciler(cl, scheme, recorder)
+
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "deleting-gs", Namespace: "zenith-test"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	updatedGS := &zenithv1.GitSync{}
+	cl.Get(context.Background(), types.NamespacedName{Name: "deleting-gs", Namespace: "zenith-test"}, updatedGS)
+
+	for _, f := range updatedGS.Finalizers {
+		if f == gitSyncFinalizer {
+			t.Error("Expected gitsync finalizer to be removed during deletion")
+		}
+	}
+}
+
+func TestGitSyncReconciler_NotFound(t *testing.T) {
+	scheme := setupScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewGitSyncReconciler(cl, scheme, recorder)
+
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "nonexistent", Namespace: "zenith-test"},
+	})
+
+	if err != nil {
+		t.Fatalf("Expected no error for not found, got: %v", err)
+	}
+	if result.Requeue {
+		t.Error("Expected no requeue for not found")
+	}
+}
+
+func TestParseManifests(t *testing.T) {
+	yamlData := `
+apiVersion: zenith.dev/v1alpha1
+kind: App
+metadata:
+  name: web-app
+spec:
+  image: nginx:latest
+  replicas: 2
+---
+apiVersion: zenith.dev/v1alpha1
+kind: Database
+metadata:
+  name: my-db
+spec:
+  engine: postgresql
+`
+
+	results, err := ParseManifests([]byte(yamlData))
+	if err != nil {
+		t.Fatalf("ParseManifests failed: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("Expected 2 manifests, got %d", len(results))
+	}
+
+	if results[0].GetKind() != "App" {
+		t.Errorf("Expected kind 'App', got '%s'", results[0].GetKind())
+	}
+	if results[0].GetName() != "web-app" {
+		t.Errorf("Expected name 'web-app', got '%s'", results[0].GetName())
+	}
+
+	if results[1].GetKind() != "Database" {
+		t.Errorf("Expected kind 'Database', got '%s'", results[1].GetKind())
+	}
+	if results[1].GetName() != "my-db" {
+		t.Errorf("Expected name 'my-db', got '%s'", results[1].GetName())
+	}
+}
+
+func TestParseManifests_EmptyDocument(t *testing.T) {
+	yamlData := `---
+---
+apiVersion: zenith.dev/v1alpha1
+kind: App
+metadata:
+  name: test
+spec:
+  image: test:latest
+---
+`
+
+	results, err := ParseManifests([]byte(yamlData))
+	if err != nil {
+		t.Fatalf("ParseManifests failed: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 manifest (empty docs filtered), got %d", len(results))
+	}
+}
+
+func TestParseManifests_InvalidYAML(t *testing.T) {
+	yamlData := `
+not: valid: yaml: [
+`
+
+	_, err := ParseManifests([]byte(yamlData))
+	if err == nil {
+		t.Error("Expected error for invalid YAML")
+	}
+}
+
 func TestBuildConnectionString(t *testing.T) {
 	tests := []struct {
 		engine   string
@@ -1359,5 +1728,367 @@ func TestBuildConnectionString(t *testing.T) {
 				t.Errorf("Expected '%s', got '%s'", tt.expected, result)
 			}
 		})
+	}
+}
+
+// ============================================================================
+// Crossplane Controller Tests
+// ============================================================================
+
+func TestCrossplaneReconciler_CreatesFinalizerAndStatus(t *testing.T) {
+	scheme := setupScheme()
+
+	cr := &zenithv1.CrossplaneResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-bucket",
+			Namespace: "zenith-test",
+		},
+		Spec: zenithv1.CrossplaneResourceSpec{
+			Provider:          "aws",
+			ResourceKind:      "Bucket",
+			ProviderConfigRef: "default",
+			DeletionPolicy:    "Delete",
+			Config: map[string]string{
+				"region": "eu-central-1",
+				"acl":    "private",
+			},
+			WriteConnectionSecretToRef: &zenithv1.SecretKeyRef{
+				Name: "bucket-conn",
+				Key:  "endpoint",
+			},
+		},
+	}
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-test"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns, cr).
+		WithStatusSubresource(cr).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewCrossplaneReconciler(cl, scheme, recorder)
+
+	// First reconcile adds finalizer
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "my-bucket", Namespace: "zenith-test"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	// Verify finalizer was added
+	updatedCR := &zenithv1.CrossplaneResource{}
+	cl.Get(context.Background(), types.NamespacedName{Name: "my-bucket", Namespace: "zenith-test"}, updatedCR)
+	if len(updatedCR.Finalizers) == 0 {
+		t.Error("Expected finalizer to be added")
+	}
+
+	foundFinalizer := false
+	for _, f := range updatedCR.Finalizers {
+		if f == crossplaneFinalizer {
+			foundFinalizer = true
+			break
+		}
+	}
+	if !foundFinalizer {
+		t.Error("Expected crossplane finalizer to be added")
+	}
+}
+
+func TestCrossplaneReconciler_DeletionRemovesFinalizer(t *testing.T) {
+	scheme := setupScheme()
+
+	now := metav1.Now()
+	cr := &zenithv1.CrossplaneResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "deleting-bucket",
+			Namespace:         "zenith-test",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{crossplaneFinalizer},
+		},
+		Spec: zenithv1.CrossplaneResourceSpec{
+			Provider:     "aws",
+			ResourceKind: "Bucket",
+		},
+	}
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-test"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns, cr).
+		WithStatusSubresource(cr).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewCrossplaneReconciler(cl, scheme, recorder)
+
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "deleting-bucket", Namespace: "zenith-test"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	updatedCR := &zenithv1.CrossplaneResource{}
+	cl.Get(context.Background(), types.NamespacedName{Name: "deleting-bucket", Namespace: "zenith-test"}, updatedCR)
+
+	for _, f := range updatedCR.Finalizers {
+		if f == crossplaneFinalizer {
+			t.Error("Expected finalizer to be removed during deletion")
+		}
+	}
+}
+
+func TestCrossplaneReconciler_NotFound(t *testing.T) {
+	scheme := setupScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewCrossplaneReconciler(cl, scheme, recorder)
+
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "nonexistent", Namespace: "zenith-test"},
+	})
+
+	if err != nil {
+		t.Fatalf("Expected no error for not found, got: %v", err)
+	}
+	if result.Requeue {
+		t.Error("Expected no requeue for not found")
+	}
+}
+
+func TestCrossplaneDefaultAPIVersion(t *testing.T) {
+	tests := []struct {
+		provider     string
+		resourceKind string
+		expected     string
+	}{
+		{"aws", "Bucket", "s3.aws.upbound.io/v1beta1"},
+		{"aws", "Instance", "ec2.aws.upbound.io/v1beta1"},
+		{"aws", "Database", "rds.aws.upbound.io/v1beta1"},
+		{"gcp", "Bucket", "storage.gcp.upbound.io/v1beta1"},
+		{"gcp", "Instance", "compute.gcp.upbound.io/v1beta1"},
+		{"azure", "StorageAccount", "storage.azure.upbound.io/v1beta1"},
+		{"azure", "VirtualMachine", "compute.azure.upbound.io/v1beta1"},
+		{"hetzner", "Server", "hcloud.crossplane.io/v1alpha1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider+"/"+tt.resourceKind, func(t *testing.T) {
+			result := defaultAPIVersion(tt.provider, tt.resourceKind)
+			if result != tt.expected {
+				t.Errorf("Expected '%s', got '%s'", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestCrossplaneBuildResource(t *testing.T) {
+	scheme := setupScheme()
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewCrossplaneReconciler(cl, scheme, recorder)
+
+	cr := &zenithv1.CrossplaneResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-bucket",
+			Namespace: "zenith-myproj",
+		},
+		Spec: zenithv1.CrossplaneResourceSpec{
+			Provider:          "aws",
+			ResourceKind:      "Bucket",
+			ProviderConfigRef: "aws-config",
+			DeletionPolicy:    "Delete",
+			Config: map[string]string{
+				"region": "eu-central-1",
+				"acl":    "private",
+			},
+			WriteConnectionSecretToRef: &zenithv1.SecretKeyRef{
+				Name: "bucket-secret",
+				Key:  "endpoint",
+			},
+		},
+	}
+
+	resource := reconciler.buildCrossplaneResource(cr)
+
+	if resource.GetKind() != "Bucket" {
+		t.Errorf("Expected kind 'Bucket', got '%s'", resource.GetKind())
+	}
+
+	expectedName := "zenith-zenith-myproj-test-bucket"
+	if resource.GetName() != expectedName {
+		t.Errorf("Expected name '%s', got '%s'", expectedName, resource.GetName())
+	}
+
+	labels := resource.GetLabels()
+	if labels["app.kubernetes.io/managed-by"] != "zenith-operator" {
+		t.Error("Expected managed-by label")
+	}
+	if labels["zenith.dev/crossplane-resource"] != "test-bucket" {
+		t.Error("Expected crossplane-resource label")
+	}
+}
+
+// ============================================================================
+// Backstage Catalog Tests
+// ============================================================================
+
+func TestBackstageCatalogReconciler_GeneratesConfigMap(t *testing.T) {
+	scheme := setupScheme()
+
+	project := &zenithv1.Project{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "catalog-project",
+			Labels: map[string]string{
+				"zenith.dev/owner": "owner@test.com",
+			},
+		},
+		Spec: zenithv1.ProjectSpec{
+			DisplayName: "Catalog Project",
+			Owner:       "owner@test.com",
+			Plan:        "pro",
+		},
+	}
+
+	// Create system namespace for the ConfigMap
+	systemNs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-system"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(project, systemNs).
+		WithStatusSubresource(project).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewBackstageCatalogReconciler(cl, scheme, recorder)
+
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "catalog-project"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	// Verify ConfigMap was created
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(context.Background(), types.NamespacedName{
+		Name:      "backstage-catalog",
+		Namespace: "zenith-system",
+	}, cm); err != nil {
+		t.Fatalf("Expected ConfigMap to be created: %v", err)
+	}
+
+	if cm.Data["catalog-info.json"] == "" {
+		t.Error("Expected catalog-info.json data in ConfigMap")
+	}
+
+	// Verify labels
+	if cm.Labels["app.kubernetes.io/managed-by"] != "zenith-operator" {
+		t.Error("Expected managed-by label on ConfigMap")
+	}
+	if cm.Labels["app.kubernetes.io/component"] != "backstage-catalog" {
+		t.Error("Expected component label on ConfigMap")
+	}
+}
+
+func TestBackstageCatalogReconciler_IncludesAppsAndDatabases(t *testing.T) {
+	scheme := setupScheme()
+
+	project := &zenithv1.Project{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "full-project",
+		},
+		Spec: zenithv1.ProjectSpec{
+			DisplayName: "Full Project",
+			Owner:       "user@test.com",
+			Plan:        "pro",
+		},
+	}
+
+	replicas := int32(2)
+	app := &zenithv1.App{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-app",
+			Namespace: "zenith-full-project",
+			Labels: map[string]string{
+				"zenith.dev/project": "full-project",
+			},
+		},
+		Spec: zenithv1.AppSpec{
+			Image:    "nginx:latest",
+			Replicas: &replicas,
+			Port:     8080,
+		},
+	}
+
+	systemNs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-system"}}
+	projectNs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-full-project"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(project, app, systemNs, projectNs).
+		WithStatusSubresource(project, app).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewBackstageCatalogReconciler(cl, scheme, recorder)
+
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "full-project"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(context.Background(), types.NamespacedName{
+		Name:      "backstage-catalog",
+		Namespace: "zenith-system",
+	}, cm); err != nil {
+		t.Fatalf("Expected ConfigMap: %v", err)
+	}
+
+	catalogJSON := cm.Data["catalog-info.json"]
+	if catalogJSON == "" {
+		t.Fatal("Expected non-empty catalog JSON")
+	}
+
+	// The catalog should contain at least the project (System) and app (Component)
+	if len(catalogJSON) < 10 {
+		t.Error("Expected substantial catalog JSON content")
+	}
+}
+
+func TestBackstageCatalogReconciler_EmptyCluster(t *testing.T) {
+	scheme := setupScheme()
+
+	systemNs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "zenith-system"}}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(systemNs).
+		Build()
+
+	recorder := record.NewFakeRecorder(10)
+	reconciler := NewBackstageCatalogReconciler(cl, scheme, recorder)
+
+	// Should not fail even if there are no projects
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "nonexistent"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile failed: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(context.Background(), types.NamespacedName{
+		Name:      "backstage-catalog",
+		Namespace: "zenith-system",
+	}, cm); err != nil {
+		t.Fatalf("Expected ConfigMap even with empty cluster: %v", err)
 	}
 }

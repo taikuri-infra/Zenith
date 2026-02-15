@@ -105,6 +105,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = controllers.NewGitSyncReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("gitsync-controller"),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitSync")
+		os.Exit(1)
+	}
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)

@@ -1,8 +1,11 @@
 package root
 
 import (
+	"github.com/dotechhq/zenith/cli/cmd/apply"
 	"github.com/dotechhq/zenith/cli/cmd/db"
 	"github.com/dotechhq/zenith/cli/cmd/deploy"
+	"github.com/dotechhq/zenith/cli/cmd/diff"
+	exportcmd "github.com/dotechhq/zenith/cli/cmd/export"
 	"github.com/dotechhq/zenith/cli/cmd/install"
 	"github.com/dotechhq/zenith/cli/cmd/logs"
 	"github.com/dotechhq/zenith/cli/cmd/status"
@@ -32,6 +35,9 @@ func init() {
 	rootCmd.AddCommand(top.Cmd)
 	rootCmd.AddCommand(logs.Cmd)
 	rootCmd.AddCommand(db.Cmd)
+	rootCmd.AddCommand(exportcmd.Cmd)
+	rootCmd.AddCommand(apply.Cmd)
+	rootCmd.AddCommand(diff.Cmd)
 }
 
 func Execute() error {

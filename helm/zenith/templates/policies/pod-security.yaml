@@ -1,0 +1,26 @@
+{{- if .Values.rbac.create }}
+# Pod Security Standards labels on the Zenith system namespace.
+# These enforce restricted security standards at the namespace level
+# using the built-in Kubernetes Pod Security Admission controller.
+#
+# The labels below are applied to the namespace to enforce, audit,
+# and warn on pod security standards.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+    # Enforce baseline pod security standards
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    # Audit restricted standards (logs violations but does not block)
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    # Warn on restricted standards (shows warnings to users)
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    {{- with .Values.namespace.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

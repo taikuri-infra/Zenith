@@ -233,6 +233,62 @@ func TestGatewayRouteImplementsRuntimeObject(t *testing.T) {
 	var _ runtime.Object = &GatewayRouteList{}
 }
 
+func TestCrossplaneResourceDeepCopy(t *testing.T) {
+	cr := &CrossplaneResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-bucket",
+			Namespace: "zenith-test",
+		},
+		Spec: CrossplaneResourceSpec{
+			Provider:          "aws",
+			ResourceKind:      "Bucket",
+			ProviderConfigRef: "default",
+			DeletionPolicy:    "Delete",
+			Config: map[string]string{
+				"region": "eu-central-1",
+				"acl":    "private",
+			},
+			WriteConnectionSecretToRef: &SecretKeyRef{
+				Name: "bucket-conn",
+				Key:  "endpoint",
+			},
+		},
+		Status: CrossplaneResourceStatus{
+			Phase:                  "Ready",
+			CrossplaneResourceName: "zenith-test-my-bucket",
+			CrossplaneReady:        true,
+		},
+	}
+
+	copied := cr.DeepCopy()
+	if copied.Spec.Provider != "aws" {
+		t.Errorf("DeepCopy failed: Provider mismatch")
+	}
+	if copied.Spec.ResourceKind != "Bucket" {
+		t.Errorf("DeepCopy failed: ResourceKind mismatch")
+	}
+	if copied.Spec.Config["region"] != "eu-central-1" {
+		t.Errorf("DeepCopy failed: Config region mismatch")
+	}
+
+	// Ensure map independence
+	copied.Spec.Config["region"] = "us-east-1"
+	if cr.Spec.Config["region"] != "eu-central-1" {
+		t.Error("DeepCopy is not independent for Config map")
+	}
+
+	// Ensure pointer independence
+	copied.Spec.WriteConnectionSecretToRef.Name = "other-secret"
+	if cr.Spec.WriteConnectionSecretToRef.Name != "bucket-conn" {
+		t.Error("DeepCopy is not independent for WriteConnectionSecretToRef pointer")
+	}
+}
+
+func TestCrossplaneResourceImplementsRuntimeObject(t *testing.T) {
+	var _ runtime.Object = &CrossplaneResource{}
+	var _ runtime.Object = &CrossplaneResourceList{}
+}
+
 func TestNilDeepCopy(t *testing.T) {
 	var proj *Project
 	if proj.DeepCopy() != nil {
@@ -247,6 +303,11 @@ func TestNilDeepCopy(t *testing.T) {
 	var db *Database
 	if db.DeepCopy() != nil {
 		t.Error("DeepCopy of nil should return nil")
+	}
+
+	var cr *CrossplaneResource
+	if cr.DeepCopy() != nil {
+		t.Error("DeepCopy of nil CrossplaneResource should return nil")
 	}
 }
 
@@ -265,6 +326,7 @@ func TestSchemeRegistration(t *testing.T) {
 		&Domain{}, &DomainList{},
 		&AuthRealm{}, &AuthRealmList{},
 		&GatewayRoute{}, &GatewayRouteList{},
+		&CrossplaneResource{}, &CrossplaneResourceList{},
 	}
 
 	for _, obj := range types {
