@@ -1,0 +1,25 @@
+{{- range $name, $monitor := .Values.serviceMonitors }}
+{{- if $monitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: zenith-{{ $name }}
+  namespace: {{ $monitor.namespace }}
+  labels:
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  selector:
+    matchLabels:
+      {{- range $key, $value := $monitor.selector.matchLabels }}
+      {{ $key }}: {{ $value }}
+      {{- end }}
+  endpoints:
+    {{- range $monitor.endpoints }}
+    - port: {{ .port }}
+      interval: {{ .interval }}
+      path: {{ .path }}
+    {{- end }}
+{{- end }}
+{{- end }}
