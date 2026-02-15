@@ -6,11 +6,11 @@ RUN apk add --no-cache git ca-certificates tzdata
 WORKDIR /src
 
 # Copy dependency files first for layer caching
-COPY go.mod go.sum ./
+COPY services/api/go.mod services/api/go.sum ./
 RUN go mod download && go mod verify
 
 # Copy source code
-COPY . .
+COPY services/api/ .
 
 # Build arguments for version injection
 ARG VERSION=dev
