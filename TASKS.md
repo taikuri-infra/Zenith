@@ -187,22 +187,22 @@
 ## Phase 6: Monitoring Stack (Week 7)
 
 ### 6.1 Prometheus Setup
-- [ ] Helm chart values for kube-prometheus-stack
-- [ ] ServiceMonitor CRDs for all services
-- [ ] Pre-built alerting rules
+- [x] Helm chart values for kube-prometheus-stack
+- [x] ServiceMonitor CRDs for all services
+- [x] Pre-built alerting rules
 - **Files:** helm/monitoring/
 
 ### 6.2 Grafana Dashboards
-- [ ] Platform Overview dashboard (JSON)
-- [ ] Service Health dashboard
-- [ ] Node Metrics dashboard
-- [ ] Tenant-specific dashboards (auto-generated)
+- [x] Platform Overview dashboard (JSON)
+- [x] Service Health dashboard
+- [x] Node Metrics dashboard
+- [x] Tenant-specific dashboards (auto-generated)
 - **Files:** helm/monitoring/dashboards/
 
 ### 6.3 Loki Setup
-- [ ] Loki + Promtail Helm chart values
-- [ ] Log retention policies
-- [ ] Multi-tenant log separation
+- [x] Loki + Promtail Helm chart values
+- [x] Log retention policies
+- [x] Multi-tenant log separation
 - **Files:** helm/monitoring/
 
 ---

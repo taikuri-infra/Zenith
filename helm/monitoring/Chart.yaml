@@ -1,0 +1,20 @@
+apiVersion: v2
+name: zenith-monitoring
+description: Zenith Platform Monitoring Stack - Prometheus, Grafana, Loki
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: kube-prometheus-stack
+    version: "65.x"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+  - name: loki
+    version: "6.x"
+    repository: https://grafana.github.io/helm-charts
+    condition: loki.enabled
+  - name: promtail
+    version: "6.x"
+    repository: https://grafana.github.io/helm-charts
+    condition: promtail.enabled

@@ -1,0 +1,174 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Service Status",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "#ef4444", "text": "Down" }, "1": { "color": "#10b981", "text": "Up" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "steps": [
+              { "color": "#ef4444", "value": null },
+              { "color": "#10b981", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Zenith API",
+      "type": "stat",
+      "targets": [{ "expr": "up{job=\"zenith-api\"}", "legendFormat": "API" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "#ef4444", "text": "Down" }, "1": { "color": "#10b981", "text": "Up" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "#ef4444", "value": null }, { "color": "#10b981", "value": 1 }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Zenith Operator",
+      "type": "stat",
+      "targets": [{ "expr": "up{job=\"zenith-operator\"}", "legendFormat": "Operator" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "#ef4444", "text": "Down" }, "1": { "color": "#10b981", "text": "Up" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "#ef4444", "value": null }, { "color": "#10b981", "value": 1 }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Zenith Auth",
+      "type": "stat",
+      "targets": [{ "expr": "up{job=\"zenith-auth\"}", "legendFormat": "Auth" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "#ef4444", "text": "Down" }, "1": { "color": "#10b981", "text": "Up" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "#ef4444", "value": null }, { "color": "#10b981", "value": 1 }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "id": 5,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Kong Gateway",
+      "type": "stat",
+      "targets": [{ "expr": "up{job=\"kong\"}", "legendFormat": "Kong" }]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 6,
+      "title": "Error Rates",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 10 }, "unit": "percentunit" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 7,
+      "title": "Error Rate (5xx)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5..\", namespace=\"zenith-system\"}[5m])) by (service) / sum(rate(http_requests_total{namespace=\"zenith-system\"}[5m])) by (service)",
+          "legendFormat": "{{ service }}"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 10 }, "unit": "s" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 8,
+      "title": "Response Time (p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=\"zenith-system\"}[5m])) by (le, service))",
+          "legendFormat": "{{ service }}"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 9,
+      "title": "Reconciler Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 10 }, "unit": "ops" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 10,
+      "title": "Reconciler Operations/sec",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(controller_runtime_reconcile_total{namespace=\"zenith-system\"}[5m])) by (controller)",
+          "legendFormat": "{{ controller }}"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 10 }, "unit": "short" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 11,
+      "title": "Reconciler Errors",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(controller_runtime_reconcile_errors_total{namespace=\"zenith-system\"}[5m])) by (controller)",
+          "legendFormat": "{{ controller }}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["zenith", "services"],
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "Zenith - Service Health",
+  "uid": "zenith-service-health"
+}
