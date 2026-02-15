@@ -1,15 +1,14 @@
+"use client";
+
 import { Shell } from "@/components/shell";
 import { StatusBadge } from "@/components/status-badge";
-import { ProgressBar } from "@/components/progress-bar";
-import { mockDatabases } from "@/lib/mock-data";
+import { PageWithTableSkeleton } from "@/components/loading-skeleton";
+import { ErrorState } from "@/components/error-state";
+import { EmptyState } from "@/components/empty-state";
+import { useApi } from "@/hooks/use-api";
+import { useProject } from "@/hooks/use-project";
+import { databases, type Database } from "@/lib/api";
 import Link from "next/link";
-
-function parseStoragePercent(used: string, total: string): number {
-  const parseNum = (s: string) => parseFloat(s.replace(/[^0-9.]/g, ""));
-  const u = parseNum(used);
-  const t = parseNum(total);
-  return t > 0 ? Math.round((u / t) * 100) : 0;
-}
 
 const engineBadge: Record<string, { label: string; className: string }> = {
   postgresql: { label: "P", className: "bg-blue-500/20 text-blue-400" },
@@ -18,23 +17,36 @@ const engineBadge: Record<string, { label: string; className: string }> = {
   redis: { label: "R", className: "bg-red-500/20 text-red-400" },
 };
 
-const instanceClassMap: Record<string, string> = {
-  postgresql: "db.t3.medium",
-  mysql: "db.t3.medium",
-  mongodb: "db.m5.large",
-  redis: "cache.t3.micro",
-};
-
-const regionMap: Record<string, string> = {
-  fsn1: "eu-central-1",
-  nbg1: "eu-central-2",
-  hel1: "eu-north-1",
-};
-
 export default function DatabasesPage() {
-  const runningCount = mockDatabases.filter((d) => d.status === "running").length;
-  const pgCount = mockDatabases.filter((d) => d.engine === "postgresql").length;
-  const redisCount = mockDatabases.filter((d) => d.engine === "redis").length;
+  const projectId = useProject();
+
+  const {
+    data: dbsData,
+    loading,
+    error,
+    refetch,
+  } = useApi(() => databases.list(projectId), [projectId]);
+
+  if (loading) {
+    return (
+      <Shell>
+        <PageWithTableSkeleton cols={10} rows={3} />
+      </Shell>
+    );
+  }
+
+  if (error) {
+    return (
+      <Shell>
+        <ErrorState message={error} onRetry={refetch} />
+      </Shell>
+    );
+  }
+
+  const dbList: Database[] = dbsData?.items ?? [];
+  const runningCount = dbList.filter((d) => d.status === "running").length;
+  const pgCount = dbList.filter((d) => d.engine === "postgresql").length;
+  const redisCount = dbList.filter((d) => d.engine === "redis").length;
 
   return (
     <Shell>
@@ -43,7 +55,7 @@ export default function DatabasesPage() {
           <div>
             <h1 className="text-lg font-semibold text-white">Databases</h1>
             <p className="text-sm text-neutral-500">
-              {mockDatabases.length} instances, {runningCount} running
+              {dbList.length} instances, {runningCount} running
               {pgCount > 0 ? `, ${pgCount} PostgreSQL` : ""}
               {redisCount > 0 ? `, ${redisCount} Redis` : ""}
             </p>
@@ -63,7 +75,11 @@ export default function DatabasesPage() {
               stroke="currentColor"
               strokeWidth={2}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+              />
             </svg>
             <input
               type="text"
@@ -79,92 +95,95 @@ export default function DatabasesPage() {
           </select>
         </div>
 
-        {/* Table */}
-        <div className="overflow-hidden rounded-lg border border-border">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-surface-100">
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">DB Identifier</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Engine</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Version</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Status</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Instance Class</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Storage</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Connections</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Multi-AZ</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Backups</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Region</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockDatabases.map((db) => {
-                  const storagePercent = parseStoragePercent(db.storageUsed, db.storageTotal);
-                  const badge = engineBadge[db.engine] ?? { label: "?", className: "bg-neutral-500/20 text-neutral-400" };
-                  const instanceClass = instanceClassMap[db.engine] ?? "db.t3.small";
-                  const isMultiAz = db.engine === "postgresql";
+        {/* Table or Empty State */}
+        {dbList.length === 0 ? (
+          <EmptyState
+            title="No databases yet"
+            description="Create your first database instance to get started."
+            actionLabel="+ Create Instance"
+          />
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-border">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-surface-100">
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      DB Identifier
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Engine
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Version
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Status
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Storage
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Port
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Created
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dbList.map((db) => {
+                    const badge = engineBadge[db.engine] ?? {
+                      label: "?",
+                      className: "bg-neutral-500/20 text-neutral-400",
+                    };
 
-                  return (
-                    <tr
-                      key={db.name}
-                      className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors"
-                    >
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <Link
-                          href={`/databases/${db.name}`}
-                          className="font-medium text-white hover:text-accent-400 transition-colors"
-                        >
-                          {db.name}
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                        <span className="ml-2 text-xs capitalize text-neutral-300">{db.engine}</span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
-                        {db.version}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <StatusBadge status={db.status} />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
-                        {instanceClass}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="whitespace-nowrap font-mono text-xs text-neutral-400">
-                            {db.storageUsed} / {db.storageTotal}
+                    return (
+                      <tr
+                        key={db.name}
+                        className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors"
+                      >
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <Link
+                            href={`/databases/${db.name}`}
+                            className="font-medium text-white hover:text-accent-400 transition-colors"
+                          >
+                            {db.name}
+                          </Link>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <span
+                            className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${badge.className}`}
+                          >
+                            {badge.label}
                           </span>
-                          <div className="w-16">
-                            <ProgressBar percent={storagePercent} size="sm" />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
-                        {db.connections.used}/{db.connections.total}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-center text-xs">
-                        {isMultiAz ? (
-                          <span className="text-emerald-400">&#10003;</span>
-                        ) : (
-                          <span className="text-neutral-500">&mdash;</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs text-neutral-400">
-                        {db.lastBackup ?? <span className="text-neutral-500">&mdash;</span>}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-400">
-                        {regionMap.fsn1}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          <span className="ml-2 text-xs capitalize text-neutral-300">
+                            {db.engine}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
+                          {db.version}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <StatusBadge status={db.status as "running" | "creating" | "stopped"} />
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-400">
+                          {db.storage}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
+                          {db.port}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-neutral-400">
+                          {db.created_at}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Shell>
   );
