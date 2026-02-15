@@ -1,0 +1,41 @@
+
+=================================================================
+   Zenith Platform has been installed!
+=================================================================
+
+{{ if .Values.global.domain }}
+Your platform is available at:
+
+  Dashboard:  https://{{ .Values.global.domain }}
+  API:        https://api.{{ .Values.global.domain }}
+  Auth:       https://auth.{{ .Values.global.domain }}
+{{ else }}
+NOTE: No domain configured. Set global.domain in your values.
+
+To access services locally, use port-forwarding:
+
+  kubectl port-forward svc/{{ include "zenith.fullname" . }}-api 8080:80 -n {{ include "zenith.namespace" . }}
+  kubectl port-forward svc/{{ include "zenith.fullname" . }}-auth 8081:80 -n {{ include "zenith.namespace" . }}
+{{ end }}
+
+Verify the installation:
+
+  kubectl get pods -n {{ include "zenith.namespace" . }}
+  kubectl get crds | grep zenith
+
+Next steps:
+
+  1. Install the zen CLI:
+     curl -fsSL https://freezenith.com/install.sh | sh
+
+  2. Configure the CLI:
+     zen config set api-endpoint https://api.{{ .Values.global.domain }}
+
+  3. Create your first project:
+     zen project create my-project
+
+  4. Deploy your first app:
+     cd your-app/ && zen deploy
+
+Documentation: https://freezenith.com/docs
+Support: https://github.com/dotechhq/zenith/issues

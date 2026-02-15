@@ -228,15 +228,15 @@
 ## Phase 8: Helm Charts & Deployment (Week 9)
 
 ### 8.1 Platform Helm Chart
-- [ ] Chart for: API, Operator, Auth, Kong, Monitoring stack
-- [ ] Values.yaml with sensible defaults
-- [ ] NOTES.txt with post-install instructions
+- [x] Chart for: API, Operator, Auth, Kong, Monitoring stack
+- [x] Values.yaml with sensible defaults
+- [x] NOTES.txt with post-install instructions
 - **Files:** helm/zenith/
 
 ### 8.2 zen install Integration
-- [ ] CLI installs platform via Helm chart
-- [ ] Post-install verification
-- [ ] Welcome wizard redirect
+- [x] CLI installs platform via Helm chart
+- [x] Post-install verification
+- [x] Welcome wizard redirect
 - **Files:** cli/internal/install/helm.go
 
 ---

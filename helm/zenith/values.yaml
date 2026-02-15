@@ -1,0 +1,153 @@
+# Zenith Platform Helm Chart Values
+# Default values for the complete Zenith platform installation
+
+# -- Global configuration
+global:
+  # Platform domain (e.g., zenith.example.com)
+  domain: ""
+  # Hetzner Cloud API token
+  hetznerToken: ""
+  # Image pull policy
+  imagePullPolicy: IfNotPresent
+  # Image registry
+  imageRegistry: ghcr.io/dotechhq/zenith
+
+# -- Zenith API
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: "{{ .Values.global.imageRegistry }}/api"
+    tag: "{{ .Chart.AppVersion }}"
+  port: 8080
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 500m
+  env:
+    ENVIRONMENT: production
+    JWT_SECRET: ""  # Auto-generated if empty
+    CORS_ORIGINS: "*"
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: true
+    className: kong
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: "api.{{ .Values.global.domain }}"
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: zenith-api-tls
+        hosts:
+          - "api.{{ .Values.global.domain }}"
+
+# -- Zenith Operator
+operator:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: "{{ .Values.global.imageRegistry }}/operator"
+    tag: "{{ .Chart.AppVersion }}"
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  leaderElection: true
+  env:
+    HETZNER_TOKEN: "{{ .Values.global.hetznerToken }}"
+
+# -- Zenith Auth Service
+auth:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: "{{ .Values.global.imageRegistry }}/auth"
+    tag: "{{ .Chart.AppVersion }}"
+  port: 8081
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 500m
+  env:
+    JWT_SECRET: ""  # Auto-generated if empty
+    ISSUER_URL: "https://auth.{{ .Values.global.domain }}"
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: true
+    className: kong
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: "auth.{{ .Values.global.domain }}"
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: zenith-auth-tls
+        hosts:
+          - "auth.{{ .Values.global.domain }}"
+
+# -- Kong API Gateway
+kong:
+  enabled: true
+  proxy:
+    type: LoadBalancer
+    annotations:
+      load-balancer.hetzner.cloud/location: fsn1
+  ingressController:
+    enabled: true
+    installCRDs: false
+  admin:
+    enabled: true
+    type: ClusterIP
+
+# -- Monitoring (sub-chart)
+monitoring:
+  enabled: true
+
+# -- cert-manager
+certManager:
+  enabled: true
+  installCRDs: true
+  email: ""  # Required for Let's Encrypt
+
+# -- Container Registry
+registry:
+  enabled: false
+  storage:
+    type: s3
+    s3:
+      region: fsn1
+      bucket: zenith-registry
+
+# -- Namespace configuration
+namespace:
+  name: zenith-system
+  labels:
+    app.kubernetes.io/part-of: zenith
+
+# -- RBAC
+rbac:
+  create: true
+
+# -- Service Account
+serviceAccount:
+  create: true
+  name: zenith
+  annotations: {}
