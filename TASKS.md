@@ -94,25 +94,25 @@
 ## Phase 3: Auth Service (Week 3)
 
 ### 3.1 Auth Service Core
-- [ ] Create `services/auth/` - Go service
-- [ ] OpenID Connect provider (token endpoint, userinfo, jwks)
-- [ ] Realm management (CRUD)
-- [ ] User management within realms (register, login, MFA)
-- [ ] Client management (public/confidential, redirect URIs)
-- [ ] Session management
+- [x] Create `services/auth/` - Go service
+- [x] OpenID Connect provider (token endpoint, userinfo, jwks)
+- [x] Realm management (CRUD)
+- [x] User management within realms (register, login, MFA)
+- [x] Client management (public/confidential, redirect URIs)
+- [x] Session management
 - **Files:** services/auth/**
 
 ### 3.2 Identity Providers
-- [ ] Google OAuth integration
-- [ ] GitHub OAuth integration
-- [ ] SAML support (for enterprise)
-- [ ] OIDC federation
+- [x] Google OAuth integration
+- [x] GitHub OAuth integration
+- [x] SAML support (for enterprise)
+- [x] OIDC federation
 - **Files:** services/auth/internal/providers/
 
 ### 3.3 Kong Integration
-- [ ] JWT plugin configuration (auto-configure Kong to validate Zenith Auth JWTs)
-- [ ] Per-realm JWT validation
-- [ ] Consumer management synced with Auth clients
+- [x] JWT plugin configuration (auto-configure Kong to validate Zenith Auth JWTs)
+- [x] Per-realm JWT validation
+- [x] Consumer management synced with Auth clients
 - **Files:** services/auth/internal/kong/
 
 ---
