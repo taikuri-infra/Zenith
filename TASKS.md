@@ -22,7 +22,7 @@
 - **Files:** services/api/**
 
 ### 1.2 Kubernetes CRD Definitions
-- [ ] Define CRDs in Go structs (kubebuilder markers):
+- [x] Define CRDs in Go structs (kubebuilder markers):
   - `Project` - tenant project (name, owner, plan, status)
   - `App` - application deployment (name, image, replicas, env, ports, domain)
   - `Database` - managed database (engine, version, storage, backups)
@@ -30,8 +30,8 @@
   - `Domain` - custom domain (domain, app, ssl)
   - `AuthRealm` - auth realm (name, providers, clients)
   - `GatewayRoute` - Kong route (path, methods, service, plugins)
-- [ ] Generate YAML manifests with controller-gen
-- [ ] Register CRDs in the operator
+- [x] Generate YAML manifests with controller-gen
+- [x] Register CRDs in the operator
 - **Files:** services/operator/api/v1alpha1/
 
 ### 1.3 Zenith Operator Scaffold
