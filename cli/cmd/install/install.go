@@ -5,215 +5,403 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dotechhq/zenith/cli/internal/install"
 	"github.com/dotechhq/zenith/cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
+// CLI flags for non-interactive (power-user) mode.
 var (
-	flagToken      string
-	flagRegion     string
-	flagServerType string
-	flagNonInteractive bool
+	flagDomain      string
+	flagProvider    string
+	flagHetznerToken string
+	flagRegion      string
+	flagDNSProvider string
+	flagDNSToken    string
+	flagWithCluster bool
+	flagSSHHost     string
+	flagSSHUser     string
+	flagServerType  string
 )
 
 var Cmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install Zenith platform on Hetzner Cloud",
-	Long: `Install the Zenith platform on a new Hetzner Cloud server.
+	Short: "Install Zenith Mission Control",
+	Long: `Install the Zenith Mission Control platform.
 
-This creates a management plane with k3s, CAPI, and all Zenith components.
-The entire process takes about 3 minutes.
+Interactive wizard (default):
+  zen install
 
-Example:
-  zen install --provider hetzner --token hc_xxx`,
+Non-interactive (power-user) mode:
+  zen install --domain embermind.app \
+    --provider hetzner --hetzner-token hc_xxx \
+    --region nuremberg \
+    --dns-provider cloudflare --dns-token cf_xxx \
+    --with-cluster`,
 	RunE: runInstall,
 }
 
 func init() {
-	Cmd.Flags().StringVar(&flagToken, "token", "", "Hetzner Cloud API token")
-	Cmd.Flags().StringVar(&flagRegion, "region", "", "Hetzner Cloud region (fsn1, nbg1, hel1, ash, hil)")
-	Cmd.Flags().StringVar(&flagServerType, "server-type", "", "Server type (cx22, cx32, cx42)")
-	Cmd.Flags().BoolVar(&flagNonInteractive, "non-interactive", false, "Skip interactive prompts")
-	// --provider flag is accepted but hetzner is the only option
-	Cmd.Flags().String("provider", "hetzner", "Cloud provider (only hetzner supported)")
+	f := Cmd.Flags()
+	f.StringVar(&flagDomain, "domain", "", "Your domain (e.g., embermind.app)")
+	f.StringVar(&flagProvider, "provider", "", "Server provider: hetzner or existing")
+	f.StringVar(&flagHetznerToken, "hetzner-token", "", "Hetzner Cloud API token")
+	f.StringVar(&flagRegion, "region", "", "Server region (nuremberg, falkenstein, helsinki, ashburn)")
+	f.StringVar(&flagServerType, "server-type", "cx22", "Hetzner server type (cx22, cx32, cx42)")
+	f.StringVar(&flagDNSProvider, "dns-provider", "", "DNS provider: cloudflare or manual")
+	f.StringVar(&flagDNSToken, "dns-token", "", "Cloudflare API token")
+	f.BoolVar(&flagWithCluster, "with-cluster", false, "Create first cluster immediately")
+	f.StringVar(&flagSSHHost, "ssh-host", "", "SSH host/IP for existing server")
+	f.StringVar(&flagSSHUser, "ssh-user", "root", "SSH user for existing server")
+
+	// Accept legacy --token flag as alias for --hetzner-token
+	f.String("token", "", "Alias for --hetzner-token (deprecated)")
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
-	cfg := &install.Config{}
-
 	// Show header
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(tui.ColorPrimary).
-		Render("  Zenith Platform Installer")
+		PaddingLeft(2).
+		Render("Zenith Platform Installer")
+	subtitle := lipgloss.NewStyle().
+		Foreground(tui.ColorMuted).
+		PaddingLeft(2).
+		Render("Bootstrap Mission Control for your infrastructure")
+	fmt.Println()
 	fmt.Println(header)
+	fmt.Println(subtitle)
 	fmt.Println()
 
-	if flagNonInteractive {
-		// Use flags directly
-		if flagToken == "" {
-			return fmt.Errorf("--token is required in non-interactive mode")
-		}
-		cfg.HetznerToken = flagToken
-		cfg.Region = flagRegion
-		if cfg.Region == "" {
-			cfg.Region = "fsn1"
-		}
-		cfg.ServerType = flagServerType
-		if cfg.ServerType == "" {
-			cfg.ServerType = "cx22"
-		}
-	} else {
-		// Interactive wizard
+	var cfg *install.Config
+
+	if isNonInteractive(cmd) {
+		// Non-interactive mode: build config from flags
 		var err error
-		cfg, err = runWizard()
+		cfg, err = buildConfigFromFlags(cmd)
 		if err != nil {
 			return err
 		}
+	} else {
+		// Interactive wizard
+		result, err := install.RunWizard()
+		if err != nil {
+			return err
+		}
+		if !result.Confirmed {
+			fmt.Println(lipgloss.NewStyle().
+				Foreground(tui.ColorMuted).
+				PaddingLeft(2).
+				Render("Installation cancelled."))
+			return nil
+		}
+		cfg = result.Config
 	}
 
-	// Validate
-	if err := install.ValidateToken(cfg.HetznerToken); err != nil {
-		return fmt.Errorf("invalid token: %w", err)
+	// Run installation steps with progress display
+	if err := runSteps(cfg); err != nil {
+		return err
 	}
 
-	// Run installation steps
-	return runSteps(cfg)
+	// Build and display results
+	result := install.BuildResult(cfg)
+	showResult(cfg, result)
+
+	return nil
 }
 
-func runWizard() (*install.Config, error) {
-	var token, regionSel, serverTypeSel string
-
-	// Pre-fill from flags
-	token = flagToken
-	regionSel = flagRegion
-	serverTypeSel = flagServerType
-
-	regionOptions := make([]huh.Option[string], len(install.Regions))
-	for i, r := range install.Regions {
-		label := fmt.Sprintf("%s - %s, %s", r.ID, r.Name, r.Country)
-		regionOptions[i] = huh.NewOption(label, r.ID)
-	}
-	if regionSel == "" {
-		regionSel = "fsn1"
-	}
-
-	serverTypeOptions := make([]huh.Option[string], len(install.ServerTypes))
-	for i, s := range install.ServerTypes {
-		label := fmt.Sprintf("%s - %s (€%.2f/mo)", s.ID, s.Description, s.Price)
-		serverTypeOptions[i] = huh.NewOption(label, s.ID)
-	}
-	if serverTypeSel == "" {
-		serverTypeSel = "cx22"
-	}
-
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Hetzner Cloud API Token").
-				Description("Create one at console.hetzner.cloud → API Tokens").
-				Placeholder("hc_xxxxxxxxxxxx").
-				Value(&token).
-				Validate(func(s string) error {
-					return install.ValidateToken(s)
-				}),
-		),
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Region").
-				Description("Select the Hetzner Cloud region for your management server").
-				Options(regionOptions...).
-				Value(&regionSel),
-			huh.NewSelect[string]().
-				Title("Server Type").
-				Description("Select the server type for your management plane").
-				Options(serverTypeOptions...).
-				Value(&serverTypeSel),
-		),
-	).WithTheme(huh.ThemeDracula())
-
-	if err := form.Run(); err != nil {
-		return nil, fmt.Errorf("wizard cancelled: %w", err)
-	}
-
-	return &install.Config{
-		HetznerToken: token,
-		Region:       regionSel,
-		ServerType:   serverTypeSel,
-	}, nil
+// isNonInteractive checks if enough flags are set to skip the wizard.
+func isNonInteractive(cmd *cobra.Command) bool {
+	// If --domain is set, assume non-interactive mode
+	return flagDomain != ""
 }
 
+// buildConfigFromFlags creates a Config from CLI flags.
+func buildConfigFromFlags(cmd *cobra.Command) (*install.Config, error) {
+	cfg := &install.Config{
+		Domain:     flagDomain,
+		ServerType: flagServerType,
+	}
+
+	// Handle legacy --token flag
+	token := flagHetznerToken
+	if token == "" {
+		if legacyToken, _ := cmd.Flags().GetString("token"); legacyToken != "" {
+			token = legacyToken
+		}
+	}
+
+	// Determine provider
+	provider := strings.ToLower(flagProvider)
+	if provider == "" && token != "" {
+		provider = "hetzner"
+	}
+	if provider == "" && flagSSHHost != "" {
+		provider = "existing"
+	}
+	if provider == "" {
+		provider = "hetzner"
+	}
+
+	switch provider {
+	case "hetzner":
+		cfg.MCProvider = install.ProviderHetzner
+		cfg.HetznerToken = token
+		if cfg.HetznerToken == "" {
+			return nil, fmt.Errorf("--hetzner-token is required when using Hetzner provider")
+		}
+		if err := install.ValidateToken(cfg.HetznerToken); err != nil {
+			return nil, fmt.Errorf("invalid Hetzner token: %w", err)
+		}
+		cfg.Region = resolveRegion(flagRegion)
+	case "existing":
+		cfg.MCProvider = install.ProviderExisting
+		if flagSSHHost == "" {
+			return nil, fmt.Errorf("--ssh-host is required when using existing server")
+		}
+		cfg.SSHHost = flagSSHHost
+		cfg.SSHUser = flagSSHUser
+	default:
+		return nil, fmt.Errorf("unknown provider %q (use 'hetzner' or 'existing')", provider)
+	}
+
+	// Domain is required
+	if cfg.Domain == "" {
+		return nil, fmt.Errorf("--domain is required")
+	}
+	if err := install.ValidateDomain(cfg.Domain); err != nil {
+		return nil, fmt.Errorf("invalid domain: %w", err)
+	}
+
+	// DNS provider
+	dnsProvider := strings.ToLower(flagDNSProvider)
+	switch dnsProvider {
+	case "cloudflare":
+		cfg.DNSProvider = install.DNSCloudflare
+		if flagDNSToken == "" {
+			return nil, fmt.Errorf("--dns-token is required when using Cloudflare DNS")
+		}
+		cfg.CloudflareToken = flagDNSToken
+	case "manual", "":
+		cfg.DNSProvider = install.DNSManual
+	default:
+		return nil, fmt.Errorf("unknown dns-provider %q (use 'cloudflare' or 'manual')", dnsProvider)
+	}
+
+	// First cluster
+	cfg.WithCluster = flagWithCluster
+	if cfg.WithCluster {
+		// Reuse same provider settings for the cluster
+		cfg.ClusterProvider = cfg.MCProvider
+		cfg.ClusterHetznerToken = cfg.HetznerToken
+		cfg.ClusterRegion = cfg.Region
+		cfg.ClusterServerType = cfg.ServerType
+		cfg.ClusterSSHHost = cfg.SSHHost
+		cfg.ClusterSSHUser = cfg.SSHUser
+	}
+
+	return cfg, nil
+}
+
+// resolveRegion maps human-friendly region names to Hetzner region IDs.
+func resolveRegion(input string) string {
+	input = strings.ToLower(strings.TrimSpace(input))
+
+	aliases := map[string]string{
+		"nuremberg":   "nbg1",
+		"nurnberg":    "nbg1",
+		"nbg1":        "nbg1",
+		"falkenstein": "fsn1",
+		"fsn1":        "fsn1",
+		"helsinki":    "hel1",
+		"hel1":        "hel1",
+		"ashburn":     "ash",
+		"ash":         "ash",
+	}
+
+	if id, ok := aliases[input]; ok {
+		return id
+	}
+
+	// Default to Nuremberg
+	if input == "" {
+		return "nbg1"
+	}
+
+	return input
+}
+
+// runSteps executes all installation steps with a progress display.
 func runSteps(cfg *install.Config) error {
 	steps := install.GetInstallSteps(cfg)
 
-	checkmark := lipgloss.NewStyle().Foreground(tui.ColorSuccess).Render("✓")
-	spinner := lipgloss.NewStyle().Foreground(tui.ColorWarning).Render("⠋")
+	// Styles
+	checkStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+	spinStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
+	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
 	stepStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
+	descStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
 	timeStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
+
 	totalStart := time.Now()
 
 	fmt.Println()
 	for i, step := range steps {
-		fmt.Printf("  %s %s\n", spinner, stepStyle.Render(step.Name))
+		stepNum := fmt.Sprintf("[%d/%d]", i+1, len(steps))
+
+		// Show spinner line
+		fmt.Printf("  %s %s %s\n",
+			spinStyle.Render("  "+stepNum),
+			stepStyle.Render(step.Name),
+			descStyle.Render("- "+step.Description),
+		)
 
 		start := time.Now()
 		if err := step.Action(cfg); err != nil {
-			errMark := lipgloss.NewStyle().Foreground(tui.ColorError).Render("✗")
-			fmt.Printf("\r  %s %s - %s\n", errMark,
+			// Move up and overwrite with error
+			fmt.Printf("\033[1A\r  %s %s %s\n",
+				errStyle.Render("x "+stepNum),
 				stepStyle.Render(step.Name),
-				lipgloss.NewStyle().Foreground(tui.ColorError).Render(err.Error()))
-			return fmt.Errorf("step %d failed: %w", i+1, err)
+				errStyle.Render("- "+err.Error()),
+			)
+			return fmt.Errorf("step %d (%s) failed: %w", i+1, step.Name, err)
 		}
+
 		elapsed := time.Since(start)
 
-		// Move up and overwrite the spinner line
-		fmt.Printf("\033[1A\r  %s %s %s\n", checkmark,
+		// Move up and overwrite with checkmark
+		fmt.Printf("\033[1A\r  %s %s %s\n",
+			checkStyle.Render("v "+stepNum),
 			stepStyle.Render(step.Name),
-			timeStyle.Render(fmt.Sprintf("(%s)", elapsed.Round(time.Millisecond))))
+			timeStyle.Render(fmt.Sprintf("(%s)", formatDuration(elapsed))),
+		)
 	}
 
 	totalElapsed := time.Since(totalStart)
-
-	// Success box
 	fmt.Println()
-	successBox := lipgloss.NewStyle().
+	fmt.Printf("  %s %s\n",
+		checkStyle.Render("v All steps completed"),
+		timeStyle.Render(fmt.Sprintf("in %s", formatDuration(totalElapsed))),
+	)
+
+	return nil
+}
+
+// showResult displays the final success box with credentials and URLs.
+func showResult(cfg *install.Config, result *install.InstallResult) {
+	fmt.Println()
+
+	// Success header
+	successTitle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(tui.ColorSuccess).
+		Render("Zenith installed successfully!")
+
+	// Build the content
+	var content strings.Builder
+
+	content.WriteString(successTitle)
+	content.WriteString("\n\n")
+
+	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted).Width(20)
+	valueStyle := lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true)
+	urlStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Underline(true)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).Bold(true)
+
+	row := func(label, value string) {
+		content.WriteString(fmt.Sprintf("  %s %s\n",
+			labelStyle.Render(label),
+			valueStyle.Render(value),
+		))
+	}
+	urlRow := func(label, value string) {
+		content.WriteString(fmt.Sprintf("  %s %s\n",
+			labelStyle.Render(label),
+			urlStyle.Render(value),
+		))
+	}
+
+	content.WriteString("  URLS\n")
+	urlRow("Mission Control:", result.MissionControlURL)
+	urlRow("Cloud Platform:", result.CloudURL)
+	content.WriteString("\n")
+
+	content.WriteString("  CREDENTIALS\n")
+	row("Username:", result.AdminUser)
+	content.WriteString(fmt.Sprintf("  %s %s\n",
+		labelStyle.Render("Password:"),
+		warnStyle.Render(result.AdminPassword),
+	))
+	content.WriteString("\n")
+
+	content.WriteString("  SERVER\n")
+	row("IP Address:", result.ServerIP)
+	if cfg.MCProvider == install.ProviderHetzner {
+		if r := install.GetRegionByID(cfg.Region); r != nil {
+			row("Region:", r.Name)
+		}
+	}
+
+	if result.ClusterName != "" {
+		content.WriteString("\n")
+		content.WriteString("  FIRST CLUSTER\n")
+		row("Name:", result.ClusterName)
+		row("IP:", result.ClusterIP)
+	}
+
+	// Render the bordered box
+	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.ColorSuccess).
 		Padding(1, 2).
-		Render(fmt.Sprintf(
-			"%s\n\n"+
-				"  %s %s\n"+
-				"  %s %s\n"+
-				"  %s %s\n\n"+
-				"  %s",
-			lipgloss.NewStyle().Bold(true).Foreground(tui.ColorSuccess).Render("Zenith installed successfully!"),
-			lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("Region:"),
-			cfg.Region,
-			lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("Server:"),
-			cfg.ServerType,
-			lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("Time:"),
-			totalElapsed.Round(time.Millisecond).String(),
-			lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("Next: Open the welcome wizard in your browser"),
-		))
-	fmt.Println(successBox)
+		Render(content.String())
+	fmt.Println(box)
+
+	// DNS instructions if manual
+	if cfg.DNSProvider == install.DNSManual {
+		fmt.Println()
+		dnsBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(tui.ColorWarning).
+			Padding(1, 2).
+			Render(fmt.Sprintf(
+				"%s\n\n"+
+					"  Add these DNS records to your domain registrar:\n\n"+
+					"  %s  A  %s  ->  %s\n"+
+					"  %s  A  %s  ->  %s\n",
+				lipgloss.NewStyle().Bold(true).Foreground(tui.ColorWarning).Render("ACTION REQUIRED: Add DNS Records"),
+				lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("Type"),
+				lipgloss.NewStyle().Foreground(tui.ColorText).Render(fmt.Sprintf("mission.%s", cfg.Domain)),
+				lipgloss.NewStyle().Foreground(tui.ColorPrimary).Render(result.ServerIP),
+				lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("Type"),
+				lipgloss.NewStyle().Foreground(tui.ColorText).Render(fmt.Sprintf("cloud.%s", cfg.Domain)),
+				lipgloss.NewStyle().Foreground(tui.ColorPrimary).Render(result.ServerIP),
+			))
+		fmt.Println(dnsBox)
+	}
 
 	// Next steps
 	fmt.Println()
+	fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2).Render("Next steps:"))
 	nextSteps := []string{
-		"Open the management panel to create your first cluster",
+		fmt.Sprintf("Open Mission Control: %s", result.MissionControlURL),
 		"Run 'zen status' to check platform health",
 		"Run 'zen deploy' to deploy your first app",
 	}
-	fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).Render("  Next steps:"))
 	for _, step := range nextSteps {
 		fmt.Printf("  %s %s\n",
-			lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("→"),
-			strings.TrimSpace(step))
+			lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("->"),
+			step)
 	}
 	fmt.Println()
+}
 
-	return nil
+// formatDuration produces a human-friendly duration string.
+func formatDuration(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }

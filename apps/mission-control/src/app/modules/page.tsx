@@ -5,23 +5,28 @@ import { StatusBadge } from "@/components/status-badge";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { DemoButton } from "@/components/demo-button";
+import { getApi, isDemoMode } from "@/lib/get-api";
 import type { Module } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/use-api";
 import { Package } from "lucide-react";
 
 export default function ModulesPage() {
+  const apiClient = getApi();
+  const demo = isDemoMode();
+
   const { data: modules, loading, error, refetch } = useApi<Module[]>(
-    () => api.modules.list()
+    () => apiClient.modules.list()
   );
 
-  const updateAllMutation = useMutation(() => api.modules.updateAll());
+  const updateAllMutation = useMutation(() => apiClient.modules.updateAll());
 
   const updatesAvailable = modules
     ? modules.filter((m) => m.status === "update_available").length
     : 0;
 
   const handleUpdateAll = async () => {
+    if (demo) return;
     try {
       await updateAllMutation.execute(undefined);
       refetch();
@@ -44,13 +49,13 @@ export default function ModulesPage() {
             )}
           </div>
           {updatesAvailable > 0 && (
-            <button
+            <DemoButton
               onClick={handleUpdateAll}
               disabled={updateAllMutation.loading}
               className="rounded-lg bg-accent-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
             >
               {updateAllMutation.loading ? "Updating..." : "Update All"}
-            </button>
+            </DemoButton>
           )}
         </div>
 

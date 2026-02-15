@@ -5,12 +5,14 @@ import { Shell } from "@/components/shell";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import type { AuditEntry } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { ScrollText } from "lucide-react";
 
 export default function AuditPage() {
+  const apiClient = getApi();
+
   const [actor, setActor] = useState<string>("");
   const [cluster, setCluster] = useState<string>("");
   const [period, setPeriod] = useState<string>("today");
@@ -22,7 +24,7 @@ export default function AuditPage() {
     refetch,
   } = useApi<AuditEntry[]>(
     () =>
-      api.audit.list({
+      apiClient.audit.list({
         actor: actor || undefined,
         cluster: cluster || undefined,
         period: period || undefined,
@@ -53,9 +55,9 @@ export default function AuditPage() {
             className="rounded-lg border border-border bg-surface-100 px-3 py-1.5 text-sm text-neutral-300 outline-none"
           >
             <option value="">All Clusters</option>
-            <option value="zenith-shared">zenith-shared</option>
-            <option value="pro-startup-a">pro-startup-a</option>
-            <option value="pro-enterprise">pro-enterprise</option>
+            <option value="production-eu">production-eu</option>
+            <option value="staging-us">staging-us</option>
+            <option value="dev-local">dev-local</option>
           </select>
           <select
             value={period}

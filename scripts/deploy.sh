@@ -125,8 +125,9 @@ log_ok "Ingress routes applied"
 log_step "Restarting deployments..."
 
 kubectl rollout restart deployment/zenith-landing -n zenith-platform
-kubectl rollout restart deployment/zenith-mc -n zenith-platform
+kubectl rollout restart deployment/zenith-mc-demo -n zenith-platform
 kubectl rollout restart deployment/zenith-api -n zenith-platform
+kubectl rollout restart deployment/zenith-mc -n zenith-embermind
 kubectl rollout restart deployment/zenith-web -n zenith-embermind
 log_ok "All deployments restarted"
 
@@ -139,17 +140,21 @@ echo "  Waiting for zenith-landing..."
 kubectl rollout status deployment/zenith-landing -n zenith-platform --timeout=120s
 log_ok "zenith-landing is ready"
 
-echo "  Waiting for zenith-mc..."
-kubectl rollout status deployment/zenith-mc -n zenith-platform --timeout=120s
-log_ok "zenith-mc is ready"
+echo "  Waiting for zenith-mc-demo..."
+kubectl rollout status deployment/zenith-mc-demo -n zenith-platform --timeout=120s
+log_ok "zenith-mc-demo is ready"
 
 echo "  Waiting for zenith-api..."
 kubectl rollout status deployment/zenith-api -n zenith-platform --timeout=120s
 log_ok "zenith-api is ready"
 
-echo "  Waiting for zenith-web..."
+echo "  Waiting for zenith-mc (embermind)..."
+kubectl rollout status deployment/zenith-mc -n zenith-embermind --timeout=120s
+log_ok "zenith-mc (embermind) is ready"
+
+echo "  Waiting for zenith-web (embermind)..."
 kubectl rollout status deployment/zenith-web -n zenith-embermind --timeout=120s
-log_ok "zenith-web is ready"
+log_ok "zenith-web (embermind) is ready"
 
 # -------------------------------------------------------
 # Step 7: Show deployment status
@@ -184,8 +189,9 @@ echo "   $(date '+%Y-%m-%d %H:%M:%S')"
 echo "============================================="
 echo ""
 echo "Endpoints:"
-echo "  Landing:          https://freezenith.com"
-echo "  Mission Control:  https://mission.freezenith.com"
-echo "  API:              https://api.freezenith.com/health"
-echo "  Embermind Web:    https://embermind.app"
+echo "  Landing:             https://freezenith.com"
+echo "  Demo (showroom):     https://demo.freezenith.com"
+echo "  API:                 https://api.freezenith.com/health"
+echo "  Embermind MC:        https://mission.embermind.app"
+echo "  Embermind Cloud:     https://cloud.embermind.app"
 echo ""

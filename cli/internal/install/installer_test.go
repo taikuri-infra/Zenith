@@ -33,16 +33,43 @@ func TestValidateToken(t *testing.T) {
 	}
 }
 
+func TestValidateDomain(t *testing.T) {
+	tests := []struct {
+		name    string
+		domain  string
+		wantErr bool
+	}{
+		{"valid domain", "example.com", false},
+		{"valid subdomain", "app.example.com", false},
+		{"too short", "a.b", true},
+		{"no dot", "localhost", true},
+		{"empty", "", true},
+		{"minimal valid", "a.co", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateDomain(tt.domain)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateDomain(%q) error = %v, wantErr %v", tt.domain, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestGetInstallSteps(t *testing.T) {
 	cfg := &Config{
+		MCProvider:   ProviderHetzner,
 		HetznerToken: "test-token-1234567890",
 		ServerType:   "cx22",
 		Region:       "fsn1",
+		Domain:       "example.com",
+		DNSProvider:  DNSManual,
 	}
 
 	steps := GetInstallSteps(cfg)
-	if len(steps) != 7 {
-		t.Errorf("Expected 7 install steps, got %d", len(steps))
+	if len(steps) != 5 {
+		t.Errorf("Expected 5 install steps (no cluster), got %d", len(steps))
 	}
 
 	// Verify steps execute without error
@@ -53,23 +80,50 @@ func TestGetInstallSteps(t *testing.T) {
 	}
 }
 
+func TestGetInstallSteps_WithCluster(t *testing.T) {
+	cfg := &Config{
+		MCProvider:        ProviderHetzner,
+		HetznerToken:      "test-token-1234567890",
+		ServerType:        "cx22",
+		Region:            "fsn1",
+		Domain:            "example.com",
+		DNSProvider:       DNSManual,
+		WithCluster:       true,
+		ClusterProvider:   ProviderHetzner,
+		ClusterServerType: "cx22",
+		ClusterRegion:     "fsn1",
+	}
+
+	steps := GetInstallSteps(cfg)
+	if len(steps) != 6 {
+		t.Errorf("Expected 6 install steps (with cluster), got %d", len(steps))
+	}
+
+	// Last step should be the cluster creation
+	lastStep := steps[len(steps)-1]
+	if lastStep.Name != "Create first cluster" {
+		t.Errorf("Expected last step 'Create first cluster', got '%s'", lastStep.Name)
+	}
+}
+
 func TestGetInstallSteps_StepNames(t *testing.T) {
 	cfg := &Config{
+		MCProvider:   ProviderHetzner,
 		HetznerToken: "test-token-1234567890",
 		ServerType:   "cx22",
 		Region:       "fsn1",
+		Domain:       "example.com",
+		DNSProvider:  DNSCloudflare,
 	}
 
 	steps := GetInstallSteps(cfg)
 
 	expectedNames := []string{
-		"Validate Hetzner token",
-		"Create management server",
-		"Install k3s",
-		"Install Cluster API",
-		"Deploy Zenith platform",
-		"Configure DNS & SSL",
-		"Create admin account",
+		"Provision server",
+		"Install platform",
+		"Configure DNS",
+		"Issue SSL certificates",
+		"Wait for Mission Control",
 	}
 
 	for i, expected := range expectedNames {
@@ -84,9 +138,12 @@ func TestGetInstallSteps_StepNames(t *testing.T) {
 
 func TestGetInstallSteps_StepDurations(t *testing.T) {
 	cfg := &Config{
+		MCProvider:   ProviderHetzner,
 		HetznerToken: "test-token-1234567890",
 		ServerType:   "cx22",
 		Region:       "fsn1",
+		Domain:       "example.com",
+		DNSProvider:  DNSManual,
 	}
 
 	steps := GetInstallSteps(cfg)
@@ -100,9 +157,12 @@ func TestGetInstallSteps_StepDurations(t *testing.T) {
 
 func TestGetInstallSteps_StepDescriptions(t *testing.T) {
 	cfg := &Config{
+		MCProvider:   ProviderHetzner,
 		HetznerToken: "test-token-1234567890",
 		ServerType:   "cx22",
 		Region:       "fsn1",
+		Domain:       "example.com",
+		DNSProvider:  DNSManual,
 	}
 
 	steps := GetInstallSteps(cfg)
@@ -114,38 +174,76 @@ func TestGetInstallSteps_StepDescriptions(t *testing.T) {
 	}
 }
 
-func TestGetInstallSteps_DescriptionContainsConfig(t *testing.T) {
+func TestGetInstallSteps_ProvisionDescriptionContainsConfig(t *testing.T) {
 	cfg := &Config{
+		MCProvider:   ProviderHetzner,
 		HetznerToken: "test-token-1234567890",
 		ServerType:   "cx22",
 		Region:       "fsn1",
+		Domain:       "example.com",
+		DNSProvider:  DNSManual,
 	}
 
 	steps := GetInstallSteps(cfg)
 
-	// The second step ("Create management server") should mention the server type and region
-	if len(steps) >= 2 {
-		desc := steps[1].Description
+	// The first step ("Provision server") should mention the server type and region
+	if len(steps) >= 1 {
+		desc := steps[0].Description
 		if !strings.Contains(desc, cfg.ServerType) {
-			t.Errorf("Expected step 2 description to contain server type '%s', got: '%s'", cfg.ServerType, desc)
+			t.Errorf("Expected provision step description to contain server type '%s', got: '%s'", cfg.ServerType, desc)
 		}
-		if !strings.Contains(desc, cfg.Region) {
-			t.Errorf("Expected step 2 description to contain region '%s', got: '%s'", cfg.Region, desc)
+		// Region name is resolved, so check for "Falkenstein" not "fsn1"
+		if !strings.Contains(desc, "Falkenstein") {
+			t.Errorf("Expected provision step description to contain region name 'Falkenstein', got: '%s'", desc)
 		}
 	}
 }
 
-func TestGetInstallSteps_InvalidToken(t *testing.T) {
+func TestGetInstallSteps_ExistingServer(t *testing.T) {
 	cfg := &Config{
-		HetznerToken: "short",
-		ServerType:   "cx22",
-		Region:       "fsn1",
+		MCProvider:  ProviderExisting,
+		SSHHost:     "192.168.1.100",
+		SSHUser:     "root",
+		Domain:      "example.com",
+		DNSProvider: DNSManual,
 	}
 
 	steps := GetInstallSteps(cfg)
-	// First step validates token
-	if err := steps[0].Action(cfg); err == nil {
-		t.Error("Expected first step to fail with invalid token")
+
+	// First step should mention the SSH host
+	desc := steps[0].Description
+	if !strings.Contains(desc, "192.168.1.100") {
+		t.Errorf("Expected provision step to mention SSH host, got: '%s'", desc)
+	}
+}
+
+func TestGetInstallSteps_CloudflareDNS(t *testing.T) {
+	cfg := &Config{
+		MCProvider:      ProviderHetzner,
+		HetznerToken:    "test-token-1234567890",
+		ServerType:      "cx22",
+		Region:          "fsn1",
+		Domain:          "example.com",
+		DNSProvider:     DNSCloudflare,
+		CloudflareToken: "cf_test_token_1234",
+	}
+
+	steps := GetInstallSteps(cfg)
+
+	// Find the DNS step
+	var dnsStep *Step
+	for i := range steps {
+		if steps[i].Name == "Configure DNS" {
+			dnsStep = &steps[i]
+			break
+		}
+	}
+
+	if dnsStep == nil {
+		t.Fatal("Expected to find a 'Configure DNS' step")
+	}
+	if !strings.Contains(dnsStep.Description, "Cloudflare") {
+		t.Errorf("Expected DNS step description to mention Cloudflare, got: '%s'", dnsStep.Description)
 	}
 }
 
@@ -201,7 +299,6 @@ func TestParseRegionSelection(t *testing.T) {
 		{"nbg1 - Nuremberg, Germany", "nbg1"},
 		{"hel1 - Helsinki, Finland", "hel1"},
 		{"ash - Ashburn, USA", "ash"},
-		{"hil - Hillsboro, USA", "hil"},
 		{"unknown", "fsn1"},
 		{"", "fsn1"},
 	}
@@ -300,7 +397,7 @@ func TestRegionValidation(t *testing.T) {
 	}
 
 	// Test known valid regions
-	validRegions := []string{"fsn1", "nbg1", "hel1", "ash", "hil"}
+	validRegions := []string{"fsn1", "nbg1", "hel1", "ash"}
 	for _, id := range validRegions {
 		if !validIDs[id] {
 			t.Errorf("Expected region '%s' to be valid", id)
@@ -478,6 +575,42 @@ func TestConfig_StructFields(t *testing.T) {
 	}
 }
 
+func TestConfig_NewFields(t *testing.T) {
+	cfg := Config{
+		MCProvider:          ProviderHetzner,
+		HetznerToken:        "hc_token123",
+		Domain:              "example.com",
+		DNSProvider:         DNSCloudflare,
+		CloudflareToken:     "cf_token456",
+		WithCluster:         true,
+		ClusterProvider:     ProviderExisting,
+		ClusterSSHHost:      "10.0.0.1",
+		ClusterSSHUser:      "admin",
+	}
+
+	if cfg.MCProvider != ProviderHetzner {
+		t.Errorf("Expected MCProvider 'hetzner', got '%s'", cfg.MCProvider)
+	}
+	if cfg.Domain != "example.com" {
+		t.Errorf("Expected Domain 'example.com', got '%s'", cfg.Domain)
+	}
+	if cfg.DNSProvider != DNSCloudflare {
+		t.Errorf("Expected DNSProvider 'cloudflare', got '%s'", cfg.DNSProvider)
+	}
+	if cfg.CloudflareToken != "cf_token456" {
+		t.Errorf("Expected CloudflareToken 'cf_token456', got '%s'", cfg.CloudflareToken)
+	}
+	if !cfg.WithCluster {
+		t.Error("Expected WithCluster to be true")
+	}
+	if cfg.ClusterProvider != ProviderExisting {
+		t.Errorf("Expected ClusterProvider 'existing', got '%s'", cfg.ClusterProvider)
+	}
+	if cfg.ClusterSSHHost != "10.0.0.1" {
+		t.Errorf("Expected ClusterSSHHost '10.0.0.1', got '%s'", cfg.ClusterSSHHost)
+	}
+}
+
 func TestStep_StructFields(t *testing.T) {
 	step := Step{
 		Name:        "Test step",
@@ -519,5 +652,203 @@ func TestParseServerTypeSelection_FromServerTypeOptions(t *testing.T) {
 		if result != ServerTypes[i].ID {
 			t.Errorf("ParseServerTypeSelection(%q) = %q, want %q", opt, result, ServerTypes[i].ID)
 		}
+	}
+}
+
+func TestGetServerTypeByID(t *testing.T) {
+	tests := []struct {
+		id       string
+		wantNil  bool
+		wantName string
+	}{
+		{"cx22", false, "CX22"},
+		{"cx32", false, "CX32"},
+		{"cx42", false, "CX42"},
+		{"cx11", true, ""},
+		{"", true, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			result := GetServerTypeByID(tt.id)
+			if tt.wantNil && result != nil {
+				t.Errorf("Expected nil for ID %q, got %v", tt.id, result)
+			}
+			if !tt.wantNil && result == nil {
+				t.Errorf("Expected non-nil for ID %q", tt.id)
+			}
+			if result != nil && result.Name != tt.wantName {
+				t.Errorf("Expected Name %q, got %q", tt.wantName, result.Name)
+			}
+		})
+	}
+}
+
+func TestGetRegionByID(t *testing.T) {
+	tests := []struct {
+		id       string
+		wantNil  bool
+		wantName string
+	}{
+		{"nbg1", false, "Nuremberg"},
+		{"fsn1", false, "Falkenstein"},
+		{"hel1", false, "Helsinki"},
+		{"ash", false, "Ashburn"},
+		{"invalid", true, ""},
+		{"", true, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			result := GetRegionByID(tt.id)
+			if tt.wantNil && result != nil {
+				t.Errorf("Expected nil for ID %q, got %v", tt.id, result)
+			}
+			if !tt.wantNil && result == nil {
+				t.Errorf("Expected non-nil for ID %q", tt.id)
+			}
+			if result != nil && result.Name != tt.wantName {
+				t.Errorf("Expected Name %q, got %q", tt.wantName, result.Name)
+			}
+		})
+	}
+}
+
+func TestEstimateMonthlyCost(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *Config
+		wantCost float64
+	}{
+		{
+			name: "hetzner MC only",
+			cfg: &Config{
+				MCProvider: ProviderHetzner,
+				ServerType: "cx22",
+			},
+			wantCost: 4.35,
+		},
+		{
+			name: "existing server",
+			cfg: &Config{
+				MCProvider: ProviderExisting,
+			},
+			wantCost: 0,
+		},
+		{
+			name: "hetzner MC + hetzner cluster",
+			cfg: &Config{
+				MCProvider:        ProviderHetzner,
+				ServerType:        "cx22",
+				WithCluster:       true,
+				ClusterProvider:   ProviderHetzner,
+				ClusterServerType: "cx32",
+			},
+			wantCost: 4.35 + 7.75,
+		},
+		{
+			name: "hetzner MC + existing cluster",
+			cfg: &Config{
+				MCProvider:      ProviderHetzner,
+				ServerType:      "cx22",
+				WithCluster:     true,
+				ClusterProvider: ProviderExisting,
+			},
+			wantCost: 4.35,
+		},
+		{
+			name: "no cluster flag means no cluster cost",
+			cfg: &Config{
+				MCProvider:        ProviderHetzner,
+				ServerType:        "cx42",
+				WithCluster:       false,
+				ClusterProvider:   ProviderHetzner,
+				ClusterServerType: "cx32",
+			},
+			wantCost: 14.55,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := EstimateMonthlyCost(tt.cfg)
+			if got != tt.wantCost {
+				t.Errorf("EstimateMonthlyCost() = %.2f, want %.2f", got, tt.wantCost)
+			}
+		})
+	}
+}
+
+func TestBuildResult(t *testing.T) {
+	cfg := &Config{
+		MCProvider: ProviderHetzner,
+		Domain:     "example.com",
+	}
+
+	result := BuildResult(cfg)
+
+	if result.Domain != "example.com" {
+		t.Errorf("Expected Domain 'example.com', got '%s'", result.Domain)
+	}
+	if result.MissionControlURL != "https://mission.example.com" {
+		t.Errorf("Expected MissionControlURL 'https://mission.example.com', got '%s'", result.MissionControlURL)
+	}
+	if result.CloudURL != "https://cloud.example.com" {
+		t.Errorf("Expected CloudURL 'https://cloud.example.com', got '%s'", result.CloudURL)
+	}
+	if result.AdminUser != "admin" {
+		t.Errorf("Expected AdminUser 'admin', got '%s'", result.AdminUser)
+	}
+	if len(result.AdminPassword) != 16 {
+		t.Errorf("Expected AdminPassword length 16, got %d", len(result.AdminPassword))
+	}
+	if result.ClusterName != "" {
+		t.Errorf("Expected empty ClusterName without cluster, got '%s'", result.ClusterName)
+	}
+}
+
+func TestBuildResult_WithCluster(t *testing.T) {
+	cfg := &Config{
+		MCProvider:  ProviderHetzner,
+		Domain:      "example.com",
+		WithCluster: true,
+	}
+
+	result := BuildResult(cfg)
+
+	if result.ClusterName == "" {
+		t.Error("Expected non-empty ClusterName with cluster")
+	}
+	if result.ClusterIP == "" {
+		t.Error("Expected non-empty ClusterIP with cluster")
+	}
+}
+
+func TestBuildResult_ExistingServer(t *testing.T) {
+	cfg := &Config{
+		MCProvider: ProviderExisting,
+		SSHHost:    "10.0.0.5",
+		Domain:     "example.com",
+	}
+
+	result := BuildResult(cfg)
+
+	if result.ServerIP != "10.0.0.5" {
+		t.Errorf("Expected ServerIP '10.0.0.5', got '%s'", result.ServerIP)
+	}
+}
+
+func TestProviderConstants(t *testing.T) {
+	if ProviderHetzner != "hetzner" {
+		t.Errorf("Expected ProviderHetzner 'hetzner', got '%s'", ProviderHetzner)
+	}
+	if ProviderExisting != "existing" {
+		t.Errorf("Expected ProviderExisting 'existing', got '%s'", ProviderExisting)
+	}
+	if DNSCloudflare != "cloudflare" {
+		t.Errorf("Expected DNSCloudflare 'cloudflare', got '%s'", DNSCloudflare)
+	}
+	if DNSManual != "manual" {
+		t.Errorf("Expected DNSManual 'manual', got '%s'", DNSManual)
 	}
 }
