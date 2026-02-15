@@ -13,12 +13,12 @@
 ## Phase 1: Project Foundation (Week 1)
 
 ### 1.1 Go Backend API Scaffold
-- [ ] Create `services/api/` with Go module
-- [ ] Use Fiber or Echo framework
-- [ ] Health check endpoint: GET /health
-- [ ] Project structure: cmd/, internal/handlers/, internal/models/, internal/middleware/
-- [ ] Docker multi-stage build
-- [ ] Makefile with: build, test, lint, docker-build
+- [x] Create `services/api/` with Go module
+- [x] Use Fiber or Echo framework
+- [x] Health check endpoint: GET /health
+- [x] Project structure: cmd/, internal/handlers/, internal/models/, internal/middleware/
+- [x] Docker multi-stage build
+- [x] Makefile with: build, test, lint, docker-build
 - **Files:** services/api/**
 
 ### 1.2 Kubernetes CRD Definitions
