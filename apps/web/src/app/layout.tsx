@@ -1,0 +1,21 @@
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Zenith - Open-Source PaaS for Kubernetes",
+  description: "Deploy apps, databases, and infrastructure on Kubernetes without the complexity.",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className="dark">
+      <body className="min-h-screen bg-surface font-sans">
+        {children}
+      </body>
+    </html>
+  );
+}
