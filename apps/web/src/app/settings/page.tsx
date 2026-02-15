@@ -3,9 +3,11 @@
 import { Shell } from "@/components/shell";
 import { PageHeaderSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
+import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { projects, type Project } from "@/lib/api";
+import { useState } from "react";
 
 export default function SettingsPage() {
   const projectId = useProject();
@@ -16,6 +18,18 @@ export default function SettingsPage() {
     error,
     refetch,
   } = useApi(() => projects.get(projectId), [projectId]);
+
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleted, setDeleted] = useState(false);
+
+  const handleDelete = () => {
+    if (deleteConfirm === project?.name) {
+      setDeleted(true);
+      setShowDelete(false);
+      setDeleteConfirm("");
+    }
+  };
 
   if (loading) {
     return (
@@ -50,6 +64,12 @@ export default function SettingsPage() {
             Manage your project configuration
           </p>
         </div>
+
+        {deleted && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+            <p className="text-xs text-red-400">Project deletion initiated. This is a demo -- no actual resources were removed.</p>
+          </div>
+        )}
 
         {/* General */}
         <section>
@@ -114,13 +134,58 @@ export default function SettingsPage() {
                   This action cannot be undone.
                 </p>
               </div>
-              <button className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 transition-colors flex-shrink-0">
+              <button
+                onClick={() => setShowDelete(true)}
+                className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 transition-colors flex-shrink-0"
+              >
                 Delete Project
               </button>
             </div>
           </div>
         </section>
       </div>
+
+      {showDelete && (
+        <Modal title="Delete Project" onClose={() => { setShowDelete(false); setDeleteConfirm(""); }}>
+          <div className="space-y-3">
+            <p className="text-sm text-neutral-400">
+              This action is irreversible. All apps, databases, storage, and configurations will be permanently deleted.
+            </p>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">
+                Type <span className="font-mono text-white">{project?.name || "project-name"}</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={project?.name || "project-name"}
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                type="button"
+                onClick={() => { setShowDelete(false); setDeleteConfirm(""); }}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteConfirm !== project?.name}
+                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${
+                  deleteConfirm === project?.name
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-red-500/30 cursor-not-allowed"
+                }`}
+              >
+                Delete Project
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Shell>
   );
 }

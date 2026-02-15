@@ -3,9 +3,11 @@
 import { Shell } from "@/components/shell";
 import { PageHeaderSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
+import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { projects, type Project } from "@/lib/api";
+import { useState } from "react";
 
 export default function BillingPage() {
   const projectId = useProject();
@@ -16,6 +18,23 @@ export default function BillingPage() {
     error,
     refetch,
   } = useApi(() => projects.get(projectId), [projectId]);
+
+  const [showPayment, setShowPayment] = useState(false);
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvc, setCardCvc] = useState("");
+  const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
+
+  const handleAddPayment = () => {
+    if (!cardNumber.trim()) return;
+    const last4 = cardNumber.trim().replace(/\s/g, "").slice(-4) || "0000";
+    const masked = `\u2022\u2022\u2022\u2022 ${last4}`;
+    setPaymentMethods((prev) => [...prev, masked]);
+    setShowPayment(false);
+    setCardNumber("");
+    setCardExpiry("");
+    setCardCvc("");
+  };
 
   if (loading) {
     return (
@@ -113,21 +132,81 @@ export default function BillingPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm text-neutral-300">
-                    No payment method configured
-                  </p>
-                  <p className="text-xs text-neutral-500">
-                    Add a payment method to unlock paid features
-                  </p>
+                  {paymentMethods.length > 0 ? (
+                    <>
+                      <p className="text-sm text-neutral-300">Payment methods</p>
+                      <div className="mt-1 space-y-1">
+                        {paymentMethods.map((pm, i) => (
+                          <p key={i} className="text-xs text-neutral-400 font-mono">{pm}</p>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-neutral-300">
+                        No payment method configured
+                      </p>
+                      <p className="text-xs text-neutral-500">
+                        Add a payment method to unlock paid features
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
-              <button className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm text-white hover:bg-accent-600 transition-colors">
+              <button
+                onClick={() => setShowPayment(true)}
+                className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm text-white hover:bg-accent-600 transition-colors"
+              >
                 Add Payment Method
               </button>
             </div>
           </div>
         </section>
       </div>
+
+      {showPayment && (
+        <Modal title="Add Payment Method" onClose={() => setShowPayment(false)}>
+          <form onSubmit={(e) => { e.preventDefault(); handleAddPayment(); }} className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Card Number</label>
+              <input
+                type="text"
+                value={cardNumber}
+                onChange={(e) => setCardNumber(e.target.value)}
+                placeholder="4242 4242 4242 4242"
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-neutral-400">Expiry</label>
+                <input
+                  type="text"
+                  value={cardExpiry}
+                  onChange={(e) => setCardExpiry(e.target.value)}
+                  placeholder="MM/YY"
+                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-neutral-400">CVC</label>
+                <input
+                  type="text"
+                  value={cardCvc}
+                  onChange={(e) => setCardCvc(e.target.value)}
+                  placeholder="123"
+                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <button type="button" onClick={() => setShowPayment(false)} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button type="submit" className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors">Add Card</button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </Shell>
   );
 }

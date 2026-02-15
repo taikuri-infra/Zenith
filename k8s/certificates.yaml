@@ -19,6 +19,8 @@ spec:
     - api.freezenith.com
     - demo-ms.freezenith.com
     - demo-cloud.freezenith.com
+    - pitch.freezenith.com
+    - demo-tachyon.freezenith.com
 ---
 # embermind.app customer domains
 apiVersion: cert-manager.io/v1

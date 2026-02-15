@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Shell } from "@/components/shell";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
@@ -7,15 +8,21 @@ import {
   CardSkeleton,
   TableSkeleton,
 } from "@/components/loading-skeleton";
-import { DemoButton } from "@/components/demo-button";
-import { getApi, isDemoMode } from "@/lib/get-api";
+import { Modal } from "@/components/modal";
+import { getApi } from "@/lib/get-api";
 import type { PlatformUpdate, UpdateHistoryEntry } from "@/lib/api";
-import { useApi, useMutation } from "@/hooks/use-api";
+import { useApi } from "@/hooks/use-api";
 import { ArrowUpCircle } from "lucide-react";
+
+const UPGRADE_STEPS = [
+  "Downloading...",
+  "Installing...",
+  "Restarting...",
+  "Complete!",
+];
 
 export default function UpdatesPage() {
   const apiClient = getApi();
-  const demo = isDemoMode();
 
   const {
     data: platformUpdate,
@@ -31,19 +38,72 @@ export default function UpdatesPage() {
     refetch: refetchHistory,
   } = useApi<UpdateHistoryEntry[]>(() => apiClient.updates.history());
 
-  const applyMutation = useMutation((version: string) =>
-    apiClient.updates.apply(version)
-  );
+  const [localUpdate, setLocalUpdate] = useState<PlatformUpdate | null>(null);
+  const [localHistory, setLocalHistory] = useState<UpdateHistoryEntry[]>([]);
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [upgradeStep, setUpgradeStep] = useState(0);
+  const [upgradeProgress, setUpgradeProgress] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const handleUpgrade = async () => {
-    if (demo || !platformUpdate) return;
-    try {
-      await applyMutation.execute(platformUpdate.version);
-      refetchUpdate();
-      refetchHistory();
-    } catch {
-      // error is set in the mutation hook
+  useEffect(() => {
+    if (platformUpdate) {
+      setLocalUpdate(platformUpdate);
     }
+  }, [platformUpdate]);
+
+  useEffect(() => {
+    if (history) {
+      setLocalHistory(history);
+    }
+  }, [history]);
+
+  const handleUpgrade = () => {
+    if (!localUpdate) return;
+    setShowProgressModal(true);
+    setUpgradeStep(0);
+    setUpgradeProgress(0);
+
+    let progress = 0;
+    let step = 0;
+
+    intervalRef.current = setInterval(() => {
+      progress += 5;
+      if (progress >= 100) progress = 100;
+
+      const newStep = Math.min(
+        Math.floor(progress / 25),
+        UPGRADE_STEPS.length - 1
+      );
+      step = newStep;
+
+      setUpgradeProgress(progress);
+      setUpgradeStep(step);
+
+      if (progress >= 100) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+      }
+    }, 200);
+  };
+
+  const handleProgressClose = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (upgradeProgress >= 100 && localUpdate) {
+      const newHistoryEntry: UpdateHistoryEntry = {
+        version: localUpdate.version,
+        date: new Date().toISOString().split("T")[0],
+        status: "installed",
+      };
+      setLocalHistory((prev) => {
+        const updated = prev.map((e) =>
+          e.status === "installed" ? { ...e, status: "superseded" as const } : e
+        );
+        return [newHistoryEntry, ...updated];
+      });
+      setLocalUpdate(null);
+    }
+    setShowProgressModal(false);
+    setUpgradeStep(0);
+    setUpgradeProgress(0);
   };
 
   return (
@@ -56,7 +116,7 @@ export default function UpdatesPage() {
           <CardSkeleton />
         ) : updateError ? (
           <ErrorState error={updateError} onRetry={refetchUpdate} />
-        ) : !platformUpdate ? (
+        ) : !localUpdate ? (
           <EmptyState
             title="No updates available"
             description="You are running the latest version of Zenith."
@@ -71,40 +131,31 @@ export default function UpdatesPage() {
                     NEW
                   </span>
                   <h2 className="text-base font-semibold text-white">
-                    Zenith {platformUpdate.version}
+                    Zenith {localUpdate.version}
                   </h2>
                 </div>
                 <p className="mt-1 text-sm text-neutral-500">
-                  Released {platformUpdate.releasedAt} &middot; Current version:{" "}
-                  {platformUpdate.current}
+                  Released {localUpdate.releasedAt} &middot; Current version:{" "}
+                  {localUpdate.current}
                 </p>
-                {platformUpdate.breakingChanges && (
+                {localUpdate.breakingChanges && (
                   <p className="mt-1 text-xs text-amber-400">
                     Contains breaking changes
                   </p>
                 )}
               </div>
-              <DemoButton
+              <button
                 onClick={handleUpgrade}
-                disabled={applyMutation.loading}
-                className="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
+                className="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500"
               >
-                {applyMutation.loading
-                  ? "Upgrading..."
-                  : `Upgrade to ${platformUpdate.version}`}
-              </DemoButton>
+                Upgrade to {localUpdate.version}
+              </button>
             </div>
-
-            {applyMutation.error && (
-              <p className="mt-2 text-xs text-red-400">
-                Upgrade failed: {applyMutation.error.message}
-              </p>
-            )}
 
             <div className="mt-4">
               <h3 className="text-sm font-medium text-white">New Features</h3>
               <ul className="mt-2 space-y-1.5">
-                {platformUpdate.features.map((feature, i) => (
+                {localUpdate.features.map((feature, i) => (
                   <li
                     key={i}
                     className="flex items-start gap-2 text-sm text-neutral-300"
@@ -127,7 +178,7 @@ export default function UpdatesPage() {
             <TableSkeleton columns={3} rows={4} />
           ) : historyError ? (
             <ErrorState error={historyError} onRetry={refetchHistory} />
-          ) : !history || history.length === 0 ? (
+          ) : localHistory.length === 0 ? (
             <EmptyState
               title="No update history"
               description="No previous updates have been recorded."
@@ -149,11 +200,11 @@ export default function UpdatesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {history.map((entry, i) => (
+                  {localHistory.map((entry, i) => (
                     <tr
-                      key={entry.version}
+                      key={`${entry.version}-${i}`}
                       className={`transition-colors hover:bg-surface-200 ${
-                        i < history.length - 1
+                        i < localHistory.length - 1
                           ? "border-b border-border"
                           : ""
                       }`}
@@ -185,6 +236,55 @@ export default function UpdatesPage() {
           )}
         </section>
       </div>
+
+      {showProgressModal && (
+        <Modal title="Upgrading Platform" onClose={handleProgressClose}>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {UPGRADE_STEPS.map((step, i) => (
+                <div
+                  key={step}
+                  className={`flex items-center gap-2 text-sm ${
+                    i < upgradeStep
+                      ? "text-emerald-400"
+                      : i === upgradeStep
+                      ? "text-white font-medium"
+                      : "text-neutral-600"
+                  }`}
+                >
+                  {i < upgradeStep ? (
+                    <span className="text-emerald-400">&#10003;</span>
+                  ) : i === upgradeStep ? (
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
+                  ) : (
+                    <span className="inline-block h-3 w-3 rounded-full border border-neutral-700" />
+                  )}
+                  {step}
+                </div>
+              ))}
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-200">
+              <div
+                className="h-full rounded-full bg-accent-500 transition-all duration-300"
+                style={{ width: `${upgradeProgress}%` }}
+              />
+            </div>
+            <p className="text-center text-xs text-neutral-500">
+              {upgradeProgress}%
+            </p>
+            {upgradeProgress >= 100 && (
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={handleProgressClose}
+                  className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </Shell>
   );
 }
