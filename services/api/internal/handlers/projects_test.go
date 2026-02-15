@@ -283,3 +283,213 @@ func TestDeleteProjectNotFound(t *testing.T) {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
 }
+
+func TestUpdateProjectNotFound(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Put("/api/v1/projects/:id", handler.Update)
+
+	updateBody := `{"name":"Updated"}`
+	req := httptest.NewRequest("PUT", "/api/v1/projects/nonexistent", bytes.NewBufferString(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 404 {
+		t.Errorf("Expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateProjectInvalidBody(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Post("/api/v1/projects", handler.Create)
+	app.Put("/api/v1/projects/:id", handler.Update)
+
+	// Create
+	createBody := `{"name":"Original"}`
+	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, _ := app.Test(createReq)
+	defer createResp.Body.Close()
+
+	var created handlers.ProjectResponse
+	json.NewDecoder(createResp.Body).Decode(&created)
+
+	// Update with invalid body
+	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString("{invalid"))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateResp, _ := app.Test(updateReq)
+
+	if updateResp.StatusCode != 400 {
+		t.Errorf("Expected 400, got %d", updateResp.StatusCode)
+	}
+}
+
+func TestUpdateProjectInvalidPlan(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Post("/api/v1/projects", handler.Create)
+	app.Put("/api/v1/projects/:id", handler.Update)
+
+	// Create
+	createBody := `{"name":"Original"}`
+	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, _ := app.Test(createReq)
+	defer createResp.Body.Close()
+
+	var created handlers.ProjectResponse
+	json.NewDecoder(createResp.Body).Decode(&created)
+
+	// Update with invalid plan
+	updateBody := `{"plan":"ultimate"}`
+	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString(updateBody))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateResp, _ := app.Test(updateReq)
+
+	if updateResp.StatusCode != 400 {
+		t.Errorf("Expected 400, got %d", updateResp.StatusCode)
+	}
+}
+
+func TestUpdateProjectNameOnly(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Post("/api/v1/projects", handler.Create)
+	app.Put("/api/v1/projects/:id", handler.Update)
+
+	// Create with plan pro
+	createBody := `{"name":"Original","plan":"pro"}`
+	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, _ := app.Test(createReq)
+	defer createResp.Body.Close()
+
+	var created handlers.ProjectResponse
+	json.NewDecoder(createResp.Body).Decode(&created)
+
+	// Update name only - plan should remain pro
+	updateBody := `{"name":"Renamed"}`
+	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString(updateBody))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateResp, _ := app.Test(updateReq)
+	defer updateResp.Body.Close()
+
+	if updateResp.StatusCode != 200 {
+		t.Fatalf("Expected 200, got %d", updateResp.StatusCode)
+	}
+
+	var result handlers.ProjectResponse
+	json.NewDecoder(updateResp.Body).Decode(&result)
+
+	if result.Name != "Renamed" {
+		t.Errorf("Expected name 'Renamed', got '%s'", result.Name)
+	}
+	if result.Plan != "pro" {
+		t.Errorf("Expected plan 'pro' (unchanged), got '%s'", result.Plan)
+	}
+}
+
+func TestDeleteProjectResponseMessage(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Post("/api/v1/projects", handler.Create)
+	app.Delete("/api/v1/projects/:id", handler.Delete)
+
+	createBody := `{"name":"ToDelete"}`
+	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, _ := app.Test(createReq)
+	defer createResp.Body.Close()
+
+	var created handlers.ProjectResponse
+	json.NewDecoder(createResp.Body).Decode(&created)
+
+	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/"+created.ID, nil)
+	deleteResp, _ := app.Test(deleteReq)
+	defer deleteResp.Body.Close()
+
+	var result map[string]interface{}
+	json.NewDecoder(deleteResp.Body).Decode(&result)
+
+	msg, ok := result["message"].(string)
+	if !ok || msg == "" {
+		t.Error("Expected non-empty message in delete response")
+	}
+}
+
+func TestCreateProjectInvalidBody(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Post("/api/v1/projects", handler.Create)
+
+	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateProjectSlugGeneration(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Post("/api/v1/projects", handler.Create)
+
+	body := `{"name":"My Cool Project"}`
+	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	var result handlers.ProjectResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if result.Slug != "my-cool-project" {
+		t.Errorf("Expected slug 'my-cool-project', got '%s'", result.Slug)
+	}
+}
+
+func TestCreateProjectNamespacePrefix(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Post("/api/v1/projects", handler.Create)
+
+	body := `{"name":"Test"}`
+	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	var result handlers.ProjectResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	expectedPrefix := "zenith-"
+	if len(result.Namespace) < len(expectedPrefix) || result.Namespace[:len(expectedPrefix)] != expectedPrefix {
+		t.Errorf("Expected namespace to start with 'zenith-', got '%s'", result.Namespace)
+	}
+}
+
+func TestListProjectsEmpty(t *testing.T) {
+	app, handler := setupProjectApp()
+	app.Use(injectUser)
+	app.Get("/api/v1/projects", handler.List)
+
+	req := httptest.NewRequest("GET", "/api/v1/projects", nil)
+	resp, _ := app.Test(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("Expected 200, got %d", resp.StatusCode)
+	}
+
+	var result models.ListResponse[handlers.ProjectResponse]
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if len(result.Items) != 0 {
+		t.Errorf("Expected 0 projects, got %d", len(result.Items))
+	}
+}
