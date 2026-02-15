@@ -1,6 +1,12 @@
 package root
 
 import (
+	"github.com/dotechhq/zenith/cli/cmd/db"
+	"github.com/dotechhq/zenith/cli/cmd/deploy"
+	"github.com/dotechhq/zenith/cli/cmd/install"
+	"github.com/dotechhq/zenith/cli/cmd/logs"
+	"github.com/dotechhq/zenith/cli/cmd/status"
+	"github.com/dotechhq/zenith/cli/cmd/top"
 	"github.com/dotechhq/zenith/cli/cmd/version"
 	"github.com/spf13/cobra"
 )
@@ -20,6 +26,12 @@ You get: Apps, Databases, Storage, Auth, Gateway, Monitoring, Registry.`,
 
 func init() {
 	rootCmd.AddCommand(version.Cmd)
+	rootCmd.AddCommand(install.Cmd)
+	rootCmd.AddCommand(deploy.Cmd)
+	rootCmd.AddCommand(status.Cmd)
+	rootCmd.AddCommand(top.Cmd)
+	rootCmd.AddCommand(logs.Cmd)
+	rootCmd.AddCommand(db.Cmd)
 }
 
 func Execute() error {

@@ -156,30 +156,30 @@
 ## Phase 5: CLI (Week 6)
 
 ### 5.1 zen install
-- [ ] Interactive TUI wizard (Charm huh)
-- [ ] Hetzner token input + validation
-- [ ] Server type selection
-- [ ] Region selection
-- [ ] Progress animation (bubbletea)
-- [ ] Creates management plane (k3s + CAPI)
+- [x] Interactive TUI wizard (Charm huh)
+- [x] Hetzner token input + validation
+- [x] Server type selection
+- [x] Region selection
+- [x] Progress animation (bubbletea)
+- [x] Creates management plane (k3s + CAPI)
 - **Files:** cli/cmd/install.go, cli/internal/install/
 
 ### 5.2 zen deploy
-- [ ] Auto-detect project type (Dockerfile, package.json, go.mod, etc.)
-- [ ] Build + push to registry
-- [ ] Create/update App CRD
-- [ ] Stream deployment progress
+- [x] Auto-detect project type (Dockerfile, package.json, go.mod, etc.)
+- [x] Build + push to registry
+- [x] Create/update App CRD
+- [x] Stream deployment progress
 - **Files:** cli/cmd/deploy.go
 
 ### 5.3 zen status / zen top / zen logs
-- [ ] `zen status` - rich project overview (lipgloss tables)
-- [ ] `zen top` - real-time resource monitor (htop-style, bubbletea)
-- [ ] `zen logs` - color-coded log streaming from Loki
+- [x] `zen status` - rich project overview (lipgloss tables)
+- [x] `zen top` - real-time resource monitor (htop-style, bubbletea)
+- [x] `zen logs` - color-coded log streaming from Loki
 - **Files:** cli/cmd/status.go, cli/cmd/top.go, cli/cmd/logs.go
 
 ### 5.4 zen db connect
-- [ ] Auto port-forward to database
-- [ ] Launch psql/redis-cli/mongosh
+- [x] Auto port-forward to database
+- [x] Launch psql/redis-cli/mongosh
 - **Files:** cli/cmd/db.go
 
 ---
