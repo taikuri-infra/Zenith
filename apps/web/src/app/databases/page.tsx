@@ -7,7 +7,8 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
-import { databases, type Database } from "@/lib/api";
+import { type Database } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import Link from "next/link";
 
 const engineBadge: Record<string, { label: string; className: string }> = {
@@ -19,6 +20,7 @@ const engineBadge: Record<string, { label: string; className: string }> = {
 
 export default function DatabasesPage() {
   const projectId = useProject();
+  const { databases } = getApi();
 
   const {
     data: dbsData,

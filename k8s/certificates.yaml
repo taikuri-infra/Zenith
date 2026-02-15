@@ -16,8 +16,9 @@ spec:
   dnsNames:
     - freezenith.com
     - www.freezenith.com
-    - demo.freezenith.com
     - api.freezenith.com
+    - demo-ms.freezenith.com
+    - demo-cloud.freezenith.com
 ---
 # embermind.app customer domains
 apiVersion: cert-manager.io/v1
@@ -31,5 +32,5 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - mission.embermind.app
+    - ms.embermind.app
     - cloud.embermind.app

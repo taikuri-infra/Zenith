@@ -7,11 +7,13 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
-import { apps, type App } from "@/lib/api";
+import { type App } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import Link from "next/link";
 
 export default function AppsPage() {
   const projectId = useProject();
+  const { apps } = getApi();
 
   const {
     data: appsData,

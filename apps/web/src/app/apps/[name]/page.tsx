@@ -7,12 +7,14 @@ import { AppDetailSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
-import { apps, type App } from "@/lib/api";
+import { type App } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import { useParams } from "next/navigation";
 
 export default function AppDetailPage() {
   const { name } = useParams<{ name: string }>();
   const projectId = useProject();
+  const { apps } = getApi();
 
   const {
     data: app,

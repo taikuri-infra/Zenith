@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, UnauthorizedError } from "@/lib/api";
+import { isDemoMode } from "@/lib/get-api";
 
 /**
  * Generic hook for API data fetching with loading and error states.
@@ -27,7 +28,7 @@ export function useApi<T>(
       setData(result);
     } catch (err) {
       if (err instanceof UnauthorizedError) {
-        if (typeof window !== "undefined") {
+        if (!isDemoMode() && typeof window !== "undefined") {
           window.location.href = "/login";
         }
         return;
@@ -77,7 +78,7 @@ export function useMutation<TData, TVariables>(
         return result;
       } catch (err) {
         if (err instanceof UnauthorizedError) {
-          if (typeof window !== "undefined") {
+          if (!isDemoMode() && typeof window !== "undefined") {
             window.location.href = "/login";
           }
           return null;

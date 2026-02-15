@@ -6,11 +6,13 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
-import { storage, type StorageBucket } from "@/lib/api";
+import { type StorageBucket } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import Link from "next/link";
 
 export default function StoragePage() {
   const projectId = useProject();
+  const { storage } = getApi();
 
   const {
     data: storageData,

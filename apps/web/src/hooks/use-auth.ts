@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { auth, isAuthenticated, getAccessToken, clearTokens } from "@/lib/api";
+import { isDemoMode } from "@/lib/get-api";
 
 interface User {
   email: string;
@@ -23,13 +24,19 @@ export function useAuth(): AuthState & {
   register: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
 } {
+  const demo = isDemoMode();
+
   const [state, setState] = useState<AuthState>({
-    user: null,
-    isAuthenticated: false,
-    loading: true,
+    user: demo
+      ? { email: "demo@zenith.dev", name: "Demo User", role: "admin" }
+      : null,
+    isAuthenticated: demo,
+    loading: !demo,
   });
 
   useEffect(() => {
+    if (demo) return;
+
     // Check if user is authenticated on mount
     const authenticated = isAuthenticated();
     if (authenticated) {
@@ -55,9 +62,10 @@ export function useAuth(): AuthState & {
       }
     }
     setState({ user: null, isAuthenticated: false, loading: false });
-  }, []);
+  }, [demo]);
 
   const login = useCallback(async (email: string, password: string) => {
+    if (demo) return true;
     try {
       const response = await auth.login({ email, password });
       const payload = JSON.parse(atob(response.access_token.split(".")[1]));
@@ -74,10 +82,11 @@ export function useAuth(): AuthState & {
     } catch {
       return false;
     }
-  }, []);
+  }, [demo]);
 
   const register = useCallback(
     async (email: string, password: string, name: string) => {
+      if (demo) return true;
       try {
         const response = await auth.register({ email, password, name });
         const payload = JSON.parse(atob(response.access_token.split(".")[1]));
@@ -95,13 +104,14 @@ export function useAuth(): AuthState & {
         return false;
       }
     },
-    []
+    [demo]
   );
 
   const logout = useCallback(() => {
+    if (demo) return;
     auth.logout();
     setState({ user: null, isAuthenticated: false, loading: false });
-  }, []);
+  }, [demo]);
 
   return { ...state, login, register, logout };
 }

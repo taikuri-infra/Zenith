@@ -1,0 +1,150 @@
+# =============================================================================
+# Demo Deployments (demo-ms.freezenith.com + demo-cloud.freezenith.com)
+# Read-only showrooms with mock data baked in at build time
+# =============================================================================
+
+# ---- Mission Control Demo ----
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-mc-demo
+  namespace: zenith-platform
+  labels:
+    app: zenith-mc-demo
+    app.kubernetes.io/name: zenith-mc-demo
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mission-control-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenith-mc-demo
+  template:
+    metadata:
+      labels:
+        app: zenith-mc-demo
+        app.kubernetes.io/name: zenith-mc-demo
+    spec:
+      containers:
+        - name: mission-control
+          image: zenith-mc-demo:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3100
+              name: http
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://api.freezenith.com"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3100
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3100
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-mc-demo
+  namespace: zenith-platform
+  labels:
+    app: zenith-mc-demo
+    app.kubernetes.io/name: zenith-mc-demo
+    app.kubernetes.io/part-of: zenith
+spec:
+  selector:
+    app: zenith-mc-demo
+  ports:
+    - port: 3100
+      targetPort: 3100
+      protocol: TCP
+      name: http
+---
+# ---- Web Platform Demo ----
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-web-demo
+  namespace: zenith-platform
+  labels:
+    app: zenith-web-demo
+    app.kubernetes.io/name: zenith-web-demo
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: web-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenith-web-demo
+  template:
+    metadata:
+      labels:
+        app: zenith-web-demo
+        app.kubernetes.io/name: zenith-web-demo
+    spec:
+      containers:
+        - name: web
+          image: zenith-web-demo:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://api.freezenith.com"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-web-demo
+  namespace: zenith-platform
+  labels:
+    app: zenith-web-demo
+    app.kubernetes.io/name: zenith-web-demo
+    app.kubernetes.io/part-of: zenith
+spec:
+  selector:
+    app: zenith-web-demo
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http

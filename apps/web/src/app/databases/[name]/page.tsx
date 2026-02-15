@@ -7,7 +7,8 @@ import { DatabaseDetailSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
-import { databases, type Database } from "@/lib/api";
+import { type Database } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import { useParams } from "next/navigation";
 
 const engineColors: Record<string, string> = {
@@ -20,6 +21,7 @@ const engineColors: Record<string, string> = {
 export default function DatabaseDetailPage() {
   const { name } = useParams<{ name: string }>();
   const projectId = useProject();
+  const { databases } = getApi();
 
   const {
     data: db,
