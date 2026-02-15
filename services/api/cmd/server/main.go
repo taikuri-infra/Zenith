@@ -76,6 +76,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 
 	// Handlers
 	projectHandler := handlers.NewProjectHandler(k8sClient)
+	appHandler := handlers.NewAppHandler(k8sClient)
+	dbHandler := handlers.NewDatabaseHandler(k8sClient)
+	storageHandler := handlers.NewStorageHandler(k8sClient)
 
 	api := app.Group("/api/v1")
 	api.Get("/version", handlers.VersionInfo(Version, BuildTime, GitCommit))
@@ -90,4 +93,29 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	projects.Get("/:id", projectHandler.Get)
 	projects.Put("/:id", projectHandler.Update)
 	projects.Delete("/:id", middleware.RequireRole(models.RoleOwner), projectHandler.Delete)
+
+	// Apps (nested under projects)
+	apps := protected.Group("/projects/:id/apps")
+	apps.Post("/", appHandler.Create)
+	apps.Get("/", appHandler.List)
+	apps.Get("/:name", appHandler.Get)
+	apps.Put("/:name", appHandler.Update)
+	apps.Delete("/:name", appHandler.Delete)
+	apps.Post("/:name/redeploy", appHandler.Redeploy)
+
+	// Databases (nested under projects)
+	databases := protected.Group("/projects/:id/databases")
+	databases.Post("/", dbHandler.Create)
+	databases.Get("/", dbHandler.List)
+	databases.Get("/:name", dbHandler.Get)
+	databases.Delete("/:name", dbHandler.Delete)
+	databases.Get("/:name/backups", dbHandler.ListBackups)
+	databases.Post("/:name/backups", dbHandler.CreateBackup)
+
+	// Storage (nested under projects)
+	storage := protected.Group("/projects/:id/storage")
+	storage.Post("/", storageHandler.Create)
+	storage.Get("/", storageHandler.List)
+	storage.Get("/:name", storageHandler.Get)
+	storage.Delete("/:name", storageHandler.Delete)
 }
