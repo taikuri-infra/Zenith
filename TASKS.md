@@ -120,35 +120,35 @@
 ## Phase 4: Operator Reconcilers (Week 4-5)
 
 ### 4.1 App Reconciler
-- [ ] Watch App CRDs
-- [ ] Create Deployment + Service + Ingress
-- [ ] Health checks and readiness probes
-- [ ] Auto-scaling based on spec
-- [ ] Rolling updates
+- [x] Watch App CRDs
+- [x] Create Deployment + Service + Ingress
+- [x] Health checks and readiness probes
+- [x] Auto-scaling based on spec
+- [x] Rolling updates
 - **Files:** services/operator/internal/controllers/app_controller.go
 
 ### 4.2 Database Reconciler
-- [ ] Watch Database CRDs
-- [ ] PostgreSQL: Create CNPG Cluster CR
-- [ ] Redis: Create Redis CR
-- [ ] MySQL: Create MySQL CR
-- [ ] Hetzner Volume provisioning for storage
-- [ ] Connection secret generation
-- [ ] Automated backups to Hetzner Object Storage
+- [x] Watch Database CRDs
+- [x] PostgreSQL: Create CNPG Cluster CR
+- [x] Redis: Create Redis CR
+- [x] MySQL: Create MySQL CR
+- [x] Hetzner Volume provisioning for storage
+- [x] Connection secret generation
+- [x] Automated backups to Hetzner Object Storage
 - **Files:** services/operator/internal/controllers/database_controller.go
 
 ### 4.3 Domain Reconciler
-- [ ] Watch Domain CRDs
-- [ ] Create/update Hetzner DNS records
-- [ ] cert-manager Certificate resources
-- [ ] Kong Ingress configuration
+- [x] Watch Domain CRDs
+- [x] Create/update Hetzner DNS records
+- [x] cert-manager Certificate resources
+- [x] Kong Ingress configuration
 - **Files:** services/operator/internal/controllers/domain_controller.go
 
 ### 4.4 Storage Reconciler
-- [ ] Watch StorageBucket CRDs
-- [ ] Hetzner Object Storage bucket creation
-- [ ] Access policy management
-- [ ] Credential generation (S3-compatible keys)
+- [x] Watch StorageBucket CRDs
+- [x] Hetzner Object Storage bucket creation
+- [x] Access policy management
+- [x] Credential generation (S3-compatible keys)
 - **Files:** services/operator/internal/controllers/storage_controller.go
 
 ---
