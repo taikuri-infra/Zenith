@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zenith-platform
+  labels:
+    app.kubernetes.io/part-of: zenith
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zenith-embermind
+  labels:
+    app.kubernetes.io/part-of: zenith
+    zenith.dev/tenant: embermind
+    zenith.dev/domain: embermind.app

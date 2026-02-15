@@ -1,8 +1,14 @@
+"use client";
+
 import Link from "next/link";
+import { motion, useInView } from "framer-motion";
+import { useRef } from "react";
 import { Section, SectionHeader } from "@/components/section";
 import { FeatureCard } from "@/components/feature-card";
-import { Terminal } from "@/components/terminal";
-import { PricingCard } from "@/components/pricing-card";
+import { AnimatedTerminal } from "@/components/animated-terminal";
+import { TrustBar } from "@/components/trust-bar";
+import { ArchitectureDiagram } from "@/components/architecture-diagram";
+import { PricingComparison } from "@/components/pricing-comparison";
 import {
   Rocket,
   Database,
@@ -10,90 +16,24 @@ import {
   HardDrive,
   Network,
   BarChart3,
-  Terminal as TerminalIcon,
-  Upload,
-  Scaling,
   ArrowRight,
   Github,
   Star,
   Users,
-  Zap,
-  Server,
-  Layers,
-  Box,
   ChevronRight,
+  Copy,
+  Check,
 } from "lucide-react";
+import { useState } from "react";
 
 export default function LandingPage() {
   return (
     <div className="relative">
       {/* ===== HERO SECTION ===== */}
-      <section className="relative overflow-hidden pt-28 pb-20 md:pt-36 md:pb-28">
-        {/* Background effects */}
-        <div className="absolute inset-0 grid-pattern" />
-        <div className="absolute inset-0 hero-gradient" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-accent-500/5 rounded-full blur-3xl" />
+      <HeroSection />
 
-        <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="flex flex-col items-center text-center">
-            {/* Badge */}
-            <div className="mb-6 animate-fade-in">
-              <span className="inline-flex items-center gap-2 rounded-full border border-accent-500/30 bg-accent-500/10 px-4 py-1.5 text-sm text-accent-400">
-                <Zap className="h-3.5 w-3.5" />
-                100% Free and Open Source
-              </span>
-            </div>
-
-            {/* Headline */}
-            <h1 className="animate-fade-in-up max-w-4xl text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
-              Your own cloud.{" "}
-              <span className="gradient-text">Zero complexity.</span>
-            </h1>
-
-            {/* Subheadline */}
-            <p className="mt-6 max-w-2xl animate-fade-in-up text-base text-neutral-400 opacity-0 delay-200 sm:text-lg md:text-xl">
-              100% free, open-source Kubernetes PaaS on Hetzner Cloud.
-              One command to deploy apps, databases, auth, and everything you need.
-            </p>
-
-            {/* CTA Buttons */}
-            <div className="mt-8 flex flex-col gap-3 animate-fade-in-up opacity-0 delay-300 sm:flex-row sm:gap-4">
-              <Link
-                href="#get-started"
-                className="group inline-flex items-center justify-center gap-2 rounded-lg bg-accent-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-500/25"
-              >
-                Get Started
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-              <Link
-                href="https://github.com/DoTech/zenith"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-50 px-6 py-3 text-sm font-medium text-neutral-300 transition-all hover:border-border-hover hover:text-white"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Github className="h-4 w-4" />
-                View on GitHub
-              </Link>
-            </div>
-
-            {/* Terminal */}
-            <div className="mt-12 w-full max-w-2xl animate-fade-in-up opacity-0 delay-400">
-              <Terminal
-                lines={[
-                  {
-                    command: "zen install --provider hetzner --token hc_xxx",
-                    output: [
-                      "  Provisioning management cluster on Hetzner Cloud...",
-                      "  Installing Zenith operator, gateway, monitoring...",
-                      "  Ready! Dashboard: https://zenith.your-domain.com",
-                    ],
-                  },
-                ]}
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ===== TRUST BAR ===== */}
+      <TrustBar />
 
       {/* ===== FEATURES SECTION ===== */}
       <Section id="features">
@@ -108,381 +48,419 @@ export default function LandingPage() {
             icon={Rocket}
             title="Apps"
             description="Deploy any container with zero-downtime deploys, auto-scaling, rollbacks, and custom domains. From Docker images or Git repos."
+            index={0}
           />
           <FeatureCard
             icon={Database}
             title="Databases"
             description="PostgreSQL, MySQL, MongoDB, Redis -- all managed. Automated backups, point-in-time recovery, connection pooling included."
+            index={1}
           />
           <FeatureCard
             icon={Shield}
             title="Auth"
             description="Built-in authentication and authorization. OAuth 2.0, SAML, MFA, per-tenant realms. No external Keycloak needed."
+            index={2}
           />
           <FeatureCard
             icon={HardDrive}
             title="Storage"
             description="S3-compatible object storage integrated with Hetzner. Buckets, presigned URLs, CDN-ready. Seamlessly connected to your apps."
+            index={3}
           />
           <FeatureCard
             icon={Network}
             title="API Gateway"
             description="Kong-powered API gateway with rate limiting, JWT validation, CORS, and request transformation. CRD-driven configuration."
+            index={4}
           />
           <FeatureCard
             icon={BarChart3}
             title="Monitoring"
             description="Grafana, Prometheus, and Loki out of the box. Pre-built dashboards for apps, databases, and infrastructure."
+            index={5}
           />
         </div>
       </Section>
 
       {/* ===== HOW IT WORKS SECTION ===== */}
-      <Section id="how-it-works" className="border-t border-border">
-        <SectionHeader
-          label="How it Works"
-          title="Three commands. That's it."
-          description="From zero to a fully operational cloud platform in minutes. No DevOps degree required."
-        />
-
-        <div className="grid gap-8 md:grid-cols-3">
-          {/* Step 1 */}
-          <div className="relative">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-500/10 border border-accent-500/20 text-sm font-bold text-accent-400">
-                1
-              </div>
-              <h3 className="text-lg font-semibold text-white">Install</h3>
-            </div>
-            <div className="rounded-lg border border-border bg-surface-50 p-4 font-mono text-sm">
-              <span className="text-accent-400">$</span>
-              <span className="ml-2 text-neutral-200">zen install --provider hetzner</span>
-            </div>
-            <p className="mt-3 text-sm text-neutral-500">
-              One command provisions your management cluster on Hetzner Cloud. Zenith operator, gateway, monitoring -- all installed automatically.
-            </p>
-            {/* Connector line (desktop) */}
-            <div className="absolute right-0 top-5 hidden h-px w-8 translate-x-full bg-gradient-to-r from-accent-500/40 to-transparent md:block" />
-          </div>
-
-          {/* Step 2 */}
-          <div className="relative">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-500/10 border border-accent-500/20 text-sm font-bold text-accent-400">
-                2
-              </div>
-              <h3 className="text-lg font-semibold text-white">Deploy</h3>
-            </div>
-            <div className="rounded-lg border border-border bg-surface-50 p-4 font-mono text-sm">
-              <span className="text-accent-400">$</span>
-              <span className="ml-2 text-neutral-200">cd my-app && zen deploy</span>
-            </div>
-            <p className="mt-3 text-sm text-neutral-500">
-              Push your app to Zenith. It detects your framework, builds it, sets up TLS, and gives you a URL. Zero config needed.
-            </p>
-            <div className="absolute right-0 top-5 hidden h-px w-8 translate-x-full bg-gradient-to-r from-accent-500/40 to-transparent md:block" />
-          </div>
-
-          {/* Step 3 */}
-          <div>
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-500/10 border border-accent-500/20 text-sm font-bold text-accent-400">
-                3
-              </div>
-              <h3 className="text-lg font-semibold text-white">Scale</h3>
-            </div>
-            <div className="rounded-lg border border-border bg-surface-50 p-4 font-mono text-sm">
-              <span className="text-accent-400">$</span>
-              <span className="ml-2 text-neutral-200">zen scale my-app --replicas 5</span>
-            </div>
-            <p className="mt-3 text-sm text-neutral-500">
-              Everything auto-scales. Or fine-tune it yourself. CAPI manages nodes, the operator handles the rest. Sit back and relax.
-            </p>
-          </div>
-        </div>
-      </Section>
-
-      {/* ===== PRICING SECTION ===== */}
-      <Section id="pricing" className="border-t border-border">
-        <SectionHeader
-          label="Pricing"
-          title="Free forever. Really."
-          description="Zenith is 100% open source with no feature gating. Pay only for Hetzner infrastructure."
-        />
-
-        <div className="grid gap-6 md:grid-cols-3">
-          <PricingCard
-            name="Free"
-            price="$0"
-            period="forever"
-            description="Everything included. Self-hosted on your Hetzner account."
-            features={[
-              "All platform features",
-              "Unlimited apps and databases",
-              "Built-in auth, gateway, monitoring",
-              "CLI and web dashboard",
-              "Community support",
-              "MIT licensed",
-            ]}
-            cta="Get Started"
-            ctaHref="#get-started"
-            featured
-          />
-          <PricingCard
-            name="Pro Support"
-            price="$49"
-            period="/month"
-            description="Priority support for teams running Zenith in production."
-            features={[
-              "Everything in Free",
-              "Priority email support",
-              "48-hour response SLA",
-              "Assisted upgrades",
-              "Architecture review",
-              "Private Discord channel",
-            ]}
-            cta="Contact Sales"
-            ctaHref="mailto:support@freezenith.com"
-          />
-          <PricingCard
-            name="Enterprise"
-            price="Custom"
-            description="Dedicated support for large-scale deployments."
-            features={[
-              "Everything in Pro Support",
-              "Dedicated support engineer",
-              "Custom SLAs",
-              "White-label option",
-              "On-call incident response",
-              "Custom feature development",
-            ]}
-            cta="Talk to Us"
-            ctaHref="mailto:enterprise@freezenith.com"
-          />
-        </div>
-      </Section>
+      <HowItWorksSection />
 
       {/* ===== ARCHITECTURE SECTION ===== */}
-      <Section id="architecture" className="border-t border-border">
+      <Section id="architecture" className="border-t border-border/50">
         <SectionHeader
           label="Architecture"
           title="Built on proven technology"
           description="Zenith combines the best open-source tools into a unified platform managed by a Kubernetes operator."
         />
+        <ArchitectureDiagram />
+      </Section>
 
-        <div className="mx-auto max-w-3xl">
-          {/* Architecture diagram using CSS */}
-          <div className="rounded-xl border border-border bg-surface-50 p-6 md:p-8">
-            {/* Layer 1: Internet */}
-            <div className="text-center">
-              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-200 px-4 py-2">
-                <Network className="h-4 w-4 text-neutral-400" />
-                <span className="text-sm font-medium text-neutral-300">Internet</span>
-              </div>
-            </div>
-
-            {/* Connector */}
-            <div className="mx-auto my-3 h-6 w-px bg-gradient-to-b from-neutral-600 to-accent-500/40" />
-
-            {/* Layer 2: Load Balancer */}
-            <div className="text-center">
-              <div className="inline-flex items-center gap-2 rounded-lg border border-accent-500/30 bg-accent-500/5 px-4 py-2">
-                <Scaling className="h-4 w-4 text-accent-400" />
-                <span className="text-sm font-medium text-accent-300">Hetzner Load Balancer</span>
-              </div>
-            </div>
-
-            {/* Connector */}
-            <div className="mx-auto my-3 h-6 w-px bg-gradient-to-b from-accent-500/40 to-accent-500/20" />
-
-            {/* Layer 3: Kong Gateway */}
-            <div className="text-center">
-              <div className="inline-flex items-center gap-2 rounded-lg border border-accent-500/20 bg-accent-500/5 px-4 py-2">
-                <Shield className="h-4 w-4 text-accent-400" />
-                <span className="text-sm font-medium text-accent-300">Kong API Gateway</span>
-              </div>
-              <p className="mt-1 text-xs text-neutral-500">JWT validation, rate limiting, routing</p>
-            </div>
-
-            {/* Connector */}
-            <div className="mx-auto my-3 h-6 w-px bg-gradient-to-b from-accent-500/20 to-accent-500/10" />
-
-            {/* Layer 4: Kubernetes */}
-            <div className="rounded-lg border border-border bg-surface-100 p-4 md:p-6">
-              <div className="mb-4 flex items-center justify-center gap-2">
-                <Layers className="h-4 w-4 text-accent-400" />
-                <span className="text-sm font-semibold text-white">Kubernetes (k3s / CAPI)</span>
-              </div>
-
-              {/* Inner grid: Zenith components */}
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <ArchBlock icon={Box} label="Zenith Operator" accent />
-                <ArchBlock icon={Shield} label="Auth Service" />
-                <ArchBlock icon={BarChart3} label="Monitoring" />
-                <ArchBlock icon={Database} label="DB Operators" />
-              </div>
-
-              {/* Connector */}
-              <div className="mx-auto my-3 h-4 w-px bg-border" />
-
-              {/* Your apps */}
-              <div className="rounded-lg border border-dashed border-accent-500/30 bg-accent-500/5 p-3 text-center">
-                <div className="flex items-center justify-center gap-2">
-                  <Rocket className="h-4 w-4 text-accent-400" />
-                  <span className="text-sm font-medium text-accent-300">Your Apps & Services</span>
-                </div>
-                <p className="mt-1 text-xs text-neutral-500">Containers, functions, cron jobs</p>
-              </div>
-            </div>
-
-            {/* Connector */}
-            <div className="mx-auto my-3 h-6 w-px bg-border" />
-
-            {/* Layer 5: Hetzner */}
-            <div className="text-center">
-              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-200 px-4 py-2">
-                <Server className="h-4 w-4 text-neutral-400" />
-                <span className="text-sm font-medium text-neutral-300">Hetzner Cloud</span>
-              </div>
-              <p className="mt-1 text-xs text-neutral-500">Servers, volumes, networking, DNS, object storage</p>
-            </div>
-          </div>
-        </div>
+      {/* ===== PRICING COMPARISON SECTION ===== */}
+      <Section id="pricing" className="border-t border-border/50">
+        <SectionHeader
+          label="Pricing"
+          title="10x cheaper. Same power."
+          description="Run the same workloads for a fraction of the cost. Zenith is free -- you only pay for Hetzner infrastructure."
+        />
+        <PricingComparison />
       </Section>
 
       {/* ===== OPEN SOURCE SECTION ===== */}
-      <Section className="border-t border-border">
-        <div className="mx-auto max-w-3xl text-center">
-          <div className="mb-6">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-500/10 border border-accent-500/20">
-              <Github className="h-8 w-8 text-accent-400" />
-            </div>
-          </div>
+      <OpenSourceSection />
 
-          <h2 className="text-3xl font-bold text-white md:text-4xl">
-            100% open source. MIT licensed.
-          </h2>
-          <p className="mx-auto mt-4 max-w-lg text-neutral-400">
-            No vendor lock-in. No hidden features. Fork it, modify it, self-host it.
-            The entire platform is yours to own.
-          </p>
-
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-6">
-            <Link
-              href="https://github.com/DoTech/zenith"
-              className="group inline-flex items-center gap-2 rounded-lg bg-surface-200 border border-border px-5 py-2.5 text-sm font-medium text-white transition-all hover:border-border-hover hover:bg-surface-300"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Star className="h-4 w-4 text-yellow-500" />
-              Star on GitHub
-              <ChevronRight className="h-3.5 w-3.5 text-neutral-500 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-            <Link
-              href="https://github.com/DoTech/zenith/blob/main/CONTRIBUTING.md"
-              className="inline-flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Users className="h-4 w-4" />
-              Become a contributor
-            </Link>
-          </div>
-
-          {/* Tech stack badges */}
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-2">
-            {["Go", "Kubernetes", "Next.js", "TypeScript", "Helm", "Kong", "Grafana", "PostgreSQL"].map(
-              (tech) => (
-                <span
-                  key={tech}
-                  className="rounded-full border border-border bg-surface-100 px-3 py-1 text-xs text-neutral-500"
-                >
-                  {tech}
-                </span>
-              )
-            )}
-          </div>
-        </div>
-      </Section>
-
-      {/* ===== GET STARTED CTA ===== */}
-      <Section id="get-started" className="border-t border-border">
-        <div className="relative overflow-hidden rounded-2xl border border-accent-500/20 bg-gradient-to-br from-accent-950/50 via-surface-50 to-surface-50 p-8 md:p-12 text-center">
-          {/* Background glow */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[400px] h-[200px] bg-accent-500/10 rounded-full blur-3xl" />
-
-          <div className="relative">
-            <h2 className="text-3xl font-bold text-white md:text-4xl">
-              Ready to deploy?
-            </h2>
-            <p className="mx-auto mt-4 max-w-lg text-neutral-400">
-              Get your entire platform running in under 10 minutes. No credit card, no sign-up.
-              Just you and your Hetzner account.
-            </p>
-
-            {/* Install command */}
-            <div className="mx-auto mt-8 max-w-lg">
-              <div className="flex items-center rounded-lg border border-border bg-surface-100 px-4 py-3 font-mono text-sm">
-                <span className="text-accent-400">$</span>
-                <span className="ml-2 flex-1 text-left text-neutral-200">
-                  zen install --provider hetzner --token hc_xxx
-                </span>
-                <button
-                  className="ml-2 rounded p-1 text-neutral-500 transition-colors hover:text-white"
-                  aria-label="Copy to clipboard"
-                >
-                  <TerminalIcon className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-              <Link
-                href="https://github.com/DoTech/zenith"
-                className="group inline-flex items-center gap-2 rounded-lg bg-accent-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-500/25"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Read the Docs
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-              <Link
-                href="/docs"
-                className="text-sm text-neutral-400 transition-colors hover:text-white"
-              >
-                Or browse the documentation
-              </Link>
-            </div>
-          </div>
-        </div>
-      </Section>
+      {/* ===== CTA FOOTER SECTION ===== */}
+      <CTASection />
     </div>
   );
 }
 
-/* ===== Architecture diagram helper ===== */
-
-function ArchBlock({
-  icon: Icon,
-  label,
-  accent = false,
-}: {
-  icon: typeof Box;
-  label: string;
-  accent?: boolean;
-}) {
+/* ===== Hero Section ===== */
+function HeroSection() {
   return (
-    <div
-      className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center ${
-        accent
-          ? "border-accent-500/30 bg-accent-500/5"
-          : "border-border bg-surface-200"
-      }`}
-    >
-      <Icon className={`h-4 w-4 ${accent ? "text-accent-400" : "text-neutral-400"}`} />
-      <span className={`text-xs font-medium ${accent ? "text-accent-300" : "text-neutral-400"}`}>
-        {label}
-      </span>
-    </div>
+    <section className="relative overflow-hidden pt-32 pb-8 md:pt-40 md:pb-12">
+      {/* Background layers */}
+      <div className="absolute inset-0 grid-pattern opacity-60" />
+      <div className="absolute inset-0 hero-gradient" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-accent-500/[0.04] rounded-full blur-[120px]" />
+      <div className="absolute inset-0 noise" />
+
+      <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="flex flex-col items-center text-center">
+          {/* Badge */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-8"
+          >
+            <span className="inline-flex items-center gap-2 rounded-full border border-accent-500/20 bg-accent-500/5 px-4 py-1.5 text-sm text-accent-400 backdrop-blur-sm">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-400" />
+              </span>
+              100% Free and Open Source
+            </span>
+          </motion.div>
+
+          {/* Headline */}
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="max-w-4xl text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl leading-[1.1]"
+          >
+            Your Own Cloud Platform.{" "}
+            <span className="gradient-text-hero">10x Cheaper.</span>
+          </motion.h1>
+
+          {/* Subheadline */}
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="mt-6 max-w-2xl text-base text-neutral-400 sm:text-lg md:text-xl leading-relaxed"
+          >
+            One <code className="rounded bg-surface-200 px-1.5 py-0.5 font-mono text-sm text-accent-400">zen install</code> command
+            turns Hetzner Cloud into your own platform -- apps, databases, auth, storage, gateway, monitoring.
+          </motion.p>
+
+          {/* CTA Buttons */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="mt-10 flex flex-col gap-3 sm:flex-row sm:gap-4"
+          >
+            <Link
+              href="#get-started"
+              className="group inline-flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-7 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/25 hover:scale-[1.02]"
+            >
+              Get Started
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              href="https://github.com/DoTech/zenith"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface-50/50 px-7 py-3.5 text-sm font-medium text-neutral-300 backdrop-blur-sm transition-all duration-300 hover:border-border-hover hover:text-white hover:bg-surface-100"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Github className="h-4 w-4" />
+              View on GitHub
+            </Link>
+          </motion.div>
+
+          {/* Animated Terminal */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.5 }}
+            className="mt-16 w-full max-w-2xl"
+          >
+            <AnimatedTerminal />
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ===== How It Works Section ===== */
+function HowItWorksSection() {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-100px" });
+
+  const steps = [
+    {
+      num: "1",
+      title: "Install the CLI",
+      command: "curl -fsSL https://get.freezenith.com | sh",
+      description:
+        "One command installs the Zenith CLI. Available for macOS, Linux, and WSL. Homebrew and apt packages also available.",
+    },
+    {
+      num: "2",
+      title: "Deploy your platform",
+      command: "zen install --provider hetzner --token hc_xxx",
+      description:
+        "Provisions a management cluster on Hetzner Cloud. Installs the Zenith operator, API gateway, auth service, and monitoring stack automatically.",
+    },
+    {
+      num: "3",
+      title: "Ship your apps",
+      command: "cd my-app && zen deploy",
+      description:
+        "Push your app. Zenith detects your framework, builds the container, configures TLS, and gives you a URL. Zero config needed.",
+    },
+  ];
+
+  return (
+    <Section id="how-it-works" className="border-t border-border/50">
+      <SectionHeader
+        label="How it Works"
+        title="Three steps. Five minutes."
+        description="From zero to a fully operational cloud platform. No DevOps degree required."
+      />
+
+      <div ref={ref} className="grid gap-6 md:gap-8 md:grid-cols-3">
+        {steps.map((step, i) => (
+          <motion.div
+            key={step.num}
+            initial={{ opacity: 0, y: 30 }}
+            animate={isInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.5, delay: i * 0.12 }}
+            className="relative"
+          >
+            {/* Step number and title */}
+            <div className="mb-5 flex items-center gap-3.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-500/10 border border-accent-500/20 text-sm font-bold text-accent-400 shrink-0">
+                {step.num}
+              </div>
+              <h3 className="text-lg font-semibold text-white">{step.title}</h3>
+            </div>
+
+            {/* Code block */}
+            <div className="rounded-xl border border-border bg-surface-50/80 p-4 font-mono text-sm overflow-x-auto">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-accent-400 select-none shrink-0">$</span>
+                <span className="text-neutral-200 whitespace-nowrap">{step.command}</span>
+              </div>
+            </div>
+
+            {/* Description */}
+            <p className="mt-4 text-sm text-neutral-500 leading-relaxed">
+              {step.description}
+            </p>
+
+            {/* Connector line between steps (desktop only) */}
+            {i < steps.length - 1 && (
+              <div className="absolute right-0 top-5 hidden h-px w-10 translate-x-[calc(100%-4px)] md:block">
+                <div className="h-full w-full bg-gradient-to-r from-accent-500/30 to-transparent" />
+              </div>
+            )}
+          </motion.div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+/* ===== Open Source Section ===== */
+function OpenSourceSection() {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-100px" });
+
+  return (
+    <Section className="border-t border-border/50">
+      <div ref={ref} className="mx-auto max-w-3xl text-center">
+        {/* GitHub icon */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={isInView ? { opacity: 1, scale: 1 } : {}}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
+        >
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-100 border border-border">
+            <Github className="h-8 w-8 text-white" />
+          </div>
+        </motion.div>
+
+        <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="text-3xl font-bold text-white md:text-4xl lg:text-5xl"
+        >
+          100% Free, Forever.
+        </motion.h2>
+
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="mx-auto mt-5 max-w-lg text-neutral-400 leading-relaxed"
+        >
+          MIT licensed. No vendor lock-in. No hidden features. Fork it, modify it,
+          self-host it. The entire platform is yours.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-6"
+        >
+          <Link
+            href="https://github.com/DoTech/zenith"
+            className="group inline-flex items-center gap-2.5 rounded-xl bg-surface-200 border border-border px-6 py-3 text-sm font-medium text-white transition-all duration-300 hover:border-border-hover hover:bg-surface-300 hover:shadow-lg"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Star className="h-4 w-4 text-yellow-500" />
+            Star on GitHub
+            <ChevronRight className="h-3.5 w-3.5 text-neutral-500 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+          <Link
+            href="https://github.com/DoTech/zenith/blob/main/CONTRIBUTING.md"
+            className="inline-flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Users className="h-4 w-4" />
+            Become a contributor
+          </Link>
+        </motion.div>
+
+        {/* Tech stack badges */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="mt-12 flex flex-wrap items-center justify-center gap-2"
+        >
+          {[
+            "Go",
+            "Kubernetes",
+            "Next.js",
+            "TypeScript",
+            "Helm",
+            "Kong",
+            "Grafana",
+            "PostgreSQL",
+          ].map((tech) => (
+            <span
+              key={tech}
+              className="rounded-full border border-border bg-surface-100/50 px-3.5 py-1 text-xs text-neutral-500 transition-colors hover:text-neutral-300 hover:border-border-hover"
+            >
+              {tech}
+            </span>
+          ))}
+        </motion.div>
+      </div>
+    </Section>
+  );
+}
+
+/* ===== CTA Section ===== */
+function CTASection() {
+  const [copied, setCopied] = useState(false);
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-100px" });
+
+  const installCommand = "zen install --provider hetzner --token hc_xxx";
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(installCommand);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback silently
+    }
+  };
+
+  return (
+    <Section id="get-started" className="border-t border-border/50">
+      <motion.div
+        ref={ref}
+        initial={{ opacity: 0, y: 20 }}
+        animate={isInView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.6 }}
+        className="relative overflow-hidden rounded-2xl border border-accent-500/15 bg-gradient-to-br from-accent-950/40 via-surface-50 to-surface-50 p-8 md:p-14 text-center"
+      >
+        {/* Background glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[250px] bg-accent-500/8 rounded-full blur-[100px]" />
+        <div className="absolute inset-0 noise" />
+
+        <div className="relative">
+          <h2 className="text-3xl font-bold text-white md:text-4xl lg:text-5xl">
+            Deploy your first app in 5 minutes
+          </h2>
+          <p className="mx-auto mt-5 max-w-lg text-neutral-400 leading-relaxed">
+            No credit card. No sign-up. Just your Hetzner account and one command.
+          </p>
+
+          {/* Install command with copy */}
+          <div className="mx-auto mt-10 max-w-lg">
+            <div className="group flex items-center rounded-xl border border-border bg-surface-100/80 backdrop-blur-sm px-5 py-3.5 font-mono text-sm transition-all hover:border-border-hover">
+              <span className="text-accent-400 select-none">$</span>
+              <span className="ml-2 flex-1 text-left text-neutral-200 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                {installCommand}
+              </span>
+              <button
+                onClick={handleCopy}
+                className="ml-3 shrink-0 rounded-lg p-1.5 text-neutral-500 transition-all hover:text-white hover:bg-surface-300"
+                aria-label="Copy to clipboard"
+              >
+                {copied ? (
+                  <Check className="h-4 w-4 text-accent-400" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
+            <Link
+              href="/docs"
+              className="group inline-flex items-center gap-2 rounded-xl bg-accent-500 px-7 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/25"
+            >
+              Read the Docs
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              href="https://github.com/DoTech/zenith"
+              className="inline-flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Github className="h-4 w-4" />
+              View source on GitHub
+            </Link>
+          </div>
+        </div>
+      </motion.div>
+    </Section>
   );
 }

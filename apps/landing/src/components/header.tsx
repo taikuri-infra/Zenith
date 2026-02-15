@@ -1,30 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Menu, X, Zap } from "lucide-react";
+import { Menu, X, Github } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const navLinks = [
-  { href: "#features", label: "Features" },
-  { href: "#how-it-works", label: "How it Works" },
-  { href: "#pricing", label: "Pricing" },
+  { href: "/#features", label: "Features" },
+  { href: "/#how-it-works", label: "How it Works" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/docs", label: "Docs" },
-  { href: "https://github.com/DoTech/zenith", label: "GitHub" },
 ];
 
 export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
-    <header className="fixed top-0 z-50 w-full border-b border-border/50 bg-surface/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+    <header
+      className={cn(
+        "fixed top-0 z-50 w-full transition-all duration-300",
+        scrolled
+          ? "border-b border-border/60 bg-surface/90 backdrop-blur-xl"
+          : "border-b border-transparent bg-transparent"
+      )}
+    >
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 sm:px-6">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/10 border border-accent-500/20 group-hover:bg-accent-500/20 transition-colors">
-            <Zap className="h-4 w-4 text-accent-400" />
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 group-hover:shadow-lg group-hover:shadow-accent-500/25 transition-all duration-300">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="relative z-10">
+              <path d="M8 1L14 5V11L8 15L2 11V5L8 1Z" fill="white" fillOpacity="0.9" />
+              <path d="M8 1L14 5L8 9L2 5L8 1Z" fill="white" />
+            </svg>
           </div>
-          <span className="text-lg font-bold text-white">Zenith</span>
+          <span className="text-lg font-bold tracking-tight text-white">Zenith</span>
         </Link>
 
         {/* Desktop nav */}
@@ -33,8 +60,12 @@ export function Header() {
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-lg px-3 py-2 text-sm text-neutral-400 transition-colors hover:text-white hover:bg-surface-200"
-              {...(link.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              className={cn(
+                "rounded-lg px-3.5 py-2 text-sm transition-colors duration-200",
+                pathname === link.href
+                  ? "text-white"
+                  : "text-neutral-400 hover:text-white"
+              )}
             >
               {link.label}
             </Link>
@@ -45,15 +76,16 @@ export function Header() {
         <div className="hidden items-center gap-3 md:flex">
           <Link
             href="https://github.com/DoTech/zenith"
-            className="rounded-lg px-4 py-2 text-sm text-neutral-300 transition-colors hover:text-white"
+            className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm text-neutral-400 transition-colors hover:text-white"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Star on GitHub
+            <Github className="h-4 w-4" />
+            <span>GitHub</span>
           </Link>
           <Link
             href="#get-started"
-            className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-500/20"
+            className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-500/25"
           >
             Get Started
           </Link>
@@ -61,7 +93,7 @@ export function Header() {
 
         {/* Mobile toggle */}
         <button
-          className="rounded-lg p-2 text-neutral-400 hover:text-white md:hidden"
+          className="relative z-50 rounded-lg p-2 text-neutral-400 hover:text-white md:hidden transition-colors"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle navigation"
         >
@@ -69,36 +101,56 @@ export function Header() {
         </button>
       </div>
 
-      {/* Mobile nav */}
-      <div
-        className={cn(
-          "overflow-hidden border-t border-border/50 bg-surface/95 backdrop-blur-xl transition-all duration-300 md:hidden",
-          mobileOpen ? "max-h-96 py-4" : "max-h-0 py-0"
+      {/* Mobile nav overlay */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden border-t border-border/50 bg-surface/98 backdrop-blur-xl md:hidden"
+          >
+            <nav className="flex flex-col gap-1 px-4 py-4">
+              {navLinks.map((link, i) => (
+                <motion.div
+                  key={link.href}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <Link
+                    href={link.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="block rounded-lg px-3 py-2.5 text-sm text-neutral-300 transition-colors hover:text-white hover:bg-surface-200"
+                  >
+                    {link.label}
+                  </Link>
+                </motion.div>
+              ))}
+              <div className="mt-3 flex flex-col gap-2 border-t border-border pt-4">
+                <Link
+                  href="https://github.com/DoTech/zenith"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-200 px-4 py-2.5 text-sm font-medium text-neutral-300 transition-all hover:text-white"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Github className="h-4 w-4" />
+                  Star on GitHub
+                </Link>
+                <Link
+                  href="#get-started"
+                  onClick={() => setMobileOpen(false)}
+                  className="block rounded-lg bg-accent-500 px-4 py-2.5 text-center text-sm font-medium text-white transition-all hover:bg-accent-600"
+                >
+                  Get Started
+                </Link>
+              </div>
+            </nav>
+          </motion.div>
         )}
-      >
-        <nav className="flex flex-col gap-1 px-4">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setMobileOpen(false)}
-              className="rounded-lg px-3 py-2.5 text-sm text-neutral-400 transition-colors hover:text-white hover:bg-surface-200"
-              {...(link.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <div className="mt-2 border-t border-border pt-3">
-            <Link
-              href="#get-started"
-              onClick={() => setMobileOpen(false)}
-              className="block rounded-lg bg-accent-500 px-4 py-2.5 text-center text-sm font-medium text-white transition-all hover:bg-accent-600"
-            >
-              Get Started
-            </Link>
-          </div>
-        </nav>
-      </div>
+      </AnimatePresence>
     </header>
   );
 }

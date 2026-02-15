@@ -1,4 +1,9 @@
+"use client";
+
 import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 
 interface SectionProps {
   children: React.ReactNode;
@@ -8,7 +13,7 @@ interface SectionProps {
 
 export function Section({ children, className, id }: SectionProps) {
   return (
-    <section id={id} className={cn("py-20 md:py-28 px-4 sm:px-6", className)}>
+    <section id={id} className={cn("relative py-24 md:py-32 px-4 sm:px-6", className)}>
       <div className="mx-auto max-w-6xl">{children}</div>
     </section>
   );
@@ -22,20 +27,38 @@ interface SectionHeaderProps {
 }
 
 export function SectionHeader({ label, title, description, className }: SectionHeaderProps) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-100px" });
+
   return (
-    <div className={cn("mb-12 md:mb-16 text-center", className)}>
+    <div ref={ref} className={cn("mb-16 md:mb-20 text-center", className)}>
       {label && (
-        <span className="mb-3 inline-block rounded-full border border-accent-500/30 bg-accent-500/10 px-3 py-1 text-xs font-medium text-accent-400">
+        <motion.span
+          initial={{ opacity: 0, y: 10 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5 }}
+          className="mb-4 inline-block rounded-full border border-accent-500/20 bg-accent-500/5 px-4 py-1.5 text-xs font-medium tracking-wide uppercase text-accent-400"
+        >
           {label}
-        </span>
+        </motion.span>
       )}
-      <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl">
+      <motion.h2
+        initial={{ opacity: 0, y: 20 }}
+        animate={isInView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl"
+      >
         {title}
-      </h2>
+      </motion.h2>
       {description && (
-        <p className="mx-auto mt-4 max-w-2xl text-base text-neutral-400 md:text-lg">
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="mx-auto mt-5 max-w-2xl text-base text-neutral-400 md:text-lg leading-relaxed"
+        >
           {description}
-        </p>
+        </motion.p>
       )}
     </div>
   );

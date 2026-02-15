@@ -1,46 +1,53 @@
 import Link from "next/link";
-import { Zap, Github, MessageCircle } from "lucide-react";
+import { Github, MessageCircle, Twitter } from "lucide-react";
 
 const footerLinks = {
   Product: [
-    { label: "Features", href: "#features" },
-    { label: "Pricing", href: "#pricing" },
-    { label: "How it Works", href: "#how-it-works" },
-    { label: "Architecture", href: "#architecture" },
-  ],
-  Resources: [
+    { label: "Features", href: "/#features" },
+    { label: "Pricing", href: "/pricing" },
+    { label: "How it Works", href: "/#how-it-works" },
+    { label: "Architecture", href: "/#architecture" },
     { label: "Documentation", href: "/docs" },
+  ],
+  Developers: [
+    { label: "Getting Started", href: "/docs" },
+    { label: "CLI Reference", href: "/docs" },
+    { label: "API Docs", href: "/docs" },
+    { label: "Helm Charts", href: "/docs" },
     { label: "GitHub", href: "https://github.com/DoTech/zenith" },
-    { label: "Changelog", href: "https://github.com/DoTech/zenith/releases" },
-    { label: "Contributing", href: "https://github.com/DoTech/zenith/blob/main/CONTRIBUTING.md" },
   ],
   Community: [
     { label: "Discord", href: "https://discord.gg/zenith" },
     { label: "Twitter", href: "https://twitter.com/freezenith" },
-    { label: "GitHub Discussions", href: "https://github.com/DoTech/zenith/discussions" },
+    { label: "Discussions", href: "https://github.com/DoTech/zenith/discussions" },
+    { label: "Contributing", href: "https://github.com/DoTech/zenith/blob/main/CONTRIBUTING.md" },
+    { label: "Changelog", href: "https://github.com/DoTech/zenith/releases" },
   ],
 };
 
 export function Footer() {
   return (
     <footer className="border-t border-border bg-surface">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 md:py-20">
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
           {/* Brand column */}
-          <div className="col-span-2 md:col-span-1">
-            <Link href="/" className="flex items-center gap-2 group">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/10 border border-accent-500/20">
-                <Zap className="h-4 w-4 text-accent-400" />
+          <div className="col-span-2">
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 transition-all duration-300 group-hover:shadow-lg group-hover:shadow-accent-500/25">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1L14 5V11L8 15L2 11V5L8 1Z" fill="white" fillOpacity="0.9" />
+                  <path d="M8 1L14 5L8 9L2 5L8 1Z" fill="white" />
+                </svg>
               </div>
-              <span className="text-lg font-bold text-white">Zenith</span>
+              <span className="text-lg font-bold tracking-tight text-white">Zenith</span>
             </Link>
-            <p className="mt-4 text-sm text-neutral-500 max-w-xs">
-              100% free, open-source Kubernetes PaaS. Deploy everything with a single command.
+            <p className="mt-4 max-w-xs text-sm text-neutral-500 leading-relaxed">
+              Your own cloud platform, 10x cheaper. 100% free, open-source Kubernetes PaaS on Hetzner Cloud.
             </p>
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-6 flex items-center gap-2">
               <Link
                 href="https://github.com/DoTech/zenith"
-                className="rounded-lg p-2 text-neutral-500 transition-colors hover:text-white hover:bg-surface-200"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-500 transition-all hover:text-white hover:bg-surface-200"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub"
@@ -49,12 +56,21 @@ export function Footer() {
               </Link>
               <Link
                 href="https://discord.gg/zenith"
-                className="rounded-lg p-2 text-neutral-500 transition-colors hover:text-white hover:bg-surface-200"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-500 transition-all hover:text-white hover:bg-surface-200"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Discord"
               >
                 <MessageCircle className="h-4 w-4" />
+              </Link>
+              <Link
+                href="https://twitter.com/freezenith"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-500 transition-all hover:text-white hover:bg-surface-200"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Twitter"
+              >
+                <Twitter className="h-4 w-4" />
               </Link>
             </div>
           </div>
@@ -62,14 +78,18 @@ export function Footer() {
           {/* Link columns */}
           {Object.entries(footerLinks).map(([category, links]) => (
             <div key={category}>
-              <h3 className="text-sm font-semibold text-white">{category}</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                {category}
+              </h3>
               <ul className="mt-4 space-y-2.5">
                 {links.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm text-neutral-500 transition-colors hover:text-neutral-300"
-                      {...(link.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      className="text-sm text-neutral-500 transition-colors hover:text-neutral-200"
+                      {...(link.href.startsWith("http")
+                        ? { target: "_blank", rel: "noopener noreferrer" }
+                        : {})}
                     >
                       {link.label}
                     </Link>
@@ -81,17 +101,20 @@ export function Footer() {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 md:flex-row">
+        <div className="mt-16 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 md:flex-row">
           <p className="text-xs text-neutral-600">
             Made by{" "}
-            <Link href="https://dotech.com" className="text-neutral-500 hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">
+            <Link
+              href="https://dotech.com"
+              className="text-neutral-500 hover:text-white transition-colors"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               DoTech
             </Link>
-            {" "}. MIT Licensed.
+            . MIT Licensed. Open source on GitHub.
           </p>
-          <p className="text-xs text-neutral-600">
-            freezenith.com
-          </p>
+          <p className="text-xs text-neutral-600">freezenith.com</p>
         </div>
       </div>
     </footer>
