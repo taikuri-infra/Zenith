@@ -1,0 +1,27 @@
+apiVersion: v2
+name: zenith
+description: Zenith - Kubernetes-native PaaS on Hetzner Cloud
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://freezenith.com
+sources:
+  - https://github.com/dotechhq/zenith
+keywords:
+  - paas
+  - kubernetes
+  - hetzner
+  - platform
+maintainers:
+  - name: DoTech
+    url: https://github.com/dotechhq
+
+dependencies:
+  - name: kong
+    version: "2.x"
+    repository: https://charts.konghq.com
+    condition: kong.enabled
+  - name: zenith-monitoring
+    version: "0.1.0"
+    repository: "file://../monitoring"
+    condition: monitoring.enabled
