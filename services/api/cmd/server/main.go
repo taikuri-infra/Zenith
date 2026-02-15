@@ -9,7 +9,9 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/config"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
+	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
+	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -69,6 +71,23 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	app.Get("/health", handlers.HealthCheck(Version, BuildTime, GitCommit))
 	app.Get("/ready", handlers.ReadinessCheck())
 
+	// K8s client (in-memory for dev, real client for production)
+	k8sClient := k8s.NewMemoryClient()
+
+	// Handlers
+	projectHandler := handlers.NewProjectHandler(k8sClient)
+
 	api := app.Group("/api/v1")
 	api.Get("/version", handlers.VersionInfo(Version, BuildTime, GitCommit))
+
+	// Protected routes
+	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret))
+
+	// Projects
+	projects := protected.Group("/projects")
+	projects.Post("/", projectHandler.Create)
+	projects.Get("/", projectHandler.List)
+	projects.Get("/:id", projectHandler.Get)
+	projects.Put("/:id", projectHandler.Update)
+	projects.Delete("/:id", middleware.RequireRole(models.RoleOwner), projectHandler.Delete)
 }

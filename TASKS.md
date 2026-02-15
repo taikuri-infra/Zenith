@@ -60,12 +60,12 @@
 - **Files:** services/api/internal/middleware/auth.go, services/api/internal/models/user.go
 
 ### 2.2 Project Management API
-- [ ] POST /api/v1/projects - create project
-- [ ] GET /api/v1/projects - list user's projects
-- [ ] GET /api/v1/projects/:id - get project details
-- [ ] PUT /api/v1/projects/:id - update project
-- [ ] DELETE /api/v1/projects/:id - delete project (danger zone)
-- [ ] Each project creates a K8s namespace
+- [x] POST /api/v1/projects - create project
+- [x] GET /api/v1/projects - list user's projects
+- [x] GET /api/v1/projects/:id - get project details
+- [x] PUT /api/v1/projects/:id - update project
+- [x] DELETE /api/v1/projects/:id - delete project (danger zone)
+- [x] Each project creates a K8s namespace
 - **Files:** services/api/internal/handlers/projects.go
 
 ### 2.3 Apps API
