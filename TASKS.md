@@ -42,10 +42,10 @@
 - **Files:** services/operator/**
 
 ### 1.4 CLI Scaffold
-- [ ] Create `cli/` with Go module + Cobra
-- [ ] `zen version`, `zen help` commands
-- [ ] Config file: ~/.zen/config.yaml
-- [ ] Charm TUI utilities setup (lipgloss, bubbletea)
+- [x] Create `cli/` with Go module + Cobra
+- [x] `zen version`, `zen help` commands
+- [x] Config file: ~/.zen/config.yaml
+- [x] Charm TUI utilities setup (lipgloss, bubbletea)
 - **Files:** cli/**
 
 ---
