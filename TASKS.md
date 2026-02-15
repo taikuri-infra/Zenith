@@ -210,17 +210,17 @@
 ## Phase 7: Connect Frontend to Backend (Week 8)
 
 ### 7.1 API Client
-- [ ] Replace mock data in apps/web/ with real API calls
-- [ ] Create shared API client library
-- [ ] WebSocket for real-time updates (deployment progress, logs)
-- [ ] Error handling and loading states
+- [x] Replace mock data in apps/web/ with real API calls
+- [x] Create shared API client library
+- [x] WebSocket for real-time updates (deployment progress, logs)
+- [x] Error handling and loading states
 - **Files:** apps/web/src/lib/api.ts, apps/web/src/hooks/
 
 ### 7.2 Auth Integration
-- [ ] Login/register pages
-- [ ] OAuth flow (Google, GitHub)
-- [ ] JWT token management (refresh, storage)
-- [ ] Protected routes
+- [x] Login/register pages
+- [x] OAuth flow (Google, GitHub)
+- [x] JWT token management (refresh, storage)
+- [x] Protected routes
 - **Files:** apps/web/src/app/login/, apps/web/src/middleware.ts
 
 ---
