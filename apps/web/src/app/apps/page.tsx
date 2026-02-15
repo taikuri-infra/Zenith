@@ -5,11 +5,13 @@ import { StatusBadge } from "@/components/status-badge";
 import { PageWithTableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
+import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type App } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 
 export default function AppsPage() {
   const projectId = useProject();
@@ -21,6 +23,19 @@ export default function AppsPage() {
     error,
     refetch,
   } = useApi(() => apps.list(projectId), [projectId]);
+
+  const [appList, setAppList] = useState<App[]>([]);
+  const [showDeploy, setShowDeploy] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formRepo, setFormRepo] = useState("");
+  const [formPort, setFormPort] = useState("8080");
+  const [formReplicas, setFormReplicas] = useState("1");
+
+  useEffect(() => {
+    if (appsData?.items) {
+      setAppList(appsData.items);
+    }
+  }, [appsData]);
 
   if (loading) {
     return (
@@ -38,9 +53,30 @@ export default function AppsPage() {
     );
   }
 
-  const appList: App[] = appsData?.items ?? [];
   const runningCount = appList.filter((a) => a.status === "running").length;
   const stoppedCount = appList.length - runningCount;
+
+  const handleDeploy = () => {
+    if (!formName.trim()) return;
+    const newApp: App = {
+      name: formName.trim(),
+      image: formRepo.trim() || `${formName.trim()}:latest`,
+      replicas: parseInt(formReplicas) || 1,
+      port: parseInt(formPort) || 8080,
+      status: "building",
+      cpu: "0.25",
+      memory: "256Mi",
+      domain: undefined,
+      env: {},
+      created_at: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    };
+    setAppList((prev) => [...prev, newApp]);
+    setShowDeploy(false);
+    setFormName("");
+    setFormRepo("");
+    setFormPort("8080");
+    setFormReplicas("1");
+  };
 
   return (
     <Shell>
@@ -53,7 +89,10 @@ export default function AppsPage() {
               {stoppedCount > 0 ? `, ${stoppedCount} stopped` : ""}
             </p>
           </div>
-          <button className="rounded-lg bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 text-sm transition-colors">
+          <button
+            onClick={() => setShowDeploy(true)}
+            className="rounded-lg bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 text-sm transition-colors"
+          >
             + Deploy App
           </button>
         </div>
@@ -175,6 +214,73 @@ export default function AppsPage() {
           </div>
         )}
       </div>
+
+      {showDeploy && (
+        <Modal title="Deploy App" onClose={() => setShowDeploy(false)}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleDeploy();
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">App Name</label>
+              <input
+                type="text"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="my-app"
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Git Repository</label>
+              <input
+                type="text"
+                value={formRepo}
+                onChange={(e) => setFormRepo(e.target.value)}
+                placeholder="https://github.com/org/repo"
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Port</label>
+              <input
+                type="number"
+                value={formPort}
+                onChange={(e) => setFormPort(e.target.value)}
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Replicas</label>
+              <input
+                type="number"
+                value={formReplicas}
+                onChange={(e) => setFormReplicas(e.target.value)}
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowDeploy(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
+              >
+                Deploy
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </Shell>
   );
 }

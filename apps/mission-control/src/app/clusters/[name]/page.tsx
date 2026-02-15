@@ -1,15 +1,15 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useEffect } from "react";
 import { Shell } from "@/components/shell";
 import { StatusBadge } from "@/components/status-badge";
 import { ProgressBar } from "@/components/progress-bar";
 import { ErrorState } from "@/components/error-state";
 import { ClusterDetailSkeleton } from "@/components/loading-skeleton";
-import { DemoButton } from "@/components/demo-button";
-import { getApi, isDemoMode } from "@/lib/get-api";
+import { Modal } from "@/components/modal";
+import { getApi } from "@/lib/get-api";
 import type { Cluster } from "@/lib/api";
-import { useApi, useMutation } from "@/hooks/use-api";
+import { useApi } from "@/hooks/use-api";
 
 export default function ClusterDetailPage({
   params,
@@ -18,7 +18,6 @@ export default function ClusterDetailPage({
 }) {
   const { name } = use(params);
   const apiClient = getApi();
-  const demo = isDemoMode();
 
   const {
     data: cluster,
@@ -27,18 +26,37 @@ export default function ClusterDetailPage({
     refetch,
   } = useApi<Cluster>(() => apiClient.clusters.get(name), [name]);
 
-  const upgradeMutation = useMutation((version: string) =>
-    apiClient.clusters.upgrade(name, version)
-  );
+  const [localCluster, setLocalCluster] = useState<Cluster | null>(null);
+  const [showScaleModal, setShowScaleModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [targetNodes, setTargetNodes] = useState(3);
+  const [upgradeSuccess, setUpgradeSuccess] = useState(false);
 
-  const handleUpgrade = async () => {
-    if (demo || !cluster?.upgradeAvailable) return;
-    try {
-      await upgradeMutation.execute(cluster.upgradeAvailable);
-      refetch();
-    } catch {
-      // error is set in the mutation hook
+  useEffect(() => {
+    if (cluster) {
+      setLocalCluster(cluster);
+      setTargetNodes(cluster.nodes);
     }
+  }, [cluster]);
+
+  const handleScale = () => {
+    if (localCluster) {
+      setLocalCluster({ ...localCluster, nodes: targetNodes });
+    }
+    setShowScaleModal(false);
+  };
+
+  const handleUpgrade = () => {
+    if (localCluster && localCluster.upgradeAvailable) {
+      setLocalCluster({
+        ...localCluster,
+        k8sVersion: localCluster.upgradeAvailable,
+        upgradeAvailable: undefined,
+      });
+      setUpgradeSuccess(true);
+      setTimeout(() => setUpgradeSuccess(false), 3000);
+    }
+    setShowUpgradeModal(false);
   };
 
   return (
@@ -47,7 +65,7 @@ export default function ClusterDetailPage({
         <ClusterDetailSkeleton />
       ) : error ? (
         <ErrorState error={error} onRetry={refetch} title="Failed to load cluster" />
-      ) : !cluster ? (
+      ) : !localCluster ? (
         <ErrorState
           error={new Error("Cluster not found")}
           title="Cluster not found"
@@ -57,18 +75,24 @@ export default function ClusterDetailPage({
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-semibold text-white">
-                {cluster.name}
+                {localCluster.name}
               </h1>
               <p className="mt-1 text-sm text-neutral-500">
-                {cluster.type === "dedicated" ? "Dedicated" : "Shared"} cluster
-                {cluster.tenant && (
-                  <span> &middot; Tenant: {cluster.tenant}</span>
+                {localCluster.type === "dedicated" ? "Dedicated" : "Shared"} cluster
+                {localCluster.tenant && (
+                  <span> &middot; Tenant: {localCluster.tenant}</span>
                 )}
-                {" "}&middot; {cluster.region}
+                {" "}&middot; {localCluster.region}
               </p>
             </div>
-            <StatusBadge status={cluster.status} />
+            <StatusBadge status={localCluster.status} />
           </div>
+
+          {upgradeSuccess && (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-xs text-emerald-400">
+              Kubernetes upgrade completed successfully!
+            </div>
+          )}
 
           {/* Overview cards */}
           <div className="grid grid-cols-4 gap-4">
@@ -77,37 +101,37 @@ export default function ClusterDetailPage({
                 Kubernetes Version
               </p>
               <p className="mt-1 font-mono text-lg font-semibold text-white">
-                {cluster.k8sVersion}
+                {localCluster.k8sVersion}
               </p>
-              {cluster.upgradeAvailable && (
+              {localCluster.upgradeAvailable && (
                 <p className="mt-0.5 text-xs text-amber-400">
-                  Upgrade available: {cluster.upgradeAvailable}
+                  Upgrade available: {localCluster.upgradeAvailable}
                 </p>
               )}
             </div>
             <div className="rounded-lg border border-border bg-surface-100 p-4">
               <p className="text-xs font-medium text-neutral-500">Nodes</p>
               <p className="mt-1 text-lg font-semibold text-white">
-                {cluster.nodes}
+                {localCluster.nodes}
               </p>
               <p className="mt-0.5 text-xs text-neutral-500">Worker nodes</p>
             </div>
             <div className="rounded-lg border border-border bg-surface-100 p-4">
               <p className="text-xs font-medium text-neutral-500">Pods</p>
               <p className="mt-1 text-lg font-semibold text-white">
-                {cluster.pods.used} / {cluster.pods.total}
+                {localCluster.pods.used} / {localCluster.pods.total}
               </p>
               <p className="mt-0.5 text-xs text-neutral-500">
-                {cluster.pods.total - cluster.pods.used} available
+                {localCluster.pods.total - localCluster.pods.used} available
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface-100 p-4">
               <p className="text-xs font-medium text-neutral-500">PVCs</p>
               <p className="mt-1 text-lg font-semibold text-white">
-                {cluster.pvcs.used} / {cluster.pvcs.total}
+                {localCluster.pvcs.used} / {localCluster.pvcs.total}
               </p>
               <p className="mt-0.5 text-xs text-neutral-500">
-                {cluster.pvcs.total - cluster.pvcs.used} available
+                {localCluster.pvcs.total - localCluster.pvcs.used} available
               </p>
             </div>
           </div>
@@ -122,19 +146,19 @@ export default function ClusterDetailPage({
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm text-neutral-400">CPU</p>
                   <p className="text-sm font-medium text-white">
-                    {cluster.cpuPercent}%
+                    {localCluster.cpuPercent}%
                   </p>
                 </div>
-                <ProgressBar percent={cluster.cpuPercent} size="md" />
+                <ProgressBar percent={localCluster.cpuPercent} size="md" />
               </div>
               <div className="rounded-lg border border-border bg-surface-100 p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm text-neutral-400">RAM</p>
                   <p className="text-sm font-medium text-white">
-                    {cluster.ramPercent}%
+                    {localCluster.ramPercent}%
                   </p>
                 </div>
-                <ProgressBar percent={cluster.ramPercent} size="md" />
+                <ProgressBar percent={localCluster.ramPercent} size="md" />
               </div>
             </div>
           </section>
@@ -143,26 +167,99 @@ export default function ClusterDetailPage({
           <section>
             <h2 className="mb-3 text-sm font-medium text-white">Actions</h2>
             <div className="flex gap-3">
-              <DemoButton
-                onClick={handleUpgrade}
-                disabled={!cluster.upgradeAvailable || upgradeMutation.loading}
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                disabled={!localCluster.upgradeAvailable}
                 className="rounded-lg border border-border bg-surface-100 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-surface-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {upgradeMutation.loading
-                  ? "Upgrading..."
-                  : "Upgrade Kubernetes"}
-              </DemoButton>
-              <DemoButton className="rounded-lg border border-border bg-surface-100 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-surface-200">
+                Upgrade Kubernetes
+              </button>
+              <button
+                onClick={() => {
+                  setTargetNodes(localCluster.nodes);
+                  setShowScaleModal(true);
+                }}
+                className="rounded-lg border border-border bg-surface-100 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-surface-200"
+              >
                 Scale Nodes
-              </DemoButton>
+              </button>
             </div>
-            {upgradeMutation.error && (
-              <p className="mt-2 text-xs text-red-400">
-                Upgrade failed: {upgradeMutation.error.message}
-              </p>
-            )}
           </section>
         </div>
+      )}
+
+      {showScaleModal && localCluster && (
+        <Modal title="Scale Nodes" onClose={() => setShowScaleModal(false)}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleScale();
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">
+                Target Nodes
+              </label>
+              <input
+                type="number"
+                value={targetNodes}
+                onChange={(e) => setTargetNodes(Number(e.target.value))}
+                min={1}
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-neutral-500">
+                Current: {localCluster.nodes} nodes
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowScaleModal(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
+              >
+                Scale
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showUpgradeModal && localCluster && (
+        <Modal title="Upgrade Kubernetes" onClose={() => setShowUpgradeModal(false)}>
+          <div className="space-y-4">
+            <p className="text-sm text-neutral-300">
+              Upgrade to <span className="font-mono font-medium text-white">{localCluster.upgradeAvailable}</span>?
+            </p>
+            <p className="text-xs text-neutral-500">
+              This will perform a rolling upgrade of all nodes from{" "}
+              <span className="font-mono">{localCluster.k8sVersion}</span> to{" "}
+              <span className="font-mono">{localCluster.upgradeAvailable}</span>.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowUpgradeModal(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleUpgrade}
+                className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
+              >
+                Proceed
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </Shell>
   );

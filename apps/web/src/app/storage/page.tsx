@@ -4,11 +4,13 @@ import { Shell } from "@/components/shell";
 import { PageWithTableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
+import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type StorageBucket } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 
 export default function StoragePage() {
   const projectId = useProject();
@@ -20,6 +22,18 @@ export default function StoragePage() {
     error,
     refetch,
   } = useApi(() => storage.list(projectId), [projectId]);
+
+  const [buckets, setBuckets] = useState<StorageBucket[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formRegion, setFormRegion] = useState("fsn1");
+  const [formAccess, setFormAccess] = useState("private");
+
+  useEffect(() => {
+    if (storageData?.items) {
+      setBuckets(storageData.items);
+    }
+  }, [storageData]);
 
   if (loading) {
     return (
@@ -37,8 +51,25 @@ export default function StoragePage() {
     );
   }
 
-  const buckets: StorageBucket[] = storageData?.items ?? [];
   const totalObjects = buckets.reduce((sum, b) => sum + b.objects, 0);
+
+  const handleCreate = () => {
+    if (!formName.trim()) return;
+    const newBucket: StorageBucket = {
+      name: formName.trim(),
+      access: formAccess,
+      region: formRegion,
+      size: "0 B",
+      objects: 0,
+      status: "active",
+      created_at: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    };
+    setBuckets((prev) => [...prev, newBucket]);
+    setShowCreate(false);
+    setFormName("");
+    setFormRegion("fsn1");
+    setFormAccess("private");
+  };
 
   return (
     <Shell>
@@ -50,7 +81,10 @@ export default function StoragePage() {
               {buckets.length} buckets, {totalObjects.toLocaleString()} objects
             </p>
           </div>
-          <button className="rounded-lg bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 text-sm transition-colors">
+          <button
+            onClick={() => setShowCreate(true)}
+            className="rounded-lg bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 text-sm transition-colors"
+          >
             + Create Bucket
           </button>
         </div>
@@ -183,6 +217,68 @@ export default function StoragePage() {
           </div>
         )}
       </div>
+
+      {showCreate && (
+        <Modal title="Create Bucket" onClose={() => setShowCreate(false)}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleCreate();
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Bucket Name</label>
+              <input
+                type="text"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="my-bucket"
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Region</label>
+              <select
+                value={formRegion}
+                onChange={(e) => setFormRegion(e.target.value)}
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              >
+                <option value="fsn1">fsn1</option>
+                <option value="nbg1">nbg1</option>
+                <option value="hel1">hel1</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Access</label>
+              <select
+                value={formAccess}
+                onChange={(e) => setFormAccess(e.target.value)}
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              >
+                <option value="private">private</option>
+                <option value="public-read">public-read</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
+              >
+                Create
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </Shell>
   );
 }

@@ -4,14 +4,12 @@ import { useState, useEffect } from "react";
 import { Shell } from "@/components/shell";
 import { ErrorState } from "@/components/error-state";
 import { SettingsSectionSkeleton } from "@/components/loading-skeleton";
-import { DemoButton } from "@/components/demo-button";
-import { getApi, isDemoMode } from "@/lib/get-api";
+import { getApi } from "@/lib/get-api";
 import type { PlatformSettings } from "@/lib/api";
-import { useApi, useMutation } from "@/hooks/use-api";
+import { useApi } from "@/hooks/use-api";
 
 export default function SettingsPage() {
   const apiClient = getApi();
-  const demo = isDemoMode();
 
   const {
     data: settings,
@@ -23,6 +21,8 @@ export default function SettingsPage() {
   const [platformName, setPlatformName] = useState("");
   const [baseDomain, setBaseDomain] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Sync local state when settings are loaded
   useEffect(() => {
@@ -33,19 +33,14 @@ export default function SettingsPage() {
     }
   }, [settings]);
 
-  const saveMutation = useMutation((data: Partial<PlatformSettings>) =>
-    apiClient.settings.update(data)
-  );
-
-  const handleSave = async () => {
-    if (demo) return;
-    try {
-      await saveMutation.execute({ platformName, baseDomain });
+  const handleSave = () => {
+    setSaving(true);
+    setTimeout(() => {
+      setSaving(false);
       setDirty(false);
-      refetch();
-    } catch {
-      // error is set in the mutation hook
-    }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    }, 600);
   };
 
   const handlePlatformNameChange = (value: string) => {
@@ -64,19 +59,19 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-white">Settings</h1>
           {dirty && (
-            <DemoButton
+            <button
               onClick={handleSave}
-              disabled={saveMutation.loading}
+              disabled={saving}
               className="rounded-lg bg-accent-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
             >
-              {saveMutation.loading ? "Saving..." : "Save Changes"}
-            </DemoButton>
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
           )}
         </div>
 
-        {saveMutation.error && (
-          <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2 text-xs text-red-400">
-            Failed to save settings: {saveMutation.error.message}
+        {saveSuccess && (
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-xs text-emerald-400">
+            Settings saved successfully.
           </div>
         )}
 
@@ -110,8 +105,7 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       handlePlatformNameChange(e.target.value)
                     }
-                    readOnly={demo}
-                    className={`rounded-lg border border-border bg-surface-200 px-3 py-1.5 text-sm text-neutral-300 outline-none focus:border-accent-600 ${demo ? "cursor-not-allowed opacity-60" : ""}`}
+                    className="rounded-lg border border-border bg-surface-200 px-3 py-1.5 text-sm text-neutral-300 outline-none focus:border-accent-600"
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -127,8 +121,7 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       handleBaseDomainChange(e.target.value)
                     }
-                    readOnly={demo}
-                    className={`rounded-lg border border-border bg-surface-200 px-3 py-1.5 text-sm text-neutral-300 outline-none focus:border-accent-600 ${demo ? "cursor-not-allowed opacity-60" : ""}`}
+                    className="rounded-lg border border-border bg-surface-200 px-3 py-1.5 text-sm text-neutral-300 outline-none focus:border-accent-600"
                   />
                 </div>
               </div>
