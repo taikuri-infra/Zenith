@@ -35,10 +35,10 @@
 - **Files:** services/operator/api/v1alpha1/
 
 ### 1.3 Zenith Operator Scaffold
-- [ ] Create `services/operator/` with kubebuilder
-- [ ] Reconcilers for each CRD type
-- [ ] Hetzner Cloud client integration
-- [ ] Event recording for status updates
+- [x] Create `services/operator/` with kubebuilder
+- [x] Reconcilers for each CRD type
+- [x] Hetzner Cloud client integration
+- [x] Event recording for status updates
 - **Files:** services/operator/**
 
 ### 1.4 CLI Scaffold
