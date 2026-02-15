@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: zenith-web:latest
+          image: zenith-web-demo:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 3000
