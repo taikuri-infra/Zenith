@@ -7,16 +7,17 @@ import { EmptyState } from "@/components/empty-state";
 import {
   StatCardRowSkeleton,
   TableSkeleton,
-  SectionSkeleton,
 } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import type { PlatformState, Cluster, Module } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 
 export default function StatePage() {
-  const state = useApi<PlatformState>(() => api.state.get());
-  const clusters = useApi<Cluster[]>(() => api.clusters.list());
-  const modules = useApi<Module[]>(() => api.modules.list());
+  const apiClient = getApi();
+
+  const state = useApi<PlatformState>(() => apiClient.state.get());
+  const clusters = useApi<Cluster[]>(() => apiClient.clusters.list());
+  const modules = useApi<Module[]>(() => apiClient.modules.list());
 
   return (
     <Shell>

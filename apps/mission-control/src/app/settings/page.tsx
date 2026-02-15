@@ -4,17 +4,21 @@ import { useState, useEffect } from "react";
 import { Shell } from "@/components/shell";
 import { ErrorState } from "@/components/error-state";
 import { SettingsSectionSkeleton } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { DemoButton } from "@/components/demo-button";
+import { getApi, isDemoMode } from "@/lib/get-api";
 import type { PlatformSettings } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/use-api";
 
 export default function SettingsPage() {
+  const apiClient = getApi();
+  const demo = isDemoMode();
+
   const {
     data: settings,
     loading,
     error,
     refetch,
-  } = useApi<PlatformSettings>(() => api.settings.get());
+  } = useApi<PlatformSettings>(() => apiClient.settings.get());
 
   const [platformName, setPlatformName] = useState("");
   const [baseDomain, setBaseDomain] = useState("");
@@ -30,10 +34,11 @@ export default function SettingsPage() {
   }, [settings]);
 
   const saveMutation = useMutation((data: Partial<PlatformSettings>) =>
-    api.settings.update(data)
+    apiClient.settings.update(data)
   );
 
   const handleSave = async () => {
+    if (demo) return;
     try {
       await saveMutation.execute({ platformName, baseDomain });
       setDirty(false);
@@ -59,13 +64,13 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-white">Settings</h1>
           {dirty && (
-            <button
+            <DemoButton
               onClick={handleSave}
               disabled={saveMutation.loading}
               className="rounded-lg bg-accent-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
             >
               {saveMutation.loading ? "Saving..." : "Save Changes"}
-            </button>
+            </DemoButton>
           )}
         </div>
 
@@ -105,7 +110,8 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       handlePlatformNameChange(e.target.value)
                     }
-                    className="rounded-lg border border-border bg-surface-200 px-3 py-1.5 text-sm text-neutral-300 outline-none focus:border-accent-600"
+                    readOnly={demo}
+                    className={`rounded-lg border border-border bg-surface-200 px-3 py-1.5 text-sm text-neutral-300 outline-none focus:border-accent-600 ${demo ? "cursor-not-allowed opacity-60" : ""}`}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -121,7 +127,8 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       handleBaseDomainChange(e.target.value)
                     }
-                    className="rounded-lg border border-border bg-surface-200 px-3 py-1.5 text-sm text-neutral-300 outline-none focus:border-accent-600"
+                    readOnly={demo}
+                    className={`rounded-lg border border-border bg-surface-200 px-3 py-1.5 text-sm text-neutral-300 outline-none focus:border-accent-600 ${demo ? "cursor-not-allowed opacity-60" : ""}`}
                   />
                 </div>
               </div>

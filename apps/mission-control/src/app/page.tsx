@@ -12,23 +12,20 @@ import {
   ActivityListSkeleton,
   Skeleton,
 } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import type { Cluster, Module, AuditEntry, PlatformUpdate } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardPage() {
-  const clusters = useApi<Cluster[]>(() => api.clusters.list());
-  const modules = useApi<Module[]>(() => api.modules.list());
-  const audit = useApi<AuditEntry[]>(() => api.audit.list({ limit: 4 }));
-  const platformUpdate = useApi<PlatformUpdate>(() => api.updates.check());
-  const dashboardStats = useApi(() => api.dashboard.stats());
+  const apiClient = getApi();
 
-  const isLoading =
-    clusters.loading || modules.loading || audit.loading || platformUpdate.loading || dashboardStats.loading;
-  const hasError =
-    clusters.error || modules.error || audit.error || platformUpdate.error || dashboardStats.error;
+  const clusters = useApi<Cluster[]>(() => apiClient.clusters.list());
+  const modules = useApi<Module[]>(() => apiClient.modules.list());
+  const audit = useApi<AuditEntry[]>(() => apiClient.audit.list({ limit: 4 }));
+  const platformUpdate = useApi<PlatformUpdate>(() => apiClient.updates.check());
+  const dashboardStats = useApi(() => apiClient.dashboard.stats());
 
   const updatesAvailable = modules.data
     ? modules.data.filter((m) => m.status === "update_available").length

@@ -7,32 +7,36 @@ import {
   CardSkeleton,
   TableSkeleton,
 } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { DemoButton } from "@/components/demo-button";
+import { getApi, isDemoMode } from "@/lib/get-api";
 import type { PlatformUpdate, UpdateHistoryEntry } from "@/lib/api";
 import { useApi, useMutation } from "@/hooks/use-api";
 import { ArrowUpCircle } from "lucide-react";
 
 export default function UpdatesPage() {
+  const apiClient = getApi();
+  const demo = isDemoMode();
+
   const {
     data: platformUpdate,
     loading: updateLoading,
     error: updateError,
     refetch: refetchUpdate,
-  } = useApi<PlatformUpdate>(() => api.updates.check());
+  } = useApi<PlatformUpdate>(() => apiClient.updates.check());
 
   const {
     data: history,
     loading: historyLoading,
     error: historyError,
     refetch: refetchHistory,
-  } = useApi<UpdateHistoryEntry[]>(() => api.updates.history());
+  } = useApi<UpdateHistoryEntry[]>(() => apiClient.updates.history());
 
   const applyMutation = useMutation((version: string) =>
-    api.updates.apply(version)
+    apiClient.updates.apply(version)
   );
 
   const handleUpgrade = async () => {
-    if (!platformUpdate) return;
+    if (demo || !platformUpdate) return;
     try {
       await applyMutation.execute(platformUpdate.version);
       refetchUpdate();
@@ -80,7 +84,7 @@ export default function UpdatesPage() {
                   </p>
                 )}
               </div>
-              <button
+              <DemoButton
                 onClick={handleUpgrade}
                 disabled={applyMutation.loading}
                 className="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
@@ -88,7 +92,7 @@ export default function UpdatesPage() {
                 {applyMutation.loading
                   ? "Upgrading..."
                   : `Upgrade to ${platformUpdate.version}`}
-              </button>
+              </DemoButton>
             </div>
 
             {applyMutation.error && (

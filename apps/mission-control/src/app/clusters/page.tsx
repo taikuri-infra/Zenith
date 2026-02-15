@@ -6,15 +6,17 @@ import { ProgressBar } from "@/components/progress-bar";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { DemoButton } from "@/components/demo-button";
+import { getApi } from "@/lib/get-api";
 import type { Cluster } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import Link from "next/link";
 import { Server } from "lucide-react";
 
 export default function ClustersPage() {
+  const apiClient = getApi();
   const { data: clusters, loading, error, refetch } = useApi<Cluster[]>(
-    () => api.clusters.list()
+    () => apiClient.clusters.list()
   );
 
   return (
@@ -22,9 +24,9 @@ export default function ClustersPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-white">Clusters</h1>
-          <button className="rounded-lg bg-accent-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-500">
+          <DemoButton className="rounded-lg bg-accent-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-500">
             + New Cluster
-          </button>
+          </DemoButton>
         </div>
 
         {loading ? (

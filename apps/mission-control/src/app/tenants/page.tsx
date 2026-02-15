@@ -5,14 +5,15 @@ import { StatusBadge } from "@/components/status-badge";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import type { Tenant } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { Users } from "lucide-react";
 
 export default function TenantsPage() {
+  const apiClient = getApi();
   const { data: tenants, loading, error, refetch } = useApi<Tenant[]>(
-    () => api.tenants.list()
+    () => apiClient.tenants.list()
   );
 
   const activeCount = tenants

@@ -78,9 +78,10 @@ check_dns() {
 
 check_dns "freezenith.com" "$SERVER_IP"
 check_dns "www.freezenith.com" "$SERVER_IP"
-check_dns "mission.freezenith.com" "$SERVER_IP"
+check_dns "demo.freezenith.com" "$SERVER_IP"
 check_dns "api.freezenith.com" "$SERVER_IP"
-check_dns "embermind.app" "$SERVER_IP"
+check_dns "mission.embermind.app" "$SERVER_IP"
+check_dns "cloud.embermind.app" "$SERVER_IP"
 
 # -------------------------------------------------------
 # Section 2: HTTPS Connectivity
@@ -103,9 +104,10 @@ check_https() {
 
 check_https "https://freezenith.com" "200"
 check_https "https://www.freezenith.com" "200"
-check_https "https://mission.freezenith.com" "200"
+check_https "https://demo.freezenith.com" "200"
 check_https "https://api.freezenith.com/health" "200"
-check_https "https://embermind.app" "200"
+check_https "https://mission.embermind.app" "200"
+check_https "https://cloud.embermind.app" "200"
 
 # -------------------------------------------------------
 # Section 3: HTTP -> HTTPS Redirect
@@ -131,9 +133,10 @@ check_redirect() {
 
 check_redirect "http://freezenith.com"
 check_redirect "http://www.freezenith.com"
-check_redirect "http://mission.freezenith.com"
+check_redirect "http://demo.freezenith.com"
 check_redirect "http://api.freezenith.com"
-check_redirect "http://embermind.app"
+check_redirect "http://mission.embermind.app"
+check_redirect "http://cloud.embermind.app"
 
 # -------------------------------------------------------
 # Section 4: SSL Certificate Validity
@@ -164,9 +167,10 @@ check_ssl() {
 }
 
 check_ssl "freezenith.com"
-check_ssl "mission.freezenith.com"
+check_ssl "demo.freezenith.com"
 check_ssl "api.freezenith.com"
-check_ssl "embermind.app"
+check_ssl "mission.embermind.app"
+check_ssl "cloud.embermind.app"
 
 # -------------------------------------------------------
 # Section 5: Content Checks
@@ -189,9 +193,10 @@ check_content() {
 }
 
 check_content "https://freezenith.com" "zenith" "Landing page contains 'zenith'"
-check_content "https://mission.freezenith.com" "mission\|control\|zenith" "Mission Control page loads"
+check_content "https://demo.freezenith.com" "mission\|control\|zenith" "Demo showroom loads"
 check_content "https://api.freezenith.com/health" "ok\|healthy\|status" "API health endpoint responds"
-check_content "https://embermind.app" "zenith\|embermind" "Embermind web platform loads"
+check_content "https://mission.embermind.app" "mission\|control\|zenith" "Embermind Mission Control loads"
+check_content "https://cloud.embermind.app" "zenith\|embermind" "Embermind cloud platform loads"
 
 # -------------------------------------------------------
 # Section 6: API Endpoint Tests

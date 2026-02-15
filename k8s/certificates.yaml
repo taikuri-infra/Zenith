@@ -1,3 +1,8 @@
+# =============================================================================
+# TLS Certificates via cert-manager (Let's Encrypt)
+# =============================================================================
+
+# freezenith.com platform domains
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -11,9 +16,10 @@ spec:
   dnsNames:
     - freezenith.com
     - www.freezenith.com
-    - mission.freezenith.com
+    - demo.freezenith.com
     - api.freezenith.com
 ---
+# embermind.app customer domains
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -25,4 +31,5 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - embermind.app
+    - mission.embermind.app
+    - cloud.embermind.app

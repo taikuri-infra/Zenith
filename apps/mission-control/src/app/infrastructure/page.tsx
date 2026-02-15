@@ -8,14 +8,15 @@ import {
   StatCardRowSkeleton,
   TableSkeleton,
 } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import type { InfraOverview } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { HardDrive } from "lucide-react";
 
 export default function InfrastructurePage() {
+  const apiClient = getApi();
   const { data: infra, loading, error, refetch } = useApi<InfraOverview>(
-    () => api.infrastructure.overview()
+    () => apiClient.infrastructure.overview()
   );
 
   return (

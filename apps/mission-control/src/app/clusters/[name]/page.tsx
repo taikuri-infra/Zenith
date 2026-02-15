@@ -6,10 +6,10 @@ import { StatusBadge } from "@/components/status-badge";
 import { ProgressBar } from "@/components/progress-bar";
 import { ErrorState } from "@/components/error-state";
 import { ClusterDetailSkeleton } from "@/components/loading-skeleton";
-import { api } from "@/lib/api";
+import { DemoButton } from "@/components/demo-button";
+import { getApi, isDemoMode } from "@/lib/get-api";
 import type { Cluster } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
-import { useMutation } from "@/hooks/use-api";
+import { useApi, useMutation } from "@/hooks/use-api";
 
 export default function ClusterDetailPage({
   params,
@@ -17,19 +17,22 @@ export default function ClusterDetailPage({
   params: Promise<{ name: string }>;
 }) {
   const { name } = use(params);
+  const apiClient = getApi();
+  const demo = isDemoMode();
+
   const {
     data: cluster,
     loading,
     error,
     refetch,
-  } = useApi<Cluster>(() => api.clusters.get(name), [name]);
+  } = useApi<Cluster>(() => apiClient.clusters.get(name), [name]);
 
   const upgradeMutation = useMutation((version: string) =>
-    api.clusters.upgrade(name, version)
+    apiClient.clusters.upgrade(name, version)
   );
 
   const handleUpgrade = async () => {
-    if (!cluster?.upgradeAvailable) return;
+    if (demo || !cluster?.upgradeAvailable) return;
     try {
       await upgradeMutation.execute(cluster.upgradeAvailable);
       refetch();
@@ -140,7 +143,7 @@ export default function ClusterDetailPage({
           <section>
             <h2 className="mb-3 text-sm font-medium text-white">Actions</h2>
             <div className="flex gap-3">
-              <button
+              <DemoButton
                 onClick={handleUpgrade}
                 disabled={!cluster.upgradeAvailable || upgradeMutation.loading}
                 className="rounded-lg border border-border bg-surface-100 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-surface-200 disabled:cursor-not-allowed disabled:opacity-50"
@@ -148,10 +151,10 @@ export default function ClusterDetailPage({
                 {upgradeMutation.loading
                   ? "Upgrading..."
                   : "Upgrade Kubernetes"}
-              </button>
-              <button className="rounded-lg border border-border bg-surface-100 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-surface-200">
+              </DemoButton>
+              <DemoButton className="rounded-lg border border-border bg-surface-100 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-surface-200">
                 Scale Nodes
-              </button>
+              </DemoButton>
             </div>
             {upgradeMutation.error && (
               <p className="mt-2 text-xs text-red-400">

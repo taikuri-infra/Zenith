@@ -23,7 +23,6 @@ spec:
   tls:
     secretName: freezenith-tls
 ---
-# HTTP -> HTTPS redirect for landing
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -42,39 +41,38 @@ spec:
         - name: redirect-to-https
 ---
 # -----------------------------------------------------------------------------
-# mission.freezenith.com -> zenith-mc:3100
+# demo.freezenith.com -> zenith-mc-demo:3100 (showroom)
 # -----------------------------------------------------------------------------
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: freezenith-mission-control
+  name: freezenith-demo
   namespace: zenith-platform
 spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`mission.freezenith.com`)
+    - match: Host(`demo.freezenith.com`)
       kind: Rule
       services:
-        - name: zenith-mc
+        - name: zenith-mc-demo
           port: 3100
   tls:
     secretName: freezenith-tls
 ---
-# HTTP -> HTTPS redirect for mission control
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: freezenith-mission-control-redirect
+  name: freezenith-demo-redirect
   namespace: zenith-platform
 spec:
   entryPoints:
     - web
   routes:
-    - match: Host(`mission.freezenith.com`)
+    - match: Host(`demo.freezenith.com`)
       kind: Rule
       services:
-        - name: zenith-mc
+        - name: zenith-mc-demo
           port: 3100
       middlewares:
         - name: redirect-to-https
@@ -99,7 +97,6 @@ spec:
   tls:
     secretName: freezenith-tls
 ---
-# HTTP -> HTTPS redirect for API
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -117,9 +114,7 @@ spec:
       middlewares:
         - name: redirect-to-https
 ---
-# -----------------------------------------------------------------------------
-# HTTPS redirect middleware (shared by all HTTP IngressRoutes)
-# -----------------------------------------------------------------------------
+# HTTPS redirect middleware (zenith-platform namespace)
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -131,18 +126,59 @@ spec:
     permanent: true
 ---
 # =============================================================================
-# embermind.app -> zenith-web:3000 (in zenith-embermind namespace)
+# embermind.app customer domains (zenith-embermind namespace)
 # =============================================================================
+
+# -----------------------------------------------------------------------------
+# mission.embermind.app -> zenith-mc:3100 (customer Mission Control)
+# -----------------------------------------------------------------------------
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: embermind-web
+  name: embermind-mission
   namespace: zenith-embermind
 spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`embermind.app`)
+    - match: Host(`mission.embermind.app`)
+      kind: Rule
+      services:
+        - name: zenith-mc
+          port: 3100
+  tls:
+    secretName: embermind-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: embermind-mission-redirect
+  namespace: zenith-embermind
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`mission.embermind.app`)
+      kind: Rule
+      services:
+        - name: zenith-mc
+          port: 3100
+      middlewares:
+        - name: redirect-to-https
+---
+# -----------------------------------------------------------------------------
+# cloud.embermind.app -> zenith-web:3000 (customer cloud platform)
+# -----------------------------------------------------------------------------
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: embermind-cloud
+  namespace: zenith-embermind
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`cloud.embermind.app`)
       kind: Rule
       services:
         - name: zenith-web
@@ -150,17 +186,16 @@ spec:
   tls:
     secretName: embermind-tls
 ---
-# HTTP -> HTTPS redirect for embermind.app
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: embermind-web-redirect
+  name: embermind-cloud-redirect
   namespace: zenith-embermind
 spec:
   entryPoints:
     - web
   routes:
-    - match: Host(`embermind.app`)
+    - match: Host(`cloud.embermind.app`)
       kind: Rule
       services:
         - name: zenith-web
@@ -168,7 +203,7 @@ spec:
       middlewares:
         - name: redirect-to-https
 ---
-# HTTPS redirect middleware for embermind namespace
+# HTTPS redirect middleware (zenith-embermind namespace)
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
