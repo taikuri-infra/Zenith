@@ -1,20 +1,42 @@
+"use client";
+
 import { Shell } from "@/components/shell";
-import { mockStorage } from "@/lib/mock-data";
+import { PageWithTableSkeleton } from "@/components/loading-skeleton";
+import { ErrorState } from "@/components/error-state";
+import { EmptyState } from "@/components/empty-state";
+import { useApi } from "@/hooks/use-api";
+import { useProject } from "@/hooks/use-project";
+import { storage, type StorageBucket } from "@/lib/api";
 import Link from "next/link";
 
-function parseSizeGB(s: string): number {
-  return parseFloat(s.replace(/[^0-9.]/g, ""));
-}
-
 export default function StoragePage() {
-  const totalSize = mockStorage.reduce((sum, b) => sum + parseSizeGB(b.used), 0);
-  const totalObjects = mockStorage.reduce((sum, b) => sum + b.objects, 0);
+  const projectId = useProject();
 
-  /* Mock metadata for each bucket */
-  const bucketMeta: Record<string, { access: "Private" | "Public"; versioning: "Enabled" | "Suspended"; created: string }> = {
-    uploads: { access: "Private", versioning: "Enabled", created: "2025-09-14" },
-    backups: { access: "Private", versioning: "Suspended", created: "2025-08-02" },
-  };
+  const {
+    data: storageData,
+    loading,
+    error,
+    refetch,
+  } = useApi(() => storage.list(projectId), [projectId]);
+
+  if (loading) {
+    return (
+      <Shell>
+        <PageWithTableSkeleton cols={7} rows={3} />
+      </Shell>
+    );
+  }
+
+  if (error) {
+    return (
+      <Shell>
+        <ErrorState message={error} onRetry={refetch} />
+      </Shell>
+    );
+  }
+
+  const buckets: StorageBucket[] = storageData?.items ?? [];
+  const totalObjects = buckets.reduce((sum, b) => sum + b.objects, 0);
 
   return (
     <Shell>
@@ -23,7 +45,7 @@ export default function StoragePage() {
           <div>
             <h1 className="text-lg font-semibold text-white">Storage</h1>
             <p className="text-sm text-neutral-500">
-              {mockStorage.length} buckets, {totalSize.toFixed(1)} GB total, {totalObjects.toLocaleString()} objects
+              {buckets.length} buckets, {totalObjects.toLocaleString()} objects
             </p>
           </div>
           <button className="rounded-lg bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 text-sm transition-colors">
@@ -41,7 +63,11 @@ export default function StoragePage() {
               stroke="currentColor"
               strokeWidth={2}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+              />
             </svg>
             <input
               type="text"
@@ -56,26 +82,44 @@ export default function StoragePage() {
           </select>
         </div>
 
-        {/* Table */}
-        <div className="overflow-hidden rounded-lg border border-border">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-surface-100">
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Bucket Name</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Objects</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Size</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Access</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Versioning</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Created</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Region</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockStorage.map((bucket) => {
-                  const meta = bucketMeta[bucket.name] ?? { access: "Private" as const, versioning: "Suspended" as const, created: "---" };
-
-                  return (
+        {/* Table or Empty State */}
+        {buckets.length === 0 ? (
+          <EmptyState
+            title="No storage buckets yet"
+            description="Create a storage bucket to store files and objects."
+            actionLabel="+ Create Bucket"
+          />
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-border">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-surface-100">
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Bucket Name
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Objects
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Size
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Access
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Status
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Region
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
+                      Created
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {buckets.map((bucket) => (
                     <tr
                       key={bucket.name}
                       className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors"
@@ -92,10 +136,10 @@ export default function StoragePage() {
                         {bucket.objects.toLocaleString()}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
-                        {bucket.used}
+                        {bucket.size}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        {meta.access === "Private" ? (
+                        {bucket.access === "private" ? (
                           <span className="inline-flex items-center rounded-full bg-neutral-500/10 px-2 py-0.5 text-xs font-medium text-neutral-400">
                             Private
                           </span>
@@ -105,26 +149,37 @@ export default function StoragePage() {
                           </span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs">
-                        {meta.versioning === "Enabled" ? (
-                          <span className="text-emerald-400">Enabled</span>
-                        ) : (
-                          <span className="text-neutral-500">Suspended</span>
-                        )}
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                            bucket.status === "active"
+                              ? "bg-emerald-500/10 text-emerald-400"
+                              : "bg-amber-500/10 text-amber-400"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              bucket.status === "active"
+                                ? "bg-emerald-400"
+                                : "bg-amber-400"
+                            }`}
+                          />
+                          {bucket.status}
+                        </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-400">
-                        {meta.created}
+                        {bucket.region}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-400">
-                        eu-central-1
+                        {bucket.created_at}
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Shell>
   );
