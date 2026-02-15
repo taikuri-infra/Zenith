@@ -1,0 +1,180 @@
+# =============================================================================
+# Traefik IngressRoutes for Zenith Platform
+# Uses traefik.io/v1alpha1 IngressRoute CRD (NOT kubernetes.io/v1 Ingress)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# freezenith.com / www.freezenith.com -> zenith-landing:3000
+# -----------------------------------------------------------------------------
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: freezenith-landing
+  namespace: zenith-platform
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`freezenith.com`) || Host(`www.freezenith.com`)
+      kind: Rule
+      services:
+        - name: zenith-landing
+          port: 3000
+  tls:
+    secretName: freezenith-tls
+---
+# HTTP -> HTTPS redirect for landing
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: freezenith-landing-redirect
+  namespace: zenith-platform
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`freezenith.com`) || Host(`www.freezenith.com`)
+      kind: Rule
+      services:
+        - name: zenith-landing
+          port: 3000
+      middlewares:
+        - name: redirect-to-https
+---
+# -----------------------------------------------------------------------------
+# mission.freezenith.com -> zenith-mc:3100
+# -----------------------------------------------------------------------------
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: freezenith-mission-control
+  namespace: zenith-platform
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`mission.freezenith.com`)
+      kind: Rule
+      services:
+        - name: zenith-mc
+          port: 3100
+  tls:
+    secretName: freezenith-tls
+---
+# HTTP -> HTTPS redirect for mission control
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: freezenith-mission-control-redirect
+  namespace: zenith-platform
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`mission.freezenith.com`)
+      kind: Rule
+      services:
+        - name: zenith-mc
+          port: 3100
+      middlewares:
+        - name: redirect-to-https
+---
+# -----------------------------------------------------------------------------
+# api.freezenith.com -> zenith-api:8080
+# -----------------------------------------------------------------------------
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: freezenith-api
+  namespace: zenith-platform
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`api.freezenith.com`)
+      kind: Rule
+      services:
+        - name: zenith-api
+          port: 8080
+  tls:
+    secretName: freezenith-tls
+---
+# HTTP -> HTTPS redirect for API
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: freezenith-api-redirect
+  namespace: zenith-platform
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`api.freezenith.com`)
+      kind: Rule
+      services:
+        - name: zenith-api
+          port: 8080
+      middlewares:
+        - name: redirect-to-https
+---
+# -----------------------------------------------------------------------------
+# HTTPS redirect middleware (shared by all HTTP IngressRoutes)
+# -----------------------------------------------------------------------------
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-to-https
+  namespace: zenith-platform
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# =============================================================================
+# embermind.app -> zenith-web:3000 (in zenith-embermind namespace)
+# =============================================================================
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: embermind-web
+  namespace: zenith-embermind
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`embermind.app`)
+      kind: Rule
+      services:
+        - name: zenith-web
+          port: 3000
+  tls:
+    secretName: embermind-tls
+---
+# HTTP -> HTTPS redirect for embermind.app
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: embermind-web-redirect
+  namespace: zenith-embermind
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`embermind.app`)
+      kind: Rule
+      services:
+        - name: zenith-web
+          port: 3000
+      middlewares:
+        - name: redirect-to-https
+---
+# HTTPS redirect middleware for embermind namespace
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-to-https
+  namespace: zenith-embermind
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

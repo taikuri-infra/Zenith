@@ -1,26 +1,66 @@
+# ---- Base ----
 FROM node:20-alpine AS base
-RUN npm install -g pnpm@10.29.3
+RUN corepack enable && corepack prepare pnpm@10.29.3 --activate
+RUN apk add --no-cache libc6-compat
 
+# ---- Dependencies ----
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+
+# Copy workspace root files needed by pnpm
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
+
+# Copy package.json for the app and its workspace dependencies
 COPY apps/mission-control/package.json ./apps/mission-control/
 COPY packages/ui/package.json ./packages/ui/
+
+# Install dependencies with frozen lockfile for reproducible builds
 RUN pnpm install --frozen-lockfile
 
+# ---- Builder ----
 FROM base AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/mission-control/node_modules ./apps/mission-control/node_modules
-COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
-COPY . .
-RUN pnpm build:mc
 
+# Copy installed dependencies from deps stage
+COPY --from=deps /app/ ./
+
+# Copy source code
+COPY packages/ui/ ./packages/ui/
+COPY apps/mission-control/ ./apps/mission-control/
+
+# Build the application
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter @zenith/mission-control build
+
+# ---- Runner ----
 FROM node:20-alpine AS runner
 WORKDIR /app
+
 ENV NODE_ENV=production
-COPY --from=builder /app/apps/mission-control/.next/standalone ./
-COPY --from=builder /app/apps/mission-control/.next/static ./apps/mission-control/.next/static
-COPY --from=builder /app/apps/mission-control/public ./apps/mission-control/public
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3100
+ENV HOSTNAME="0.0.0.0"
+
+LABEL org.opencontainers.image.title="zenith-mission-control"
+LABEL org.opencontainers.image.description="Zenith Mission Control - Operator dashboard"
+LABEL org.opencontainers.image.source="https://github.com/dotechhq/zenith"
+LABEL org.opencontainers.image.vendor="DoTech"
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy standalone output
+COPY --from=builder --chown=nextjs:nodejs /app/apps/mission-control/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/mission-control/.next/static ./apps/mission-control/.next/static
+
+# Copy public assets if they exist (using a no-fail pattern)
+# If your app has a public/ directory, uncomment the next line:
+# COPY --from=builder --chown=nextjs:nodejs /app/apps/mission-control/public ./apps/mission-control/public
+
+USER nextjs
+
 EXPOSE 3100
+
 CMD ["node", "apps/mission-control/server.js"]

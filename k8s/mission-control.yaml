@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-mc
+  namespace: zenith-platform
+  labels:
+    app: zenith-mc
+    app.kubernetes.io/name: zenith-mc
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mission-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenith-mc
+  template:
+    metadata:
+      labels:
+        app: zenith-mc
+        app.kubernetes.io/name: zenith-mc
+    spec:
+      containers:
+        - name: mission-control
+          image: zenith-mc:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3100
+              name: http
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://api.freezenith.com"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3100
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3100
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-mc
+  namespace: zenith-platform
+  labels:
+    app: zenith-mc
+    app.kubernetes.io/name: zenith-mc
+    app.kubernetes.io/part-of: zenith
+spec:
+  selector:
+    app: zenith-mc
+  ports:
+    - port: 3100
+      targetPort: 3100
+      protocol: TCP
+      name: http

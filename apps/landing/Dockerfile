@@ -11,7 +11,7 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 
 # Copy package.json for the app and its workspace dependencies
-COPY apps/web/package.json ./apps/web/
+COPY apps/landing/package.json ./apps/landing/
 COPY packages/ui/package.json ./packages/ui/
 
 # Install dependencies with frozen lockfile for reproducible builds
@@ -26,12 +26,12 @@ COPY --from=deps /app/ ./
 
 # Copy source code
 COPY packages/ui/ ./packages/ui/
-COPY apps/web/ ./apps/web/
+COPY apps/landing/ ./apps/landing/
 
 # Build the application
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter @zenith/web build
+RUN pnpm --filter @zenith/landing build
 
 # ---- Runner ----
 FROM node:20-alpine AS runner
@@ -42,8 +42,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-LABEL org.opencontainers.image.title="zenith-web"
-LABEL org.opencontainers.image.description="Zenith Web Platform - User-facing dashboard"
+LABEL org.opencontainers.image.title="zenith-landing"
+LABEL org.opencontainers.image.description="Zenith Landing Page - freezenith.com"
 LABEL org.opencontainers.image.source="https://github.com/dotechhq/zenith"
 LABEL org.opencontainers.image.vendor="DoTech"
 
@@ -52,15 +52,15 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Copy standalone output
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/landing/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/landing/.next/static ./apps/landing/.next/static
 
 # Copy public assets if they exist (using a no-fail pattern)
 # If your app has a public/ directory, uncomment the next line:
-# COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+# COPY --from=builder --chown=nextjs:nodejs /app/apps/landing/public ./apps/landing/public
 
 USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "apps/web/server.js"]
+CMD ["node", "apps/landing/server.js"]

@@ -1,0 +1,28 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: freezenith-tls
+  namespace: zenith-platform
+spec:
+  secretName: freezenith-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - freezenith.com
+    - www.freezenith.com
+    - mission.freezenith.com
+    - api.freezenith.com
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: embermind-tls
+  namespace: zenith-embermind
+spec:
+  secretName: embermind-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - embermind.app

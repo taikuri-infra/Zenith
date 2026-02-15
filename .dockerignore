@@ -1,0 +1,66 @@
+# Dependencies (installed in container)
+**/node_modules
+.pnpm-store
+
+# Build output (built in container)
+**/.next
+**/out
+**/dist
+**/build
+**/bin
+
+# Go binaries
+services/api/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Development environment files
+.env*.local
+.env.development
+.env.test
+
+# IDE
+.vscode
+.idea
+**/*.swp
+**/*.swo
+
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# Testing and coverage
+**/coverage
+**/.nyc_output
+**/coverage.out
+**/coverage.html
+**/*.test
+
+# Logs
+**/*.log
+**/npm-debug.log*
+**/pnpm-debug.log*
+
+# TypeScript build cache
+**/*.tsbuildinfo
+
+# Git
+.git
+.gitignore
+
+# Documentation (not needed for builds)
+docs/
+*.md
+LICENSE
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Helm charts (not needed for app builds)
+helm/
+
+# CLI source (not needed for app builds)
+cli/

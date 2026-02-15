@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-api
+  namespace: zenith-platform
+  labels:
+    app: zenith-api
+    app.kubernetes.io/name: zenith-api
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenith-api
+  template:
+    metadata:
+      labels:
+        app: zenith-api
+        app.kubernetes.io/name: zenith-api
+    spec:
+      containers:
+        - name: api
+          image: zenith-api:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-api
+  namespace: zenith-platform
+  labels:
+    app: zenith-api
+    app.kubernetes.io/name: zenith-api
+    app.kubernetes.io/part-of: zenith
+spec:
+  selector:
+    app: zenith-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
