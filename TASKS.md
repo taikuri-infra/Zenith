@@ -69,24 +69,24 @@
 - **Files:** services/api/internal/handlers/projects.go
 
 ### 2.3 Apps API
-- [ ] POST /api/v1/projects/:id/apps - deploy app (creates App CRD)
-- [ ] GET /api/v1/projects/:id/apps - list apps
-- [ ] GET /api/v1/projects/:id/apps/:name - app details (status, metrics)
-- [ ] PUT /api/v1/projects/:id/apps/:name - update (replicas, env, image)
-- [ ] DELETE /api/v1/projects/:id/apps/:name - delete app
-- [ ] POST /api/v1/projects/:id/apps/:name/redeploy - trigger redeploy
+- [x] POST /api/v1/projects/:id/apps - deploy app (creates App CRD)
+- [x] GET /api/v1/projects/:id/apps - list apps
+- [x] GET /api/v1/projects/:id/apps/:name - app details (status, metrics)
+- [x] PUT /api/v1/projects/:id/apps/:name - update (replicas, env, image)
+- [x] DELETE /api/v1/projects/:id/apps/:name - delete app
+- [x] POST /api/v1/projects/:id/apps/:name/redeploy - trigger redeploy
 - **Files:** services/api/internal/handlers/apps.go
 
 ### 2.4 Databases API
-- [ ] CRUD for databases (creates Database CRD -> CNPG/Redis operator)
-- [ ] Connection string generation
-- [ ] Backup management (list, create, restore)
+- [x] CRUD for databases (creates Database CRD -> CNPG/Redis operator)
+- [x] Connection string generation
+- [x] Backup management (list, create, restore)
 - **Files:** services/api/internal/handlers/databases.go
 
 ### 2.5 Storage API
-- [ ] CRUD for storage buckets (maps to Hetzner Object Storage)
-- [ ] Access control (private/public)
-- [ ] Lifecycle policies
+- [x] CRUD for storage buckets (maps to Hetzner Object Storage)
+- [x] Access control (private/public)
+- [x] Lifecycle policies
 - **Files:** services/api/internal/handlers/storage.go
 
 ---
