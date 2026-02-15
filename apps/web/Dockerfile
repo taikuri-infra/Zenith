@@ -21,6 +21,10 @@ RUN pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 
+# Demo mode build arg (NEXT_PUBLIC_* must be set at build time for client components)
+ARG NEXT_PUBLIC_DEMO_MODE=false
+ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE
+
 # Copy installed dependencies from deps stage
 COPY --from=deps /app/ ./
 

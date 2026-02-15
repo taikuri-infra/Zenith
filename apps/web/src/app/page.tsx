@@ -7,12 +7,14 @@ import { DashboardSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
-import { apps, databases, projects, type App, type Database, type Project } from "@/lib/api";
+import { type App, type Database, type Project } from "@/lib/api";
+import { getApi } from "@/lib/get-api";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
 export default function OverviewPage() {
   const projectId = useProject();
+  const { projects, apps, databases } = getApi();
 
   const {
     data: projectData,

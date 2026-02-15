@@ -1,15 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, UserPlus, Github, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { auth } from "@/lib/api";
+import { isDemoMode } from "@/lib/get-api";
 
 export default function LoginPage() {
   const router = useRouter();
   const { login, register } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
+
+  // In demo mode, skip login entirely
+  useEffect(() => {
+    if (isDemoMode()) {
+      router.replace("/");
+    }
+  }, [router]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

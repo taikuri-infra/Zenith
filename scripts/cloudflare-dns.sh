@@ -37,9 +37,11 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 RECORDS=(
   "${FREEZENITH_ZONE} freezenith.com A ${SERVER_IP} false"
   "${FREEZENITH_ZONE} www.freezenith.com A ${SERVER_IP} false"
-  "${FREEZENITH_ZONE} mission.freezenith.com A ${SERVER_IP} false"
   "${FREEZENITH_ZONE} api.freezenith.com A ${SERVER_IP} false"
-  "${EMBERMIND_ZONE} embermind.app A ${SERVER_IP} false"
+  "${FREEZENITH_ZONE} demo-ms.freezenith.com A ${SERVER_IP} false"
+  "${FREEZENITH_ZONE} demo-cloud.freezenith.com A ${SERVER_IP} false"
+  "${EMBERMIND_ZONE} ms.embermind.app A ${SERVER_IP} false"
+  "${EMBERMIND_ZONE} cloud.embermind.app A ${SERVER_IP} false"
 )
 
 # Get existing record ID for a given zone, name, and type
