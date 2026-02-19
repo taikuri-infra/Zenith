@@ -1020,7 +1020,7 @@ Zenith is the only project that is:
 
 ## Management Plane - How Kubernetes Gets Upgraded Without Nightmares
 
-> One €5 server manages everything. CAPI upgrades clusters. back-zenith is the control panel.
+> One €5 server manages everything. CAPI upgrades clusters. Mission Control is the self-service management plane.
 
 ### The Problem
 
@@ -1038,10 +1038,10 @@ Upgrading Kubernetes is terrifying:
 │  MANAGEMENT PLANE (€5/mo CX22 - 2 vCPU, 4GB RAM)                    │
 │                                                                       │
 │  ┌─────────────┐  ┌──────────────────┐  ┌───────────────────────┐    │
-│  │   k3s       │  │  CAPI + CAPH     │  │   back-zenith         │    │
-│  │ (single     │  │  (Cluster API    │  │   (admin panel)       │    │
+│  │   k3s       │  │  CAPI + CAPH     │  │  Mission Control      │    │
+│  │ (single     │  │  (Cluster API    │  │  (self-service mgmt)  │    │
 │  │  node)      │  │   Provider       │  │                       │    │
-│  │             │  │   Hetzner)       │  │   back.freezenith.com │    │
+│  │             │  │   Hetzner)       │  │  ms.{domain}          │    │
 │  └─────────────┘  └────────┬─────────┘  └───────────┬───────────┘    │
 │                             │                         │               │
 │                             │  manages                │  controls     │
@@ -1066,6 +1066,8 @@ Upgrading Kubernetes is terrifying:
 │                                                                       │
 └───────────────────────────────────────────────────────────────────────┘
 ```
+
+**Key: Mission Control IS the management plane.** It runs on the same k3s node alongside CAPI + CAPH. The operator uses Mission Control to manage everything — create clusters, upgrade Kubernetes, update modules, manage tenants. No external intervention is needed after `zen install`. Everything is self-service.
 
 ### CAPI (Cluster API) + CAPH (Provider Hetzner)
 
@@ -1121,9 +1123,9 @@ spec:
 
 **Kubernetes upgrade (rolling, zero-downtime):**
 ```
-1. back-zenith shows: "Kubernetes 1.29.4 → 1.30.2 available"
-2. Platform operator clicks "Upgrade"
-3. back-zenith patches CAPI MachineDeployment:
+1. Mission Control shows: "Kubernetes 1.29.4 → 1.30.2 available"
+2. Operator clicks "Upgrade"
+3. Mission Control patches CAPI MachineDeployment:
      spec.template.spec.version: "v1.30.2"
 4. CAPI rolling upgrade:
      → Creates new node with K8s 1.30.2
@@ -1132,17 +1134,18 @@ spec:
      → Deletes old node
      → Repeats for all nodes (one at a time)
 5. Zero downtime. User apps keep running.
-6. back-zenith shows: ✅ "Kubernetes upgraded to 1.30.2"
+6. Mission Control shows: "Kubernetes upgraded to 1.30.2"
 ```
 
-### back-zenith - The Platform Operator Panel
+### Mission Control - The Self-Service Management Plane
 
-**URL:** `back.freezenith.com` (or self-hosted: `back.your-domain.com`)
+**URL:** `ms.{domain}` (e.g., `ms.embermind.app`)
 **Auth:** Separate credentials (not connected to user-facing auth)
-**Who uses it:** The person/team running the Zenith platform (you, the operator)
+**Who uses it:** The person/team running the Zenith platform (the operator)
 **NOT visible to:** End users (customers deploying apps)
+**Self-service:** After `zen install`, the operator manages everything from Mission Control. No external intervention needed.
 
-**What back-zenith manages:**
+**What Mission Control manages:**
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -1199,7 +1202,7 @@ spec:
 ### How Updates Flow
 
 ```
-freezenith.com                    back-zenith                     Workload Cluster
+freezenith.com                    Mission Control                  Workload Cluster
 (release server)                  (management plane)               (user workloads)
       │                                 │                                │
       │  1. Publishes releases          │                                │
@@ -1233,14 +1236,14 @@ freezenith.com                    back-zenith                     Workload Clust
       │                                 │◀───────────────────────────────│
       │                                 │     All pods healthy?          │
       │                                 │     API responding?            │
-      │                                 │     ✅ Update complete          │
+      │                                 │     Update complete            │
       │                                 │                                │
 ```
 
 ### Module Update Flow (Example: CloudNativePG 1.22 → 1.23)
 
 ```
-1. back-zenith shows:
+1. Mission Control shows:
    ┌─────────────────────────────────────────────────┐
    │ CloudNativePG                                   │
    │ Current: v1.22.1    Available: v1.23.0          │
@@ -1250,7 +1253,7 @@ freezenith.com                    back-zenith                     Workload Clust
    │ • Improved backup performance                   │
    │ • Fixed WAL archiving edge case                 │
    │                                                 │
-   │ ⚠ This updates the PostgreSQL operator.         │
+   │ This updates the PostgreSQL operator.            │
    │   Running databases will be reconciled with     │
    │   the new operator version. No downtime for     │
    │   existing databases.                           │
@@ -1260,7 +1263,7 @@ freezenith.com                    back-zenith                     Workload Clust
 
 2. Operator clicks "Update"
 
-3. back-zenith runs on workload cluster:
+3. Mission Control runs on workload cluster:
    helm upgrade cloudnative-pg \
      cnpg/cloudnative-pg \
      --version 0.23.0 \
@@ -1272,19 +1275,19 @@ freezenith.com                    back-zenith                     Workload Clust
 5. Operator reconciles all existing PostgreSQL clusters
    (no downtime - just applies new operator logic)
 
-6. back-zenith shows: ✅ CloudNativePG v1.23.0
+6. Mission Control shows: CloudNativePG v1.23.0
 ```
 
 ### Platform Upgrade Flow (Zenith v1.2 → v1.3)
 
 ```
-1. back-zenith polls freezenith.com:
+1. Mission Control polls freezenith.com:
    GET https://freezenith.com/api/releases/latest
    → { "version": "1.3.0", "chart_url": "oci://registry.freezenith.com/charts/zenith:1.3.0" }
 
-2. back-zenith shows:
+2. Mission Control shows:
    ┌─────────────────────────────────────────────────┐
-   │ 🆕 Zenith v1.3.0 available                      │
+   │ Zenith v1.3.0 available                         │
    │ Current: v1.2.1                                 │
    │                                                 │
    │ What's new:                                     │
@@ -1303,7 +1306,7 @@ freezenith.com                    back-zenith                     Workload Clust
 
 3. Operator clicks "Upgrade"
 
-4. back-zenith runs on workload cluster:
+4. Mission Control runs on workload cluster:
    # Update CRDs first (new CRDs added safely)
    kubectl apply -f <new CRD manifests>
 
@@ -1317,12 +1320,12 @@ freezenith.com                    back-zenith                     Workload Clust
 5. Rolling update: new operator, API, and web pods replace old ones
    (zero downtime - K8s rolling strategy)
 
-6. back-zenith verifies:
+6. Mission Control verifies:
    - Operator pod healthy
    - API responding at /healthz
    - Web UI loading
    - All CRDs registered
-   - ✅ Upgrade complete
+   - Upgrade complete
 
 7. If anything fails:
    helm rollback zenith 0 --namespace zenith-system
@@ -1363,7 +1366,7 @@ Three layers of state, each with a clear purpose:
 │  LAYER 3: SQLite (management server)                               │
 │  ────────────────────────────────────                              │
 │  Source of truth for: operational metadata                          │
-│  Stored in: /var/lib/back-zenith/state.db (single file)            │
+│  Stored in: /var/lib/zenith-mc/state.db (single file)              │
 │  Contains:                                                          │
 │    - Audit log (who did what, when)                                │
 │    - Update history (which versions installed, when upgraded)       │
@@ -1390,8 +1393,8 @@ Every 6 hours (automatic cron on management server):
      → uploaded to s3://zenith-backups/mgmt-etcd/
 
   2. SQLite backup:
-     sqlite3 /var/lib/back-zenith/state.db ".backup /tmp/state.db"
-     → uploaded to s3://zenith-backups/back-zenith-state/
+     sqlite3 /var/lib/zenith-mc/state.db ".backup /tmp/state.db"
+     → uploaded to s3://zenith-backups/mc-state/
 
   3. Workload cluster etcd snapshots (triggered via CAPI):
      → uploaded to s3://zenith-backups/workload-etcd/{cluster-name}/
@@ -1427,22 +1430,22 @@ curl -sfL https://get.freezenith.com | sh -s -- \
 # 2. Creates CX22 server in Hetzner (cheapest, €4.49/mo)
 # 3. SSHs into server, installs k3s
 # 4. Installs CAPI + CAPH (Cluster API Provider Hetzner)
-# 5. Installs back-zenith (API + web panel)
-# 6. Creates DNS record: back.myplatform.com → management server IP
+# 5. Installs Mission Control (API + web panel)
+# 6. Creates DNS record: ms.myplatform.com → management server IP
 # 7. Sets up SSL (cert-manager + Let's Encrypt)
 # 8. Creates admin account (password shown in terminal OR emailed)
 #
 # Output:
-# ✅ Management plane ready!
+# Management plane ready!
 #
-# 🔗 Open: https://back.myplatform.com
-# 👤 Username: admin
-# 🔑 Password: xK9m2pL7qR4
+# Open: https://ms.myplatform.com
+# Username: admin
+# Password: xK9m2pL7qR4
 #
 # Next: Open the URL above to set up your platform.
 ```
 
-**Phase B: Welcome wizard in back-zenith (~5 minutes)**
+**Phase B: Welcome wizard in Mission Control (~5 minutes)**
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -1527,20 +1530,20 @@ curl -sfL https://get.freezenith.com | sh -s -- \
 │                                                                  │
 │     🎉 Your platform is ready!                                    │
 │                                                                  │
-│     Platform URL:  https://app.myplatform.com                    │
-│     Admin panel:   https://back.myplatform.com (you are here)    │
+│     Platform URL:  https://cloud.myplatform.com                  │
+│     Mission Control: https://ms.myplatform.com (you are here)    │
 │                                                                  │
 │     What's next:                                                 │
 │     → Invite your first users                                    │
 │     → Deploy your first app                                      │
 │     → Read the getting started guide                             │
 │                                                                  │
-│     [Open Platform →]  [Stay in Admin Panel]                     │
+│     [Open Platform →]  [Stay in Mission Control]                 │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### How Zenith Web Talks to back-zenith
+### How Zenith Web Talks to Mission Control
 
 When a user in Zenith web does something that needs infrastructure (e.g., "Add a Planet"):
 
@@ -1554,11 +1557,11 @@ Zenith API (workload cluster)
          ▼
 Zenith Operator (workload cluster)
   → Sees Planet CRD, needs a new Hetzner server
-  → Calls back-zenith API: POST /api/internal/planets
+  → Calls Mission Control API: POST /api/internal/planets
     (authenticated with cluster service account token)
          │
          ▼
-back-zenith (management plane)
+Mission Control (management plane)
   → Validates request (quota check, billing check)
   → Updates CAPI MachineDeployment (add 1 replica)
   → Records in SQLite audit log
@@ -1571,9 +1574,9 @@ CAPI (management plane)
   → Machine status: Ready
          │
          ▼
-back-zenith notifies Zenith Operator
+Mission Control notifies Zenith Operator
   → Planet CRD status: Ready
-  → User sees: 🟢 "Planet online"
+  → User sees: "Planet online"
 ```
 
 **State is preserved at every step:**
@@ -1659,18 +1662,18 @@ $ zen install
   ✓ SSH connection established                       1s
   ✓ k3s installed                                   12s
   ✓ CAPI + CAPH installed                            8s
-  ✓ back-zenith deployed                             5s
-  ✓ DNS configured (back.myplatform.com)             2s
+  ✓ Mission Control deployed                         5s
+  ✓ DNS configured (ms.myplatform.com)               2s
   ⠸ Waiting for SSL certificate...                  15s
   ✓ SSL provisioned (Let's Encrypt)                  3s
 
   ┌─────────────────────────────────────────────────────────┐
   │                                                         │
-  │  ✅ Management plane ready!                              │
+  │  Management plane ready!                                 │
   │                                                         │
-  │  🔗 https://back.myplatform.com                         │
-  │  👤 admin                                               │
-  │  🔑 xK9m2pL7qR4vBn8                                    │
+  │  https://ms.myplatform.com                              │
+  │  admin                                                  │
+  │  xK9m2pL7qR4vBn8                                       │
   │                                                         │
   │  Open the URL above to set up your platform.            │
   │                                                         │
@@ -2033,14 +2036,21 @@ zen completion <shell>      Generate shell completions
 cmd/
 ├── zenith-operator/main.go      # Workload cluster operator
 ├── zenith-api/main.go           # User-facing API
-├── zenith-web/                   # User-facing frontend
-├── back-zenith/main.go          # Platform operator API
-├── back-zenith-web/             # Platform operator frontend
 └── zen/main.go                  # CLI
+
+apps/
+├── web/                          # User-facing platform (Next.js, cloud.{domain})
+├── mission-control/              # Management plane UI (Next.js, ms.{domain})
+└── landing/                      # freezenith.com marketing site
+
+services/
+├── api/                          # Go API server (user-facing)
+├── operator/                     # Zenith K8s operator (workload clusters)
+└── auth/                         # Auth service
 
 internal/
 ├── ...existing...
-├── backplane/                    # back-zenith backend
+├── mcplane/                      # Mission Control backend
 │   ├── server.go                # HTTP server
 │   ├── handlers/
 │   │   ├── clusters.go          # CAPI cluster management
@@ -2060,19 +2070,9 @@ internal/
 │   └── releases/
 │       ├── checker.go           # Check freezenith.com for updates
 │       └── applier.go           # Apply platform updates
-
-web-back/                         # back-zenith frontend (Next.js)
-├── src/app/
-│   ├── page.tsx                 # Dashboard
-│   ├── clusters/
-│   ├── modules/
-│   ├── updates/
-│   ├── tenants/
-│   ├── infrastructure/
-│   └── audit/
-├── src/components/
-└── package.json
 ```
+
+**Note:** Mission Control (apps/mission-control/) serves as both the management plane UI AND the backend for cluster operations. CAPI + CAPH run on the same k3s node. The operator manages everything through Mission Control — no separate "back-zenith" or admin panel needed.
 
 ---
 

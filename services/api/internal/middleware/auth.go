@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"strings"
 	"time"
 
@@ -147,6 +148,21 @@ func GenerateToken(secret string, user *models.User, expiry time.Duration) (stri
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
+}
+
+// ParseToken validates a JWT string and returns its claims.
+func ParseToken(secret, tokenString string) (*Claims, error) {
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid or expired token")
+	}
+	return claims, nil
 }
 
 // ConstantTimeCompare provides timing-safe string comparison

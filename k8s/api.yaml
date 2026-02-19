@@ -27,6 +27,24 @@ spec:
             - containerPort: 8080
               name: http
               protocol: TCP
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-secrets
+                  key: jwt-secret
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-secrets
+                  key: admin-email
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-secrets
+                  key: admin-password
+            - name: CORS_ORIGINS
+              value: "https://ms.embermind.app,https://cloud.embermind.app,https://demo-ms.freezenith.com,https://demo-cloud.freezenith.com"
           resources:
             requests:
               memory: "64Mi"

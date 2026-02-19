@@ -1378,9 +1378,9 @@ Implementation: WebSocket from frontend → Galaxy API → kubectl logs/watch
 
 ---
 
-## back-zenith - Platform Operator Panel (SEPARATE APP)
+## Mission Control - Platform Operator Panel (SEPARATE APP)
 
-> This is NOT part of the user-facing Zenith UI. This is a separate app at back.freezenith.com.
+> This is NOT part of the user-facing Zenith UI. This is a separate app at ms.freezenith.com.
 > Different login. Different audience. Only the platform operator sees this.
 
 **URL:** `back.your-domain.com`
@@ -1516,7 +1516,7 @@ Shown on first login after `zen install`. No sidebar, no header. Full-screen wiz
 │ │ Management K8s:      v1.30.2 (k3s)                         │   │
 │ │ Domain:              myplatform.com                         │   │
 │ │ Hetzner Region:      fsn1                                  │   │
-│ │ State DB:            /var/lib/back-zenith/state.db (42MB)  │   │
+│ │ State DB:            /var/lib/zenith-mc/state.db (42MB)  │   │
 │ │ Last backup:         2 hours ago → s3://zenith-backups/    │   │
 │ └────────────────────────────────────────────────────────────┘   │
 │                                                                  │
@@ -1576,7 +1576,7 @@ Shown on first login after `zen install`. No sidebar, no header. Full-screen wiz
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ ┌──────┐  back-zenith             Zenith v1.2.1   [🔔] [admin] │
+│ ┌──────┐  Mission Control             Zenith v1.2.1   [🔔] [admin] │
 │ │ ⚙️   │                                                        │
 ├─┴──────┴─────────────────────────────────────────────────────────┤
 │ ┌──────────┐ ┌──────────────────────────────────────────────┐    │
@@ -1598,7 +1598,7 @@ Shown on first login after `zen install`. No sidebar, no header. Full-screen wiz
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### B1. Dashboard (back.freezenith.com)
+### B1. Dashboard (ms.freezenith.com)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -1889,7 +1889,7 @@ Shown on first login after `zen install`. No sidebar, no header. Full-screen wiz
 │ ┌────────────────────────────────────────────────────────────┐   │
 │ │ Resource          Count    Cost/mo   Notes                 │   │
 │ │ ────────────────────────────────────────────────────────── │   │
-│ │ Management CX22   1        €4.49     back-zenith + CAPI    │   │
+│ │ Management CX22   1        €4.49     Mission Control + CAPI    │   │
 │ │ CX22 (shared)     8        €35.92    zenith-shared cluster │   │
 │ │ CX32 (pro-A)      4        €29.56    pro-startup-a         │   │
 │ │ CX42 (pro-B)      12       €141.48   pro-enterprise        │   │

@@ -12,7 +12,7 @@
 /opt/zenith/
 ├── apps/
 │   ├── web/              # User-facing platform (Next.js 15, port 3000)
-│   ├── mission-control/  # Operator panel (Next.js 15, port 3100)
+│   ├── mission-control/  # Management plane (Next.js 15, port 3100, ms.{domain})
 │   └── landing/          # freezenith.com (TODO)
 ├── packages/
 │   └── ui/               # Shared design system
@@ -55,21 +55,22 @@
 
 ## Architecture
 ```
-Internet
-  ├── LB → Frontend Apps (Next.js, React, etc.)
-  ├── LB → Kong API Gateway → Backend Services
-  │           ├── JWT validation via Zenith Auth
-  │           ├── Rate limiting, CORS, plugins
-  │           └── Route management per tenant
-  └── Mobile → Kong API Gateway → Backend Services
+Management Plane (€5 CX22 - single server):
+  k3s + CAPI + CAPH + Mission Control
+  Mission Control IS the management plane (not just a UI)
+  Self-service: operator manages everything from MC after zen install
+  URL: ms.{domain} (e.g., ms.embermind.app)
 
-Management Plane (€5 CX22):
-  k3s + CAPI + CAPH → manages tenant clusters
-  Mission Control UI → operator dashboard
-
-Tenant Clusters (CAPI-managed):
+Workload Clusters (CAPI-managed):
   Zenith Operator → watches CRDs → creates Hetzner resources
   Service Operators → CNPG, Redis, etc.
+  Web Platform → user-facing dashboard (cloud.{domain})
+  Kong API Gateway → Backend Services (JWT, rate limiting, CORS)
+
+Domain Convention:
+  ms.{domain}    → Mission Control (operator management plane)
+  cloud.{domain} → Web Platform (user-facing dashboard)
+  Root domain    → reserved for customer use
 ```
 
 ## Current State (Feb 2026)
@@ -84,8 +85,10 @@ Tenant Clusters (CAPI-managed):
 
 ## Key Decisions
 - Everything is a CRD. User creates app -> Backend creates CRD -> Operator reconciles.
+- Mission Control IS the management plane. CAPI + CAPH run on the same k3s. Everything self-service after `zen install`.
 - Auth is built-in (not external Keycloak). Each tenant gets a realm.
 - Kong for API Gateway (has K8s operator, integrates with JWT).
 - CAPI for cluster lifecycle (zero-downtime K8s upgrades).
 - GitOps-friendly: `zen export`, `zen apply`, `zen diff`.
 - UX must be dead simple. Progressive disclosure. No jargon.
+- Customer domain convention: `ms.{domain}` for MC, `cloud.{domain}` for web. Root domain stays for customer.

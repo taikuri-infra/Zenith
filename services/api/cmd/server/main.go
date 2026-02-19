@@ -13,6 +13,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
 	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -79,15 +80,32 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	capiClient := capi.NewClient(k8sClient)
 	adminStore := capi.NewMemoryStore()
 
+	// User store + seed admin
+	userStore := store.NewUserStore()
+	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
+		if _, err := userStore.Create(cfg.AdminEmail, cfg.AdminPassword, "Admin", models.RoleOwner); err != nil {
+			log.Printf("Admin seed skipped: %v", err)
+		} else {
+			log.Printf("Admin user seeded: %s", cfg.AdminEmail)
+		}
+	}
+
 	// Handlers
 	projectHandler := handlers.NewProjectHandler(k8sClient)
 	appHandler := handlers.NewAppHandler(k8sClient)
 	dbHandler := handlers.NewDatabaseHandler(k8sClient)
 	storageHandler := handlers.NewStorageHandler(k8sClient)
 	adminHandler := handlers.NewAdminHandler(k8sClient, capiClient, adminStore)
+	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret)
 
 	api := app.Group("/api/v1")
 	api.Get("/version", handlers.VersionInfo(Version, BuildTime, GitCommit))
+
+	// Public auth routes (no token required)
+	authRoutes := api.Group("/auth")
+	authRoutes.Post("/login", authHandler.Login)
+	authRoutes.Post("/register", authHandler.Register)
+	authRoutes.Post("/refresh", authHandler.Refresh)
 
 	// Protected routes
 	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret))
