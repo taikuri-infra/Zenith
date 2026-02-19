@@ -131,6 +131,46 @@ export interface DashboardStats {
   updatesAvailable: number;
 }
 
+// ---------- Token helpers ----------
+
+const ACCESS_TOKEN_KEY = "mc_token";
+const REFRESH_TOKEN_KEY = "mc_refresh_token";
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function setTokens(accessToken: string, refreshToken: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
+
+export function clearTokens(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+export function isAuthenticated(): boolean {
+  return !!getAccessToken();
+}
+
+// ---------- Auth response type ----------
+
+export interface LoginResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
 // ---------- API Client ----------
 
 class ApiClient {
@@ -144,21 +184,19 @@ class ApiClient {
   setToken(token: string) {
     this.token = token;
     if (typeof window !== "undefined") {
-      localStorage.setItem("mc_token", token);
+      localStorage.setItem(ACCESS_TOKEN_KEY, token);
     }
   }
 
   clearToken() {
     this.token = null;
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("mc_token");
-    }
+    clearTokens();
   }
 
   getToken(): string | null {
     if (this.token) return this.token;
     if (typeof window !== "undefined") {
-      return localStorage.getItem("mc_token");
+      return localStorage.getItem(ACCESS_TOKEN_KEY);
     }
     return null;
   }
@@ -182,6 +220,40 @@ class ApiClient {
     if (!text) return undefined as T;
     return JSON.parse(text) as T;
   }
+
+  // Auth
+  auth = {
+    login: async (email: string, password: string): Promise<LoginResponse> => {
+      const res = await this.request<LoginResponse>("/api/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      setTokens(res.access_token, res.refresh_token);
+      this.token = res.access_token;
+      return res;
+    },
+    logout: () => {
+      this.clearToken();
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+    },
+    refresh: async (): Promise<boolean> => {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) return false;
+      try {
+        const res = await this.request<LoginResponse>("/api/v1/auth/refresh", {
+          method: "POST",
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        setTokens(res.access_token, res.refresh_token);
+        this.token = res.access_token;
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
 
   // Dashboard
   dashboard = {

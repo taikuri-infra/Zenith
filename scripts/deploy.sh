@@ -106,12 +106,30 @@ for img in zenith-landing zenith-mc zenith-web zenith-api zenith-mc-demo zenith-
 done
 
 # -------------------------------------------------------
-# Step 4: Apply Kubernetes manifests
+# Step 4: Create secrets (if they don't exist)
 # -------------------------------------------------------
-log_step "Applying Kubernetes manifests..."
+log_step "Ensuring secrets exist..."
 
 kubectl apply -f k8s/namespace.yaml
 log_ok "Namespaces created/updated"
+
+if ! kubectl get secret zenith-secrets -n zenith-platform > /dev/null 2>&1; then
+  JWT_SECRET=$(openssl rand -hex 32)
+  ADMIN_PASS=$(openssl rand -base64 16)
+  kubectl create secret generic zenith-secrets \
+    -n zenith-platform \
+    --from-literal=jwt-secret="$JWT_SECRET" \
+    --from-literal=admin-email="admin@embermind.app" \
+    --from-literal=admin-password="$ADMIN_PASS"
+  log_ok "Created zenith-secrets (admin password: $ADMIN_PASS)"
+else
+  log_ok "zenith-secrets already exists"
+fi
+
+# -------------------------------------------------------
+# Step 5: Apply Kubernetes manifests
+# -------------------------------------------------------
+log_step "Applying Kubernetes manifests..."
 
 kubectl apply -f k8s/landing.yaml
 log_ok "Landing deployment applied"
@@ -135,7 +153,7 @@ kubectl apply -f k8s/ingress.yaml
 log_ok "Ingress routes applied"
 
 # -------------------------------------------------------
-# Step 5: Restart deployments to pick up new images
+# Step 6: Restart deployments to pick up new images
 # -------------------------------------------------------
 log_step "Restarting deployments..."
 
@@ -148,7 +166,7 @@ kubectl rollout restart deployment/zenith-web -n zenith-embermind
 log_ok "All deployments restarted"
 
 # -------------------------------------------------------
-# Step 6: Wait for rollouts to complete
+# Step 7: Wait for rollouts to complete
 # -------------------------------------------------------
 log_step "Waiting for rollouts to complete..."
 
@@ -177,7 +195,7 @@ kubectl rollout status deployment/zenith-web -n zenith-embermind --timeout=120s
 log_ok "zenith-web (embermind) is ready"
 
 # -------------------------------------------------------
-# Step 7: Show deployment status
+# Step 8: Show deployment status
 # -------------------------------------------------------
 log_step "Deployment status:"
 

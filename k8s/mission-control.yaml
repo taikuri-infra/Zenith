@@ -1,6 +1,5 @@
 # =============================================================================
 # Mission Control - Customer (ms.embermind.app)
-# Uses demo image until real API backend is ready
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -27,7 +26,7 @@ spec:
     spec:
       containers:
         - name: mission-control
-          image: zenith-mc-demo:latest
+          image: zenith-mc:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 3100

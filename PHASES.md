@@ -1148,7 +1148,7 @@ P19-01  Finalize GOVERNANCE.md (maintainers, decision process)
 
 ---
 
-## Phase 19.5: Management Plane + back-zenith (Week 30-32)
+## Phase 19.5: Management Plane + Mission Control (Week 30-32)
 
 **Goal:** CAPI-based cluster management + platform operator panel.
 
@@ -1163,7 +1163,7 @@ P19M-05  Implement CAPI cluster creation: workload cluster from template
 P19M-06  Implement CAPI K8s version upgrade (patch MachineDeployment.spec.version)
 P19M-07  Implement rolling upgrade monitoring (watch Machine status, report progress)
 P19M-08  Implement CAPI node scaling (add/remove MachineDeployment replicas)
-P19M-09  Create back-zenith Go API server (cmd/back-zenith/main.go)
+P19M-09  Create Mission Control Go API server (cmd/zenith-mc/main.go)
 P19M-10  Implement /api/clusters endpoints (list, get, create, upgrade, scale)
 P19M-11  Implement /api/modules endpoints (list installed, check updates, upgrade)
 P19M-12  Implement module updater: Helm upgrade for each operator (CNPG, Redis, etc.)
@@ -1172,7 +1172,7 @@ P19M-14  Implement platform updater: apply new CRDs + helm upgrade zenith
 P19M-15  Implement /api/tenants endpoints (list, usage, quotas, suspend)
 P19M-16  Implement /api/infrastructure endpoint (Hetzner resource inventory + cost)
 P19M-17  Implement /api/audit endpoint (log all admin actions)
-P19M-18  Create back-zenith-web Next.js app (web-back/)
+P19M-18  Create mission-control Next.js app (apps/mission-control/)
 P19M-19  Build Dashboard page (cluster overview, update notifications, recent activity)
 P19M-20  Build Clusters page (list, detail, upgrade wizard, progress view)
 P19M-21  Build Modules page (list with versions, update detail, bulk update)
@@ -1184,15 +1184,15 @@ P19M-26  Build State page (complete snapshot: platform, clusters, modules, Hetzn
 P19M-27  Build Welcome Wizard (first-time setup: region, size, confirm, progress, done)
 P19M-28  Implement platform rollback: helm rollback zenith to previous version
 P19M-29  Implement health verification after upgrades (API + operator + web probes)
-P19M-30  Implement SQLite state store (/var/lib/back-zenith/state.db)
+P19M-30  Implement SQLite state store (/var/lib/zenith-mc/state.db)
 P19M-31  Implement audit log persistence in SQLite (actor, action, timestamp, cluster, details)
 P19M-32  Implement module inventory tracking in SQLite (what version on which cluster)
 P19M-33  Implement automated state backup: etcd snapshots + SQLite → Hetzner Object Storage every 6h
 P19M-34  Implement state restore: `zen restore --from s3://zenith-backups/` (recovery from mgmt server loss)
-P19M-35  Implement inter-cluster communication: Zenith Operator → back-zenith API for infra requests
-P19M-36  Implement quota validation in back-zenith (check limits before provisioning)
-P19M-37  Create Dockerfile for back-zenith (API + web, single image)
-P19M-38  Add back-zenith to Helm chart (deployed on management cluster only)
+P19M-35  Implement inter-cluster communication: Zenith Operator → Mission Control API for infra requests
+P19M-36  Implement quota validation in Mission Control (check limits before provisioning)
+P19M-37  Create Dockerfile for Mission Control (API + web, single image)
+P19M-38  Add Mission Control to Helm chart (deployed on management cluster only)
 P19M-39  Update `zen install` to two-phase: CLI creates mgmt plane → browser wizard creates platform
 P19M-40  Write admin guide: "Managing Your Zenith Platform" (docs/admin-guide.md)
 ```
@@ -1200,15 +1200,15 @@ P19M-40  Write admin guide: "Managing Your Zenith Platform" (docs/admin-guide.md
 ### Test Cases
 
 ```
-T19M-01  `zen install` creates management server + k3s + CAPI + back-zenith end-to-end (~3 min)
-T19M-02  Welcome Wizard creates workload cluster from back-zenith UI (~5 min)
+T19M-01  `zen install` creates management server + k3s + CAPI + Mission Control end-to-end (~3 min)
+T19M-02  Welcome Wizard creates workload cluster from Mission Control UI (~5 min)
 T19M-03  CAPI creates workload cluster with correct K8s version and node count
 T19M-04  K8s upgrade via CAPI: rolling upgrade completes, zero pod downtime
 T19M-05  K8s upgrade can be paused and resumed safely
 T19M-06  Module upgrade (CNPG): helm upgrade succeeds, existing databases unaffected
 T19M-07  Platform upgrade: new Zenith version applied, CRDs updated, pods healthy
 T19M-08  Platform rollback: reverts to previous version successfully
-T19M-09  back-zenith auth is separate from user-facing auth
+T19M-09  Mission Control auth is separate from user-facing auth
 T19M-10  Audit log captures all admin actions with timestamp and actor in SQLite
 T19M-11  Infrastructure page shows accurate Hetzner cost (verified against Hetzner dashboard)
 T19M-12  Tenant suspension blocks API access for that tenant
@@ -1216,22 +1216,22 @@ T19M-13  Upgrade notification appears within 6 hours of new release on freezenit
 T19M-14  State page shows complete snapshot of all clusters, modules, resources
 T19M-15  Automated backup: etcd + SQLite backed up to S3 every 6 hours
 T19M-16  Disaster recovery: destroy mgmt server → `zen restore` → full recovery in ~5 min
-T19M-17  Zenith Operator on workload cluster communicates with back-zenith for infra requests
-T19M-18  Quota check: back-zenith rejects Planet creation when tenant exceeds limit
+T19M-17  Zenith Operator on workload cluster communicates with Mission Control for infra requests
+T19M-18  Quota check: Mission Control rejects Planet creation when tenant exceeds limit
 ```
 
 ### Definition of Done
 - [ ] Two-phase install works: CLI → mgmt plane → Welcome Wizard → platform created
 - [ ] K8s upgrades via CAPI: rolling, zero-downtime, pausable
-- [ ] All modules upgradeable from back-zenith UI
+- [ ] All modules upgradeable from Mission Control UI
 - [ ] Platform updates from freezenith.com work end-to-end
-- [ ] back-zenith panel functional with all 8 pages (Dashboard, Clusters, Modules, Updates, Tenants, Infra, State, Audit)
+- [ ] Mission Control panel functional with all 8 pages (Dashboard, Clusters, Modules, Updates, Tenants, Infra, State, Audit)
 - [ ] Welcome Wizard works on first login
 - [ ] SQLite state store: audit log, module inventory, tenant metadata
 - [ ] Automated backups: etcd + SQLite → S3 every 6 hours
 - [ ] Disaster recovery: full restore from backup in ~5 minutes
 - [ ] Rollback works for both modules and platform
-- [ ] Inter-cluster communication: Zenith Operator ↔ back-zenith API
+- [ ] Inter-cluster communication: Zenith Operator ↔ Mission Control API
 
 ---
 
@@ -1329,7 +1329,7 @@ Phase 16.5: GitOps                         17 tasks     Week 26-27
 Phase 17: Landing Page + Docs              15 tasks     Week 27-28
 Phase 18: Production Hardening             15 tasks     Week 29-30
 Phase 19: CNCF Preparation                 12 tasks     Week 31
-Phase 19.5: Management Plane + back-zenith 40 tasks     Week 31-33
+Phase 19.5: Management Plane + Mission Control 40 tasks     Week 31-33
 Phase 20: CNCF Submission                  12 tasks     Week 34-35
 ──────────────────────────────────────────────────────────────
 TOTAL                                      ~456 tasks    35 weeks

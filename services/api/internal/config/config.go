@@ -16,8 +16,10 @@ type Config struct {
 	InCluster   bool
 
 	// Auth
-	JWTSecret   string
-	JWTIssuer   string
+	JWTSecret     string
+	JWTIssuer     string
+	AdminEmail    string
+	AdminPassword string
 }
 
 func Load() *Config {
@@ -28,8 +30,10 @@ func Load() *Config {
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 		KubeConfig:  getEnv("KUBECONFIG", ""),
 		InCluster:   getEnvBool("IN_CLUSTER", false),
-		JWTSecret:   getEnv("JWT_SECRET", ""),
-		JWTIssuer:   getEnv("JWT_ISSUER", "zenith"),
+		JWTSecret:     getEnv("JWT_SECRET", ""),
+		JWTIssuer:     getEnv("JWT_ISSUER", "zenith"),
+		AdminEmail:    getEnv("ADMIN_EMAIL", ""),
+		AdminPassword: getEnv("ADMIN_PASSWORD", ""),
 	}
 }
 
