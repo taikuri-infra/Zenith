@@ -11,6 +11,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -18,7 +19,7 @@ func setupAdminApp() (*fiber.App, *handlers.AdminHandler) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
-	store := capi.NewMemoryStore()
+	store := store.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
 	return app, handler
 }
@@ -903,7 +904,7 @@ func TestListAuditLogEmptyStore(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
 	// Create a store but clear the audit log manually
-	store := capi.NewMemoryStore()
+	store := store.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
 	app.Use(injectAdmin)
 	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
@@ -1101,7 +1102,7 @@ func TestSuspendTenantSuccess(t *testing.T) {
 	// We need to use the k8sClient directly to create a project
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
-	store := capi.NewMemoryStore()
+	store := store.NewMemoryAdminRepository()
 	h := handlers.NewAdminHandler(k8sClient, capiClient, store)
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
@@ -1152,7 +1153,7 @@ func TestSuspendTenantSuccess(t *testing.T) {
 func TestListTenantsWithProjects(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
-	store := capi.NewMemoryStore()
+	store := store.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
@@ -1206,7 +1207,7 @@ func TestApplyUpdateInvalidBody(t *testing.T) {
 func TestDashboardStatsWithClusters(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
-	store := capi.NewMemoryStore()
+	store := store.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
@@ -1256,7 +1257,7 @@ func TestDashboardStatsWithClusters(t *testing.T) {
 func TestDashboardStatsWithSuspendedTenant(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
-	store := capi.NewMemoryStore()
+	store := store.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})

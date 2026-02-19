@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -10,29 +11,26 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// StoredUser wraps a User with the password hash.
-type StoredUser struct {
-	models.User
-	PasswordHash string
-}
+// Compile-time interface check.
+var _ UserRepository = (*MemoryUserRepository)(nil)
 
-// UserStore is a thread-safe, in-memory user store.
-type UserStore struct {
+// MemoryUserRepository is a thread-safe, in-memory user store.
+type MemoryUserRepository struct {
 	users   map[string]*StoredUser // keyed by ID
 	byEmail map[string]string     // email -> ID
 	mu      sync.RWMutex
 }
 
-// NewUserStore returns an empty UserStore.
-func NewUserStore() *UserStore {
-	return &UserStore{
+// NewMemoryUserRepository returns an empty in-memory user store.
+func NewMemoryUserRepository() *MemoryUserRepository {
+	return &MemoryUserRepository{
 		users:   make(map[string]*StoredUser),
 		byEmail: make(map[string]string),
 	}
 }
 
 // Create adds a new user. Returns an error if the email is already taken.
-func (s *UserStore) Create(email, password, name string, role models.Role) (*models.User, error) {
+func (s *MemoryUserRepository) Create(_ context.Context, email, password, name string, role models.Role) (*models.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -64,7 +62,7 @@ func (s *UserStore) Create(email, password, name string, role models.Role) (*mod
 }
 
 // GetByEmail returns the stored user for the given email.
-func (s *UserStore) GetByEmail(email string) (*StoredUser, error) {
+func (s *MemoryUserRepository) GetByEmail(_ context.Context, email string) (*StoredUser, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -76,7 +74,7 @@ func (s *UserStore) GetByEmail(email string) (*StoredUser, error) {
 }
 
 // GetByID returns the stored user for the given ID.
-func (s *UserStore) GetByID(id string) (*StoredUser, error) {
+func (s *MemoryUserRepository) GetByID(_ context.Context, id string) (*StoredUser, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -88,13 +86,13 @@ func (s *UserStore) GetByID(id string) (*StoredUser, error) {
 }
 
 // CheckPassword returns true if the password matches the stored hash.
-func (s *UserStore) CheckPassword(user *StoredUser, password string) bool {
+func (s *MemoryUserRepository) CheckPassword(user *StoredUser, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) == nil
 }
 
 // Count returns the total number of users.
-func (s *UserStore) Count() int {
+func (s *MemoryUserRepository) Count(_ context.Context) (int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.users)
+	return len(s.users), nil
 }

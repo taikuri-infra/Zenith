@@ -8,6 +8,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/capi"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -15,15 +16,15 @@ import (
 type AdminHandler struct {
 	capiClient *capi.Client
 	k8sClient  k8s.Client
-	store      *capi.MemoryStore
+	store      store.AdminRepository
 }
 
 // NewAdminHandler creates a new AdminHandler with the given dependencies.
-func NewAdminHandler(k8sClient k8s.Client, capiClient *capi.Client, store *capi.MemoryStore) *AdminHandler {
+func NewAdminHandler(k8sClient k8s.Client, capiClient *capi.Client, adminStore store.AdminRepository) *AdminHandler {
 	return &AdminHandler{
 		capiClient: capiClient,
 		k8sClient:  k8sClient,
-		store:      store,
+		store:      adminStore,
 	}
 }
 
@@ -58,7 +59,7 @@ func (h *AdminHandler) GetDashboardStats(c *fiber.Ctx) error {
 		}
 	}
 
-	modules := h.store.ListModules()
+	modules, _ := h.store.ListModules(c.Context())
 	updatesAvailable := 0
 	for _, m := range modules {
 		if m.Status == "update_available" {
@@ -138,7 +139,7 @@ func (h *AdminHandler) CreateCluster(c *fiber.Ctx) error {
 		return NewConflict("cluster already exists")
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:    time.Now().Format("15:04"),
 		Actor:   actorFromContext(c),
 		Action:  "Created cluster " + input.Name,
@@ -160,7 +161,7 @@ func (h *AdminHandler) DeleteCluster(c *fiber.Ctx) error {
 		return NewNotFound("cluster")
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:    time.Now().Format("15:04"),
 		Actor:   actorFromContext(c),
 		Action:  "Deleted cluster " + name,
@@ -190,7 +191,7 @@ func (h *AdminHandler) UpgradeCluster(c *fiber.Ctx) error {
 		return NewNotFound("cluster")
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:    time.Now().Format("15:04"),
 		Actor:   actorFromContext(c),
 		Action:  "Initiated upgrade to " + input.Version,
@@ -257,7 +258,7 @@ func (h *AdminHandler) SuspendTenant(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to suspend tenant")
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Suspended tenant " + id,
@@ -271,7 +272,11 @@ func (h *AdminHandler) SuspendTenant(c *fiber.Ctx) error {
 // ListModules returns all platform modules.
 // GET /api/v1/admin/modules
 func (h *AdminHandler) ListModules(c *fiber.Ctx) error {
-	return c.JSON(h.store.ListModules())
+	modules, err := h.store.ListModules(c.Context())
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to list modules")
+	}
+	return c.JSON(modules)
 }
 
 // InstallModule triggers installation of a module (placeholder).
@@ -282,7 +287,7 @@ func (h *AdminHandler) InstallModule(c *fiber.Ctx) error {
 		return NewBadRequest("module name is required")
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Installed module " + name,
@@ -299,7 +304,7 @@ func (h *AdminHandler) UninstallModule(c *fiber.Ctx) error {
 		return NewBadRequest("module name is required")
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Uninstalled module " + name,
@@ -316,12 +321,12 @@ func (h *AdminHandler) UpdateModule(c *fiber.Ctx) error {
 		return NewBadRequest("module name is required")
 	}
 
-	mod, err := h.store.UpdateModule(name)
+	mod, err := h.store.UpdateModule(c.Context(), name)
 	if err != nil {
 		return NewNotFound("module")
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Updated module " + name + " to " + mod.Installed,
@@ -333,16 +338,20 @@ func (h *AdminHandler) UpdateModule(c *fiber.Ctx) error {
 // UpdateAllModules updates all modules that have updates available.
 // POST /api/v1/admin/modules/update-all
 func (h *AdminHandler) UpdateAllModules(c *fiber.Ctx) error {
-	modules := h.store.ListModules()
+	modules, err := h.store.ListModules(c.Context())
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to list modules")
+	}
+
 	updated := 0
 	for _, m := range modules {
 		if m.Status == "update_available" {
-			h.store.UpdateModule(m.Name)
+			_, _ = h.store.UpdateModule(c.Context(), m.Name)
 			updated++
 		}
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Updated all modules (" + strconv.Itoa(updated) + " updated)",
@@ -359,7 +368,10 @@ func (h *AdminHandler) ListAuditLog(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	entries := h.store.ListAuditLog(limit, offset)
+	entries, err := h.store.ListAuditLog(c.Context(), limit, offset)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to list audit log")
+	}
 	return c.JSON(entries)
 }
 
@@ -368,7 +380,11 @@ func (h *AdminHandler) ListAuditLog(c *fiber.Ctx) error {
 // CheckUpdates returns available platform updates.
 // GET /api/v1/admin/updates/check
 func (h *AdminHandler) CheckUpdates(c *fiber.Ctx) error {
-	return c.JSON(h.store.GetPlatformUpdate())
+	update, err := h.store.GetPlatformUpdate(c.Context())
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to check updates")
+	}
+	return c.JSON(update)
 }
 
 // ApplyUpdate applies a platform update (placeholder).
@@ -382,7 +398,7 @@ func (h *AdminHandler) ApplyUpdate(c *fiber.Ctx) error {
 		return NewBadRequest("version is required")
 	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Applied platform update " + input.Version,
@@ -394,7 +410,11 @@ func (h *AdminHandler) ApplyUpdate(c *fiber.Ctx) error {
 // ListUpdateHistory returns the history of past platform updates.
 // GET /api/v1/admin/updates/history
 func (h *AdminHandler) ListUpdateHistory(c *fiber.Ctx) error {
-	return c.JSON(h.store.ListUpdateHistory())
+	history, err := h.store.ListUpdateHistory(c.Context())
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to list update history")
+	}
+	return c.JSON(history)
 }
 
 // ---------- Infrastructure ----------
@@ -445,8 +465,11 @@ func (h *AdminHandler) GetInfraOverview(c *fiber.Ctx) error {
 // GetPlatformState returns the current platform state summary.
 // GET /api/v1/admin/state
 func (h *AdminHandler) GetPlatformState(c *fiber.Ctx) error {
-	update := h.store.GetPlatformUpdate()
-	settings := h.store.GetSettings()
+	update, _ := h.store.GetPlatformUpdate(c.Context())
+	settings, err := h.store.GetSettings(c.Context())
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get settings")
+	}
 
 	updateAvailable := ""
 	if update != nil && update.Version != update.Current {
@@ -470,8 +493,8 @@ func (h *AdminHandler) GetPlatformState(c *fiber.Ctx) error {
 func (h *AdminHandler) ExportState(c *fiber.Ctx) error {
 	clusters, _ := h.capiClient.ListClusters(c.Context())
 	projects, _ := h.k8sClient.ListCRDs(c.Context(), "Project", "")
-	settings := h.store.GetSettings()
-	modules := h.store.ListModules()
+	settings, _ := h.store.GetSettings(c.Context())
+	modules, _ := h.store.ListModules(c.Context())
 
 	tenants := make([]models.Tenant, 0, len(projects))
 	for _, p := range projects {
@@ -500,7 +523,11 @@ func (h *AdminHandler) ExportState(c *fiber.Ctx) error {
 // GetSettings returns the current platform settings.
 // GET /api/v1/admin/settings
 func (h *AdminHandler) GetSettings(c *fiber.Ctx) error {
-	return c.JSON(h.store.GetSettings())
+	settings, err := h.store.GetSettings(c.Context())
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get settings")
+	}
+	return c.JSON(settings)
 }
 
 // UpdateSettings updates platform settings.
@@ -511,9 +538,12 @@ func (h *AdminHandler) UpdateSettings(c *fiber.Ctx) error {
 		return NewBadRequest("invalid request body")
 	}
 
-	updated := h.store.UpdateSettings(&input)
+	updated, err := h.store.UpdateSettings(c.Context(), &input)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to update settings")
+	}
 
-	h.store.AddAuditEntry(models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Updated platform settings",

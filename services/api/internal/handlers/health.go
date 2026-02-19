@@ -3,6 +3,7 @@ package handlers
 import (
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -40,14 +41,29 @@ func HealthCheck(version, buildTime, gitCommit string) fiber.Handler {
 	}
 }
 
-func ReadinessCheck() fiber.Handler {
+func ReadinessCheck(pool *pgxpool.Pool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		checks := map[string]string{
 			"server": "ready",
 		}
 
-		return c.JSON(ReadinessResponse{
-			Status: "ready",
+		status := "ready"
+		if pool != nil {
+			if err := pool.Ping(c.Context()); err != nil {
+				checks["database"] = "unhealthy"
+				status = "not_ready"
+			} else {
+				checks["database"] = "ready"
+			}
+		}
+
+		code := fiber.StatusOK
+		if status != "ready" {
+			code = fiber.StatusServiceUnavailable
+		}
+
+		return c.Status(code).JSON(ReadinessResponse{
+			Status: status,
 			Checks: checks,
 		})
 	}

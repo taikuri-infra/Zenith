@@ -129,6 +129,95 @@ export interface DashboardStats {
   monthlyCost: string;
   costProvider: string;
   updatesAvailable: number;
+  customerCount?: number;
+  activeCustomers?: number;
+  mrr?: string;
+  newCustomersThisMonth?: number;
+}
+
+// ---------- Plans & Customers ----------
+
+export interface Plan {
+  id: string;
+  name: string;
+  cpuCores: number;
+  ramGb: number;
+  s3Tb: number;
+  dbStorageGb: number;
+  volumeGb: number;
+  lbCount: number;
+  priceCents: number;
+  currency: string;
+  billingCycle: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  domain: string;
+  planId: string;
+  contactEmail: string;
+  contactName: string;
+  status: "active" | "suspended";
+  clusterStatus: "pending" | "provisioning" | "running" | "error";
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  plan?: Plan;
+}
+
+export interface CreateCustomerInput {
+  name: string;
+  domain: string;
+  planId: string;
+  contactEmail: string;
+  contactName: string;
+}
+
+export interface UpdateCustomerInput {
+  name?: string;
+  domain?: string;
+  planId?: string;
+  contactEmail?: string;
+  contactName?: string;
+  notes?: string;
+}
+
+export interface CreatePlanInput {
+  name: string;
+  cpuCores: number;
+  ramGb: number;
+  s3Tb?: number;
+  dbStorageGb?: number;
+  volumeGb?: number;
+  lbCount?: number;
+  priceCents: number;
+  currency?: string;
+  billingCycle?: string;
+}
+
+export interface UpdatePlanInput {
+  name?: string;
+  cpuCores?: number;
+  ramGb?: number;
+  s3Tb?: number;
+  dbStorageGb?: number;
+  volumeGb?: number;
+  lbCount?: number;
+  priceCents?: number;
+  currency?: string;
+  billingCycle?: string;
+  active?: boolean;
+}
+
+export interface CustomerStats {
+  totalCustomers: number;
+  activeCustomers: number;
+  mrr: string;
+  newThisMonth: number;
 }
 
 // ---------- Token helpers ----------
@@ -360,6 +449,53 @@ class ApiClient {
     update: (data: Partial<PlatformSettings>) =>
       this.request<PlatformSettings>("/api/v1/admin/settings", {
         method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+  };
+
+  // Customers
+  customers = {
+    list: () => this.request<Customer[]>("/api/v1/admin/customers"),
+    get: (id: string) =>
+      this.request<Customer>(`/api/v1/admin/customers/${encodeURIComponent(id)}`),
+    create: (data: CreateCustomerInput) =>
+      this.request<Customer>("/api/v1/admin/customers", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: UpdateCustomerInput) =>
+      this.request<Customer>(`/api/v1/admin/customers/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      this.request<void>(`/api/v1/admin/customers/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
+    suspend: (id: string) =>
+      this.request<Customer>(
+        `/api/v1/admin/customers/${encodeURIComponent(id)}/suspend`,
+        { method: "POST" }
+      ),
+    activate: (id: string) =>
+      this.request<Customer>(
+        `/api/v1/admin/customers/${encodeURIComponent(id)}/activate`,
+        { method: "POST" }
+      ),
+    stats: () => this.request<CustomerStats>("/api/v1/admin/customers/stats"),
+  };
+
+  // Plans
+  plans = {
+    list: () => this.request<Plan[]>("/api/v1/admin/plans"),
+    create: (data: CreatePlanInput) =>
+      this.request<Plan>("/api/v1/admin/plans", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: UpdatePlanInput) =>
+      this.request<Plan>(`/api/v1/admin/plans/${encodeURIComponent(id)}`, {
+        method: "PUT",
         body: JSON.stringify(data),
       }),
   };

@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Server,
+  Building2,
+  CreditCard,
   Package,
   ArrowUpCircle,
   Users,
@@ -16,6 +18,8 @@ import {
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Customers", href: "/customers", icon: Building2 },
+  { name: "Plans", href: "/plans", icon: CreditCard },
   { name: "Clusters", href: "/clusters", icon: Server },
   { name: "Modules", href: "/modules", icon: Package },
   { name: "Updates", href: "/updates", icon: ArrowUpCircle },

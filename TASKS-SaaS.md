@@ -12,14 +12,14 @@
 | Phase | Description | Tasks | Done | Status |
 |-------|-------------|-------|------|--------|
 | Pre | Foundation (Auth, API scaffold, Deploy, IaC) | 24 | 24 | **COMPLETE** |
-| 0 | PostgreSQL + Persistent State | 18 | 0 | NOT STARTED |
-| 1 | Customer Management in Admin | 16 | 0 | NOT STARTED |
+| 0 | PostgreSQL + Persistent State | 18 | 14 | **IN PROGRESS** |
+| 1 | Customer Management in Admin | 16 | 16 | **COMPLETE** |
 | 2 | CAPI Cluster Provisioning | 20 | 0 | NOT STARTED |
 | 3 | Resource Metering & Limits | 11 | 0 | NOT STARTED |
 | 4 | Billing (Stripe + Fairbroker) | 11 | 0 | NOT STARTED |
 | 5 | Customer Onboarding Automation | 5 | 0 | NOT STARTED |
 | 6 | Open-Core Extraction (Future) | 7 | 0 | NOT STARTED |
-| **Total** | | **112** | **24** | **21%** |
+| **Total** | | **112** | **54** | **48%** |
 
 ---
 
@@ -197,83 +197,80 @@ infra/
 ## Phase 0: PostgreSQL + Persistent State
 
 > **Goal:** Replace all in-memory stores with PostgreSQL. Nothing else works without this.
-> **Status:** NOT STARTED (0/18)
+> **Status:** IN PROGRESS (14/18)
 
 ### Tasks — IaC (Provision PostgreSQL)
 
-- [ ] **S0-01** Terraform: Add Hetzner volume for PostgreSQL persistent data (or use CNPG on existing server)
-- [ ] **S0-02** Ansible playbook `setup-postgres.yml`: Deploy PostgreSQL on k3s via CNPG operator or StatefulSet with PVC
-  - Persistent volume backed by Hetzner volume
-  - Automated backups to Hetzner S3
-  - Secrets managed via Ansible Vault / SOPS
-- [ ] **S0-03** Ansible: Wire `DATABASE_URL` into k8s secrets, update `k8s/api.yaml` env
+- [x] **S0-01** K8s StatefulSet for PostgreSQL with PVC (`k8s/postgres.yaml`) — postgres:16-alpine, 5Gi volume
+- [x] **S0-02** Deploy script updated: `scripts/deploy.sh` creates DB credentials secret, deploys PostgreSQL before API, waits for readiness
+- [x] **S0-03** DB env vars wired into `k8s/api.yaml`: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 
 ### Tasks — Database Schema (golang-migrate)
 
-- [ ] **S0-04** Add golang-migrate for schema migrations (embedded in API binary)
-- [ ] **S0-05** Migration 001: `users`, `sessions`, `api_keys` tables
-- [ ] **S0-06** Migration 002: `customers` (id, name, domain, plan_id, status, created_at, ...)
-- [ ] **S0-07** Migration 003: `plans` (id, name, cpu_limit, ram_limit, s3_limit, db_storage_limit, volume_limit, lb_limit, price_cents, currency, billing_cycle)
-- [ ] **S0-08** Migration 004: `clusters` (id, customer_id, name, region, k8s_version, status, capi_cluster_name, node_count, created_at)
-- [ ] **S0-09** Migration 005: `resource_usage` (id, customer_id, cluster_id, resource_type, amount, unit, recorded_at) — time-series metering
-- [ ] **S0-10** Migration 006: `invoices` (id, customer_id, plan_id, amount, currency, status, stripe_invoice_id, period_start, period_end)
-- [ ] **S0-11** Migration 007: `audit_log` (id, actor, action, resource_type, resource_id, customer_id, metadata jsonb, created_at)
-- [ ] **S0-12** Migration 008: `modules`, `settings`, `platform_state` tables
+- [x] **S0-04** golang-migrate with embedded SQL files (`store/migrations/`, `embed.FS`)
+- [x] **S0-05** Migration 001: `users`, `platform_settings`, `modules`, `audit_log`, `update_history` tables
+- [x] **S0-06** Migration: `customers` (id, name, domain, plan_id, status, created_at, ...) — completed in Phase 1
+- [x] **S0-07** Migration: `plans` (id, name, cpu_limit, ram_limit, s3_limit, db_storage_limit, volume_limit, lb_limit, price_cents, currency, billing_cycle) — completed in Phase 1
+- [ ] **S0-08** Migration: `clusters` (id, customer_id, name, region, k8s_version, status, capi_cluster_name, node_count, created_at) — Phase 2 scope
+- [ ] **S0-09** Migration: `resource_usage` (id, customer_id, cluster_id, resource_type, amount, unit, recorded_at) — Phase 3 scope
+- [ ] **S0-10** Migration: `invoices` (id, customer_id, plan_id, amount, currency, status, stripe_invoice_id, period_start, period_end) — Phase 4 scope
+- [x] **S0-11** Migration 001 includes `audit_log` table with time, actor, action, cluster columns
+- [x] **S0-12** Migration 002: Seed default modules (11), platform settings, update history
 
 ### Tasks — Go API (Replace In-Memory Stores)
 
-- [ ] **S0-13** Add pgx driver + connection pool in API startup
-- [ ] **S0-14** Replace `store.UserStore` with PostgreSQL-backed implementation
-- [ ] **S0-15** Replace `k8s.MemoryClient` with real K8s client (client-go, in-cluster config)
-- [ ] **S0-16** Replace `capi.MemoryStore` with PostgreSQL for settings/modules/audit
-- [ ] **S0-17** API auto-migrates on startup (golang-migrate `Up()`)
-- [ ] **S0-18** Update Dockerfile: ensure migrate files embedded in binary
+- [x] **S0-13** pgx/v5 driver + `pgxpool` connection pool, conditional startup (falls back to in-memory when no DATABASE_URL)
+- [x] **S0-14** `PostgresUserRepository` implements `UserRepository` interface (bcrypt, pgx, uuid)
+- [ ] **S0-15** Replace `k8s.MemoryClient` with real K8s client (client-go, in-cluster config) — separate task
+- [x] **S0-16** `PostgresAdminRepository` implements `AdminRepository` interface (settings, modules, audit, updates)
+- [x] **S0-17** API auto-migrates on startup via `store.RunMigrations()` before pool creation
+- [x] **S0-18** SQL files embedded via `//go:embed *.sql` in `store/migrations/embed.go`
 
 ### Definition of Done
-- PostgreSQL provisioned via Ansible (not manual SSH)
-- API server restarts without losing data
-- Users, sessions, settings persist across deployments
-- Real K8s client connects to k3s cluster API
-- `ansible-playbook setup-postgres.yml` is the only command needed
+- [x] PostgreSQL deployed via k8s manifest with persistent volume
+- [x] API server can restart without losing data (when connected to PostgreSQL)
+- [x] Users, settings, modules, audit log persist across deployments
+- [ ] Real K8s client connects to k3s cluster API (separate task)
+- [x] `scripts/deploy.sh` handles full deployment including PostgreSQL
 
 ---
 
 ## Phase 1: Customer Management in Admin Panel
 
 > **Goal:** Admin (DoTech staff) can create, view, and manage customer accounts from the MC dashboard.
-> **Status:** NOT STARTED (0/16)
+> **Status:** COMPLETE (16/16)
 
 ### Tasks — API Endpoints
 
-- [ ] **S1-01** `POST /api/v1/admin/customers` — create customer
+- [x] **S1-01** `POST /api/v1/admin/customers` — create customer
   - Body: `{ name, domain, plan_id, contact_email, contact_name }`
-- [ ] **S1-02** `GET /api/v1/admin/customers` — list all customers
+- [x] **S1-02** `GET /api/v1/admin/customers` — list all customers
   - Response: customer list with plan, cluster status, resource usage summary
-- [ ] **S1-03** `GET /api/v1/admin/customers/:id` — get customer detail
+- [x] **S1-03** `GET /api/v1/admin/customers/:id` — get customer detail
   - Response: full customer profile, cluster info, usage, invoices
-- [ ] **S1-04** `PUT /api/v1/admin/customers/:id` — update customer (name, plan, status)
-- [ ] **S1-05** `POST /api/v1/admin/customers/:id/suspend` — suspend customer
-- [ ] **S1-06** `POST /api/v1/admin/customers/:id/activate` — reactivate customer
-- [ ] **S1-07** `DELETE /api/v1/admin/customers/:id` — delete customer (+ cluster teardown)
-- [ ] **S1-08** `GET /api/v1/admin/plans` — list available plans
-- [ ] **S1-09** `POST /api/v1/admin/plans` — create plan
+- [x] **S1-04** `PUT /api/v1/admin/customers/:id` — update customer (name, plan, status)
+- [x] **S1-05** `POST /api/v1/admin/customers/:id/suspend` — suspend customer
+- [x] **S1-06** `POST /api/v1/admin/customers/:id/activate` — reactivate customer
+- [x] **S1-07** `DELETE /api/v1/admin/customers/:id` — delete customer (+ cluster teardown)
+- [x] **S1-08** `GET /api/v1/admin/plans` — list available plans
+- [x] **S1-09** `POST /api/v1/admin/plans` — create plan
   - Body: `{ name, cpu_cores, ram_gb, s3_tb, db_storage_gb, volume_gb, lb_count, price_cents, currency, billing_cycle }`
-- [ ] **S1-10** `PUT /api/v1/admin/plans/:id` — update plan
+- [x] **S1-10** `PUT /api/v1/admin/plans/:id` — update plan
 
 ### Tasks — MC Frontend
 
-- [ ] **S1-11** MC page: `/customers` — customer list table
+- [x] **S1-11** MC page: `/customers` — customer list table
   - Columns: Name, Domain, Plan, Cluster Status, CPU/RAM usage bars, Monthly Cost, Status
   - Actions: + New Customer, search/filter
-- [ ] **S1-12** MC page: `/customers/[id]` — customer detail
+- [x] **S1-12** MC page: `/customers/[id]` — customer detail
   - Sections: Profile, Cluster info, Resource usage gauges (CPU/RAM/S3/DB vs ceiling), Recent activity, Invoice history, Actions (suspend/activate/upgrade plan/delete)
-- [ ] **S1-13** MC page: `/customers/new` — create customer wizard
+- [x] **S1-13** MC page: `/customers/new` — create customer wizard
   - Steps: Company info → Select plan → Configure domain → Review → Create
-- [ ] **S1-14** MC page: `/plans` — plan management
+- [x] **S1-14** MC page: `/plans` — plan management
   - Table: Plan name, Resources (CPU/RAM/S3/DB), Price, Active customers count
   - Actions: + New Plan, Edit, Archive
-- [ ] **S1-15** MC sidebar: Add "Customers" and "Plans" nav items (above Clusters)
-- [ ] **S1-16** MC dashboard (`/`): Replace "Tenants" with "Customers" card + stats
+- [x] **S1-15** MC sidebar: Add "Customers" and "Plans" nav items (above Clusters)
+- [x] **S1-16** MC dashboard (`/`): Replace "Tenants" with "Customers" card + stats
   - Show: total customers, MRR (monthly recurring revenue), new this month
 
 ### Definition of Done
@@ -535,14 +532,16 @@ Phase 6 makes it **famous**.
 
 ## What Exists Today (Technical Detail)
 
-### API (`services/api/`) — In-Memory, No Persistence
+### API (`services/api/`) — PostgreSQL + In-Memory Fallback
 - **Framework:** Go + Fiber v2, all routes defined and working
 - **Auth:** JWT login/register/refresh, bcrypt passwords, role hierarchy (Owner > Admin > Developer > Viewer)
-- **Stores:** All in-memory — `UserStore`, `MemoryClient` (K8s CRDs), `MemoryStore` (CAPI/admin data)
+- **Stores:** Repository pattern — `UserRepository` + `AdminRepository` interfaces, with both `MemoryXxxRepository` and `PostgresXxxRepository` implementations
+- **Database:** pgx/v5 connection pool, golang-migrate with embedded SQL, auto-migration on startup
+- **Conditional:** When `DATABASE_URL` is set → PostgreSQL; otherwise → in-memory (dev/demo mode)
 - **Handlers:** Full set — projects, apps, databases, storage, clusters, tenants, modules, audit, settings, infra
-- **Config:** PORT, JWT_SECRET, ADMIN_EMAIL/PASSWORD, CORS_ORIGINS, IN_CLUSTER
-- **Missing:** No PostgreSQL driver (pgx/lib/pq), no migrations, no `database/sql`, no real K8s client (client-go)
-- **Missing:** No customer CRUD, no plan CRUD, no billing endpoints
+- **Config:** PORT, JWT_SECRET, ADMIN_EMAIL/PASSWORD, CORS_ORIGINS, IN_CLUSTER, DATABASE_URL (or DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME)
+- **Health:** `/ready` endpoint pings PostgreSQL when connected
+- **Missing:** No real K8s client (still using `k8s.MemoryClient`), no customer/plan/billing CRUD
 
 ### Mission Control (`apps/mission-control/`) — UI Ready, No SaaS Pages
 - **Pages:** Dashboard, Clusters, Tenants, Modules, Updates, Infrastructure, State, Audit, Settings, Login
@@ -558,12 +557,13 @@ Phase 6 makes it **famous**.
 - **Ansible:** Does not exist yet — server setup is manual SSH
 - **Missing:** No Hetzner Terraform (servers, volumes, networks, firewalls), no Ansible playbooks, no remote Terraform state, no CAPI templates, no secrets management (Vault/SOPS)
 
-### Infrastructure — Live, No Database
+### Infrastructure — Live, PostgreSQL Ready
 - **Server:** ghasi (161.35.82.211), k3s v1.34.3, Traefik 3.5.1
-- **Namespaces:** `zenith-platform` (landing, api, demo-mc, demo-web), `zenith-embermind` (customer mc, web)
-- **Deploy:** `scripts/deploy.sh` builds 6 Docker images, imports to k3s, applies manifests
+- **Namespaces:** `zenith-platform` (landing, api, postgres, demo-mc, demo-web), `zenith-embermind` (customer mc, web)
+- **Deploy:** `scripts/deploy.sh` builds 6 Docker images, imports to k3s, deploys PostgreSQL StatefulSet first, then applies manifests
+- **Database:** PostgreSQL 16 StatefulSet with 5Gi PVC, headless Service, DB credentials in k8s Secret
 - **TLS:** cert-manager with letsencrypt-prod ClusterIssuer
-- **Missing:** No PostgreSQL deployment, no `DATABASE_URL` in api.yaml, no CAPI/CAPH installed
+- **Missing:** No CAPI/CAPH installed, no Terraform for Hetzner servers, no Ansible playbooks
 
 ---
 

@@ -17,6 +17,9 @@ import type {
   PlatformState,
   PlatformSettings,
   DashboardStats,
+  Plan,
+  Customer,
+  CustomerStats,
 } from "./api";
 
 // ---------------------------------------------------------------------------
@@ -409,4 +412,148 @@ export const demoDashboardStats: DashboardStats = {
   monthlyCost: "\u20AC287",
   costProvider: "Hetzner Cloud",
   updatesAvailable: 2,
+  customerCount: 5,
+  activeCustomers: 4,
+  mrr: "\u20AC4,595",
+  newCustomersThisMonth: 1,
+};
+
+// ---------------------------------------------------------------------------
+// Plans (3)
+// ---------------------------------------------------------------------------
+export const demoPlans: Plan[] = [
+  {
+    id: "plan-starter",
+    name: "Starter",
+    cpuCores: 4,
+    ramGb: 8,
+    s3Tb: 0,
+    dbStorageGb: 10,
+    volumeGb: 50,
+    lbCount: 1,
+    priceCents: 9900,
+    currency: "EUR",
+    billingCycle: "monthly",
+    active: true,
+    createdAt: "2025-08-10T00:00:00Z",
+    updatedAt: "2025-08-10T00:00:00Z",
+  },
+  {
+    id: "plan-pro",
+    name: "Pro",
+    cpuCores: 16,
+    ramGb: 32,
+    s3Tb: 1,
+    dbStorageGb: 100,
+    volumeGb: 500,
+    lbCount: 3,
+    priceCents: 49900,
+    currency: "EUR",
+    billingCycle: "monthly",
+    active: true,
+    createdAt: "2025-08-10T00:00:00Z",
+    updatedAt: "2025-08-10T00:00:00Z",
+  },
+  {
+    id: "plan-enterprise",
+    name: "Enterprise",
+    cpuCores: 64,
+    ramGb: 128,
+    s3Tb: 10,
+    dbStorageGb: 1000,
+    volumeGb: 5000,
+    lbCount: 10,
+    priceCents: 199900,
+    currency: "EUR",
+    billingCycle: "monthly",
+    active: true,
+    createdAt: "2025-08-10T00:00:00Z",
+    updatedAt: "2025-08-10T00:00:00Z",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Customers (5)
+// ---------------------------------------------------------------------------
+export const demoCustomers: Customer[] = [
+  {
+    id: "cust-001",
+    name: "Embermind",
+    domain: "embermind.app",
+    planId: "plan-pro",
+    contactEmail: "ops@embermind.app",
+    contactName: "Sarah Chen",
+    status: "active",
+    clusterStatus: "running",
+    notes: "Launch partner. VIP support.",
+    createdAt: "2025-09-15T10:00:00Z",
+    updatedAt: "2026-02-10T14:00:00Z",
+    plan: demoPlans[1],
+  },
+  {
+    id: "cust-002",
+    name: "Acme Corp",
+    domain: "acme-corp.com",
+    planId: "plan-pro",
+    contactEmail: "infra@acme-corp.com",
+    contactName: "James Wilson",
+    status: "active",
+    clusterStatus: "running",
+    notes: "",
+    createdAt: "2025-10-22T09:00:00Z",
+    updatedAt: "2026-01-15T11:00:00Z",
+    plan: demoPlans[1],
+  },
+  {
+    id: "cust-003",
+    name: "Starship IO",
+    domain: "starship.io",
+    planId: "plan-starter",
+    contactEmail: "admin@starship.io",
+    contactName: "Alex Rivera",
+    status: "active",
+    clusterStatus: "running",
+    notes: "",
+    createdAt: "2025-12-01T08:00:00Z",
+    updatedAt: "2026-02-01T16:00:00Z",
+    plan: demoPlans[0],
+  },
+  {
+    id: "cust-004",
+    name: "DevHub",
+    domain: "devhub.dev",
+    planId: "plan-starter",
+    contactEmail: "team@devhub.dev",
+    contactName: "Maria Santos",
+    status: "suspended",
+    clusterStatus: "running",
+    notes: "Billing issue. Follow up Feb 20.",
+    createdAt: "2025-11-10T12:00:00Z",
+    updatedAt: "2026-02-12T09:30:00Z",
+    plan: demoPlans[0],
+  },
+  {
+    id: "cust-005",
+    name: "CloudNine",
+    domain: "cloudnine.cloud",
+    planId: "plan-enterprise",
+    contactEmail: "platform@cloudnine.cloud",
+    contactName: "Tom Baker",
+    status: "active",
+    clusterStatus: "provisioning",
+    notes: "Enterprise onboarding in progress.",
+    createdAt: "2026-02-05T14:00:00Z",
+    updatedAt: "2026-02-15T10:00:00Z",
+    plan: demoPlans[2],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Customer Stats
+// ---------------------------------------------------------------------------
+export const demoCustomerStats: CustomerStats = {
+  totalCustomers: 5,
+  activeCustomers: 4,
+  mrr: "\u20AC4,595",
+  newThisMonth: 1,
 };

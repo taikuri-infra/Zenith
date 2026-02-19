@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS update_history;
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS modules;
+DROP TABLE IF EXISTS platform_settings;
+DROP TABLE IF EXISTS users;

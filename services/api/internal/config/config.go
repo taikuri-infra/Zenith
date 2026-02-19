@@ -20,6 +20,9 @@ type Config struct {
 	JWTIssuer     string
 	AdminEmail    string
 	AdminPassword string
+
+	// Database
+	DatabaseURL string
 }
 
 func Load() *Config {
@@ -34,6 +37,7 @@ func Load() *Config {
 		JWTIssuer:     getEnv("JWT_ISSUER", "zenith"),
 		AdminEmail:    getEnv("ADMIN_EMAIL", ""),
 		AdminPassword: getEnv("ADMIN_PASSWORD", ""),
+		DatabaseURL:   buildDatabaseURL(),
 	}
 }
 
@@ -51,6 +55,25 @@ func getEnvInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+// buildDatabaseURL returns DATABASE_URL if set, otherwise assembles one from
+// individual DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME env vars.
+// Returns "" when no database is configured (falls back to in-memory stores).
+func buildDatabaseURL() string {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		return url
+	}
+	host := os.Getenv("DB_HOST")
+	if host == "" {
+		return ""
+	}
+	port := getEnv("DB_PORT", "5432")
+	user := getEnv("DB_USER", "zenith")
+	pass := os.Getenv("DB_PASSWORD")
+	name := getEnv("DB_NAME", "zenith")
+	sslmode := getEnv("DB_SSLMODE", "disable")
+	return "postgres://" + user + ":" + pass + "@" + host + ":" + port + "/" + name + "?sslmode=" + sslmode
 }
 
 func getEnvBool(key string, fallback bool) bool {
