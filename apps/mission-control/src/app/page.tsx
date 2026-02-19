@@ -13,7 +13,7 @@ import {
   Skeleton,
 } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
-import type { Cluster, Module, AuditEntry, PlatformUpdate } from "@/lib/api";
+import type { Cluster, Module, AuditEntry, PlatformUpdate, CustomerStats } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const audit = useApi<AuditEntry[]>(() => apiClient.audit.list({ limit: 4 }));
   const platformUpdate = useApi<PlatformUpdate>(() => apiClient.updates.check());
   const dashboardStats = useApi(() => apiClient.dashboard.stats());
+  const customerStats = useApi<CustomerStats>(() => apiClient.customers.stats());
 
   const updatesAvailable = modules.data
     ? modules.data.filter((m) => m.status === "update_available").length
@@ -51,14 +52,14 @@ export default function DashboardPage() {
               alert={!dashboardStats.data.allHealthy}
             />
             <StatCard
-              label="Tenants"
-              value={dashboardStats.data.tenantCount}
-              sub={`${dashboardStats.data.activeToday} active today`}
+              label="Customers"
+              value={customerStats.data?.totalCustomers ?? dashboardStats.data.tenantCount}
+              sub={`${customerStats.data?.activeCustomers ?? dashboardStats.data.activeToday} active`}
             />
             <StatCard
-              label="Monthly Cost"
-              value={dashboardStats.data.monthlyCost}
-              sub={dashboardStats.data.costProvider}
+              label="MRR"
+              value={customerStats.data?.mrr ?? dashboardStats.data.monthlyCost}
+              sub={`${customerStats.data?.newThisMonth ?? 0} new this month`}
             />
             <StatCard
               label="Updates"

@@ -14,6 +14,9 @@ import type {
   PlatformState,
   PlatformSettings,
   DashboardStats,
+  Customer,
+  Plan,
+  CustomerStats,
 } from "./api";
 
 import {
@@ -27,6 +30,9 @@ import {
   demoPlatformState,
   demoPlatformSettings,
   demoDashboardStats,
+  demoCustomers,
+  demoPlans,
+  demoCustomerStats,
 } from "./demo-data";
 
 // Simulate a short network delay so skeleton states flash briefly
@@ -158,6 +164,51 @@ export const demoApi = {
       return demoPlatformSettings;
     },
     update: async (): Promise<PlatformSettings> => {
+      throw new Error("Not available in demo mode");
+    },
+  },
+
+  customers: {
+    list: async (): Promise<Customer[]> => {
+      await delay();
+      return demoCustomers;
+    },
+    get: async (id: string): Promise<Customer> => {
+      await delay();
+      const customer = demoCustomers.find((c) => c.id === id);
+      if (!customer) throw new Error(`Customer "${id}" not found`);
+      return customer;
+    },
+    create: async (): Promise<Customer> => {
+      throw new Error("Not available in demo mode");
+    },
+    update: async (): Promise<Customer> => {
+      throw new Error("Not available in demo mode");
+    },
+    delete: async (): Promise<void> => {
+      throw new Error("Not available in demo mode");
+    },
+    suspend: async (): Promise<Customer> => {
+      throw new Error("Not available in demo mode");
+    },
+    activate: async (): Promise<Customer> => {
+      throw new Error("Not available in demo mode");
+    },
+    stats: async (): Promise<CustomerStats> => {
+      await delay();
+      return demoCustomerStats;
+    },
+  },
+
+  plans: {
+    list: async (): Promise<Plan[]> => {
+      await delay();
+      return demoPlans;
+    },
+    create: async (): Promise<Plan> => {
+      throw new Error("Not available in demo mode");
+    },
+    update: async (): Promise<Plan> => {
       throw new Error("Not available in demo mode");
     },
   },

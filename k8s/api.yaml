@@ -45,6 +45,19 @@ spec:
                   key: admin-password
             - name: CORS_ORIGINS
               value: "https://ms.embermind.app,https://cloud.embermind.app,https://demo-ms.freezenith.com,https://demo-cloud.freezenith.com"
+            - name: DB_HOST
+              value: zenith-postgres.zenith-platform.svc.cluster.local
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: zenith
+            - name: DB_NAME
+              value: zenith
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-db-credentials
+                  key: db-password
           resources:
             requests:
               memory: "64Mi"
@@ -61,7 +74,7 @@ spec:
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10

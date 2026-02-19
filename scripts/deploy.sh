@@ -127,9 +127,29 @@ else
 fi
 
 # -------------------------------------------------------
+# Step 4b: Create DB credentials (if they don't exist)
+# -------------------------------------------------------
+if ! kubectl get secret zenith-db-credentials -n zenith-platform > /dev/null 2>&1; then
+  DB_PASSWORD=$(openssl rand -base64 24)
+  kubectl create secret generic zenith-db-credentials \
+    -n zenith-platform \
+    --from-literal=db-password="$DB_PASSWORD"
+  log_ok "Created zenith-db-credentials (password generated)"
+else
+  log_ok "zenith-db-credentials already exists"
+fi
+
+# -------------------------------------------------------
 # Step 5: Apply Kubernetes manifests
 # -------------------------------------------------------
 log_step "Applying Kubernetes manifests..."
+
+kubectl apply -f k8s/postgres.yaml
+log_ok "PostgreSQL StatefulSet applied"
+
+echo "  Waiting for PostgreSQL to be ready..."
+kubectl rollout status statefulset/zenith-postgres -n zenith-platform --timeout=120s
+log_ok "PostgreSQL is ready"
 
 kubectl apply -f k8s/landing.yaml
 log_ok "Landing deployment applied"

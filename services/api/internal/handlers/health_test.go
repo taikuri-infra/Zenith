@@ -51,7 +51,7 @@ func TestHealthCheck(t *testing.T) {
 
 func TestReadinessCheck(t *testing.T) {
 	app := setupApp()
-	app.Get("/ready", handlers.ReadinessCheck())
+	app.Get("/ready", handlers.ReadinessCheck(nil))
 
 	req := httptest.NewRequest("GET", "/ready", nil)
 	resp, err := app.Test(req)

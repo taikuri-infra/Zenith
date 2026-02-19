@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
 	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/store/migrations"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -29,6 +32,46 @@ var (
 
 func main() {
 	cfg := config.Load()
+	ctx := context.Background()
+
+	// Database (optional — falls back to in-memory stores when DATABASE_URL is empty)
+	var pool *pgxpool.Pool
+	var userRepo store.UserRepository
+	var adminRepo store.AdminRepository
+	var customerRepo store.CustomerRepository
+
+	if cfg.DatabaseURL != "" {
+		log.Println("Connecting to PostgreSQL...")
+		if err := store.RunMigrations(cfg.DatabaseURL, migrations.FS); err != nil {
+			log.Fatalf("Database migrations failed: %v", err)
+		}
+		log.Println("Migrations applied")
+
+		var err error
+		pool, err = store.NewPostgresPool(ctx, cfg.DatabaseURL)
+		if err != nil {
+			log.Fatalf("Database connection failed: %v", err)
+		}
+		log.Println("Connected to PostgreSQL")
+
+		userRepo = store.NewPostgresUserRepository(pool)
+		adminRepo = store.NewPostgresAdminRepository(pool)
+		customerRepo = store.NewPostgresCustomerRepository(pool)
+	} else {
+		log.Println("No DATABASE_URL set — using in-memory stores")
+		userRepo = store.NewMemoryUserRepository()
+		adminRepo = store.NewMemoryAdminRepository()
+		customerRepo = store.NewMemoryCustomerRepository()
+	}
+
+	// Seed admin user
+	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
+		if _, err := userRepo.Create(ctx, cfg.AdminEmail, cfg.AdminPassword, "Admin", models.RoleOwner); err != nil {
+			log.Printf("Admin seed skipped: %v", err)
+		} else {
+			log.Printf("Admin user seeded: %s", cfg.AdminEmail)
+		}
+	}
 
 	app := fiber.New(fiber.Config{
 		AppName:      "Zenith API",
@@ -48,7 +91,7 @@ func main() {
 	}))
 	app.Use(middleware.RequestContext())
 
-	setupRoutes(app, cfg)
+	setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, pool)
 
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.Port)
@@ -66,37 +109,31 @@ func main() {
 	if err := app.Shutdown(); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
+	if pool != nil {
+		pool.Close()
+		log.Println("Database pool closed")
+	}
 	log.Println("Server stopped")
 }
 
-func setupRoutes(app *fiber.App, cfg *config.Config) {
+func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserRepository, adminRepo store.AdminRepository, customerRepo store.CustomerRepository, pool *pgxpool.Pool) {
 	app.Get("/health", handlers.HealthCheck(Version, BuildTime, GitCommit))
-	app.Get("/ready", handlers.ReadinessCheck())
+	app.Get("/ready", handlers.ReadinessCheck(pool))
 
 	// K8s client (in-memory for dev, real client for production)
 	k8sClient := k8s.NewMemoryClient()
 
-	// CAPI client and admin store
+	// CAPI client
 	capiClient := capi.NewClient(k8sClient)
-	adminStore := capi.NewMemoryStore()
-
-	// User store + seed admin
-	userStore := store.NewUserStore()
-	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
-		if _, err := userStore.Create(cfg.AdminEmail, cfg.AdminPassword, "Admin", models.RoleOwner); err != nil {
-			log.Printf("Admin seed skipped: %v", err)
-		} else {
-			log.Printf("Admin user seeded: %s", cfg.AdminEmail)
-		}
-	}
 
 	// Handlers
 	projectHandler := handlers.NewProjectHandler(k8sClient)
 	appHandler := handlers.NewAppHandler(k8sClient)
 	dbHandler := handlers.NewDatabaseHandler(k8sClient)
 	storageHandler := handlers.NewStorageHandler(k8sClient)
-	adminHandler := handlers.NewAdminHandler(k8sClient, capiClient, adminStore)
-	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret)
+	adminHandler := handlers.NewAdminHandler(k8sClient, capiClient, adminRepo)
+	customerHandler := handlers.NewCustomerHandler(customerRepo, adminRepo)
+	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
 
 	api := app.Group("/api/v1")
 	api.Get("/version", handlers.VersionInfo(Version, BuildTime, GitCommit))
@@ -148,6 +185,21 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 
 	// Dashboard
 	admin.Get("/dashboard/stats", adminHandler.GetDashboardStats)
+
+	// Customer management
+	admin.Post("/customers", customerHandler.CreateCustomer)
+	admin.Get("/customers", customerHandler.ListCustomers)
+	admin.Get("/customers/stats", customerHandler.GetCustomerStats) // before :id
+	admin.Get("/customers/:id", customerHandler.GetCustomer)
+	admin.Put("/customers/:id", customerHandler.UpdateCustomer)
+	admin.Post("/customers/:id/suspend", customerHandler.SuspendCustomer)
+	admin.Post("/customers/:id/activate", customerHandler.ActivateCustomer)
+	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
+
+	// Plan management
+	admin.Get("/plans", customerHandler.ListPlans)
+	admin.Post("/plans", customerHandler.CreatePlan)
+	admin.Put("/plans/:id", customerHandler.UpdatePlan)
 
 	// Cluster management (CAPI)
 	admin.Get("/clusters", adminHandler.ListClusters)

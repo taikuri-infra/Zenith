@@ -15,11 +15,11 @@ const (
 )
 
 type AuthHandler struct {
-	store     *store.UserStore
+	store     store.UserRepository
 	jwtSecret string
 }
 
-func NewAuthHandler(userStore *store.UserStore, jwtSecret string) *AuthHandler {
+func NewAuthHandler(userStore store.UserRepository, jwtSecret string) *AuthHandler {
 	return &AuthHandler{store: userStore, jwtSecret: jwtSecret}
 }
 
@@ -55,7 +55,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "email and password are required")
 	}
 
-	user, err := h.store.GetByEmail(req.Email)
+	user, err := h.store.GetByEmail(c.Context(), req.Email)
 	if err != nil || !h.store.CheckPassword(user, req.Password) {
 		return fiber.NewError(fiber.StatusUnauthorized, "invalid email or password")
 	}
@@ -78,11 +78,12 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 	// First user gets owner role, subsequent users get developer
 	role := models.RoleDeveloper
-	if h.store.Count() == 0 {
+	count, err := h.store.Count(c.Context())
+	if err == nil && count == 0 {
 		role = models.RoleOwner
 	}
 
-	user, err := h.store.Create(req.Email, req.Password, req.Name, role)
+	user, err := h.store.Create(c.Context(), req.Email, req.Password, req.Name, role)
 	if err != nil {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	}
@@ -106,7 +107,7 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired refresh token")
 	}
 
-	user, err := h.store.GetByID(claims.Subject)
+	user, err := h.store.GetByID(c.Context(), claims.Subject)
 	if err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "user not found")
 	}
