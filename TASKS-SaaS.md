@@ -175,9 +175,10 @@
 | 4 | KEDA Scale-to-Zero + SaaS Free Tier | 11 | 0 | NOT STARTED |
 | 5 | Hetzner Autoscaler (up to 10 servers) | 8 | 0 | NOT STARTED |
 | 6 | Billing (Stripe) | 9 | 0 | NOT STARTED |
+| 6.5 | Pro/Team/Enterprise Features | 17 | 0 | NOT STARTED |
 | 7 | Open-Source Extraction | 12 | 0 | NOT STARTED |
 | 8 | Launch & Marketing | 8 | 0 | NOT STARTED |
-| **Total** | | **141** | **62** | **44%** |
+| **Total** | | **158** | **62** | **39%** |
 
 ---
 
@@ -756,6 +757,119 @@ Pro:  always-on, custom domain
 
 ---
 
+## Phase 6.5: Pro/Team/Enterprise Features
+
+> **Goal:** Build the features that differentiate paid plans — auth upgrades, compliance, DX improvements, white-label.
+> **Status:** NOT STARTED (0/17)
+> **Timing:** After billing works. These are the features users PAY for.
+
+### Pro Features (€29/mo)
+
+- [ ] **S65-01** MFA / 2FA (TOTP)
+  - Enable per-user: `POST /api/v1/auth/mfa/enable` → returns QR code + secret
+  - Verify: `POST /api/v1/auth/mfa/verify` → validates TOTP code
+  - Backup codes (10 one-time codes)
+  - Dashboard: MFA settings page (enable/disable, regenerate codes)
+
+- [ ] **S65-02** GitLab / Bitbucket integration
+  - GitLab webhook receiver (same pattern as GitHub S2-02)
+  - Bitbucket webhook receiver
+  - OAuth app connection flow for each provider
+  - Dashboard: choose provider when creating app (GitHub/GitLab/Bitbucket)
+
+- [ ] **S65-03** User-defined webhook events
+  - API: `POST /api/v1/webhooks` — register URL + events to listen for
+  - Events: `deploy.success`, `deploy.failed`, `app.sleeping`, `app.waking`, `db.created`, `limit.reached`
+  - Delivery log: track webhook calls, retry on failure
+  - Dashboard: webhook management page
+
+- [ ] **S65-04** API keys management
+  - API: CRUD for API keys with scoped permissions (read-only, deploy, admin)
+  - Each key has a name, created date, last used, scope
+  - Limits by plan: Free 1, Pro 5, Team 20, Enterprise unlimited
+  - Dashboard: API keys page (create, revoke, copy)
+
+### Team Features (€199/mo)
+
+- [ ] **S65-05** SSO — SAML 2.0
+  - API: `POST /api/v1/settings/sso` — configure SAML IdP (entity ID, SSO URL, certificate)
+  - Callback: `POST /api/v1/auth/sso/callback` — process SAML response
+  - Auto-provision users on first SSO login
+  - Dashboard: SSO settings page
+
+- [ ] **S65-06** SSO — OIDC (OpenID Connect)
+  - API: configure OIDC provider (client ID, secret, discovery URL)
+  - Support: Google Workspace, Azure AD, Okta, Auth0
+  - Same auto-provision as SAML
+  - Dashboard: OIDC settings alongside SAML
+
+- [ ] **S65-07** Session management
+  - API: `GET /api/v1/auth/sessions` — list active sessions (IP, device, timestamp)
+  - API: `DELETE /api/v1/auth/sessions/:id` — revoke specific session
+  - Dashboard: sessions page (see who's logged in, force logout)
+
+- [ ] **S65-08** Audit log export
+  - API: `GET /api/v1/audit/export?format=csv` — download audit log
+  - Filters: date range, action type, actor
+  - Retention policy: configurable per team (30/60/90 days)
+  - Dashboard: export button on audit page
+
+- [ ] **S65-09** DPA (Data Processing Agreement)
+  - API: `GET /api/v1/settings/dpa` — download DPA PDF
+  - API: `POST /api/v1/settings/dpa/sign` — digital signature
+  - Pre-generated PDF with company details
+  - Dashboard: DPA section in settings (download, sign, view status)
+
+- [ ] **S65-10** Preview deployments (per PR)
+  - GitHub/GitLab `pull_request` webhook → deploy preview at `{app}-pr-{N}.freezenith.com`
+  - Auto-delete when PR is merged or closed
+  - Comment on PR with preview URL (via GitHub API)
+  - Dashboard: preview list per app
+
+### Enterprise Features (custom)
+
+- [ ] **S65-11** SCIM provisioning
+  - SCIM 2.0 endpoint: auto-create/delete users from IdP (Azure AD, Okta)
+  - When employee leaves company → access revoked automatically
+  - API: `GET/POST/PATCH/DELETE /api/v1/scim/v2/Users`
+
+- [ ] **S65-12** Custom roles (RBAC)
+  - API: CRUD for custom roles with granular permissions
+  - Permissions: deploy, view_logs, manage_db, manage_team, manage_billing, admin
+  - Assign roles to team members
+  - Dashboard: roles management page
+
+- [ ] **S65-13** IP whitelisting
+  - API: `POST /api/v1/settings/ip-whitelist` — add allowed IP ranges (CIDR)
+  - Block dashboard + API access from non-whitelisted IPs
+  - Dashboard: IP whitelist settings
+
+- [ ] **S65-14** Compliance dashboard
+  - Single page showing compliance status across standards
+  - Checklist: GDPR ✅, audit log ✅, encryption ✅, DPA ✅, SSO ✅
+  - Exportable compliance report (PDF)
+
+- [ ] **S65-15** White-label: custom branding
+  - API: upload logo, set primary color, set company name
+  - Dashboard renders with customer's branding
+  - Stored in DB per team/organization
+
+- [ ] **S65-16** White-label: custom dashboard domain
+  - API: `POST /api/v1/settings/domain` — set `cloud.theirdomain.com`
+  - DNS verification (CNAME), TLS cert provisioning
+  - Dashboard accessible at custom domain
+
+- [ ] **S65-17** White-label: remove "Powered by Zenith"
+  - Config flag per organization
+  - Hide all Zenith branding from dashboard, emails, error pages
+
+### Definition of Done
+- Pro users can enable MFA, use GitLab, configure webhooks, manage API keys
+- Team users can configure SSO, manage sessions, export audit logs, sign DPA, use preview deploys
+- Enterprise users get SCIM, custom roles, IP whitelisting, compliance dashboard, full white-label
+
+---
+
 ## Phase 7: Open-Source Extraction
 
 > **Goal:** Extract self-hosted version from SaaS. docker-compose, README, LICENSE, install script.
@@ -886,6 +1000,7 @@ Phase 2: App Deploy Engine          ← CORE FEATURE (git push → live on freez
 Phase 3: Built-in Services          ← ADD VALUE (DB, auth, S3)
 Phase 4: KEDA + Free Tier           ← SCALE FREE USERS (sleep mode, plans)
 Phase 6: Billing (Stripe)           ← GET REVENUE (Pro/Team plans)
+Phase 6.5: Pro/Team/Enterprise      ← DIFFERENTIATE (MFA, SSO, compliance, white-label)
 Phase 5: Hetzner Autoscaler         ← SCALE INFRA (auto scale servers)
 Phase 7: Open-Source Extraction     ← EXTRACT docker-compose from SaaS
 Phase 8: Launch & Marketing         ← GET USERS (HN, Reddit, LinkedIn, Product Hunt)
@@ -894,6 +1009,7 @@ Phase 8: Launch & Marketing         ← GET USERS (HN, Reddit, LinkedIn, Product
 Phase 2-3 make the **SaaS product work** (deploy apps, databases, auth).
 Phase 4 makes it **cost-efficient** (1000+ free users with sleep mode).
 Phase 6 makes it **profitable** (Stripe subscriptions).
+Phase 6.5 makes it **sticky** (SSO, compliance — reasons to stay and pay more).
 Phase 5 makes it **reliable** (auto-scaling infrastructure).
 Phase 7 makes it **famous** (open-source community).
 Phase 8 makes it **known** (marketing push).
@@ -1894,10 +2010,11 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/apps | jq
 | Phase 4: KEDA | T4-01 to T4-11 (11 tests) | Scale-to-zero, ResourceQuota, plan enforcement |
 | Phase 5: Autoscaler | T5-01 to T5-07 (7 tests) | Scale up/down, budget cap, node join/leave |
 | Phase 6: Billing | T6-01 to T6-07 (7 tests) | Stripe webhooks, subscription lifecycle |
+| Phase 6.5: Pro/Team/Ent | T65-01 to T65-12 (12 tests) | MFA, SSO, SCIM, webhooks, API keys, preview deploys |
 | Phase 7: Open-Source | T7-01 to T7-05 (5 tests) | docker-compose, standalone mode |
-| **Total** | **60 unit/integration tests** | |
+| **Total** | **72 unit/integration tests** | |
 
-**Grand total: 140 E2E + 60 unit/integration = 200 test points**
+**Grand total: 140 E2E + 72 unit/integration = 212 test points**
 
 ---
 
@@ -2093,7 +2210,8 @@ Every phase follows this process before moving to the next:
 | Phase 3: Services | Scenario 1 (full), Scenario 2 (steps 1-12) |
 | Phase 4: KEDA + Plans | Scenario 1 (full), Scenario 4, Scenario 5 |
 | Phase 5: Autoscaler | Scenario 6 (infra section) |
-| Phase 6: Billing | Scenario 2 (full), Scenario 3 (full), Scenario 4 (full), Scenario 6 (full) |
+| Phase 6: Billing | Scenario 4 (full), Scenario 6 (billing section) |
+| Phase 6.5: Pro/Team/Enterprise | Scenario 2 (MFA, webhooks), Scenario 3 (SSO, audit, preview, sessions) |
 | Phase 7: Open-Source | Scenario 8 |
 | Phase 8: Launch | ALL 8 scenarios — full regression |
 
