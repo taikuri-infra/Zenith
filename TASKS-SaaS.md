@@ -14,12 +14,12 @@
 | Pre | Foundation (Auth, API scaffold, Deploy, IaC) | 24 | 24 | **COMPLETE** |
 | 0 | PostgreSQL + Persistent State | 18 | 14 | **IN PROGRESS** |
 | 1 | Customer Management in Admin | 16 | 16 | **COMPLETE** |
-| 2 | CAPI Cluster Provisioning | 20 | 0 | NOT STARTED |
+| 2 | CAPI Cluster Provisioning | 20 | 7 | **IN PROGRESS** |
 | 3 | Resource Metering & Limits | 11 | 0 | NOT STARTED |
 | 4 | Billing (Stripe + Fairbroker) | 11 | 0 | NOT STARTED |
 | 5 | Customer Onboarding Automation | 5 | 0 | NOT STARTED |
 | 6 | Open-Core Extraction (Future) | 7 | 0 | NOT STARTED |
-| **Total** | | **112** | **54** | **48%** |
+| **Total** | | **112** | **61** | **54%** |
 
 ---
 
@@ -283,7 +283,7 @@ infra/
 ## Phase 2: CAPI Cluster Provisioning Per Customer
 
 > **Goal:** Creating a customer automatically provisions a dedicated Kubernetes cluster on Hetzner via CAPI.
-> **Status:** NOT STARTED (0/20)
+> **Status:** IN PROGRESS (7/20)
 
 ### Tasks — IaC (Management Plane Setup)
 
@@ -304,11 +304,11 @@ infra/
 
 ### Tasks — Go API (Cluster Lifecycle)
 
-- [ ] **S2-06** API: When customer is created (S1-01), trigger CAPI cluster creation
+- [x] **S2-06** API: When customer is created (S1-01), trigger CAPI cluster creation
   - Generate CAPI Cluster manifest from template
   - Apply to management cluster via client-go
   - Store `capi_cluster_name` in customers table
-- [ ] **S2-07** API: Watch/poll CAPI Cluster status, update `customers.cluster_status`
+- [x] **S2-07** API: Watch/poll CAPI Cluster status, update `customers.cluster_status`
 - [ ] **S2-08** API: When cluster is ready, install Zenith Operator into customer cluster
   - Use Helm client-go or raw manifests
 - [ ] **S2-09** API: When cluster is ready, install Web Platform into customer cluster
@@ -317,20 +317,20 @@ infra/
   - `cloud.{customer-domain}` → customer cluster ingress IP
   - (future) `ms.{customer-domain}` → customer MC (open-core)
 - [ ] **S2-11** API: Issue TLS certificates for customer domain (cert-manager in customer cluster)
-- [ ] **S2-12** API: `POST /api/v1/admin/customers/:id/cluster/scale`
+- [x] **S2-12** API: `POST /api/v1/admin/customers/:id/cluster/scale`
   - Body: `{ nodes: N }` — scale worker nodes up/down via CAPI MachineDeployment
-- [ ] **S2-13** API: `POST /api/v1/admin/customers/:id/cluster/upgrade`
+- [x] **S2-13** API: `POST /api/v1/admin/customers/:id/cluster/upgrade`
   - Body: `{ k8s_version }` — upgrade customer cluster K8s via CAPI
 
 ### Tasks — MC Frontend
 
-- [ ] **S2-14** MC `/customers/[id]`: Show cluster provisioning progress
+- [x] **S2-14** MC `/customers/[id]`: Show cluster provisioning progress
   - States: Pending → Provisioning → Installing Zenith → Configuring DNS → Ready
-- [ ] **S2-15** MC `/customers/[id]`: Show cluster detail (nodes, K8s version, health)
+- [x] **S2-15** MC `/customers/[id]`: Show cluster detail (nodes, K8s version, health)
 
 ### Tasks — Cluster Teardown & Scaling
 
-- [ ] **S2-16** Implement cluster teardown on customer deletion
+- [x] **S2-16** Implement cluster teardown on customer deletion
   - Delete CAPI Cluster → Hetzner servers auto-cleaned
   - Remove DNS records via Cloudflare API
   - Archive customer data in PostgreSQL

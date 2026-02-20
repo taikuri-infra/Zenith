@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/config"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
@@ -91,7 +93,13 @@ func main() {
 	}))
 	app.Use(middleware.RequestContext())
 
-	setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, pool)
+	provisioner := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, pool)
+
+	// Start cluster sync if provisioner is available
+	if provisioner != nil {
+		provisioner.StartSync(30 * time.Second)
+		log.Println("Cluster provisioner sync started (30s interval)")
+	}
 
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.Port)
@@ -106,6 +114,10 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+	if provisioner != nil {
+		provisioner.Stop()
+		log.Println("Cluster provisioner stopped")
+	}
 	if err := app.Shutdown(); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
@@ -116,7 +128,7 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserRepository, adminRepo store.AdminRepository, customerRepo store.CustomerRepository, pool *pgxpool.Pool) {
+func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserRepository, adminRepo store.AdminRepository, customerRepo store.CustomerRepository, pool *pgxpool.Pool) *cluster.Provisioner {
 	app.Get("/health", handlers.HealthCheck(Version, BuildTime, GitCommit))
 	app.Get("/ready", handlers.ReadinessCheck(pool))
 
@@ -126,13 +138,16 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	// CAPI client
 	capiClient := capi.NewClient(k8sClient)
 
+	// Cluster provisioner
+	provisioner := cluster.NewProvisioner(capiClient, customerRepo, adminRepo)
+
 	// Handlers
 	projectHandler := handlers.NewProjectHandler(k8sClient)
 	appHandler := handlers.NewAppHandler(k8sClient)
 	dbHandler := handlers.NewDatabaseHandler(k8sClient)
 	storageHandler := handlers.NewStorageHandler(k8sClient)
 	adminHandler := handlers.NewAdminHandler(k8sClient, capiClient, adminRepo)
-	customerHandler := handlers.NewCustomerHandler(customerRepo, adminRepo)
+	customerHandler := handlers.NewCustomerHandler(customerRepo, adminRepo, provisioner)
 	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
 
 	api := app.Group("/api/v1")
@@ -195,6 +210,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	admin.Post("/customers/:id/suspend", customerHandler.SuspendCustomer)
 	admin.Post("/customers/:id/activate", customerHandler.ActivateCustomer)
 	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
+	admin.Get("/customers/:id/cluster", customerHandler.GetCustomerCluster)
+	admin.Post("/customers/:id/cluster/scale", customerHandler.ScaleCluster)
+	admin.Post("/customers/:id/cluster/upgrade", customerHandler.UpgradeCluster)
 
 	// Plan management
 	admin.Get("/plans", customerHandler.ListPlans)
@@ -239,4 +257,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	admin.Get("/settings", adminHandler.GetSettings)
 	admin.Put("/settings", adminHandler.UpdateSettings)
 	admin.Patch("/settings", adminHandler.UpdateSettings)
+
+	return provisioner
 }

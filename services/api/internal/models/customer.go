@@ -49,20 +49,39 @@ type UpdatePlanInput struct {
 	Active       *bool   `json:"active,omitempty"`
 }
 
+// Cluster status constants.
+const (
+	ClusterStatusPending      = "pending"
+	ClusterStatusProvisioning = "provisioning"
+	ClusterStatusInstalling   = "installing"
+	ClusterStatusRunning      = "running"
+	ClusterStatusError        = "error"
+	ClusterStatusDeleting     = "deleting"
+)
+
 // Customer represents a DoTech customer account.
 type Customer struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Domain        string    `json:"domain"`
-	PlanID        string    `json:"planId"`
-	ContactEmail  string    `json:"contactEmail"`
-	ContactName   string    `json:"contactName"`
-	Status        string    `json:"status"`
-	ClusterStatus string    `json:"clusterStatus"`
-	Notes         string    `json:"notes"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
-	Plan          *Plan     `json:"plan,omitempty"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Domain            string    `json:"domain"`
+	PlanID            string    `json:"planId"`
+	ContactEmail      string    `json:"contactEmail"`
+	ContactName       string    `json:"contactName"`
+	Status            string    `json:"status"`
+	ClusterStatus     string    `json:"clusterStatus"`
+	CAPIClusterName   string    `json:"capiClusterName"`
+	ClusterRegion     string    `json:"clusterRegion"`
+	ClusterNodes      int       `json:"clusterNodes"`
+	ClusterK8sVersion string    `json:"clusterK8sVersion"`
+	Notes             string    `json:"notes"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+	Plan              *Plan     `json:"plan,omitempty"`
+}
+
+// ScaleClusterInput is the request body for scaling a customer cluster.
+type ScaleClusterInput struct {
+	Nodes int `json:"nodes"`
 }
 
 // CreateCustomerInput is the request body for creating a customer.

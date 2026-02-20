@@ -198,6 +198,30 @@ export const demoApi = {
       await delay();
       return demoCustomerStats;
     },
+    getCluster: async (id: string): Promise<Cluster> => {
+      await delay();
+      const customer = demoCustomers.find((c) => c.id === id);
+      if (!customer) throw new Error(`Customer "${id}" not found`);
+      // Return a cluster-like object from the customer's cluster info
+      return {
+        name: customer.capiClusterName,
+        k8sVersion: customer.clusterK8sVersion,
+        nodes: customer.clusterNodes,
+        region: customer.clusterRegion,
+        type: "dedicated",
+        cpuPercent: 45,
+        ramPercent: 52,
+        pods: { used: 87, total: 200 },
+        pvcs: { used: 12, total: 50 },
+        status: customer.clusterStatus === "running" ? "healthy" : "warning",
+      } as Cluster;
+    },
+    scaleCluster: async (): Promise<void> => {
+      throw new Error("Not available in demo mode");
+    },
+    upgradeCluster: async (): Promise<void> => {
+      throw new Error("Not available in demo mode");
+    },
   },
 
   plans: {

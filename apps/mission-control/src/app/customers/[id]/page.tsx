@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Shell } from "@/components/shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -24,8 +24,278 @@ import {
   HardDrive,
   Database,
   Server,
+  MapPin,
+  Check,
+  Loader2,
+  Circle,
+  ArrowUpCircle,
+  Scaling,
 } from "lucide-react";
 import Link from "next/link";
+
+// ---------- Provisioning Stepper ----------
+
+const provisioningSteps = [
+  { key: "pending", label: "Account Created" },
+  { key: "provisioning", label: "Provisioning" },
+  { key: "installing", label: "Installing" },
+  { key: "running", label: "Ready" },
+] as const;
+
+function ProvisioningStepper({ clusterStatus }: { clusterStatus: string }) {
+  const statusIndex = provisioningSteps.findIndex(
+    (s) => s.key === clusterStatus
+  );
+  const currentIndex = statusIndex >= 0 ? statusIndex : 0;
+
+  return (
+    <div className="rounded-lg border border-border bg-surface-100 p-4">
+      <h2 className="mb-4 text-sm font-medium text-white">
+        Cluster Provisioning
+      </h2>
+      <div className="flex items-center gap-2">
+        {provisioningSteps.map((step, i) => {
+          const isComplete = i < currentIndex;
+          const isCurrent = i === currentIndex;
+          const isLast = i === provisioningSteps.length - 1;
+
+          return (
+            <div key={step.key} className="flex items-center gap-2">
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                    isComplete
+                      ? "border-accent-500 bg-accent-500/20"
+                      : isCurrent
+                      ? "border-accent-500 bg-accent-500/10"
+                      : "border-neutral-700 bg-surface-200"
+                  }`}
+                >
+                  {isComplete ? (
+                    <Check className="h-4 w-4 text-accent-400" />
+                  ) : isCurrent ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-accent-400" />
+                  ) : (
+                    <Circle className="h-3 w-3 text-neutral-600" />
+                  )}
+                </div>
+                <span
+                  className={`text-xs whitespace-nowrap ${
+                    isComplete || isCurrent
+                      ? "text-white font-medium"
+                      : "text-neutral-500"
+                  }`}
+                >
+                  {step.label}
+                </span>
+              </div>
+              {!isLast && (
+                <div
+                  className={`mb-5 h-0.5 w-12 ${
+                    isComplete ? "bg-accent-500" : "bg-neutral-700"
+                  }`}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {clusterStatus === "error" && (
+        <div className="mt-3 rounded-md bg-red-500/10 p-2 text-sm text-red-400">
+          Cluster provisioning failed. Contact support or retry.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Cluster Info Panel ----------
+
+function ClusterInfoPanel({
+  customer,
+  demo,
+  onRefetch,
+}: {
+  customer: Customer;
+  demo: boolean;
+  onRefetch: () => void;
+}) {
+  const apiClient = getApi();
+  const [showScaleModal, setShowScaleModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [scaleNodes, setScaleNodes] = useState(customer.clusterNodes);
+  const [upgradeVersion, setUpgradeVersion] = useState("");
+
+  const scaleMutation = useMutation(({ id, nodes }: { id: string; nodes: number }) =>
+    apiClient.customers.scaleCluster(id, nodes)
+  );
+  const upgradeMutation = useMutation(({ id, version }: { id: string; version: string }) =>
+    apiClient.customers.upgradeCluster(id, version)
+  );
+
+  const handleScale = async () => {
+    try {
+      await scaleMutation.execute({ id: customer.id, nodes: scaleNodes });
+      setShowScaleModal(false);
+      onRefetch();
+    } catch {
+      // error captured in mutation
+    }
+  };
+
+  const handleUpgrade = async () => {
+    try {
+      await upgradeMutation.execute({ id: customer.id, version: upgradeVersion });
+      setShowUpgradeModal(false);
+      onRefetch();
+    } catch {
+      // error captured in mutation
+    }
+  };
+
+  return (
+    <>
+      <div className="rounded-lg border border-border bg-surface-100 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-white">Cluster</h2>
+          {!demo && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setScaleNodes(customer.clusterNodes);
+                  setShowScaleModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-neutral-400 transition-colors hover:text-white hover:border-neutral-600"
+              >
+                <Scaling className="h-3.5 w-3.5" />
+                Scale
+              </button>
+              <button
+                onClick={() => {
+                  setUpgradeVersion("");
+                  setShowUpgradeModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-neutral-400 transition-colors hover:text-white hover:border-neutral-600"
+              >
+                <ArrowUpCircle className="h-3.5 w-3.5" />
+                Upgrade
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="rounded-md bg-surface-200 p-3">
+            <div className="flex items-center gap-2 text-xs text-neutral-500">
+              <Server className="h-3.5 w-3.5" />
+              K8s Version
+            </div>
+            <div className="mt-1 font-mono text-sm text-white">
+              {customer.clusterK8sVersion}
+            </div>
+          </div>
+          <div className="rounded-md bg-surface-200 p-3">
+            <div className="flex items-center gap-2 text-xs text-neutral-500">
+              <Cpu className="h-3.5 w-3.5" />
+              Nodes
+            </div>
+            <div className="mt-1 text-sm font-semibold text-white">
+              {customer.clusterNodes}
+            </div>
+          </div>
+          <div className="rounded-md bg-surface-200 p-3">
+            <div className="flex items-center gap-2 text-xs text-neutral-500">
+              <MapPin className="h-3.5 w-3.5" />
+              Region
+            </div>
+            <div className="mt-1 text-sm text-white">
+              {customer.clusterRegion}
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 text-xs text-neutral-600">
+          CAPI Cluster: <span className="font-mono text-neutral-400">{customer.capiClusterName}</span>
+        </div>
+      </div>
+
+      {/* Scale Modal */}
+      {showScaleModal && (
+        <Modal title="Scale Cluster" onClose={() => setShowScaleModal(false)}>
+          <p className="mb-3 text-sm text-neutral-300">
+            Scale <span className="font-medium text-white">{customer.capiClusterName}</span> to a new node count.
+          </p>
+          <label className="mb-1 block text-xs text-neutral-400">
+            Number of nodes
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={scaleNodes}
+            onChange={(e) => setScaleNodes(Number(e.target.value))}
+            className="mb-4 w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none"
+          />
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setShowScaleModal(false)}
+              className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleScale}
+              disabled={scaleMutation.loading || scaleNodes < 1}
+              className="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 transition-colors disabled:opacity-50"
+            >
+              {scaleMutation.loading ? "Scaling..." : "Scale Cluster"}
+            </button>
+          </div>
+          {scaleMutation.error && (
+            <p className="mt-2 text-xs text-red-400">{scaleMutation.error.message}</p>
+          )}
+        </Modal>
+      )}
+
+      {/* Upgrade Modal */}
+      {showUpgradeModal && (
+        <Modal title="Upgrade Cluster" onClose={() => setShowUpgradeModal(false)}>
+          <p className="mb-3 text-sm text-neutral-300">
+            Upgrade <span className="font-medium text-white">{customer.capiClusterName}</span> to a new Kubernetes version.
+          </p>
+          <label className="mb-1 block text-xs text-neutral-400">
+            Target K8s version (e.g. v1.32.0)
+          </label>
+          <input
+            type="text"
+            value={upgradeVersion}
+            onChange={(e) => setUpgradeVersion(e.target.value)}
+            placeholder="v1.32.0"
+            className="mb-4 w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+          />
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpgrade}
+              disabled={upgradeMutation.loading || !upgradeVersion}
+              className="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 transition-colors disabled:opacity-50"
+            >
+              {upgradeMutation.loading ? "Upgrading..." : "Upgrade Cluster"}
+            </button>
+          </div>
+          {upgradeMutation.error && (
+            <p className="mt-2 text-xs text-red-400">{upgradeMutation.error.message}</p>
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}
+
+// ---------- Main Page ----------
 
 export default function CustomerDetailPage({
   params,
@@ -43,6 +313,23 @@ export default function CustomerDetailPage({
   );
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Auto-refresh during provisioning states
+  useEffect(() => {
+    if (
+      !customer ||
+      customer.clusterStatus === "running" ||
+      customer.clusterStatus === "error"
+    ) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      refetch();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [customer, refetch]);
 
   const suspendMutation = useMutation((customerId: string) =>
     apiClient.customers.suspend(customerId)
@@ -84,6 +371,22 @@ export default function CustomerDetailPage({
   const formatPrice = (cents: number, currency: string) => {
     const symbol = currency === "EUR" ? "\u20AC" : "$";
     return `${symbol}${(cents / 100).toLocaleString()}`;
+  };
+
+  const clusterStatusBadge = (status: string) => {
+    switch (status) {
+      case "running":
+        return <StatusBadge status="healthy" label="Running" />;
+      case "provisioning":
+      case "installing":
+        return <StatusBadge status="warning" label={status.charAt(0).toUpperCase() + status.slice(1)} />;
+      case "error":
+        return <StatusBadge status="error" label="Error" />;
+      case "deleting":
+        return <StatusBadge status="warning" label="Deleting" />;
+      default:
+        return <StatusBadge status="idle" label="Pending" />;
+    }
   };
 
   return (
@@ -153,16 +456,19 @@ export default function CustomerDetailPage({
             <div className="flex items-center gap-3">
               <StatusBadge status={customer.status === "active" ? "active" : "suspended"} />
               <span className="text-xs text-neutral-500">Cluster:</span>
-              <StatusBadge
-                status={
-                  customer.clusterStatus === "running"
-                    ? "healthy"
-                    : customer.clusterStatus === "error"
-                    ? "error"
-                    : "warning"
-                }
-              />
+              {clusterStatusBadge(customer.clusterStatus)}
             </div>
+
+            {/* Cluster section */}
+            {customer.clusterStatus !== "running" ? (
+              <ProvisioningStepper clusterStatus={customer.clusterStatus} />
+            ) : (
+              <ClusterInfoPanel
+                customer={customer}
+                demo={demo}
+                onRefetch={refetch}
+              />
+            )}
 
             {/* Info grid */}
             <div className="grid grid-cols-2 gap-6">
@@ -318,7 +624,7 @@ export default function CustomerDetailPage({
           <p className="mb-4 text-sm text-neutral-300">
             Are you sure you want to delete{" "}
             <span className="font-medium text-white">{customer?.name}</span>?
-            This action cannot be undone.
+            This will also teardown the associated cluster. This action cannot be undone.
           </p>
           <div className="flex justify-end gap-3">
             <button

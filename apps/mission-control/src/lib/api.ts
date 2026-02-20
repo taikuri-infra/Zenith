@@ -162,7 +162,11 @@ export interface Customer {
   contactEmail: string;
   contactName: string;
   status: "active" | "suspended";
-  clusterStatus: "pending" | "provisioning" | "running" | "error";
+  clusterStatus: "pending" | "provisioning" | "installing" | "running" | "error" | "deleting";
+  capiClusterName: string;
+  clusterRegion: string;
+  clusterNodes: number;
+  clusterK8sVersion: string;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -483,6 +487,18 @@ class ApiClient {
         { method: "POST" }
       ),
     stats: () => this.request<CustomerStats>("/api/v1/admin/customers/stats"),
+    getCluster: (id: string) =>
+      this.request<Cluster>(`/api/v1/admin/customers/${encodeURIComponent(id)}/cluster`),
+    scaleCluster: (id: string, nodes: number) =>
+      this.request<void>(
+        `/api/v1/admin/customers/${encodeURIComponent(id)}/cluster/scale`,
+        { method: "POST", body: JSON.stringify({ nodes }) }
+      ),
+    upgradeCluster: (id: string, version: string) =>
+      this.request<void>(
+        `/api/v1/admin/customers/${encodeURIComponent(id)}/cluster/upgrade`,
+        { method: "POST", body: JSON.stringify({ version }) }
+      ),
   };
 
   // Plans
