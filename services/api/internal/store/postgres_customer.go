@@ -167,11 +167,12 @@ func (r *PostgresCustomerRepository) UpdatePlan(ctx context.Context, id string, 
 func (r *PostgresCustomerRepository) CreateCustomer(ctx context.Context, input *models.CreateCustomerInput) (*models.Customer, error) {
 	now := time.Now()
 	id := uuid.New().String()
+	clusterName := domainToClusterName(input.Domain)
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO customers (id, name, domain, plan_id, contact_email, contact_name, status, cluster_status, notes, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending', '', $7, $8)`,
-		id, input.Name, input.Domain, input.PlanID, input.ContactEmail, input.ContactName, now, now,
+		`INSERT INTO customers (id, name, domain, plan_id, contact_email, contact_name, status, cluster_status, capi_cluster_name, cluster_region, cluster_nodes, cluster_k8s_version, notes, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending', $7, 'fsn1', 3, 'v1.31.2', '', $8, $9)`,
+		id, input.Name, input.Domain, input.PlanID, input.ContactEmail, input.ContactName, clusterName, now, now,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -189,7 +190,9 @@ func (r *PostgresCustomerRepository) CreateCustomer(ctx context.Context, input *
 	return &models.Customer{
 		ID: id, Name: input.Name, Domain: input.Domain, PlanID: input.PlanID,
 		ContactEmail: input.ContactEmail, ContactName: input.ContactName,
-		Status: "active", ClusterStatus: "pending", CreatedAt: now, UpdatedAt: now,
+		Status: "active", ClusterStatus: "pending", CAPIClusterName: clusterName,
+		ClusterRegion: "fsn1", ClusterNodes: 3, ClusterK8sVersion: "v1.31.2",
+		CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
 
@@ -197,10 +200,14 @@ func (r *PostgresCustomerRepository) GetCustomer(ctx context.Context, id string)
 	var c models.Customer
 	var p models.Plan
 	err := r.pool.QueryRow(ctx,
-		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status, c.notes, c.created_at, c.updated_at,
+		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status,
+		        c.capi_cluster_name, c.cluster_region, c.cluster_nodes, c.cluster_k8s_version,
+		        c.notes, c.created_at, c.updated_at,
 		        p.id, p.name, p.cpu_cores, p.ram_gb, p.s3_tb, p.db_storage_gb, p.volume_gb, p.lb_count, p.price_cents, p.currency, p.billing_cycle, p.active, p.created_at, p.updated_at
 		 FROM customers c JOIN plans p ON c.plan_id = p.id WHERE c.id = $1`, id,
-	).Scan(&c.ID, &c.Name, &c.Domain, &c.PlanID, &c.ContactEmail, &c.ContactName, &c.Status, &c.ClusterStatus, &c.Notes, &c.CreatedAt, &c.UpdatedAt,
+	).Scan(&c.ID, &c.Name, &c.Domain, &c.PlanID, &c.ContactEmail, &c.ContactName, &c.Status, &c.ClusterStatus,
+		&c.CAPIClusterName, &c.ClusterRegion, &c.ClusterNodes, &c.ClusterK8sVersion,
+		&c.Notes, &c.CreatedAt, &c.UpdatedAt,
 		&p.ID, &p.Name, &p.CPUCores, &p.RAMGB, &p.S3TB, &p.DBStorageGB, &p.VolumeGB, &p.LBCount, &p.PriceCents, &p.Currency, &p.BillingCycle, &p.Active, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -214,7 +221,9 @@ func (r *PostgresCustomerRepository) GetCustomer(ctx context.Context, id string)
 
 func (r *PostgresCustomerRepository) ListCustomers(ctx context.Context) ([]models.Customer, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status, c.notes, c.created_at, c.updated_at,
+		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status,
+		        c.capi_cluster_name, c.cluster_region, c.cluster_nodes, c.cluster_k8s_version,
+		        c.notes, c.created_at, c.updated_at,
 		        p.id, p.name, p.cpu_cores, p.ram_gb, p.s3_tb, p.db_storage_gb, p.volume_gb, p.lb_count, p.price_cents, p.currency, p.billing_cycle, p.active, p.created_at, p.updated_at
 		 FROM customers c JOIN plans p ON c.plan_id = p.id ORDER BY c.created_at DESC`)
 	if err != nil {
@@ -226,7 +235,9 @@ func (r *PostgresCustomerRepository) ListCustomers(ctx context.Context) ([]model
 	for rows.Next() {
 		var c models.Customer
 		var p models.Plan
-		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.PlanID, &c.ContactEmail, &c.ContactName, &c.Status, &c.ClusterStatus, &c.Notes, &c.CreatedAt, &c.UpdatedAt,
+		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.PlanID, &c.ContactEmail, &c.ContactName, &c.Status, &c.ClusterStatus,
+			&c.CAPIClusterName, &c.ClusterRegion, &c.ClusterNodes, &c.ClusterK8sVersion,
+			&c.Notes, &c.CreatedAt, &c.UpdatedAt,
 			&p.ID, &p.Name, &p.CPUCores, &p.RAMGB, &p.S3TB, &p.DBStorageGB, &p.VolumeGB, &p.LBCount, &p.PriceCents, &p.Currency, &p.BillingCycle, &p.Active, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan customer: %w", err)
 		}
@@ -315,6 +326,93 @@ func (r *PostgresCustomerRepository) ActivateCustomer(ctx context.Context, id st
 		return nil, fmt.Errorf("customer not found")
 	}
 	return r.GetCustomer(ctx, id)
+}
+
+func (r *PostgresCustomerRepository) UpdateClusterStatus(ctx context.Context, id, status string) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE customers SET cluster_status = $1, updated_at = $2 WHERE id = $3`, status, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("update cluster status: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("customer not found")
+	}
+	return nil
+}
+
+func (r *PostgresCustomerRepository) SetCAPIClusterName(ctx context.Context, id, clusterName string) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE customers SET capi_cluster_name = $1, updated_at = $2 WHERE id = $3`, clusterName, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("set capi cluster name: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("customer not found")
+	}
+	return nil
+}
+
+func (r *PostgresCustomerRepository) UpdateClusterInfo(ctx context.Context, id string, nodes int, k8sVersion string) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE customers SET cluster_nodes = $1, cluster_k8s_version = $2, updated_at = $3 WHERE id = $4`,
+		nodes, k8sVersion, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("update cluster info: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("customer not found")
+	}
+	return nil
+}
+
+func (r *PostgresCustomerRepository) GetCustomerByClusterName(ctx context.Context, clusterName string) (*models.Customer, error) {
+	var c models.Customer
+	var p models.Plan
+	err := r.pool.QueryRow(ctx,
+		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status,
+		        c.capi_cluster_name, c.cluster_region, c.cluster_nodes, c.cluster_k8s_version,
+		        c.notes, c.created_at, c.updated_at,
+		        p.id, p.name, p.cpu_cores, p.ram_gb, p.s3_tb, p.db_storage_gb, p.volume_gb, p.lb_count, p.price_cents, p.currency, p.billing_cycle, p.active, p.created_at, p.updated_at
+		 FROM customers c JOIN plans p ON c.plan_id = p.id WHERE c.capi_cluster_name = $1`, clusterName,
+	).Scan(&c.ID, &c.Name, &c.Domain, &c.PlanID, &c.ContactEmail, &c.ContactName, &c.Status, &c.ClusterStatus,
+		&c.CAPIClusterName, &c.ClusterRegion, &c.ClusterNodes, &c.ClusterK8sVersion,
+		&c.Notes, &c.CreatedAt, &c.UpdatedAt,
+		&p.ID, &p.Name, &p.CPUCores, &p.RAMGB, &p.S3TB, &p.DBStorageGB, &p.VolumeGB, &p.LBCount, &p.PriceCents, &p.Currency, &p.BillingCycle, &p.Active, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("customer not found")
+		}
+		return nil, fmt.Errorf("get customer by cluster name: %w", err)
+	}
+	c.Plan = &p
+	return &c, nil
+}
+
+func (r *PostgresCustomerRepository) ListProvisioningCustomers(ctx context.Context) ([]models.Customer, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status,
+		        c.capi_cluster_name, c.cluster_region, c.cluster_nodes, c.cluster_k8s_version,
+		        c.notes, c.created_at, c.updated_at
+		 FROM customers c WHERE c.cluster_status IN ('pending', 'provisioning', 'installing')`)
+	if err != nil {
+		return nil, fmt.Errorf("list provisioning customers: %w", err)
+	}
+	defer rows.Close()
+
+	var customers []models.Customer
+	for rows.Next() {
+		var c models.Customer
+		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.PlanID, &c.ContactEmail, &c.ContactName, &c.Status, &c.ClusterStatus,
+			&c.CAPIClusterName, &c.ClusterRegion, &c.ClusterNodes, &c.ClusterK8sVersion,
+			&c.Notes, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan provisioning customer: %w", err)
+		}
+		customers = append(customers, c)
+	}
+	if customers == nil {
+		customers = []models.Customer{}
+	}
+	return customers, rows.Err()
 }
 
 func (r *PostgresCustomerRepository) GetCustomerStats(ctx context.Context) (*models.CustomerStats, error) {

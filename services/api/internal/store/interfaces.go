@@ -40,6 +40,13 @@ type CustomerRepository interface {
 
 	// Stats
 	GetCustomerStats(ctx context.Context) (*models.CustomerStats, error)
+
+	// Cluster provisioning
+	UpdateClusterStatus(ctx context.Context, id, status string) error
+	SetCAPIClusterName(ctx context.Context, id, clusterName string) error
+	UpdateClusterInfo(ctx context.Context, id string, nodes int, k8sVersion string) error
+	GetCustomerByClusterName(ctx context.Context, clusterName string) (*models.Customer, error)
+	ListProvisioningCustomers(ctx context.Context) ([]models.Customer, error)
 }
 
 // AdminRepository defines admin/platform persistence operations.

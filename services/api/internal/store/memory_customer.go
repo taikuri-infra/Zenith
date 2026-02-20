@@ -6,9 +6,16 @@ import (
 	"sync"
 	"time"
 
+	"strings"
+
 	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/google/uuid"
 )
+
+// domainToClusterName converts a domain like "embermind.app" to "embermind-app".
+func domainToClusterName(domain string) string {
+	return strings.ReplaceAll(strings.TrimSpace(domain), ".", "-")
+}
 
 // Compile-time interface check.
 var _ CustomerRepository = (*MemoryCustomerRepository)(nil)
@@ -40,9 +47,9 @@ func NewMemoryCustomerRepository() *MemoryCustomerRepository {
 
 	// Seed customers
 	seedCustomers := []models.Customer{
-		{ID: "cust-001", Name: "Embermind", Domain: "embermind.app", PlanID: "plan-pro", ContactEmail: "ops@embermind.app", ContactName: "Sarah Chen", Status: "active", ClusterStatus: "running", Notes: "", CreatedAt: now.Add(-30 * 24 * time.Hour), UpdatedAt: now},
-		{ID: "cust-002", Name: "Acme Corp", Domain: "acme-corp.com", PlanID: "plan-pro", ContactEmail: "infra@acme-corp.com", ContactName: "James Wilson", Status: "active", ClusterStatus: "running", Notes: "", CreatedAt: now.Add(-20 * 24 * time.Hour), UpdatedAt: now},
-		{ID: "cust-003", Name: "Starship IO", Domain: "starship.io", PlanID: "plan-starter", ContactEmail: "admin@starship.io", ContactName: "Alex Rivera", Status: "active", ClusterStatus: "running", Notes: "", CreatedAt: now.Add(-10 * 24 * time.Hour), UpdatedAt: now},
+		{ID: "cust-001", Name: "Embermind", Domain: "embermind.app", PlanID: "plan-pro", ContactEmail: "ops@embermind.app", ContactName: "Sarah Chen", Status: "active", ClusterStatus: "running", CAPIClusterName: "embermind-app", ClusterRegion: "fsn1", ClusterNodes: 3, ClusterK8sVersion: "v1.31.2", Notes: "", CreatedAt: now.Add(-30 * 24 * time.Hour), UpdatedAt: now},
+		{ID: "cust-002", Name: "Acme Corp", Domain: "acme-corp.com", PlanID: "plan-pro", ContactEmail: "infra@acme-corp.com", ContactName: "James Wilson", Status: "active", ClusterStatus: "running", CAPIClusterName: "acme-corp-com", ClusterRegion: "fsn1", ClusterNodes: 3, ClusterK8sVersion: "v1.31.2", Notes: "", CreatedAt: now.Add(-20 * 24 * time.Hour), UpdatedAt: now},
+		{ID: "cust-003", Name: "Starship IO", Domain: "starship.io", PlanID: "plan-starter", ContactEmail: "admin@starship.io", ContactName: "Alex Rivera", Status: "active", ClusterStatus: "running", CAPIClusterName: "starship-io", ClusterRegion: "fsn1", ClusterNodes: 3, ClusterK8sVersion: "v1.31.2", Notes: "", CreatedAt: now.Add(-10 * 24 * time.Hour), UpdatedAt: now},
 	}
 	for i := range seedCustomers {
 		r.customers[seedCustomers[i].ID] = &seedCustomers[i]
@@ -185,17 +192,21 @@ func (r *MemoryCustomerRepository) CreateCustomer(_ context.Context, input *mode
 
 	now := time.Now()
 	customer := &models.Customer{
-		ID:            uuid.New().String(),
-		Name:          input.Name,
-		Domain:        input.Domain,
-		PlanID:        input.PlanID,
-		ContactEmail:  input.ContactEmail,
-		ContactName:   input.ContactName,
-		Status:        "active",
-		ClusterStatus: "pending",
-		Notes:         "",
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                uuid.New().String(),
+		Name:              input.Name,
+		Domain:            input.Domain,
+		PlanID:            input.PlanID,
+		ContactEmail:      input.ContactEmail,
+		ContactName:       input.ContactName,
+		Status:            "active",
+		ClusterStatus:     "pending",
+		CAPIClusterName:   domainToClusterName(input.Domain),
+		ClusterRegion:     "fsn1",
+		ClusterNodes:      3,
+		ClusterK8sVersion: "v1.31.2",
+		Notes:             "",
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 
 	r.customers[customer.ID] = customer
@@ -328,6 +339,82 @@ func (r *MemoryCustomerRepository) ActivateCustomer(_ context.Context, id string
 		copied.Plan = &planCopy
 	}
 	return &copied, nil
+}
+
+func (r *MemoryCustomerRepository) UpdateClusterStatus(_ context.Context, id, status string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	customer, ok := r.customers[id]
+	if !ok {
+		return fmt.Errorf("customer not found")
+	}
+	customer.ClusterStatus = status
+	customer.UpdatedAt = time.Now()
+	return nil
+}
+
+func (r *MemoryCustomerRepository) SetCAPIClusterName(_ context.Context, id, clusterName string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	customer, ok := r.customers[id]
+	if !ok {
+		return fmt.Errorf("customer not found")
+	}
+	customer.CAPIClusterName = clusterName
+	customer.UpdatedAt = time.Now()
+	return nil
+}
+
+func (r *MemoryCustomerRepository) UpdateClusterInfo(_ context.Context, id string, nodes int, k8sVersion string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	customer, ok := r.customers[id]
+	if !ok {
+		return fmt.Errorf("customer not found")
+	}
+	customer.ClusterNodes = nodes
+	customer.ClusterK8sVersion = k8sVersion
+	customer.UpdatedAt = time.Now()
+	return nil
+}
+
+func (r *MemoryCustomerRepository) GetCustomerByClusterName(_ context.Context, clusterName string) (*models.Customer, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, c := range r.customers {
+		if c.CAPIClusterName == clusterName {
+			copied := *c
+			if plan, ok := r.plans[c.PlanID]; ok {
+				planCopy := *plan
+				copied.Plan = &planCopy
+			}
+			return &copied, nil
+		}
+	}
+	return nil, fmt.Errorf("customer not found")
+}
+
+func (r *MemoryCustomerRepository) ListProvisioningCustomers(_ context.Context) ([]models.Customer, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []models.Customer
+	for _, c := range r.customers {
+		if c.ClusterStatus == models.ClusterStatusPending ||
+			c.ClusterStatus == models.ClusterStatusProvisioning ||
+			c.ClusterStatus == models.ClusterStatusInstalling {
+			copied := *c
+			result = append(result, copied)
+		}
+	}
+	if result == nil {
+		result = []models.Customer{}
+	}
+	return result, nil
 }
 
 func (r *MemoryCustomerRepository) GetCustomerStats(_ context.Context) (*models.CustomerStats, error) {

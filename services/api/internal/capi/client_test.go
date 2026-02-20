@@ -196,6 +196,48 @@ func TestDeleteClusterNotFound(t *testing.T) {
 	}
 }
 
+func TestScaleCluster(t *testing.T) {
+	k8sClient := k8s.NewMemoryClient()
+	client := NewClient(k8sClient)
+	ctx := context.Background()
+
+	input := models.CreateClusterInput{
+		Name:       "scale-me",
+		Region:     "fsn1",
+		Type:       "shared",
+		Nodes:      2,
+		K8sVersion: "v1.30.2",
+	}
+	if _, err := client.CreateCluster(ctx, input); err != nil {
+		t.Fatalf("CreateCluster failed: %v", err)
+	}
+
+	if err := client.ScaleCluster(ctx, "scale-me", 5); err != nil {
+		t.Fatalf("ScaleCluster failed: %v", err)
+	}
+
+	// Verify nodes was updated
+	cluster, err := client.GetCluster(ctx, "scale-me")
+	if err != nil {
+		t.Fatalf("GetCluster after scale failed: %v", err)
+	}
+
+	if cluster.Nodes != 5 {
+		t.Errorf("Expected 5 nodes after scale, got %d", cluster.Nodes)
+	}
+}
+
+func TestScaleClusterNotFound(t *testing.T) {
+	k8sClient := k8s.NewMemoryClient()
+	client := NewClient(k8sClient)
+	ctx := context.Background()
+
+	err := client.ScaleCluster(ctx, "nonexistent", 3)
+	if err == nil {
+		t.Error("Expected error for nonexistent scale, got nil")
+	}
+}
+
 func TestUpgradeCluster(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	client := NewClient(k8sClient)

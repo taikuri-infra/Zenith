@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
@@ -11,15 +12,17 @@ import (
 
 // CustomerHandler serves all /api/v1/admin/customers/* and /api/v1/admin/plans/* endpoints.
 type CustomerHandler struct {
-	store store.CustomerRepository
-	admin store.AdminRepository
+	store       store.CustomerRepository
+	admin       store.AdminRepository
+	provisioner *cluster.Provisioner
 }
 
 // NewCustomerHandler creates a new CustomerHandler.
-func NewCustomerHandler(customerStore store.CustomerRepository, adminStore store.AdminRepository) *CustomerHandler {
+func NewCustomerHandler(customerStore store.CustomerRepository, adminStore store.AdminRepository, provisioner *cluster.Provisioner) *CustomerHandler {
 	return &CustomerHandler{
-		store: customerStore,
-		admin: adminStore,
+		store:       customerStore,
+		admin:       adminStore,
+		provisioner: provisioner,
 	}
 }
 
@@ -101,6 +104,16 @@ func (h *CustomerHandler) CreateCustomer(c *fiber.Ctx) error {
 		Action: "Created customer " + input.Name + " (" + input.Domain + ")",
 	})
 
+	// Trigger cluster provisioning in background
+	if h.provisioner != nil {
+		go func() {
+			if err := h.provisioner.ProvisionCluster(c.Context(), customer); err != nil {
+				// Logged internally; status set to error in DB
+				_ = err
+			}
+		}()
+	}
+
 	return c.Status(fiber.StatusCreated).JSON(customer)
 }
 
@@ -145,11 +158,15 @@ func (h *CustomerHandler) DeleteCustomer(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	// Get customer name for audit log before deleting
+	// Get customer for audit log and cluster teardown before deleting
 	customer, _ := h.store.GetCustomer(c.Context(), id)
 	customerName := id
 	if customer != nil {
 		customerName = customer.Name
+		// Teardown cluster before deleting customer
+		if h.provisioner != nil {
+			_ = h.provisioner.TeardownCluster(c.Context(), customer)
+		}
 	}
 
 	if err := h.store.DeleteCustomer(c.Context(), id); err != nil {
@@ -216,6 +233,125 @@ func (h *CustomerHandler) ActivateCustomer(c *fiber.Ctx) error {
 	})
 
 	return c.JSON(customer)
+}
+
+// ---------- Cluster ----------
+
+// GetCustomerCluster returns the CAPI cluster info for a customer.
+// GET /api/v1/admin/customers/:id/cluster
+func (h *CustomerHandler) GetCustomerCluster(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return NewBadRequest("customer id is required")
+	}
+
+	customer, err := h.store.GetCustomer(c.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return NewNotFound("customer")
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get customer")
+	}
+
+	if customer.CAPIClusterName == "" {
+		return c.JSON(fiber.Map{
+			"clusterStatus": customer.ClusterStatus,
+			"message":       "no cluster provisioned",
+		})
+	}
+
+	if h.provisioner == nil {
+		return c.JSON(fiber.Map{
+			"clusterStatus":   customer.ClusterStatus,
+			"capiClusterName": customer.CAPIClusterName,
+			"clusterRegion":   customer.ClusterRegion,
+			"clusterNodes":    customer.ClusterNodes,
+			"k8sVersion":      customer.ClusterK8sVersion,
+		})
+	}
+
+	cluster, err := h.provisioner.GetCluster(c.Context(), customer.CAPIClusterName)
+	if err != nil {
+		return c.JSON(fiber.Map{
+			"clusterStatus":   customer.ClusterStatus,
+			"capiClusterName": customer.CAPIClusterName,
+			"error":           err.Error(),
+		})
+	}
+
+	return c.JSON(cluster)
+}
+
+// ScaleCluster scales the customer's cluster.
+// POST /api/v1/admin/customers/:id/cluster/scale
+func (h *CustomerHandler) ScaleCluster(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return NewBadRequest("customer id is required")
+	}
+
+	var input models.ScaleClusterInput
+	if err := c.BodyParser(&input); err != nil {
+		return NewBadRequest("invalid request body")
+	}
+
+	if input.Nodes < 1 {
+		return NewBadRequest("nodes must be at least 1")
+	}
+
+	customer, err := h.store.GetCustomer(c.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return NewNotFound("customer")
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get customer")
+	}
+
+	if h.provisioner == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "cluster provisioner not available")
+	}
+
+	if err := h.provisioner.ScaleCluster(c.Context(), customer, input.Nodes); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to scale cluster: "+err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "cluster scaled", "nodes": input.Nodes})
+}
+
+// UpgradeCluster upgrades the customer's cluster K8s version.
+// POST /api/v1/admin/customers/:id/cluster/upgrade
+func (h *CustomerHandler) UpgradeCluster(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return NewBadRequest("customer id is required")
+	}
+
+	var input models.UpgradeClusterInput
+	if err := c.BodyParser(&input); err != nil {
+		return NewBadRequest("invalid request body")
+	}
+
+	if input.Version == "" {
+		return NewBadRequest("version is required")
+	}
+
+	customer, err := h.store.GetCustomer(c.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return NewNotFound("customer")
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get customer")
+	}
+
+	if h.provisioner == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "cluster provisioner not available")
+	}
+
+	if err := h.provisioner.UpgradeCluster(c.Context(), customer, input.Version); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to upgrade cluster: "+err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "cluster upgrade started", "version": input.Version})
 }
 
 // ---------- Plans ----------

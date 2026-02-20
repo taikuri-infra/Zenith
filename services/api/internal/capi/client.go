@@ -94,6 +94,24 @@ func (c *Client) DeleteCluster(ctx context.Context, name string) error {
 	return nil
 }
 
+// ScaleCluster updates the node count of a cluster.
+func (c *Client) ScaleCluster(ctx context.Context, name string, nodes int) error {
+	crd, err := c.k8s.GetCRD(ctx, KindCluster, CAPINamespace, name)
+	if err != nil {
+		return fmt.Errorf("get cluster %s for scale: %w", name, err)
+	}
+
+	var spec map[string]interface{}
+	_ = json.Unmarshal(crd.Spec, &spec)
+	spec["nodes"] = nodes
+	crd.Spec, _ = json.Marshal(spec)
+
+	if err := c.k8s.UpdateCRD(ctx, crd); err != nil {
+		return fmt.Errorf("scale cluster %s: %w", name, err)
+	}
+	return nil
+}
+
 // UpgradeCluster updates the Kubernetes version of a cluster.
 func (c *Client) UpgradeCluster(ctx context.Context, name, version string) error {
 	crd, err := c.k8s.GetCRD(ctx, KindCluster, CAPINamespace, name)

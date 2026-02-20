@@ -7,7 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
+	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
@@ -17,7 +20,7 @@ func setupCustomerApp() (*fiber.App, *handlers.CustomerHandler) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	customerStore := store.NewMemoryCustomerRepository()
 	adminStore := store.NewMemoryAdminRepository()
-	handler := handlers.NewCustomerHandler(customerStore, adminStore)
+	handler := handlers.NewCustomerHandler(customerStore, adminStore, nil)
 	return app, handler
 }
 
@@ -662,6 +665,176 @@ func TestCustomerCRUDFlow(t *testing.T) {
 
 	if verifyResp.StatusCode != 404 {
 		t.Errorf("Verify: Expected 404, got %d", verifyResp.StatusCode)
+	}
+}
+
+// ---------- Cluster endpoints ----------
+
+func setupCustomerAppWithProvisioner() (*fiber.App, *handlers.CustomerHandler) {
+	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	customerStore := store.NewMemoryCustomerRepository()
+	adminStore := store.NewMemoryAdminRepository()
+	// Create provisioner with in-memory CAPI
+	k8sClient := k8s.NewMemoryClient()
+	capiClient := capi.NewClient(k8sClient)
+	provisioner := cluster.NewProvisioner(capiClient, customerStore, adminStore)
+	handler := handlers.NewCustomerHandler(customerStore, adminStore, provisioner)
+	return app, handler
+}
+
+func TestGetCustomerCluster(t *testing.T) {
+	app, handler := setupCustomerApp()
+	app.Use(injectAdmin)
+	app.Get("/api/v1/admin/customers/:id/cluster", handler.GetCustomerCluster)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/customers/cust-001/cluster", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
+	}
+}
+
+func TestGetCustomerClusterNotFound(t *testing.T) {
+	app, handler := setupCustomerApp()
+	app.Use(injectAdmin)
+	app.Get("/api/v1/admin/customers/:id/cluster", handler.GetCustomerCluster)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/customers/nonexistent/cluster", nil)
+	resp, _ := app.Test(req)
+
+	if resp.StatusCode != 404 {
+		t.Errorf("Expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestScaleClusterEndpoint(t *testing.T) {
+	app, handler := setupCustomerAppWithProvisioner()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/customers", handler.CreateCustomer)
+	app.Post("/api/v1/admin/customers/:id/cluster/scale", handler.ScaleCluster)
+
+	// Create a customer first (triggers provisioning)
+	createBody := `{"name":"ScaleTest","domain":"scaletest.dev","planId":"plan-starter","contactEmail":"a@s.dev","contactName":"Admin"}`
+	createReq := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, _ := app.Test(createReq)
+
+	var created models.Customer
+	json.NewDecoder(createResp.Body).Decode(&created)
+
+	// Give goroutine time to provision
+	// Scale
+	scaleBody := `{"nodes":5}`
+	scaleReq := httptest.NewRequest("POST", "/api/v1/admin/customers/"+created.ID+"/cluster/scale", bytes.NewBufferString(scaleBody))
+	scaleReq.Header.Set("Content-Type", "application/json")
+	scaleResp, err := app.Test(scaleReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer scaleResp.Body.Close()
+
+	if scaleResp.StatusCode != 200 {
+		b, _ := io.ReadAll(scaleResp.Body)
+		t.Fatalf("Expected 200, got %d: %s", scaleResp.StatusCode, string(b))
+	}
+}
+
+func TestScaleClusterBadNodes(t *testing.T) {
+	app, handler := setupCustomerApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/customers/:id/cluster/scale", handler.ScaleCluster)
+
+	body := `{"nodes":0}`
+	req := httptest.NewRequest("POST", "/api/v1/admin/customers/cust-001/cluster/scale", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400 for 0 nodes, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpgradeClusterEndpoint(t *testing.T) {
+	app, handler := setupCustomerAppWithProvisioner()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/customers", handler.CreateCustomer)
+	app.Post("/api/v1/admin/customers/:id/cluster/upgrade", handler.UpgradeCluster)
+
+	// Create a customer first
+	createBody := `{"name":"UpgradeTest","domain":"upgradetest.dev","planId":"plan-starter","contactEmail":"a@u.dev","contactName":"Admin"}`
+	createReq := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, _ := app.Test(createReq)
+
+	var created models.Customer
+	json.NewDecoder(createResp.Body).Decode(&created)
+
+	// Upgrade
+	upgradeBody := `{"version":"v1.32.0"}`
+	upgradeReq := httptest.NewRequest("POST", "/api/v1/admin/customers/"+created.ID+"/cluster/upgrade", bytes.NewBufferString(upgradeBody))
+	upgradeReq.Header.Set("Content-Type", "application/json")
+	upgradeResp, err := app.Test(upgradeReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgradeResp.Body.Close()
+
+	if upgradeResp.StatusCode != 200 {
+		b, _ := io.ReadAll(upgradeResp.Body)
+		t.Fatalf("Expected 200, got %d: %s", upgradeResp.StatusCode, string(b))
+	}
+}
+
+func TestCustomerUpgradeClusterMissingVersion(t *testing.T) {
+	app, handler := setupCustomerApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/customers/:id/cluster/upgrade", handler.UpgradeCluster)
+
+	body := `{"version":""}`
+	req := httptest.NewRequest("POST", "/api/v1/admin/customers/cust-001/cluster/upgrade", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400 for empty version, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateCustomerSetsClusterFields(t *testing.T) {
+	app, handler := setupCustomerApp()
+	app.Use(injectAdmin)
+	app.Post("/api/v1/admin/customers", handler.CreateCustomer)
+
+	body := `{"name":"ClusterCo","domain":"cluster.co","planId":"plan-starter","contactEmail":"a@c.co","contactName":"Admin"}`
+	req := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != 201 {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected 201, got %d: %s", resp.StatusCode, string(b))
+	}
+
+	var customer models.Customer
+	json.NewDecoder(resp.Body).Decode(&customer)
+
+	if customer.CAPIClusterName != "cluster-co" {
+		t.Errorf("Expected capiClusterName 'cluster-co', got '%s'", customer.CAPIClusterName)
+	}
+	if customer.ClusterRegion != "fsn1" {
+		t.Errorf("Expected clusterRegion 'fsn1', got '%s'", customer.ClusterRegion)
+	}
+	if customer.ClusterNodes != 3 {
+		t.Errorf("Expected clusterNodes 3, got %d", customer.ClusterNodes)
+	}
+	if customer.ClusterK8sVersion != "v1.31.2" {
+		t.Errorf("Expected clusterK8sVersion 'v1.31.2', got '%s'", customer.ClusterK8sVersion)
 	}
 }
 
