@@ -21,6 +21,9 @@ type Config struct {
 	AdminEmail    string
 	AdminPassword string
 
+	// Internal
+	InternalSecret string
+
 	// Database
 	DatabaseURL string
 }
@@ -37,7 +40,8 @@ func Load() *Config {
 		JWTIssuer:     getEnv("JWT_ISSUER", "zenith"),
 		AdminEmail:    getEnv("ADMIN_EMAIL", ""),
 		AdminPassword: getEnv("ADMIN_PASSWORD", ""),
-		DatabaseURL:   buildDatabaseURL(),
+		InternalSecret: getEnv("INTERNAL_SECRET", ""),
+		DatabaseURL:    buildDatabaseURL(),
 	}
 }
 

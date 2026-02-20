@@ -13,7 +13,7 @@ import {
   Skeleton,
 } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
-import type { Cluster, Module, AuditEntry, PlatformUpdate, CustomerStats } from "@/lib/api";
+import type { Cluster, Module, AuditEntry, PlatformUpdate, CustomerStats, PlatformUsageSummary } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const platformUpdate = useApi<PlatformUpdate>(() => apiClient.updates.check());
   const dashboardStats = useApi(() => apiClient.dashboard.stats());
   const customerStats = useApi<CustomerStats>(() => apiClient.customers.stats());
+  const platformUsage = useApi<PlatformUsageSummary>(() => apiClient.dashboard.usage());
 
   const updatesAvailable = modules.data
     ? modules.data.filter((m) => m.status === "update_available").length
@@ -163,6 +164,37 @@ export default function DashboardPage() {
             </div>
           )}
         </section>
+
+        {/* Platform Resource Usage */}
+        {platformUsage.loading ? (
+          <StatCardRowSkeleton />
+        ) : platformUsage.data ? (
+          <section>
+            <h2 className="mb-3 text-sm font-medium text-white">Platform Resource Usage</h2>
+            <div className="grid grid-cols-4 gap-4">
+              <StatCard
+                label="Total CPU"
+                value={`${platformUsage.data.totalCpu} cores`}
+                sub={`${platformUsage.data.customersReporting} customers reporting`}
+              />
+              <StatCard
+                label="Total RAM"
+                value={`${platformUsage.data.totalRam} GB`}
+                sub="across all customers"
+              />
+              <StatCard
+                label="Total Storage"
+                value={`${platformUsage.data.totalStorage} GB`}
+                sub="DB + volumes"
+              />
+              <StatCard
+                label="Reporting"
+                value={platformUsage.data.customersReporting}
+                sub="customers with metering"
+              />
+            </div>
+          </section>
+        ) : null}
 
         {/* Two columns: Updates + Activity */}
         <div className="grid grid-cols-2 gap-6">

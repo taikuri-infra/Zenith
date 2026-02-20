@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/loading-skeleton";
 import { Modal } from "@/components/modal";
 import { getApi } from "@/lib/get-api";
 import { isDemoMode } from "@/lib/get-api";
-import type { Customer } from "@/lib/api";
+import type { Customer, CustomerUsage, UsageHistoryEntry } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import { useMutation } from "@/hooks/use-api";
 import {
@@ -295,6 +295,139 @@ function ClusterInfoPanel({
   );
 }
 
+// ---------- Resource Usage Section ----------
+
+function ResourceUsageSection({ customerId }: { customerId: string }) {
+  const apiClient = getApi();
+  const { data: usage, loading, error } = useApi<CustomerUsage>(
+    () => apiClient.customers.usage(customerId),
+    [customerId]
+  );
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-border bg-surface-100 p-4">
+        <h2 className="mb-3 text-sm font-medium text-white">Resource Usage</h2>
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-border bg-surface-100 p-4">
+        <h2 className="mb-3 text-sm font-medium text-white">Resource Usage</h2>
+        <p className="text-sm text-neutral-500">Unable to load usage data.</p>
+      </div>
+    );
+  }
+
+  if (!usage) return null;
+
+  const metrics = [
+    { label: "CPU", used: `${usage.cpuCores}`, ceiling: `${usage.cpuCeiling} cores`, percent: usage.cpuPercent },
+    { label: "RAM", used: `${usage.ramGb}`, ceiling: `${usage.ramCeiling} GB`, percent: usage.ramPercent },
+    { label: "S3 Storage", used: `${usage.s3Tb}`, ceiling: `${usage.s3Ceiling} TB`, percent: usage.s3Percent },
+    { label: "DB Storage", used: `${usage.dbStorageGb}`, ceiling: `${usage.dbCeiling} GB`, percent: usage.dbPercent },
+    { label: "Volumes", used: `${usage.volumeGb}`, ceiling: `${usage.volCeiling} GB`, percent: usage.volPercent },
+    { label: "Load Balancers", used: `${usage.lbCount}`, ceiling: `${usage.lbCeiling}`, percent: usage.lbPercent },
+  ];
+
+  return (
+    <div className="rounded-lg border border-border bg-surface-100 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-medium text-white">Resource Usage</h2>
+        {usage.recordedAt && (
+          <span className="text-xs text-neutral-600">
+            Last updated: {new Date(usage.recordedAt).toLocaleString()}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {metrics.map((m) => (
+          <div key={m.label}>
+            <div className="mb-1 flex justify-between text-xs text-neutral-400">
+              <span>{m.label}</span>
+              <span>
+                {m.used} / {m.ceiling}
+              </span>
+            </div>
+            <ProgressBar percent={m.percent} label={`${m.percent}%`} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Usage History Section ----------
+
+function UsageHistorySection({ customerId }: { customerId: string }) {
+  const apiClient = getApi();
+  const { data: history, loading, error } = useApi<UsageHistoryEntry[]>(
+    () => apiClient.customers.usageHistory(customerId, 30),
+    [customerId]
+  );
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-border bg-surface-100 p-4">
+        <h2 className="mb-3 text-sm font-medium text-white">Usage History (30 days)</h2>
+        <Skeleton className="h-48 w-full rounded" />
+      </div>
+    );
+  }
+
+  if (error || !history || history.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-surface-100 p-4">
+      <h2 className="mb-3 text-sm font-medium text-white">Usage History (30 days)</h2>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-surface-200">
+              <th className="px-3 py-2 text-left text-xs font-medium text-neutral-500">Date</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500">CPU Avg</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500">CPU Max</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500">RAM Avg</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500">RAM Max</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500">DB (GB)</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500">Vol (GB)</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-neutral-500">LBs</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.slice(-10).map((entry) => (
+              <tr key={entry.date} className="border-b border-border last:border-0">
+                <td className="px-3 py-2 font-mono text-xs text-neutral-300">{entry.date}</td>
+                <td className="px-3 py-2 text-right text-xs text-neutral-300">{entry.cpuAvg}</td>
+                <td className="px-3 py-2 text-right text-xs text-neutral-300">{entry.cpuMax}</td>
+                <td className="px-3 py-2 text-right text-xs text-neutral-300">{entry.ramAvg}</td>
+                <td className="px-3 py-2 text-right text-xs text-neutral-300">{entry.ramMax}</td>
+                <td className="px-3 py-2 text-right text-xs text-neutral-300">{entry.dbStorageGb}</td>
+                <td className="px-3 py-2 text-right text-xs text-neutral-300">{entry.volumeGb}</td>
+                <td className="px-3 py-2 text-right text-xs text-neutral-300">{entry.lbCount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {history.length > 10 && (
+        <p className="mt-2 text-xs text-neutral-600">
+          Showing last 10 of {history.length} days
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ---------- Main Page ----------
 
 export default function CustomerDetailPage({
@@ -561,59 +694,11 @@ export default function CustomerDetailPage({
               )}
             </div>
 
-            {/* Resource usage placeholder */}
-            <div className="rounded-lg border border-border bg-surface-100 p-4">
-              <h2 className="mb-3 text-sm font-medium text-white">
-                Resource Usage
-              </h2>
-              {customer.plan ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="mb-1 flex justify-between text-xs text-neutral-400">
-                      <span>CPU</span>
-                      <span>
-                        0 / {customer.plan.cpuCores} cores
-                      </span>
-                    </div>
-                    <ProgressBar percent={0} label="0%" />
-                  </div>
-                  <div>
-                    <div className="mb-1 flex justify-between text-xs text-neutral-400">
-                      <span>RAM</span>
-                      <span>
-                        0 / {customer.plan.ramGb} GB
-                      </span>
-                    </div>
-                    <ProgressBar percent={0} label="0%" />
-                  </div>
-                  <div>
-                    <div className="mb-1 flex justify-between text-xs text-neutral-400">
-                      <span>DB Storage</span>
-                      <span>
-                        0 / {customer.plan.dbStorageGb} GB
-                      </span>
-                    </div>
-                    <ProgressBar percent={0} label="0%" />
-                  </div>
-                  <div>
-                    <div className="mb-1 flex justify-between text-xs text-neutral-400">
-                      <span>Volumes</span>
-                      <span>
-                        0 / {customer.plan.volumeGb} GB
-                      </span>
-                    </div>
-                    <ProgressBar percent={0} label="0%" />
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-neutral-500">
-                  No plan assigned.
-                </p>
-              )}
-              <p className="mt-3 text-xs text-neutral-600">
-                Resource usage data will be available once the cluster is provisioned.
-              </p>
-            </div>
+            {/* Resource Usage */}
+            <ResourceUsageSection customerId={id} />
+
+            {/* Usage History */}
+            <UsageHistorySection customerId={id} />
           </>
         ) : null}
       </div>

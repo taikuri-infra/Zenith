@@ -49,6 +49,14 @@ type CustomerRepository interface {
 	ListProvisioningCustomers(ctx context.Context) ([]models.Customer, error)
 }
 
+// MeteringRepository defines resource usage metering operations.
+type MeteringRepository interface {
+	RecordUsage(ctx context.Context, input *models.MeteringInput) (*models.ResourceUsage, error)
+	GetLatestUsage(ctx context.Context, customerID string) (*models.ResourceUsage, error)
+	GetUsageHistory(ctx context.Context, customerID string, days int) ([]models.UsageHistoryEntry, error)
+	GetPlatformUsageSummary(ctx context.Context) (*models.PlatformUsageSummary, error)
+}
+
 // AdminRepository defines admin/platform persistence operations.
 type AdminRepository interface {
 	GetSettings(ctx context.Context) (*models.PlatformSettings, error)

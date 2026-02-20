@@ -12,14 +12,14 @@
 | Phase | Description | Tasks | Done | Status |
 |-------|-------------|-------|------|--------|
 | Pre | Foundation (Auth, API scaffold, Deploy, IaC) | 24 | 24 | **COMPLETE** |
-| 0 | PostgreSQL + Persistent State | 18 | 14 | **IN PROGRESS** |
+| 0 | PostgreSQL + Persistent State | 18 | 15 | **IN PROGRESS** |
 | 1 | Customer Management in Admin | 16 | 16 | **COMPLETE** |
 | 2 | CAPI Cluster Provisioning | 20 | 7 | **IN PROGRESS** |
-| 3 | Resource Metering & Limits | 11 | 0 | NOT STARTED |
+| 3 | Resource Metering & Limits | 11 | 7 | **IN PROGRESS** |
 | 4 | Billing (Stripe + Fairbroker) | 11 | 0 | NOT STARTED |
 | 5 | Customer Onboarding Automation | 5 | 0 | NOT STARTED |
 | 6 | Open-Core Extraction (Future) | 7 | 0 | NOT STARTED |
-| **Total** | | **112** | **61** | **54%** |
+| **Total** | | **112** | **68** | **61%** |
 
 ---
 
@@ -212,7 +212,7 @@ infra/
 - [x] **S0-06** Migration: `customers` (id, name, domain, plan_id, status, created_at, ...) — completed in Phase 1
 - [x] **S0-07** Migration: `plans` (id, name, cpu_limit, ram_limit, s3_limit, db_storage_limit, volume_limit, lb_limit, price_cents, currency, billing_cycle) — completed in Phase 1
 - [ ] **S0-08** Migration: `clusters` (id, customer_id, name, region, k8s_version, status, capi_cluster_name, node_count, created_at) — Phase 2 scope
-- [ ] **S0-09** Migration: `resource_usage` (id, customer_id, cluster_id, resource_type, amount, unit, recorded_at) — Phase 3 scope
+- [x] **S0-09** Migration 005: `resource_usage` (id, customer_id, cpu_cores, ram_gb, s3_tb, db_storage_gb, volume_gb, lb_count, recorded_at) — completed in Phase 3
 - [ ] **S0-10** Migration: `invoices` (id, customer_id, plan_id, amount, currency, status, stripe_invoice_id, period_start, period_end) — Phase 4 scope
 - [x] **S0-11** Migration 001 includes `audit_log` table with time, actor, action, cluster columns
 - [x] **S0-12** Migration 002: Seed default modules (11), platform settings, update history
@@ -356,30 +356,30 @@ infra/
 ## Phase 3: Resource Metering & Limits
 
 > **Goal:** Track what each customer uses. Enforce plan ceilings. Show usage in Admin.
-> **Status:** NOT STARTED (0/11)
+> **Status:** IN PROGRESS (7/11)
 
 ### Tasks
 
 - [ ] **S3-01** Metering agent: Deploy into each customer cluster
   - Collects every 60s: CPU cores used, RAM used, pod count, PVC total size, S3 bucket total size, DB storage used, LB count
-- [ ] **S3-02** Metering agent pushes to management API:
+- [x] **S3-02** Metering agent pushes to management API:
   - `POST /api/v1/internal/metering` — Body: `{ customer_id, metrics: [...] }`
-  - Internal endpoint, service-to-service auth via shared secret
-- [ ] **S3-03** API: Store metering data in `resource_usage` table
-- [ ] **S3-04** API: `GET /api/v1/admin/customers/:id/usage`
-  - Response: current usage vs plan ceiling for each resource type
-  - Include: current, limit, percent, trend (last 7 days)
-- [ ] **S3-05** API: `GET /api/v1/admin/customers/:id/usage/history`
-  - Response: time-series usage data for charts (hourly/daily/monthly)
+  - Internal endpoint, service-to-service auth via shared secret (`X-Internal-Secret` header)
+- [x] **S3-03** API: Store metering data in `resource_usage` table
+  - Migration 005, `ResourceUsage` model, `MeteringRepository` interface (Memory + Postgres)
+- [x] **S3-04** API: `GET /api/v1/admin/customers/:id/usage`
+  - Response: current usage vs plan ceiling for each resource type with percentages
+- [x] **S3-05** API: `GET /api/v1/admin/customers/:id/usage/history`
+  - Response: daily aggregated usage data (avg/max CPU & RAM, storage, volumes, LBs)
 - [ ] **S3-06** Ceiling enforcement: When customer approaches limit (>80%), send alert to Admin dashboard
 - [ ] **S3-07** Ceiling enforcement: When customer hits 100%, reject new resource creation in Zenith Operator (admission webhook)
   - Return clear error: "Plan limit reached. Contact support to upgrade."
-- [ ] **S3-08** MC `/customers/[id]`: Resource usage dashboard
-  - Visual gauges: `CPU [███████░░░] 72/160 cores (45%)`
+- [x] **S3-08** MC `/customers/[id]`: Resource usage dashboard
+  - Visual gauges with ProgressBar (color-coded: green <60%, amber 60-79%, red >=80%)
   - Per resource: CPU, RAM, S3, DB Storage, Volumes, LBs
-- [ ] **S3-09** MC `/customers/[id]`: Usage history charts (line chart, last 30 days)
-- [ ] **S3-10** MC dashboard: Aggregate usage across all customers
-  - Total platform: 450/800 cores used (56%), 900GB/1600GB RAM, etc.
+- [x] **S3-09** MC `/customers/[id]`: Usage history table (last 10 of 30 days)
+- [x] **S3-10** MC dashboard: Aggregate usage across all customers
+  - Platform Resource Usage section: Total CPU, RAM, Storage, Customers Reporting
 - [ ] **S3-11** Alert system: Notify DoTech admin when any customer approaches ceiling
   - In-app notification + optional email/Slack webhook
 

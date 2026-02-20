@@ -17,6 +17,9 @@ import type {
   Customer,
   Plan,
   CustomerStats,
+  CustomerUsage,
+  UsageHistoryEntry,
+  PlatformUsageSummary,
 } from "./api";
 
 import {
@@ -33,6 +36,9 @@ import {
   demoCustomers,
   demoPlans,
   demoCustomerStats,
+  demoCustomerUsage,
+  demoUsageHistory,
+  demoPlatformUsageSummary,
 } from "./demo-data";
 
 // Simulate a short network delay so skeleton states flash briefly
@@ -43,6 +49,10 @@ export const demoApi = {
     stats: async (): Promise<DashboardStats> => {
       await delay();
       return demoDashboardStats;
+    },
+    usage: async (): Promise<PlatformUsageSummary> => {
+      await delay();
+      return demoPlatformUsageSummary;
     },
   },
 
@@ -221,6 +231,18 @@ export const demoApi = {
     },
     upgradeCluster: async (): Promise<void> => {
       throw new Error("Not available in demo mode");
+    },
+    usage: async (id: string): Promise<CustomerUsage> => {
+      await delay();
+      const usage = demoCustomerUsage[id];
+      if (!usage) throw new Error(`No usage data for "${id}"`);
+      return usage;
+    },
+    usageHistory: async (id: string, _days?: number): Promise<UsageHistoryEntry[]> => {
+      await delay();
+      // Return the shared history for all customers (generated for cust-001 profile)
+      if (!demoCustomerUsage[id]) throw new Error(`Customer "${id}" not found`);
+      return demoUsageHistory;
     },
   },
 
