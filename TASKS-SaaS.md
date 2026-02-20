@@ -204,17 +204,17 @@ No scaling, no backups, no metrics, no audit log. Simple and clean.
 | Plan | Price | What You Get |
 |------|-------|-------------|
 | **Free** | €0 | 1 app, 1 DB (500MB), 512MB RAM, 0.5 CPU, subdomain, **sleep after 15min** |
-| **Pro** | €29/mah | 3 apps, 2 DB (5GB), 2GB RAM, 2 CPU, custom domain, always-on, daily backup |
-| **Team** | €199/mah | 10 apps, 5 DB (20GB), 4GB RAM, 4 CPU, SSO, monitoring, team mgmt, hourly backup |
-| **Managed** | €990+/mah | Unlimited, dedicated resources, SLA 99.9%, Grafana, priority support |
+| **Pro** | €29/mo | 5 apps, 3 DB (5GB each), 2GB RAM, 2 CPU, custom domain, always-on, daily backup |
+| **Team** | €199/mo | 20 apps, 10 DB (20GB each), 4GB RAM, 4 CPU, SSO, audit, team mgmt, hourly backup |
+| **Enterprise** | custom | Unlimited, dedicated infra, SLA 99.9%, VPC, compliance, Slack + phone support |
 
 ### Unit Economics
 
 ```
-Free user:    sleep mode → ~€0.70/mah cost (KEDA scale-to-zero)
-Pro user:     always-on → ~€12/mah cost → €17/mah margin (59%)
-Team user:    always-on → ~€30/mah cost → €169/mah margin (85%)
-Managed:      dedicated → ~€200/mah cost → €790+/mah margin (80%)
+Free user:    sleep mode → ~€0.70/mo cost (KEDA scale-to-zero)
+Pro user:     always-on → ~€12/mo cost → €17/mo margin (59%)
+Team user:    always-on → ~€30/mo cost → €169/mo margin (85%)
+Enterprise:   dedicated → ~€200/mo cost → custom pricing (80%+ margin)
 
 Break even: 16 Pro users = €464 revenue vs €450 infra cost
 Target:     200 free + 30 paid = €870 revenue, €450 cost, €420 profit
@@ -223,12 +223,12 @@ Target:     200 free + 30 paid = €870 revenue, €450 cost, €420 profit
 ### Infrastructure Budget
 
 ```
-10 x CPX52 (12 vCPU, 24GB RAM, 480GB SSD)  = €285/mah
-S3 storage (10TB) + Volumes (600GB)          = €52/mah
-Load Balancer + management                   = €30/mah
-DNS, domain, tools                           = €83/mah
+10 x CPX52 (12 vCPU, 24GB RAM, 480GB SSD)  = €285/mo
+S3 storage (10TB) + Volumes (600GB)          = €52/mo
+Load Balancer + management                   = €30/mo
+DNS, domain, tools                           = €83/mo
 ═══════════════════════════════════════════════════════
-Total: ~€450/mah
+Total: ~€450/mo
 
 Capacity: 120 vCPU, 240GB RAM
   → ~1,000 free users (with sleep mode)
@@ -313,7 +313,7 @@ Pro:  always-on, custom domain
 | Audit log | ❌ | Team+ |
 | Team management | ❌ | Team+ |
 | SSO | ❌ | Team+ |
-| SLA | ❌ | Managed |
+| SLA | ❌ | Enterprise |
 | Multi-user admin | ❌ | ✅ |
 | Billing | ❌ | ✅ |
 | Sleep mode (scale-to-zero) | ❌ | Free tier |
@@ -389,10 +389,10 @@ Pro:  always-on, custom domain
 - [x] **M-05** MC customer detail: resource usage gauges
 - [x] **M-06** MC customer detail: usage history table
 - [x] **M-07** MC dashboard: aggregate platform usage
-- [ ] ~~S3-01~~ Metering agent — deferred (will be built into app runtime)
-- [ ] ~~S3-06~~ Ceiling alerts — deferred to Phase 5
-- [ ] ~~S3-07~~ Admission webhook — deferred to Phase 5
-- [ ] ~~S3-11~~ Alert system — deferred to Phase 5
+- [ ] ~~M-08~~ Metering agent — deferred (will be built into app runtime)
+- [ ] ~~M-09~~ Ceiling alerts — deferred to Phase 5
+- [ ] ~~M-10~~ Admission webhook — deferred to Phase 5
+- [ ] ~~M-11~~ Alert system — deferred to Phase 5
 
 ---
 
@@ -557,7 +557,7 @@ Pro:  always-on, custom domain
 
 ## Phase 4: KEDA Scale-to-Zero + SaaS Free Tier
 
-> **Goal:** Free tier apps sleep when idle (€0.70/user/mah cost). Paid apps always-on. Plan enforcement.
+> **Goal:** Free tier apps sleep when idle (€0.70/user/mo cost). Paid apps always-on. Plan enforcement.
 > **Status:** NOT STARTED (0/11)
 
 ### Tasks
@@ -587,11 +587,11 @@ Pro:  always-on, custom domain
   - Create K8s namespace for user
 
 - [ ] **S4-05** Plan assignment + resource quotas
-  - Each user gets a plan (free/pro/team/managed)
+  - Each user gets a plan (free/pro/team/enterprise)
   - K8s ResourceQuota per user namespace:
     - Free: 0.5 CPU, 512MB RAM, 1 app, 1 DB
-    - Pro: 6 CPU, 6GB RAM, 3 apps, 2 DBs
-    - Team: 40 CPU, 40GB RAM, 10 apps, 5 DBs
+    - Pro: 10 CPU, 10GB RAM, 5 apps, 3 DBs
+    - Team: 80 CPU, 80GB RAM, 20 apps, 10 DBs
   - API enforces: can't create more apps than plan allows
 
 - [ ] **S4-06** Plan upgrade trigger points
@@ -639,7 +639,7 @@ Pro:  always-on, custom domain
 
 ## Phase 5: Hetzner Autoscaler
 
-> **Goal:** Automatically scale Hetzner server pool based on demand. Cap at 10 servers (~€450/mah).
+> **Goal:** Automatically scale Hetzner server pool based on demand. Cap at 10 servers (~€450/mo).
 > **Status:** NOT STARTED (0/8)
 
 ### Tasks
@@ -653,7 +653,7 @@ Pro:  always-on, custom domain
   - Track server pool: current count, total CPU/RAM, utilization
   - Minimum: 2 servers (availability)
   - Maximum: 10 servers (budget cap)
-  - Server type: CPX52 (12 vCPU, 24GB RAM, €28.49/mah)
+  - Server type: CPX52 (12 vCPU, 24GB RAM, €28.49/mo)
 
 - [ ] **S5-03** Scale-up trigger
   - Monitor cluster resource utilization (Kubernetes metrics-server)
@@ -673,7 +673,7 @@ Pro:  always-on, custom domain
   - Remove: cordon → drain → delete node → delete Hetzner server
 
 - [ ] **S5-06** Cost tracking
-  - Track actual Hetzner spend vs budget cap (€450/mah)
+  - Track actual Hetzner spend vs budget cap (€450/mo)
   - Alert if approaching budget
   - Admin dashboard: current server count, cost, utilization
 
@@ -704,7 +704,7 @@ Pro:  always-on, custom domain
 ### Tasks
 
 - [ ] **S6-01** Stripe Go SDK integration
-  - Products: Free, Pro (€29), Team (€199), Managed (custom)
+  - Products: Free, Pro (€29), Team (€199), Enterprise (custom)
   - Stripe Products + Prices created via API or dashboard
 
 - [ ] **S6-02** Checkout flow
@@ -849,7 +849,7 @@ Pro:  always-on, custom domain
 - [ ] **S8-04** LinkedIn content campaign
   - 32K followers — leverage existing audience
   - 3 posts/week: technical insights, building in public, cost comparisons
-  - Boost best post: €100/mah
+  - Boost best post: €100/mo
 
 - [ ] **S8-05** Product Hunt launch
   - Screenshots, 60-second demo video
@@ -985,9 +985,9 @@ Phase 8 makes it **known** (marketing push).
 8. Monitoring tab → logs, CPU/RAM gauges, request metrics
 9. Registry tab → container images listed, pull commands shown
 10. Everything works on EVERY plan — only RESOURCE LIMITS differ:
-    - Free: 1 app, 500MB DB, 1GB S3, 1 member, 1 day logs
-    - Pro: 5 apps, 5GB DB, 10GB S3, 3 members, 7 day logs
-    - Team: 20 apps, 20GB DB, 100GB S3, 10 members, 30 day logs
+    - Free: 1 app, 1×500MB DB, 1GB S3, 1 member, 1 day logs
+    - Pro: 5 apps, 3×5GB DB, 10GB S3, 3 members, 7 day logs
+    - Team: 20 apps, 10×20GB DB, 100GB S3, 10 members, 30 day logs
 11. Pro adds: MFA, custom domain, rollback, webhooks, GitLab/Bitbucket, email support
 12. Team adds: SSO, audit log, DPA, preview deploys, auto-scaling, SLA 99.5%, session mgmt
 13. Enterprise: SCIM, custom roles, IP whitelisting, compliance dashboard, VPC,
@@ -1876,7 +1876,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/apps | jq
 | # | Scenario | Steps | Covers |
 |---|----------|-------|--------|
 | 1 | Free User — Full Stack | 24 | signup, deploy, DB, auth, S3, monitoring, limits |
-| 2 | Pro User — Multi-App | 24 | 3 apps, 3 DBs, custom domain, rollback, env vars, MFA, webhooks |
+| 2 | Pro User — Multi-App | 24 | 5 apps, 3 DBs, custom domain, rollback, env vars, MFA, webhooks |
 | 3 | Team User — SSO + Audit | 23 | SSO, RBAC, preview deploys, sessions, DPA, audit log, auto-scaling |
 | 4 | Free → Pro Upgrade | 13 | limit blocks, Stripe checkout, plan upgrade, limits expand |
 | 5 | Sleep Mode (KEDA) | 12 | sleep after 15 min, wake <5 sec, data persists |
