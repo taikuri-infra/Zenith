@@ -43,6 +43,8 @@
 
 **Every plan gets the FULL stack.** Plans differ by resources and limits, NOT by features.
 
+#### Resources & Core Stack
+
 | | **Free** | **Pro €29/mo** | **Team €199/mo** | **Enterprise (custom)** |
 |---|---|---|---|---|
 | **Apps (frontend + backend)** | 1 | 5 | 20 | Unlimited |
@@ -57,15 +59,83 @@
 | **CPU / RAM per app** | 0.5 / 512MB | 2 / 2GB | 4 / 4GB | Custom |
 | **Sleep mode** | After 15 min | ❌ always-on | ❌ always-on | ❌ always-on |
 | **SSL/TLS** | ✅ | ✅ | ✅ | ✅ |
-| **SSO (SAML/OIDC)** | ❌ | ❌ | ✅ | ✅ |
-| **Audit Log** | ❌ | ❌ | ✅ | ✅ |
-| **SLA** | ❌ | ❌ | ❌ | ✅ 99.9% |
-| **Dedicated Infrastructure** | ❌ | ❌ | ❌ | ✅ |
-| **Priority Support** | ❌ | Email | Email | Slack + Phone |
 
-> **Key insight:** Free user gets backend + frontend + DB + auth + S3 + registry + monitoring.
-> The only things gated to Enterprise: SLA, dedicated infra, priority support.
-> SSO and audit log gated to Team+.
+#### Developer Experience
+
+| | **Free** | **Pro €29/mo** | **Team €199/mo** | **Enterprise (custom)** |
+|---|---|---|---|---|
+| **GitHub Integration** | ✅ | ✅ | ✅ | ✅ |
+| **GitLab / Bitbucket** | ❌ | ✅ | ✅ | ✅ |
+| **Preview Deployments (per PR)** | ❌ | ❌ | ✅ | ✅ |
+| **Rollback (one-click)** | ❌ | ✅ | ✅ | ✅ |
+| **API Keys** | 1 | 5 | 20 | Unlimited |
+| **Webhook Events** | ❌ | ✅ | ✅ | ✅ |
+| **Data Export** | ✅ | ✅ | ✅ | ✅ |
+
+#### Security & Compliance
+
+| | **Free** | **Pro €29/mo** | **Team €199/mo** | **Enterprise (custom)** |
+|---|---|---|---|---|
+| **MFA / 2FA** | ❌ | ✅ | ✅ | ✅ |
+| **SSO (SAML/OIDC)** | ❌ | ❌ | ✅ | ✅ |
+| **SCIM Provisioning** | ❌ | ❌ | ❌ | ✅ |
+| **Audit Log** | ❌ | ❌ | ✅ | ✅ export + retention policy |
+| **Custom Roles (RBAC)** | ❌ | ❌ | ❌ | ✅ |
+| **IP Whitelisting** | ❌ | ❌ | ❌ | ✅ |
+| **Session Management** | ❌ | ❌ | ✅ | ✅ |
+| **GDPR / EU Data Residency** | ✅ | ✅ | ✅ | ✅ |
+| **DPA (Data Processing Agreement)** | ❌ | ❌ | ✅ | ✅ |
+| **Compliance Dashboard** | ❌ | ❌ | ❌ | ✅ |
+| **Pen Test Report (annual)** | ❌ | ❌ | ❌ | ✅ |
+| **SOC 2 / ISO 27001 aligned** | ❌ | ❌ | ❌ | ✅ |
+
+#### Infrastructure & Reliability
+
+| | **Free** | **Pro €29/mo** | **Team €199/mo** | **Enterprise (custom)** |
+|---|---|---|---|---|
+| **Shared Infrastructure** | ✅ | ✅ | ✅ | ❌ dedicated |
+| **Dedicated Infrastructure** | ❌ | ❌ | ❌ | ✅ |
+| **Private Networking (VPC)** | ❌ | ❌ | ❌ | ✅ |
+| **Auto-scaling** | ❌ | ❌ | ✅ | ✅ |
+| **SLA** | ❌ | ❌ | 99.5% | 99.9% |
+| **Incident Response SLA** | ❌ | ❌ | 24h | 1h |
+| **Scheduled Maintenance Window** | ❌ | ❌ | ❌ | ✅ (customer chooses) |
+| **Multi-region (future)** | ❌ | ❌ | ❌ | ✅ |
+
+#### Support
+
+| | **Free** | **Pro €29/mo** | **Team €199/mo** | **Enterprise (custom)** |
+|---|---|---|---|---|
+| **Community (Discord)** | ✅ | ✅ | ✅ | ✅ |
+| **Email Support** | ❌ | ✅ (48h) | ✅ (24h) | ✅ (4h) |
+| **Slack Channel** | ❌ | ❌ | ❌ | ✅ dedicated |
+| **Phone Support** | ❌ | ❌ | ❌ | ✅ |
+| **Onboarding Call** | ❌ | ❌ | ❌ | ✅ |
+
+#### White-Label (Enterprise Add-on)
+
+| | **Free** | **Pro** | **Team** | **Enterprise** |
+|---|---|---|---|---|
+| **Custom Branding (logo, colors)** | ❌ | ❌ | ❌ | ✅ |
+| **Custom Dashboard Domain** | ❌ | ❌ | ❌ | ✅ |
+| **Remove "Powered by Zenith"** | ❌ | ❌ | ❌ | ✅ |
+
+#### Feature Count per Plan
+
+| | **Free** | **Pro €29** | **Team €199** | **Enterprise** |
+|---|---|---|---|---|
+| Resources & Core Stack (12) | 10 | 12 | 12 | 12 |
+| Developer Experience (7) | 3 | 6 | 7 | 7 |
+| Security & Compliance (12) | 1 | 2 | 6 | 12 |
+| Infrastructure & Reliability (8) | 1 | 1 | 4 | 7 |
+| Support (5) | 1 | 2 | 2 | 5 |
+| White-Label (3) | 0 | 0 | 0 | 3 |
+| **Total (out of 47)** | **16 (34%)** | **23 (49%)** | **31 (66%)** | **46 (98%)** |
+
+**What each upgrade adds:**
+- **Free → Pro** (+7): custom domain, backups, GitLab/Bitbucket, rollback, webhooks, MFA, email support
+- **Pro → Team** (+8): SSO, audit log, DPA, session management, preview deploys, auto-scaling, SLA 99.5%, incident SLA 24h
+- **Team → Enterprise** (+15): SCIM, custom roles, IP whitelisting, compliance dashboard, pen test report, SOC 2/ISO 27001, VPC, dedicated infra, maintenance window, multi-region, Slack channel, phone support, onboarding call, white-label (×3)
 
 ### For B2B Sales — What You Can Sell Today
 
@@ -902,7 +972,7 @@ Phase 8 makes it **known** (marketing push).
 6. No billing, no sleep mode, no multi-user — just works
 ```
 
-### Flow 7: Full Stack Setup (Every Plan Gets Everything)
+### Flow 7: Full Stack Setup (Every Plan Gets the Full Stack)
 
 ```
 1. User signs up (Free, Pro, Team — doesn't matter)
@@ -915,106 +985,919 @@ Phase 8 makes it **known** (marketing push).
 8. Monitoring tab → logs, CPU/RAM gauges, request metrics
 9. Registry tab → container images listed, pull commands shown
 10. Everything works on EVERY plan — only RESOURCE LIMITS differ:
-    - Free: 1 app, 500MB DB, 1GB S3, 1 team member, 1 day logs
+    - Free: 1 app, 500MB DB, 1GB S3, 1 member, 1 day logs
     - Pro: 5 apps, 5GB DB, 10GB S3, 3 members, 7 day logs
     - Team: 20 apps, 20GB DB, 100GB S3, 10 members, 30 day logs
-11. Enterprise-only extras: SLA 99.9%, dedicated infra, priority support
-12. SSO + audit log: Team+ only
+11. Pro adds: MFA, custom domain, rollback, webhooks, GitLab/Bitbucket, email support
+12. Team adds: SSO, audit log, DPA, preview deploys, auto-scaling, SLA 99.5%, session mgmt
+13. Enterprise: SCIM, custom roles, IP whitelisting, compliance dashboard, VPC,
+    dedicated infra, 99.9% SLA, 1h incident response, Slack/phone, white-label
 ```
 
 ---
 
 ## Test Plan
 
-### Phase 2: App Deploy Engine — Tests
+### E2E Customer Journey Scenarios
 
-| # | Test Case | Type | Expected Result |
-|---|-----------|------|-----------------|
-| T2-01 | Create app with valid GitHub repo URL | API | App created, status: pending |
-| T2-02 | Create app with invalid repo URL | API | 400 error, clear message |
-| T2-03 | GitHub webhook triggers build on push | Integration | Build starts, status: building |
-| T2-04 | GitHub webhook with invalid signature | Security | 401 rejected |
-| T2-05 | Framework detection: Next.js (package.json + next) | Unit | Detected as "nextjs" |
-| T2-06 | Framework detection: Go (go.mod) | Unit | Detected as "go" |
-| T2-07 | Framework detection: Python (requirements.txt) | Unit | Detected as "python" |
-| T2-08 | Framework detection: Dockerfile present | Unit | Uses Dockerfile directly |
-| T2-09 | Framework detection: unknown project | Unit | Error: "Dockerfile required" |
-| T2-10 | Build succeeds → deployment created | Integration | Pod running, IngressRoute created |
-| T2-11 | Build fails → old version stays | Integration | Previous deployment unchanged |
-| T2-12 | App accessible via subdomain | E2E | HTTPS 200 at {app}.freezenith.com |
-| T2-13 | Env vars injected into deployment | Integration | App reads DATABASE_URL correctly |
-| T2-14 | Rollback to previous version | API | Previous image tag deployed |
-| T2-15 | Delete app → all resources cleaned | Integration | Deployment, Service, IngressRoute removed |
-| T2-16 | Build log streamed to client | Integration | Real-time log output via SSE/WS |
-| T2-17 | Concurrent builds (2 apps same time) | Load | Both build successfully, no conflicts |
+These scenarios simulate a real customer using the platform end to end.
+Each scenario is a script: register → do stuff → verify with curl → confirm everything works.
 
-### Phase 3: Built-in Services — Tests
+---
 
-| # | Test Case | Type | Expected Result |
-|---|-----------|------|-----------------|
-| T3-01 | Create PostgreSQL database | API | DB created, connection string returned |
-| T3-02 | Create DB over plan limit | API | 403: "Plan limit reached" |
-| T3-03 | Database size tracking | Integration | Size reported accurately in dashboard |
-| T3-04 | Delete database | API | DB dropped, resources freed |
-| T3-05 | Enable auth on app | API | Auth tables created, endpoints active |
-| T3-06 | Auth: sign up new user | API | User created, JWT returned |
-| T3-07 | Auth: sign in | API | JWT returned, valid claims |
-| T3-08 | Auth: invalid credentials | API | 401 unauthorized |
-| T3-09 | Auth user limit enforcement | API | 403 at plan limit (1K free, 10K pro) |
-| T3-10 | S3 bucket creation | API | Bucket created, credentials returned |
-| T3-11 | S3 storage limit enforcement | API | Upload rejected at plan limit |
-| T3-12 | Database backup (Pro) | Integration | pg_dump created, stored in S3 |
-| T3-13 | Database restore from backup | Integration | Data restored correctly |
+#### Scenario 1: Free User — Full Stack Setup
 
-### Phase 4: KEDA + Free Tier — Tests
+> A new user signs up, deploys a backend + frontend, creates a database, enables auth, uploads to S3, and verifies everything works via subdomain.
 
-| # | Test Case | Type | Expected Result |
-|---|-----------|------|-----------------|
-| T4-01 | Free app scales to zero after 15 min idle | Integration | Replicas: 0 after idle period |
-| T4-02 | Request to sleeping app wakes it | E2E | App responds within 5 sec, loading page shown |
-| T4-03 | Pro app never sleeps | Integration | Replicas stays at 1 after 30 min idle |
-| T4-04 | User signup creates namespace | Integration | K8s namespace created with ResourceQuota |
-| T4-05 | Free user can't create 2nd app | API | 403: "Free plan allows 1 app" |
-| T4-06 | Pro user can create 3 apps | API | All 3 apps created successfully |
-| T4-07 | Resource quota enforced | Integration | Pod rejected if over namespace quota |
-| T4-08 | Custom domain only on paid plan | API | 403 for free, 200 for pro |
-| T4-09 | Custom domain DNS verification | Integration | CNAME verified, cert issued |
-| T4-10 | Upgrade trigger shown at limit | E2E | Banner appears when DB at 90% |
-| T4-11 | Sleep indicator in dashboard | E2E | Shows sleeping/active status per app |
+```
+# --- SETUP ---
+API=https://api.freezenith.com/api/v1
 
-### Phase 5: Hetzner Autoscaler — Tests
+# 1. Register a new free user
+TOKEN=$(curl -s -X POST $API/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test User","email":"testuser@example.com","password":"Test1234!"}' \
+  | jq -r '.token')
+# EXPECT: token is non-empty string
 
-| # | Test Case | Type | Expected Result |
-|---|-----------|------|-----------------|
-| T5-01 | Scale up when CPU > 80% | Integration | New server created and joined cluster |
-| T5-02 | Scale down when CPU < 40% | Integration | Server drained and deleted |
-| T5-03 | Never scale below 2 servers | Integration | Scale-down rejected at minimum |
-| T5-04 | Never scale above 10 servers | Integration | Scale-up rejected at maximum |
-| T5-05 | Budget cap prevents overspend | Integration | Alert at 90% budget, block at 100% |
-| T5-06 | New node joins cluster | Integration | Node ready, pods schedulable |
-| T5-07 | Node drain before removal | Integration | Pods rescheduled, zero downtime |
+# 2. Verify free plan assigned
+curl -s -H "Authorization: Bearer $TOKEN" $API/me | jq '.plan'
+# EXPECT: "free"
 
-### Phase 6: Billing — Tests
+# 3. Check dashboard — empty state
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps | jq '.apps | length'
+# EXPECT: 0
 
-| # | Test Case | Type | Expected Result |
-|---|-----------|------|-----------------|
-| T6-01 | Stripe checkout creates subscription | Integration | User plan upgraded in DB |
-| T6-02 | Webhook: invoice.paid | Integration | Payment recorded |
-| T6-03 | Webhook: payment_failed | Integration | User notified, grace period started |
-| T6-04 | Webhook: subscription.deleted | Integration | User downgraded to free |
-| T6-05 | Downgrade: over limit handling | Integration | Warning shown, no data deleted |
-| T6-06 | Pro-rated billing on upgrade | Integration | Correct amount charged by Stripe |
-| T6-07 | Invoice history displayed | E2E | All invoices shown with status |
+# --- DEPLOY BACKEND ---
 
-### Phase 7: Open-Source — Tests
+# 4. Create backend app (Go test API)
+APP_BE=$(curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test-api","repo_url":"https://github.com/taikuri-infra/zenith-test-go","branch":"main"}' \
+  | jq -r '.id')
+# EXPECT: app ID returned, status: "pending"
 
-| # | Test Case | Type | Expected Result |
-|---|-----------|------|-----------------|
-| T7-01 | `docker compose up` works | E2E | All services healthy in < 2 min |
-| T7-02 | Default login works | E2E | admin@zenith.local / changeme → dashboard |
-| T7-03 | Deploy app in standalone mode | E2E | App builds and runs on localhost |
-| T7-04 | No billing pages in standalone | E2E | Sidebar has no billing/plans links |
-| T7-05 | Install script on fresh Ubuntu | E2E | Docker installed, Zenith running |
+# 5. Wait for build to complete (poll status)
+for i in $(seq 1 60); do
+  STATUS=$(curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_BE | jq -r '.status')
+  echo "Backend build: $STATUS"
+  [ "$STATUS" = "running" ] && break
+  sleep 5
+done
+# EXPECT: status goes pending → building → deploying → running (< 3 min)
+
+# 6. Verify backend is live
+curl -s https://test-api.freezenith.com/health
+# EXPECT: {"status":"ok"}
+
+curl -s https://test-api.freezenith.com/api/ping
+# EXPECT: {"message":"pong"} (test app endpoint)
+
+# --- DEPLOY FRONTEND ---
+
+# 7. Create frontend app (Next.js test app)
+APP_FE=$(curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test-web","repo_url":"https://github.com/taikuri-infra/zenith-test-nextjs","branch":"main"}' \
+  | jq -r '.id')
+# EXPECT: FAIL — 403 "Free plan allows 1 app"
+# (Free plan = 1 app only, backend already used the slot)
+
+# --- CREATE DATABASE ---
+
+# 8. Create PostgreSQL for backend
+DB=$(curl -s -X POST $API/apps/$APP_BE/databases \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"postgresql"}' \
+  | jq -r '.connection_string')
+# EXPECT: postgresql://user:pass@host:5432/test_api_db
+
+# 9. Verify DATABASE_URL injected into app
+curl -s https://test-api.freezenith.com/api/db-check
+# EXPECT: {"connected":true,"tables":0} (test app reads DATABASE_URL)
+
+# 10. Insert dummy data via test app
+curl -s -X POST https://test-api.freezenith.com/api/items \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Widget","price":9.99}'
+# EXPECT: {"id":1,"name":"Widget","price":9.99}
+
+curl -s https://test-api.freezenith.com/api/items
+# EXPECT: [{"id":1,"name":"Widget","price":9.99}]
+
+# --- ENABLE AUTH ---
+
+# 11. Enable built-in auth on the app
+curl -s -X POST $API/apps/$APP_BE/auth/enable \
+  -H "Authorization: Bearer $TOKEN"
+# EXPECT: {"enabled":true,"endpoint":"https://test-api.freezenith.com/auth"}
+
+# 12. Register a user in the APP's auth (not platform auth)
+curl -s -X POST https://test-api.freezenith.com/auth/signup \
+  -d '{"email":"appuser@test.com","password":"Pass1234!"}'
+# EXPECT: {"user_id":"...","jwt":"..."}
+
+# 13. Login with that user
+APP_USER_TOKEN=$(curl -s -X POST https://test-api.freezenith.com/auth/login \
+  -d '{"email":"appuser@test.com","password":"Pass1234!"}' \
+  | jq -r '.jwt')
+# EXPECT: valid JWT
+
+# 14. Access protected endpoint
+curl -s https://test-api.freezenith.com/api/items \
+  -H "Authorization: Bearer $APP_USER_TOKEN"
+# EXPECT: 200 OK with items list
+
+# --- S3 STORAGE ---
+
+# 15. Create S3 bucket
+S3_CREDS=$(curl -s -X POST $API/apps/$APP_BE/storage \
+  -H "Authorization: Bearer $TOKEN")
+# EXPECT: {"bucket":"test-api-storage","access_key":"...","secret_key":"...","endpoint":"..."}
+
+# 16. Upload a file via test app
+curl -s -X POST https://test-api.freezenith.com/api/upload \
+  -F "file=@/tmp/test.txt"
+# EXPECT: {"url":"https://s3.freezenith.com/test-api-storage/test.txt"}
+
+# 17. Download the file
+curl -s https://s3.freezenith.com/test-api-storage/test.txt
+# EXPECT: contents of test.txt
+
+# --- MONITORING ---
+
+# 18. Check app logs
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_BE/logs?lines=10
+# EXPECT: last 10 log lines from the running app
+
+# 19. Check app metrics
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_BE/metrics
+# EXPECT: {"cpu_percent":2.1,"ram_mb":64,"requests_1h":15,"status":"running"}
+
+# --- VERIFY LIMITS ---
+
+# 20. Try to create second database (should fail on free)
+curl -s -X POST $API/apps/$APP_BE/databases \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"postgresql","name":"second-db"}'
+# EXPECT: 403 "Free plan allows 1 database"
+
+# 21. Check usage dashboard
+curl -s -H "Authorization: Bearer $TOKEN" $API/usage
+# EXPECT: {"apps":{"used":1,"limit":1},"databases":{"used":1,"limit":1},"storage_mb":{"used":0.01,"limit":1024},"auth_users":{"used":1,"limit":1000}}
+
+# --- CLEANUP ---
+
+# 22. Delete app
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" $API/apps/$APP_BE
+# EXPECT: 200 — app, database, auth, storage all cleaned up
+
+# 23. Verify subdomain is gone
+curl -s https://test-api.freezenith.com
+# EXPECT: 404 or Traefik default page
+
+# 24. Verify namespace cleaned
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps | jq '.apps | length'
+# EXPECT: 0
+```
+
+**Pass criteria:** All 24 steps return expected results. Total time < 5 minutes.
+
+---
+
+#### Scenario 2: Pro User — Multi-App + Database + Custom Domain
+
+> Pro user deploys backend + frontend + second backend, connects databases, sets custom domain, pushes update via git, rolls back.
+
+```
+API=https://api.freezenith.com/api/v1
+
+# 1. Register + upgrade to Pro (or use test account with Pro plan)
+TOKEN=$(curl -s -X POST $API/auth/login \
+  -d '{"email":"pro-test@example.com","password":"ProTest1234!"}' | jq -r '.token')
+
+# 2. Verify Pro plan
+curl -s -H "Authorization: Bearer $TOKEN" $API/me | jq '.plan'
+# EXPECT: "pro"
+
+# --- DEPLOY 3 APPS ---
+
+# 3. Deploy Go backend
+APP1=$(curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"myapi","repo_url":"https://github.com/taikuri-infra/zenith-test-go","branch":"main"}' \
+  | jq -r '.id')
+# EXPECT: created
+
+# 4. Deploy Next.js frontend
+APP2=$(curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"myweb","repo_url":"https://github.com/taikuri-infra/zenith-test-nextjs","branch":"main"}' \
+  | jq -r '.id')
+# EXPECT: created
+
+# 5. Deploy Python worker
+APP3=$(curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"myworker","repo_url":"https://github.com/taikuri-infra/zenith-test-python","branch":"main"}' \
+  | jq -r '.id')
+# EXPECT: created
+
+# 6. Wait for all 3 to be running
+# (poll each app's status until "running")
+# EXPECT: all 3 running within 5 minutes
+
+# 7. Verify all subdomains
+curl -s https://myapi.freezenith.com/health     # EXPECT: 200
+curl -s https://myweb.freezenith.com             # EXPECT: 200 HTML
+curl -s https://myworker.freezenith.com/health   # EXPECT: 200
+
+# 8. Try to create 4th app (over limit)
+curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"toomany","repo_url":"https://github.com/user/repo","branch":"main"}'
+# EXPECT: 403 "Pro plan allows 5 apps" (we have 3, should work actually)
+# Create 4th and 5th → succeed. 6th → 403.
+
+# --- DATABASES ---
+
+# 9. Create DB for backend
+curl -s -X POST $API/apps/$APP1/databases \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"type":"postgresql"}'
+# EXPECT: connection string returned
+
+# 10. Create DB for frontend (shared queries)
+curl -s -X POST $API/apps/$APP2/databases \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"type":"postgresql"}'
+# EXPECT: second DB created (Pro allows 3)
+
+# 11. Create 3rd DB
+curl -s -X POST $API/apps/$APP3/databases \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"type":"postgresql"}'
+# EXPECT: 200 (3rd of 3 allowed)
+
+# 12. Create 4th DB (over limit)
+curl -s -X POST $API/apps/$APP1/databases \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"type":"postgresql","name":"extra"}'
+# EXPECT: 403 "Pro plan allows 3 databases"
+
+# --- CUSTOM DOMAIN ---
+
+# 13. Add custom domain to frontend
+curl -s -X POST $API/apps/$APP2/domains \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"domain":"app.testcustomer.com"}'
+# EXPECT: {"status":"pending_verification","cname_target":"myweb.freezenith.com"}
+
+# 14. After DNS CNAME is set → verify
+curl -s -X POST $API/apps/$APP2/domains/verify \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"domain":"app.testcustomer.com"}'
+# EXPECT: {"status":"active","ssl":"provisioning"}
+
+# 15. Wait for SSL, then verify custom domain
+curl -s https://app.testcustomer.com
+# EXPECT: 200, same content as myweb.freezenith.com
+
+# --- GIT PUSH REDEPLOY ---
+
+# 16. Push a change to the test repo (simulate via API or actual git push)
+# GitHub webhook fires → new build triggered
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP1 | jq '.deployments | length'
+# EXPECT: 2 (original + new deploy)
+
+# 17. Verify new version is live
+curl -s https://myapi.freezenith.com/api/version
+# EXPECT: {"version":"v2"} (updated in the push)
+
+# --- ROLLBACK ---
+
+# 18. Rollback backend to previous version
+curl -s -X POST $API/apps/$APP1/rollback \
+  -H "Authorization: Bearer $TOKEN"
+# EXPECT: 200, deploying previous image
+
+# 19. Verify rollback
+curl -s https://myapi.freezenith.com/api/version
+# EXPECT: {"version":"v1"} (back to original)
+
+# --- ENV VARS ---
+
+# 20. Set environment variable
+curl -s -X PUT $API/apps/$APP1/env \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"STRIPE_KEY":"sk_test_xxx","APP_ENV":"production"}'
+# EXPECT: 200, app restarting
+
+# 21. Verify env var is injected
+curl -s https://myapi.freezenith.com/api/env-check
+# EXPECT: {"APP_ENV":"production"} (STRIPE_KEY should NOT be exposed)
+
+# --- WEBHOOKS ---
+
+# 22. Create webhook
+curl -s -X POST $API/webhooks \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"url":"https://hooks.slack.com/test","events":["deploy.success","deploy.failed"]}'
+# EXPECT: 201
+
+# --- MFA ---
+
+# 23. Enable MFA
+curl -s -X POST $API/auth/mfa/enable \
+  -H "Authorization: Bearer $TOKEN"
+# EXPECT: {"secret":"JBSWY3DPEHPK3PXP","qr_url":"otpauth://..."}
+
+# --- CLEANUP ---
+
+# 24. Delete all apps
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" $API/apps/$APP1
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" $API/apps/$APP2
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" $API/apps/$APP3
+# EXPECT: all deleted, subdomains gone, DBs dropped
+```
+
+**Pass criteria:** All 24 steps pass. Pro limits enforced correctly. Custom domain works. Rollback works.
+
+---
+
+#### Scenario 3: Team User — SSO + Audit + Preview Deploys + Team Members
+
+> Team plan user sets up SSO, invites team members, uses preview deployments, checks audit log.
+
+```
+API=https://api.freezenith.com/api/v1
+
+# 1. Login as Team user
+TOKEN=$(curl -s -X POST $API/auth/login \
+  -d '{"email":"team-test@example.com","password":"TeamTest1234!"}' | jq -r '.token')
+
+# --- SSO SETUP ---
+
+# 2. Configure SSO (SAML)
+curl -s -X POST $API/settings/sso \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"provider":"saml","entity_id":"https://idp.testcorp.com","sso_url":"https://idp.testcorp.com/sso","certificate":"-----BEGIN CERTIFICATE-----\nMIIC..."}'
+# EXPECT: {"status":"configured","login_url":"https://freezenith.com/sso/testcorp"}
+
+# 3. Test SSO login (simulate)
+curl -s -X POST $API/auth/sso/callback \
+  -d '{"saml_response":"<base64...>"}'
+# EXPECT: JWT returned, user auto-provisioned in team
+
+# --- TEAM MEMBERS ---
+
+# 4. Invite team member
+curl -s -X POST $API/team/invite \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"email":"dev@testcorp.com","role":"developer"}'
+# EXPECT: {"status":"invited","role":"developer"}
+
+# 5. Invite another (viewer)
+curl -s -X POST $API/team/invite \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"email":"pm@testcorp.com","role":"viewer"}'
+# EXPECT: invited
+
+# 6. List team members
+curl -s -H "Authorization: Bearer $TOKEN" $API/team | jq '.members | length'
+# EXPECT: 3 (owner + 2 invited)
+
+# 7. Verify role-based access — developer can deploy
+DEV_TOKEN=$(curl -s -X POST $API/auth/login \
+  -d '{"email":"dev@testcorp.com","password":"Dev1234!"}' | jq -r '.token')
+curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $DEV_TOKEN" \
+  -d '{"name":"dev-app","repo_url":"https://github.com/taikuri-infra/zenith-test-go","branch":"main"}'
+# EXPECT: 201 created
+
+# 8. Verify role-based access — viewer CANNOT deploy
+VIEWER_TOKEN=$(curl -s -X POST $API/auth/login \
+  -d '{"email":"pm@testcorp.com","password":"Pm1234!"}' | jq -r '.token')
+curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $VIEWER_TOKEN" \
+  -d '{"name":"viewer-app","repo_url":"https://github.com/user/repo","branch":"main"}'
+# EXPECT: 403 "Viewer role cannot create apps"
+
+# 9. Viewer CAN read apps
+curl -s -H "Authorization: Bearer $VIEWER_TOKEN" $API/apps | jq '.apps | length'
+# EXPECT: number >= 1
+
+# --- PREVIEW DEPLOYMENTS ---
+
+# 10. Open a PR on the repo (simulate webhook)
+# GitHub sends pull_request event → Zenith creates preview deployment
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID/previews | jq '.[0]'
+# EXPECT: {"pr":42,"url":"https://dev-app-pr-42.freezenith.com","status":"running"}
+
+# 11. Verify preview URL works
+curl -s https://dev-app-pr-42.freezenith.com/health
+# EXPECT: 200
+
+# 12. Merge PR → preview auto-deleted
+# (simulate webhook: pull_request closed+merged)
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID/previews | jq 'length'
+# EXPECT: 0
+
+# --- SESSION MANAGEMENT ---
+
+# 13. List active sessions
+curl -s -H "Authorization: Bearer $TOKEN" $API/auth/sessions
+# EXPECT: [{"id":"...","ip":"1.2.3.4","device":"Chrome/Mac","created_at":"...","current":true}, ...]
+
+# 14. Revoke a session (force logout another device)
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" $API/auth/sessions/SESSION_ID
+# EXPECT: 200, that session's token is now invalid
+
+# --- DPA ---
+
+# 15. Download DPA document
+curl -s -H "Authorization: Bearer $TOKEN" $API/settings/dpa --output dpa.pdf
+# EXPECT: PDF file, valid DPA document
+
+# 16. Sign DPA
+curl -s -X POST $API/settings/dpa/sign \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"signer_name":"CTO Test","signer_email":"cto@testcorp.com"}'
+# EXPECT: {"status":"signed","signed_at":"2026-02-21T..."}
+
+# --- AUDIT LOG ---
+
+# 17. Check audit log (all actions we did should be logged)
+AUDIT=$(curl -s -H "Authorization: Bearer $TOKEN" "$API/audit?limit=20")
+echo $AUDIT | jq '.[0]'
+# EXPECT: {"action":"dpa.signed","actor":"team-test@example.com","timestamp":"...","details":{...}}
+
+# 18. Verify our previous actions appear in audit
+echo $AUDIT | jq '[.[] | .action]'
+# EXPECT: includes "sso.configured", "team.member_invited", "app.created",
+#         "session.revoked", "dpa.signed" — all actions logged
+
+# 19. Export audit log (CSV)
+curl -s -H "Authorization: Bearer $TOKEN" "$API/audit/export?format=csv" --output audit.csv
+# EXPECT: CSV file with all audit entries
+
+# --- AUTO-SCALING ---
+
+# 20. Check auto-scaling config
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID/scaling
+# EXPECT: {"min_replicas":1,"max_replicas":5,"cpu_threshold":80}
+
+# 21. Update scaling
+curl -s -X PUT $API/apps/$APP_ID/scaling \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"min_replicas":2,"max_replicas":10}'
+# EXPECT: 200
+
+# --- SLA VERIFICATION ---
+
+# 22. Check SLA status
+curl -s -H "Authorization: Bearer $TOKEN" $API/settings/sla
+# EXPECT: {"sla":"99.5%","current_uptime":"99.98%","incidents_this_month":0}
+
+# --- TEAM LIMIT ---
+
+# 23. Invite members up to 10 (Team limit)
+# ... invite 7 more ...
+# 11th invite:
+curl -s -X POST $API/team/invite \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"email":"toomany@testcorp.com","role":"developer"}'
+# EXPECT: 403 "Team plan allows 10 members"
+```
+
+**Pass criteria:** SSO works, RBAC enforced, preview deploys create/destroy, audit log captures everything, DPA downloadable, session management works.
+
+---
+
+#### Scenario 4: Free → Pro Upgrade Journey
+
+> Free user hits limits, sees upgrade prompts, upgrades via Stripe, limits expand immediately.
+
+```
+API=https://api.freezenith.com/api/v1
+
+# 1. Login as free user (already has 1 app deployed from Scenario 1)
+TOKEN=$(curl -s -X POST $API/auth/login \
+  -d '{"email":"testuser@example.com","password":"Test1234!"}' | jq -r '.token')
+
+# --- HIT LIMITS ---
+
+# 2. Try second app → blocked
+curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"second","repo_url":"https://github.com/user/repo","branch":"main"}'
+# EXPECT: 403 {"error":"Free plan allows 1 app","upgrade_url":"/billing/upgrade"}
+
+# 3. Try custom domain → blocked
+curl -s -X POST $API/apps/$APP_ID/domains \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"domain":"myapp.com"}'
+# EXPECT: 403 {"error":"Custom domains require Pro plan","upgrade_url":"/billing/upgrade"}
+
+# 4. Check usage → at ceiling
+curl -s -H "Authorization: Bearer $TOKEN" $API/usage
+# EXPECT: {"apps":{"used":1,"limit":1,"percent":100},...}
+
+# --- STRIPE CHECKOUT ---
+
+# 5. Start upgrade flow
+CHECKOUT=$(curl -s -X POST $API/billing/checkout \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"plan":"pro"}')
+echo $CHECKOUT | jq '.checkout_url'
+# EXPECT: "https://checkout.stripe.com/c/pay/cs_test_..."
+
+# 6. Complete Stripe checkout (test mode card 4242...)
+# Stripe webhook fires: checkout.session.completed
+
+# 7. Verify plan upgraded
+curl -s -H "Authorization: Bearer $TOKEN" $API/me | jq '.plan'
+# EXPECT: "pro"
+
+# --- LIMITS EXPANDED ---
+
+# 8. Create second app → NOW works
+curl -s -X POST $API/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"second","repo_url":"https://github.com/user/repo","branch":"main"}'
+# EXPECT: 201 created
+
+# 9. Custom domain → NOW works
+curl -s -X POST $API/apps/$APP_ID/domains \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"domain":"myapp.com"}'
+# EXPECT: 200 {"status":"pending_verification"}
+
+# 10. Check new limits
+curl -s -H "Authorization: Bearer $TOKEN" $API/usage
+# EXPECT: {"apps":{"used":2,"limit":5},"databases":{"used":1,"limit":3},...}
+
+# 11. Verify app is NO LONGER sleeping (always-on)
+sleep 1200  # wait 20 min (longer than 15 min sleep threshold)
+curl -s https://test-api.freezenith.com/health
+# EXPECT: 200 instantly (no cold start, no wake-up delay)
+
+# --- BILLING ---
+
+# 12. Check billing page
+curl -s -H "Authorization: Bearer $TOKEN" $API/billing
+# EXPECT: {"plan":"pro","price":"€29.00","next_billing":"2026-03-21","payment_method":"visa-4242"}
+
+# 13. Check invoices
+curl -s -H "Authorization: Bearer $TOKEN" $API/billing/invoices
+# EXPECT: [{"id":"inv_...","amount":"€29.00","status":"paid","date":"2026-02-21"}]
+```
+
+**Pass criteria:** Limits block correctly, Stripe checkout works, plan upgrades instantly, limits expand, sleep mode disabled for Pro.
+
+---
+
+#### Scenario 5: Sleep Mode (Free Tier KEDA)
+
+> Verify free apps sleep after 15 min and wake on request.
+
+```
+API=https://api.freezenith.com/api/v1
+
+# 1. Deploy app on free plan (from Scenario 1)
+# App is running at test-api.freezenith.com
+
+# 2. Verify app is running
+curl -s -o /dev/null -w "%{http_code}" https://test-api.freezenith.com/health
+# EXPECT: 200
+
+# 3. Check replicas
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID | jq '.replicas'
+# EXPECT: 1
+
+# 4. Wait 16 minutes (past 15 min idle threshold)
+sleep 960
+
+# 5. Check replicas — should be 0
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID | jq '.replicas'
+# EXPECT: 0
+
+# 6. Check status in dashboard
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID | jq '.status'
+# EXPECT: "sleeping"
+
+# 7. Send request to sleeping app — measure wake time
+START=$(date +%s%N)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://test-api.freezenith.com/health)
+END=$(date +%s%N)
+WAKE_MS=$(( ($END - $START) / 1000000 ))
+echo "Wake time: ${WAKE_MS}ms, HTTP: $HTTP_CODE"
+# EXPECT: HTTP 200, wake time < 5000ms
+
+# 8. First request might get loading page
+curl -s -D - https://test-api.freezenith.com/health | head -5
+# EXPECT: either 200 (fast wake) or 503 with Retry-After + Zenith loading page
+
+# 9. Second request — app is warm now
+curl -s https://test-api.freezenith.com/health
+# EXPECT: 200 {"status":"ok"} (instant, no delay)
+
+# 10. Check replicas — back to 1
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID | jq '.replicas'
+# EXPECT: 1
+
+# 11. Check status
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID | jq '.status'
+# EXPECT: "running"
+
+# 12. Verify DB data survived sleep (data persists)
+curl -s https://test-api.freezenith.com/api/items
+# EXPECT: [{"id":1,"name":"Widget","price":9.99}] (same data from Scenario 1)
+```
+
+**Pass criteria:** App sleeps after 15 min, wakes in <5 sec, data persists, loading page shown during wake.
+
+---
+
+#### Scenario 6: Admin Platform Management
+
+> Admin verifies the full admin panel: users, apps, usage, infrastructure.
+
+```
+API=https://api.freezenith.com/api/v1
+
+# 1. Login as admin
+TOKEN=$(curl -s -X POST $API/auth/login \
+  -d '{"email":"admin@freezenith.com","password":"AdminPass!"}' | jq -r '.token')
+
+# --- DASHBOARD ---
+
+# 2. Platform overview
+curl -s -H "Authorization: Bearer $TOKEN" $API/admin/dashboard
+# EXPECT: {"total_users":150,"active_apps":87,"total_revenue":"€2,340","server_count":3,"cpu_percent":62,"ram_percent":58}
+
+# --- USER MANAGEMENT ---
+
+# 3. List users
+curl -s -H "Authorization: Bearer $TOKEN" "$API/admin/users?page=1&limit=20" | jq '.total'
+# EXPECT: number of registered users
+
+# 4. View specific user
+curl -s -H "Authorization: Bearer $TOKEN" $API/admin/users/USER_ID
+# EXPECT: {"email":"...","plan":"free","apps":1,"databases":1,"storage_mb":12,"created_at":"..."}
+
+# 5. View user's apps
+curl -s -H "Authorization: Bearer $TOKEN" $API/admin/users/USER_ID/apps
+# EXPECT: list of user's apps with status, URL, resource usage
+
+# 6. Suspend a user
+curl -s -X POST -H "Authorization: Bearer $TOKEN" $API/admin/users/USER_ID/suspend
+# EXPECT: 200, user's apps stopped, login blocked
+
+# 7. Verify suspended user can't login
+curl -s -X POST $API/auth/login \
+  -d '{"email":"testuser@example.com","password":"Test1234!"}'
+# EXPECT: 403 "Account suspended"
+
+# 8. Verify suspended user's app is down
+curl -s -o /dev/null -w "%{http_code}" https://test-api.freezenith.com/health
+# EXPECT: 503
+
+# 9. Reactivate user
+curl -s -X POST -H "Authorization: Bearer $TOKEN" $API/admin/users/USER_ID/activate
+# EXPECT: 200, apps restart, login allowed
+
+# --- INFRASTRUCTURE ---
+
+# 10. Server status
+curl -s -H "Authorization: Bearer $TOKEN" $API/admin/infrastructure
+# EXPECT: {"servers":[{"id":"srv1","cpu_percent":65,"ram_percent":58,"pods":42,"status":"ready"},...],"autoscaler":{"enabled":true,"min":2,"max":10,"current":3}}
+
+# 11. Platform resource usage
+curl -s -H "Authorization: Bearer $TOKEN" $API/admin/dashboard/usage
+# EXPECT: {"total_cpu_cores":12.5,"total_ram_gb":45.2,"total_storage_gb":120,"customers_reporting":87}
+
+# --- BILLING OVERVIEW ---
+
+# 12. MRR and revenue
+curl -s -H "Authorization: Bearer $TOKEN" $API/admin/billing
+# EXPECT: {"mrr":"€2,340","active_subscriptions":80,"free_users":120,"pro_users":65,"team_users":12,"enterprise_users":3,"churn_rate":2.1}
+
+# 13. Failed payments
+curl -s -H "Authorization: Bearer $TOKEN" $API/admin/billing/failed
+# EXPECT: [{"user":"...","amount":"€29","failed_at":"...","retry_count":2}]
+
+# --- OVERRIDE ---
+
+# 14. Override user plan limits
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" $API/admin/users/USER_ID/limits \
+  -d '{"max_apps":10,"max_databases":5,"note":"Special deal for early adopter"}'
+# EXPECT: 200
+
+# 15. Verify override in audit log
+curl -s -H "Authorization: Bearer $TOKEN" "$API/admin/audit?limit=1" | jq '.[0]'
+# EXPECT: {"action":"admin.limits_override","actor":"admin@freezenith.com","target":"USER_ID",...}
+```
+
+**Pass criteria:** Admin sees all users/apps/infra, can suspend/activate, billing overview correct, audit trail complete.
+
+---
+
+#### Scenario 7: Git Push → Auto-Redeploy + Build Failure
+
+> Verify the full CI/CD pipeline: push → build → deploy, and graceful failure handling.
+
+```
+API=https://api.freezenith.com/api/v1
+
+# 1. App is running (test-api.freezenith.com)
+curl -s https://test-api.freezenith.com/api/version
+# EXPECT: {"version":"v1"}
+
+# --- SUCCESSFUL REDEPLOY ---
+
+# 2. Push a code change to GitHub (git push with version bump)
+# GitHub webhook POST arrives at API
+
+# 3. Check build started
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID | jq '.status'
+# EXPECT: "building"
+
+# 4. Stream build logs
+curl -s -N -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID/logs/build
+# EXPECT: streaming output:
+#   Cloning repository...
+#   Detected framework: go
+#   Building image...
+#   Step 1/8: FROM golang:1.22-alpine
+#   ...
+#   Successfully built a1b2c3d4
+#   Deploying...
+#   Deployment complete.
+
+# 5. App transitions: building → deploying → running
+# (poll or wait for SSE event)
+
+# 6. Verify new version live (zero-downtime rolling update)
+curl -s https://test-api.freezenith.com/api/version
+# EXPECT: {"version":"v2"}
+
+# 7. Check deployment history
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID/deployments
+# EXPECT: [
+#   {"id":"dep2","image_tag":"abc1234","status":"active","created_at":"..."},
+#   {"id":"dep1","image_tag":"def5678","status":"superseded","created_at":"..."}
+# ]
+
+# --- FAILED BUILD ---
+
+# 8. Push broken code (syntax error in main.go)
+# GitHub webhook fires
+
+# 9. Build fails
+curl -s -H "Authorization: Bearer $TOKEN" $API/apps/$APP_ID | jq '.status'
+# EXPECT: "running" (NOT "failed" — old version keeps running)
+
+# 10. Check build log shows error
+curl -s -H "Authorization: Bearer $TOKEN" "$API/apps/$APP_ID/deployments?limit=1" | jq '.[0]'
+# EXPECT: {"status":"failed","error":"build failed: syntax error at main.go:15","image_tag":null}
+
+# 11. App still serves old version
+curl -s https://test-api.freezenith.com/api/version
+# EXPECT: {"version":"v2"} (still the last successful build)
+
+# 12. Dashboard shows failed deploy notification
+curl -s -H "Authorization: Bearer $TOKEN" $API/notifications
+# EXPECT: [{"type":"deploy_failed","app":"myapi","message":"Build failed: syntax error","timestamp":"..."}]
+
+# --- WEBHOOK NOTIFICATION ---
+
+# 13. If webhook configured, verify it was called
+# (check webhook delivery log)
+curl -s -H "Authorization: Bearer $TOKEN" $API/webhooks/deliveries
+# EXPECT: [{"event":"deploy.failed","url":"https://hooks.slack.com/test","status":200,"timestamp":"..."}]
+```
+
+**Pass criteria:** Successful push redeploys with zero downtime. Failed build keeps old version. Build logs available. Notifications sent.
+
+---
+
+#### Scenario 8: Self-Hosted Open-Source (docker-compose)
+
+> Verify the open-source version works completely offline on a fresh machine.
+
+```
+# 1. Clone repo
+git clone https://github.com/taikuri-infra/Zenith
+cd Zenith
+
+# 2. Start platform
+docker compose up -d
+# EXPECT: 4 containers start (api, dashboard, postgres, traefik)
+
+# 3. Wait for healthy
+docker compose ps
+# EXPECT: all 4 "healthy" within 2 min
+
+# 4. Open dashboard
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3100
+# EXPECT: 200
+
+# 5. Login with defaults
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -d '{"email":"admin@zenith.local","password":"changeme"}' | jq -r '.token')
+# EXPECT: valid token
+
+# 6. First-run: prompted to change password
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/me | jq '.must_change_password'
+# EXPECT: true
+
+# 7. Change password
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/auth/password \
+  -d '{"old_password":"changeme","new_password":"MyNewPass1234!"}'
+# EXPECT: 200
+
+# 8. Deploy an app (same flow as SaaS but local)
+APP=$(curl -s -X POST http://localhost:8080/api/v1/apps \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"myapp","repo_url":"https://github.com/taikuri-infra/zenith-test-go","branch":"main"}' \
+  | jq -r '.id')
+# EXPECT: app created
+
+# 9. Wait for running
+# (poll status)
+
+# 10. Access app on local port
+curl -s http://localhost:3200/health  # or whatever port is assigned
+# EXPECT: 200
+
+# 11. Create database
+curl -s -X POST http://localhost:8080/api/v1/apps/$APP/databases \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"type":"postgresql"}'
+# EXPECT: connection string with localhost:5432
+
+# 12. Verify no billing pages
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/billing
+# EXPECT: 404 (billing route doesn't exist in standalone mode)
+
+# 13. Verify no sleep mode (always-on in standalone)
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/apps/$APP | jq '.sleep_mode'
+# EXPECT: null or false
+
+# 14. Verify no multi-user (no invite endpoint)
+curl -s -X POST http://localhost:8080/api/v1/team/invite \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"email":"other@test.com"}'
+# EXPECT: 404 (team endpoint not registered in standalone mode)
+
+# 15. Shutdown cleanly
+docker compose down
+# EXPECT: all containers stopped, data persisted in volume
+
+# 16. Restart — data survives
+docker compose up -d
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -d '{"email":"admin@zenith.local","password":"MyNewPass1234!"}' | jq -r '.token')
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/apps | jq '.apps | length'
+# EXPECT: 1 (app still exists)
+```
+
+**Pass criteria:** docker-compose up works, deploy app locally, no billing/sleep/multi-user, data persists across restart.
+
+---
+
+### Summary: 8 E2E Scenarios, 134 Verification Points
+
+| # | Scenario | Steps | Covers |
+|---|----------|-------|--------|
+| 1 | Free User — Full Stack | 24 | signup, deploy, DB, auth, S3, monitoring, limits |
+| 2 | Pro User — Multi-App | 24 | 3 apps, 3 DBs, custom domain, rollback, env vars, MFA, webhooks |
+| 3 | Team User — SSO + Audit | 23 | SSO, RBAC, preview deploys, sessions, DPA, audit log, auto-scaling |
+| 4 | Free → Pro Upgrade | 13 | limit blocks, Stripe checkout, plan upgrade, limits expand |
+| 5 | Sleep Mode (KEDA) | 12 | sleep after 15 min, wake <5 sec, data persists |
+| 6 | Admin Management | 15 | users, suspend/activate, infra, billing overview, audit |
+| 7 | Git Push + Build Fail | 13 | CI/CD pipeline, zero-downtime, failed build handling |
+| 8 | Self-Hosted (docker-compose) | 16 | offline setup, no billing, no sleep, data persistence |
+| **Total** | | **140** | |
+
+### Phase-level Unit & Integration Tests (kept for reference)
+
+| Phase | Tests | Type |
+|-------|-------|------|
+| Phase 2: App Deploy | T2-01 to T2-17 (17 tests) | Framework detection, webhook validation, build pipeline |
+| Phase 3: Services | T3-01 to T3-13 (13 tests) | DB CRUD, auth flow, S3 limits |
+| Phase 4: KEDA | T4-01 to T4-11 (11 tests) | Scale-to-zero, ResourceQuota, plan enforcement |
+| Phase 5: Autoscaler | T5-01 to T5-07 (7 tests) | Scale up/down, budget cap, node join/leave |
+| Phase 6: Billing | T6-01 to T6-07 (7 tests) | Stripe webhooks, subscription lifecycle |
+| Phase 7: Open-Source | T7-01 to T7-05 (5 tests) | docker-compose, standalone mode |
+| **Total** | **60 unit/integration tests** | |
+
+**Grand total: 140 E2E + 60 unit/integration = 200 test points**
 
 ---
 
@@ -1098,3 +1981,173 @@ Phase 8 makes it **known** (marketing push).
 - API: add app/build/deploy handlers, GitHub webhook, K8s client
 - Infrastructure: KEDA, Hetzner autoscaler, in-cluster build pipeline
 - New: docker-compose.yml, README, install script, docs
+
+---
+
+## Deliverables — What You Get When This Plan Is Complete
+
+### For Your Customers (SaaS — freezenith.com)
+
+**A fully working cloud platform where developers:**
+
+1. **Sign up** at freezenith.com → get a dashboard instantly
+2. **Connect GitHub** → paste repo URL, pick branch
+3. **Deploy in 3 minutes** → Zenith detects framework (Go/Next.js/Python/Rails/Django), builds, deploys
+4. **Get a live URL** → `myapp.freezenith.com` with SSL, instantly shareable
+5. **One-click database** → PostgreSQL provisioned, connection string injected as env var
+6. **One-click auth** → built-in sign up/login for their app's users, SDK snippet ready
+7. **S3 storage** → file upload/download, access keys provided
+8. **Container registry** → images stored, pull commands shown
+9. **Monitoring** → CPU, RAM, request count, logs — all in dashboard
+10. **Team collaboration** → invite members, assign roles (owner/admin/dev/viewer)
+11. **Git push = redeploy** → push to main, webhook fires, new version live in 3 min, zero downtime
+12. **Rollback** → one click to go back to previous version if something breaks
+13. **Custom domain** (Pro+) → CNAME their domain, SSL auto-provisioned
+14. **Free tier sleeps** → apps scale to zero after 15 min, wake in <5 sec on request
+15. **Upgrade via Stripe** → self-service, limits expand instantly
+16. **SSO** (Team+) → SAML/OIDC, connect to Azure AD/Okta/Google Workspace
+17. **Audit log** (Team+) → every action logged, exportable CSV
+18. **Preview deploys** (Team+) → every PR gets a temporary URL
+
+### For You (Business Owner)
+
+1. **Admin dashboard** → total users, MRR, active apps, server utilization
+2. **User management** → view any user's apps/DBs/usage, suspend/activate, override limits
+3. **Billing overview** → MRR, active subscriptions, failed payments, churn rate, revenue per plan
+4. **Infrastructure view** → server count, CPU/RAM per server, autoscaler status, cost vs budget
+5. **Audit trail** → everything every user and admin does, logged and exportable
+6. **Auto-scaling** → servers scale 2→10 based on demand, budget cap at €450/month
+7. **Stripe integration** → subscriptions auto-renew, failed payments handled with grace period
+8. **4 revenue streams** → Free (funnel) / Pro €29 (individuals) / Team €199 (startups) / Enterprise (custom)
+9. **B2B ready** → white-label, dedicated infra, compliance dashboard, SLA, DPA
+
+### For Open-Source Community
+
+1. **`docker compose up`** → full platform running locally in <2 minutes
+2. **README** with screenshots, quick start, architecture diagram
+3. **AGPLv3 license** (same as GitLab)
+4. **One-liner install** → `curl -fsSL https://get.freezenith.com | bash`
+5. **GitHub repo** → clean, badges, issues templates, CI, contributing guide
+6. **Standalone mode** → single user, no billing, no sleep, no multi-tenant — just works
+
+### Numbers
+
+| Metric | Value |
+|--------|-------|
+| Total features | 47 across 6 categories |
+| Plan tiers | 4 (Free / Pro / Team / Enterprise) |
+| API endpoints | ~60 (auth, apps, databases, storage, billing, admin, webhooks) |
+| Dashboard pages | ~25 (deploy, apps, databases, auth, storage, monitoring, billing, settings, admin) |
+| Supported frameworks | 6 (Next.js, Go, Python, Django, Rails, static + any Dockerfile) |
+| E2E test scenarios | 8 scenarios, 140 verification points |
+| Unit/integration tests | 60 test cases |
+| Total test coverage | 200 test points |
+
+---
+
+## Verification Process — How I Ensure Zero Bugs
+
+### Per-Phase Verification
+
+Every phase follows this process before moving to the next:
+
+```
+1. WRITE CODE
+   → Go handlers, tests, models, migrations
+   → Next.js pages, components, API client
+
+2. UNIT TESTS (Go)
+   → go test ./... — MUST pass 100%
+   → Test every handler with memory repository
+   → Test edge cases: invalid input, missing auth, over limit, duplicate
+
+3. BUILD CHECK
+   → go build ./... — compiles with zero errors
+   → npm run build — Next.js builds with zero errors
+   → Docker build — images build successfully
+
+4. DEPLOY TO SERVER
+   → ssh ghasi "cd /opt/zenith && bash scripts/deploy.sh"
+   → All pods running, no CrashLoopBackoff
+   → Health endpoints respond 200
+
+5. E2E VERIFICATION (curl scripts)
+   → Run the relevant scenario(s) against live API
+   → Every EXPECT line must match actual response
+   → If any step fails → fix → redeploy → re-verify from step 1
+
+6. CROSS-SCENARIO CHECK
+   → After Phase 2: Scenario 1 (full stack) + Scenario 7 (git push) must pass
+   → After Phase 3: Scenario 1 + 2 (multi-app + DB) must pass
+   → After Phase 4: Scenario 4 (upgrade) + 5 (sleep) must pass
+   → After Phase 6: Scenario 4 (Stripe) must pass
+   → After Phase 7: Scenario 8 (docker-compose) must pass
+   → After Phase 8: ALL 8 scenarios must pass
+```
+
+### Phase → Scenario Mapping
+
+| Phase | After completion, these scenarios MUST pass |
+|-------|---------------------------------------------|
+| Phase 2: App Deploy | Scenario 1 (steps 1-6, deploy only), Scenario 7 |
+| Phase 3: Services | Scenario 1 (full), Scenario 2 (steps 1-12) |
+| Phase 4: KEDA + Plans | Scenario 1 (full), Scenario 4, Scenario 5 |
+| Phase 5: Autoscaler | Scenario 6 (infra section) |
+| Phase 6: Billing | Scenario 2 (full), Scenario 3 (full), Scenario 4 (full), Scenario 6 (full) |
+| Phase 7: Open-Source | Scenario 8 |
+| Phase 8: Launch | ALL 8 scenarios — full regression |
+
+### Bug Prevention Rules
+
+1. **No code without tests.** Every handler gets a `_test.go` file. No exceptions.
+2. **No deploy without green tests.** `go test ./...` must pass before `deploy.sh` runs.
+3. **No phase transition without E2E.** The curl scenarios run against live API before marking a phase complete.
+4. **Regression testing.** After each phase, ALL previous scenarios re-run. Nothing breaks.
+5. **Error responses are tested too.** Not just happy path — test 403s, 404s, 400s, rate limits.
+6. **Build failures are safe.** Failed builds never take down running apps (tested in Scenario 7).
+7. **Data persistence verified.** After every deploy, check existing data survived (no migration breaks).
+8. **Demo mode stays working.** After every change, demo-ms.freezenith.com still works with mock data.
+
+### Automated Test Script (built during Phase 2)
+
+```bash
+#!/bin/bash
+# scripts/e2e-test-full.sh — runs ALL scenarios against live API
+
+API=https://api.freezenith.com/api/v1
+PASS=0
+FAIL=0
+
+run_test() {
+  local name=$1
+  local expected=$2
+  local actual=$3
+  if [ "$expected" = "$actual" ]; then
+    echo "  ✅ $name"
+    PASS=$((PASS + 1))
+  else
+    echo "  ❌ $name — expected: $expected, got: $actual"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+echo "=== Scenario 1: Free User Full Stack ==="
+# ... all 24 steps ...
+
+echo "=== Scenario 2: Pro User Multi-App ==="
+# ... all 24 steps ...
+
+# ... scenarios 3-8 ...
+
+echo ""
+echo "========================="
+echo "  PASS: $PASS"
+echo "  FAIL: $FAIL"
+echo "  TOTAL: $((PASS + FAIL))"
+echo "========================="
+
+[ $FAIL -eq 0 ] && echo "🟢 ALL TESTS PASSED" || echo "🔴 SOME TESTS FAILED"
+exit $FAIL
+```
+
+This script runs after every deploy. 140 checks. If anything fails, we know exactly what broke and where.
