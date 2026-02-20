@@ -41,6 +41,7 @@ func main() {
 	var userRepo store.UserRepository
 	var adminRepo store.AdminRepository
 	var customerRepo store.CustomerRepository
+	var meteringRepo store.MeteringRepository
 
 	if cfg.DatabaseURL != "" {
 		log.Println("Connecting to PostgreSQL...")
@@ -59,11 +60,13 @@ func main() {
 		userRepo = store.NewPostgresUserRepository(pool)
 		adminRepo = store.NewPostgresAdminRepository(pool)
 		customerRepo = store.NewPostgresCustomerRepository(pool)
+		meteringRepo = store.NewPostgresMeteringRepository(pool)
 	} else {
 		log.Println("No DATABASE_URL set — using in-memory stores")
 		userRepo = store.NewMemoryUserRepository()
 		adminRepo = store.NewMemoryAdminRepository()
 		customerRepo = store.NewMemoryCustomerRepository()
+		meteringRepo = store.NewMemoryMeteringRepository()
 	}
 
 	// Seed admin user
@@ -93,7 +96,7 @@ func main() {
 	}))
 	app.Use(middleware.RequestContext())
 
-	provisioner := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, pool)
+	provisioner := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, pool)
 
 	// Start cluster sync if provisioner is available
 	if provisioner != nil {
@@ -128,7 +131,7 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserRepository, adminRepo store.AdminRepository, customerRepo store.CustomerRepository, pool *pgxpool.Pool) *cluster.Provisioner {
+func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserRepository, adminRepo store.AdminRepository, customerRepo store.CustomerRepository, meteringRepo store.MeteringRepository, pool *pgxpool.Pool) *cluster.Provisioner {
 	app.Get("/health", handlers.HealthCheck(Version, BuildTime, GitCommit))
 	app.Get("/ready", handlers.ReadinessCheck(pool))
 
@@ -148,6 +151,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	storageHandler := handlers.NewStorageHandler(k8sClient)
 	adminHandler := handlers.NewAdminHandler(k8sClient, capiClient, adminRepo)
 	customerHandler := handlers.NewCustomerHandler(customerRepo, adminRepo, provisioner)
+	meteringHandler := handlers.NewMeteringHandler(meteringRepo, customerRepo)
 	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
 
 	api := app.Group("/api/v1")
@@ -158,6 +162,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	authRoutes.Post("/login", authHandler.Login)
 	authRoutes.Post("/register", authHandler.Register)
 	authRoutes.Post("/refresh", authHandler.Refresh)
+
+	// Internal routes (metering agent)
+	if cfg.InternalSecret != "" {
+		internal := api.Group("/internal", middleware.RequireInternalSecret(cfg.InternalSecret))
+		internal.Post("/metering", meteringHandler.RecordUsage)
+	}
 
 	// Protected routes
 	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret))
@@ -200,12 +210,15 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 
 	// Dashboard
 	admin.Get("/dashboard/stats", adminHandler.GetDashboardStats)
+	admin.Get("/dashboard/usage", meteringHandler.GetPlatformUsageSummary)
 
 	// Customer management
 	admin.Post("/customers", customerHandler.CreateCustomer)
 	admin.Get("/customers", customerHandler.ListCustomers)
 	admin.Get("/customers/stats", customerHandler.GetCustomerStats) // before :id
 	admin.Get("/customers/:id", customerHandler.GetCustomer)
+	admin.Get("/customers/:id/usage", meteringHandler.GetCustomerUsage)
+	admin.Get("/customers/:id/usage/history", meteringHandler.GetCustomerUsageHistory)
 	admin.Put("/customers/:id", customerHandler.UpdateCustomer)
 	admin.Post("/customers/:id/suspend", customerHandler.SuspendCustomer)
 	admin.Post("/customers/:id/activate", customerHandler.ActivateCustomer)

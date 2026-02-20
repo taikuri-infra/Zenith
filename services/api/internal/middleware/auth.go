@@ -131,6 +131,20 @@ func RequireScope(scope string) fiber.Handler {
 	}
 }
 
+// RequireInternalSecret validates the X-Internal-Secret header using constant-time comparison.
+func RequireInternalSecret(secret string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		provided := c.Get("X-Internal-Secret")
+		if provided == "" {
+			return fiber.NewError(fiber.StatusUnauthorized, "missing internal secret")
+		}
+		if !ConstantTimeCompare(provided, secret) {
+			return fiber.NewError(fiber.StatusForbidden, "invalid internal secret")
+		}
+		return c.Next()
+	}
+}
+
 // GenerateToken creates a JWT token for a user
 func GenerateToken(secret string, user *models.User, expiry time.Duration) (string, error) {
 	claims := Claims{

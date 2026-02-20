@@ -224,6 +224,48 @@ export interface CustomerStats {
   newThisMonth: number;
 }
 
+// ---------- Metering ----------
+
+export interface CustomerUsage {
+  cpuCores: number;
+  cpuCeiling: number;
+  cpuPercent: number;
+  ramGb: number;
+  ramCeiling: number;
+  ramPercent: number;
+  s3Tb: number;
+  s3Ceiling: number;
+  s3Percent: number;
+  dbStorageGb: number;
+  dbCeiling: number;
+  dbPercent: number;
+  volumeGb: number;
+  volCeiling: number;
+  volPercent: number;
+  lbCount: number;
+  lbCeiling: number;
+  lbPercent: number;
+  recordedAt: string;
+}
+
+export interface UsageHistoryEntry {
+  date: string;
+  cpuAvg: number;
+  cpuMax: number;
+  ramAvg: number;
+  ramMax: number;
+  dbStorageGb: number;
+  volumeGb: number;
+  lbCount: number;
+}
+
+export interface PlatformUsageSummary {
+  totalCpu: number;
+  totalRam: number;
+  totalStorage: number;
+  customersReporting: number;
+}
+
 // ---------- Token helpers ----------
 
 const ACCESS_TOKEN_KEY = "mc_token";
@@ -351,6 +393,7 @@ class ApiClient {
   // Dashboard
   dashboard = {
     stats: () => this.request<DashboardStats>("/api/v1/admin/dashboard/stats"),
+    usage: () => this.request<PlatformUsageSummary>("/api/v1/admin/dashboard/usage"),
   };
 
   // Clusters
@@ -498,6 +541,14 @@ class ApiClient {
       this.request<void>(
         `/api/v1/admin/customers/${encodeURIComponent(id)}/cluster/upgrade`,
         { method: "POST", body: JSON.stringify({ version }) }
+      ),
+    usage: (id: string) =>
+      this.request<CustomerUsage>(
+        `/api/v1/admin/customers/${encodeURIComponent(id)}/usage`
+      ),
+    usageHistory: (id: string, days = 30) =>
+      this.request<UsageHistoryEntry[]>(
+        `/api/v1/admin/customers/${encodeURIComponent(id)}/usage/history?days=${days}`
       ),
   };
 

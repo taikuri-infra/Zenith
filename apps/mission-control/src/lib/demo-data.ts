@@ -20,6 +20,9 @@ import type {
   Plan,
   Customer,
   CustomerStats,
+  CustomerUsage,
+  UsageHistoryEntry,
+  PlatformUsageSummary,
 } from "./api";
 
 // ---------------------------------------------------------------------------
@@ -576,4 +579,152 @@ export const demoCustomerStats: CustomerStats = {
   activeCustomers: 4,
   mrr: "\u20AC4,595",
   newThisMonth: 1,
+};
+
+// ---------------------------------------------------------------------------
+// Customer Usage (per customer)
+// ---------------------------------------------------------------------------
+export const demoCustomerUsage: Record<string, CustomerUsage> = {
+  "cust-001": {
+    cpuCores: 10.4,
+    cpuCeiling: 16,
+    cpuPercent: 65.0,
+    ramGb: 22.1,
+    ramCeiling: 32,
+    ramPercent: 69.1,
+    s3Tb: 0.3,
+    s3Ceiling: 1,
+    s3Percent: 30.0,
+    dbStorageGb: 42,
+    dbCeiling: 100,
+    dbPercent: 42.0,
+    volumeGb: 180,
+    volCeiling: 500,
+    volPercent: 36.0,
+    lbCount: 2,
+    lbCeiling: 3,
+    lbPercent: 66.7,
+    recordedAt: "2026-02-20T12:00:00Z",
+  },
+  "cust-002": {
+    cpuCores: 6.8,
+    cpuCeiling: 16,
+    cpuPercent: 42.5,
+    ramGb: 14.2,
+    ramCeiling: 32,
+    ramPercent: 44.4,
+    s3Tb: 0.1,
+    s3Ceiling: 1,
+    s3Percent: 10.0,
+    dbStorageGb: 25,
+    dbCeiling: 100,
+    dbPercent: 25.0,
+    volumeGb: 95,
+    volCeiling: 500,
+    volPercent: 19.0,
+    lbCount: 1,
+    lbCeiling: 3,
+    lbPercent: 33.3,
+    recordedAt: "2026-02-20T12:00:00Z",
+  },
+  "cust-003": {
+    cpuCores: 2.8,
+    cpuCeiling: 4,
+    cpuPercent: 70.0,
+    ramGb: 6.9,
+    ramCeiling: 8,
+    ramPercent: 86.3,
+    s3Tb: 0,
+    s3Ceiling: 0,
+    s3Percent: 0,
+    dbStorageGb: 6,
+    dbCeiling: 10,
+    dbPercent: 60.0,
+    volumeGb: 30,
+    volCeiling: 50,
+    volPercent: 60.0,
+    lbCount: 1,
+    lbCeiling: 1,
+    lbPercent: 100.0,
+    recordedAt: "2026-02-20T12:00:00Z",
+  },
+  "cust-004": {
+    cpuCores: 0,
+    cpuCeiling: 4,
+    cpuPercent: 0,
+    ramGb: 0,
+    ramCeiling: 8,
+    ramPercent: 0,
+    s3Tb: 0,
+    s3Ceiling: 0,
+    s3Percent: 0,
+    dbStorageGb: 0,
+    dbCeiling: 10,
+    dbPercent: 0,
+    volumeGb: 0,
+    volCeiling: 50,
+    volPercent: 0,
+    lbCount: 0,
+    lbCeiling: 1,
+    lbPercent: 0,
+    recordedAt: "",
+  },
+  "cust-005": {
+    cpuCores: 0,
+    cpuCeiling: 64,
+    cpuPercent: 0,
+    ramGb: 0,
+    ramCeiling: 128,
+    ramPercent: 0,
+    s3Tb: 0,
+    s3Ceiling: 10,
+    s3Percent: 0,
+    dbStorageGb: 0,
+    dbCeiling: 1000,
+    dbPercent: 0,
+    volumeGb: 0,
+    volCeiling: 5000,
+    volPercent: 0,
+    lbCount: 0,
+    lbCeiling: 10,
+    lbPercent: 0,
+    recordedAt: "",
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Usage History (30 days for cust-001)
+// ---------------------------------------------------------------------------
+function generateUsageHistory(): UsageHistoryEntry[] {
+  const entries: UsageHistoryEntry[] = [];
+  const now = new Date();
+  for (let d = 29; d >= 0; d--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - d);
+    const cpuBase = 8 + Math.random() * 4;
+    const ramBase = 18 + Math.random() * 6;
+    entries.push({
+      date: date.toISOString().slice(0, 10),
+      cpuAvg: Math.round(cpuBase * 100) / 100,
+      cpuMax: Math.round((cpuBase + 1 + Math.random() * 2) * 100) / 100,
+      ramAvg: Math.round(ramBase * 100) / 100,
+      ramMax: Math.round((ramBase + 1 + Math.random() * 3) * 100) / 100,
+      dbStorageGb: 42,
+      volumeGb: 180,
+      lbCount: 2,
+    });
+  }
+  return entries;
+}
+
+export const demoUsageHistory: UsageHistoryEntry[] = generateUsageHistory();
+
+// ---------------------------------------------------------------------------
+// Platform Usage Summary
+// ---------------------------------------------------------------------------
+export const demoPlatformUsageSummary: PlatformUsageSummary = {
+  totalCpu: 20.0,
+  totalRam: 43.2,
+  totalStorage: 378.0,
+  customersReporting: 3,
 };
