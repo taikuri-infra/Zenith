@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -17,11 +17,11 @@ func setupAuthApp() *fiber.App {
 }
 
 func TestGenerateAndValidateToken(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:        "user-123",
 		Email:     "test@example.com",
 		Name:      "Test User",
-		Role:      models.RoleDeveloper,
+		Role:      entities.RoleDeveloper,
 		ProjectID: "proj-456",
 	}
 
@@ -92,11 +92,11 @@ func TestJWTAuthInvalidToken(t *testing.T) {
 }
 
 func TestJWTAuthValidToken(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:        "user-123",
 		Email:     "test@example.com",
 		Name:      "Test User",
-		Role:      models.RoleDeveloper,
+		Role:      entities.RoleDeveloper,
 		ProjectID: "proj-456",
 	}
 
@@ -106,7 +106,7 @@ func TestJWTAuthValidToken(t *testing.T) {
 	app.Use(JWTAuth(testSecret))
 	app.Get("/test", func(c *fiber.Ctx) error {
 		email := c.Locals("email").(string)
-		role := c.Locals("role").(models.Role)
+		role := c.Locals("role").(entities.Role)
 		return c.JSON(fiber.Map{"email": email, "role": role})
 	})
 
@@ -123,10 +123,10 @@ func TestJWTAuthValidToken(t *testing.T) {
 }
 
 func TestJWTAuthExpiredToken(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:    "user-123",
 		Email: "test@example.com",
-		Role:  models.RoleDeveloper,
+		Role:  entities.RoleDeveloper,
 	}
 
 	token, _ := GenerateToken(testSecret, user, -1*time.Hour) // expired
@@ -152,15 +152,15 @@ func TestJWTAuthExpiredToken(t *testing.T) {
 func TestRequireRole(t *testing.T) {
 	tests := []struct {
 		name     string
-		userRole models.Role
-		minRole  models.Role
+		userRole entities.Role
+		minRole  entities.Role
 		wantCode int
 	}{
-		{"owner can access admin", models.RoleOwner, models.RoleAdmin, 200},
-		{"admin can access admin", models.RoleAdmin, models.RoleAdmin, 200},
-		{"developer cannot access admin", models.RoleDeveloper, models.RoleAdmin, 403},
-		{"viewer cannot access developer", models.RoleViewer, models.RoleDeveloper, 403},
-		{"viewer can access viewer", models.RoleViewer, models.RoleViewer, 200},
+		{"owner can access admin", entities.RoleOwner, entities.RoleAdmin, 200},
+		{"admin can access admin", entities.RoleAdmin, entities.RoleAdmin, 200},
+		{"developer cannot access admin", entities.RoleDeveloper, entities.RoleAdmin, 403},
+		{"viewer cannot access developer", entities.RoleViewer, entities.RoleDeveloper, 403},
+		{"viewer can access viewer", entities.RoleViewer, entities.RoleViewer, 200},
 	}
 
 	for _, tt := range tests {
@@ -191,7 +191,7 @@ func TestRequireRole(t *testing.T) {
 
 func TestRequireRoleNoRole(t *testing.T) {
 	app := setupAuthApp()
-	app.Use(RequireRole(models.RoleViewer))
+	app.Use(RequireRole(entities.RoleViewer))
 	app.Get("/test", func(c *fiber.Ctx) error {
 		return c.SendString("ok")
 	})
@@ -217,10 +217,10 @@ func TestConstantTimeCompare(t *testing.T) {
 }
 
 func TestJWTAuthWrongSecret(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:    "user-123",
 		Email: "test@example.com",
-		Role:  models.RoleDeveloper,
+		Role:  entities.RoleDeveloper,
 	}
 
 	// Generate token with one secret, validate with another
@@ -278,18 +278,18 @@ func TestJWTAuthMalformedBearer(t *testing.T) {
 }
 
 func TestJWTAuthSetsLocals(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:        "user-999",
 		Email:     "admin@zenith.dev",
 		Name:      "Admin User",
-		Role:      models.RoleOwner,
+		Role:      entities.RoleOwner,
 		ProjectID: "proj-001",
 	}
 
 	token, _ := GenerateToken(testSecret, user, 1*time.Hour)
 
 	var capturedUserID, capturedEmail, capturedName, capturedProjectID string
-	var capturedRole models.Role
+	var capturedRole entities.Role
 
 	app := setupAuthApp()
 	app.Use(JWTAuth(testSecret))
@@ -297,7 +297,7 @@ func TestJWTAuthSetsLocals(t *testing.T) {
 		capturedUserID, _ = c.Locals("user_id").(string)
 		capturedEmail, _ = c.Locals("email").(string)
 		capturedName, _ = c.Locals("name").(string)
-		capturedRole, _ = c.Locals("role").(models.Role)
+		capturedRole, _ = c.Locals("role").(entities.Role)
 		capturedProjectID, _ = c.Locals("project_id").(string)
 		return c.SendString("ok")
 	})
@@ -322,7 +322,7 @@ func TestJWTAuthSetsLocals(t *testing.T) {
 	if capturedName != "Admin User" {
 		t.Errorf("Expected name 'Admin User', got '%s'", capturedName)
 	}
-	if capturedRole != models.RoleOwner {
+	if capturedRole != entities.RoleOwner {
 		t.Errorf("Expected role 'owner', got '%s'", capturedRole)
 	}
 	if capturedProjectID != "proj-001" {
@@ -331,13 +331,13 @@ func TestJWTAuthSetsLocals(t *testing.T) {
 }
 
 func TestAPIKeyAuthValid(t *testing.T) {
-	validKey := &models.APIKey{
+	validKey := &entities.APIKey{
 		UserID:    "user-api-001",
 		ProjectID: "proj-api-001",
 		Scopes:    []string{"read", "write"},
 	}
 
-	validator := func(key string) (*models.APIKey, error) {
+	validator := func(key string) (*entities.APIKey, error) {
 		if key == "valid-api-key-123" {
 			return validKey, nil
 		}
@@ -345,14 +345,14 @@ func TestAPIKeyAuthValid(t *testing.T) {
 	}
 
 	var capturedUserID, capturedProjectID string
-	var capturedRole models.Role
+	var capturedRole entities.Role
 
 	app := setupAuthApp()
 	app.Use(APIKeyAuth(validator))
 	app.Get("/test", func(c *fiber.Ctx) error {
 		capturedUserID, _ = c.Locals("user_id").(string)
 		capturedProjectID, _ = c.Locals("project_id").(string)
-		capturedRole, _ = c.Locals("role").(models.Role)
+		capturedRole, _ = c.Locals("role").(entities.Role)
 		return c.SendString("ok")
 	})
 
@@ -373,13 +373,13 @@ func TestAPIKeyAuthValid(t *testing.T) {
 	if capturedProjectID != "proj-api-001" {
 		t.Errorf("Expected project_id 'proj-api-001', got '%s'", capturedProjectID)
 	}
-	if capturedRole != models.RoleDeveloper {
+	if capturedRole != entities.RoleDeveloper {
 		t.Errorf("Expected role 'developer' (API key default), got '%s'", capturedRole)
 	}
 }
 
 func TestAPIKeyAuthInvalid(t *testing.T) {
-	validator := func(key string) (*models.APIKey, error) {
+	validator := func(key string) (*entities.APIKey, error) {
 		return nil, fiber.NewError(fiber.StatusUnauthorized, "invalid")
 	}
 
@@ -402,7 +402,7 @@ func TestAPIKeyAuthInvalid(t *testing.T) {
 }
 
 func TestAPIKeyAuthMissingHeaderPassesThrough(t *testing.T) {
-	validator := func(key string) (*models.APIKey, error) {
+	validator := func(key string) (*entities.APIKey, error) {
 		return nil, fiber.NewError(fiber.StatusUnauthorized, "invalid")
 	}
 
@@ -448,10 +448,10 @@ func TestRequireAuthWithAPIKey(t *testing.T) {
 }
 
 func TestRequireAuthWithJWT(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:    "user-jwt",
 		Email: "jwt@test.com",
-		Role:  models.RoleDeveloper,
+		Role:  entities.RoleDeveloper,
 	}
 
 	token, _ := GenerateToken(testSecret, user, 1*time.Hour)
@@ -495,30 +495,30 @@ func TestRequireAuthNoAuth(t *testing.T) {
 func TestRequireRoleAllCombinations(t *testing.T) {
 	tests := []struct {
 		name     string
-		userRole models.Role
-		minRole  models.Role
+		userRole entities.Role
+		minRole  entities.Role
 		wantCode int
 	}{
 		// Owner tests
-		{"owner can access owner", models.RoleOwner, models.RoleOwner, 200},
-		{"owner can access admin", models.RoleOwner, models.RoleAdmin, 200},
-		{"owner can access developer", models.RoleOwner, models.RoleDeveloper, 200},
-		{"owner can access viewer", models.RoleOwner, models.RoleViewer, 200},
+		{"owner can access owner", entities.RoleOwner, entities.RoleOwner, 200},
+		{"owner can access admin", entities.RoleOwner, entities.RoleAdmin, 200},
+		{"owner can access developer", entities.RoleOwner, entities.RoleDeveloper, 200},
+		{"owner can access viewer", entities.RoleOwner, entities.RoleViewer, 200},
 		// Admin tests
-		{"admin cannot access owner", models.RoleAdmin, models.RoleOwner, 403},
-		{"admin can access admin", models.RoleAdmin, models.RoleAdmin, 200},
-		{"admin can access developer", models.RoleAdmin, models.RoleDeveloper, 200},
-		{"admin can access viewer", models.RoleAdmin, models.RoleViewer, 200},
+		{"admin cannot access owner", entities.RoleAdmin, entities.RoleOwner, 403},
+		{"admin can access admin", entities.RoleAdmin, entities.RoleAdmin, 200},
+		{"admin can access developer", entities.RoleAdmin, entities.RoleDeveloper, 200},
+		{"admin can access viewer", entities.RoleAdmin, entities.RoleViewer, 200},
 		// Developer tests
-		{"developer cannot access owner", models.RoleDeveloper, models.RoleOwner, 403},
-		{"developer cannot access admin", models.RoleDeveloper, models.RoleAdmin, 403},
-		{"developer can access developer", models.RoleDeveloper, models.RoleDeveloper, 200},
-		{"developer can access viewer", models.RoleDeveloper, models.RoleViewer, 200},
+		{"developer cannot access owner", entities.RoleDeveloper, entities.RoleOwner, 403},
+		{"developer cannot access admin", entities.RoleDeveloper, entities.RoleAdmin, 403},
+		{"developer can access developer", entities.RoleDeveloper, entities.RoleDeveloper, 200},
+		{"developer can access viewer", entities.RoleDeveloper, entities.RoleViewer, 200},
 		// Viewer tests
-		{"viewer cannot access owner", models.RoleViewer, models.RoleOwner, 403},
-		{"viewer cannot access admin", models.RoleViewer, models.RoleAdmin, 403},
-		{"viewer cannot access developer", models.RoleViewer, models.RoleDeveloper, 403},
-		{"viewer can access viewer", models.RoleViewer, models.RoleViewer, 200},
+		{"viewer cannot access owner", entities.RoleViewer, entities.RoleOwner, 403},
+		{"viewer cannot access admin", entities.RoleViewer, entities.RoleAdmin, 403},
+		{"viewer cannot access developer", entities.RoleViewer, entities.RoleDeveloper, 403},
+		{"viewer can access viewer", entities.RoleViewer, entities.RoleViewer, 200},
 	}
 
 	for _, tt := range tests {
@@ -563,7 +563,7 @@ func TestRequireScopeWithAPIKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			app := setupAuthApp()
 			app.Use(func(c *fiber.Ctx) error {
-				c.Locals("api_key", &models.APIKey{
+				c.Locals("api_key", &entities.APIKey{
 					Scopes: tt.scopes,
 				})
 				return c.Next()
@@ -606,17 +606,17 @@ func TestRequireScopeWithoutAPIKey(t *testing.T) {
 }
 
 func TestMiddlewareChain(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:    "user-chain",
 		Email: "chain@test.com",
-		Role:  models.RoleAdmin,
+		Role:  entities.RoleAdmin,
 	}
 
 	token, _ := GenerateToken(testSecret, user, 1*time.Hour)
 
 	app := setupAuthApp()
 	app.Use(JWTAuth(testSecret))
-	app.Use(RequireRole(models.RoleDeveloper))
+	app.Use(RequireRole(entities.RoleDeveloper))
 	app.Get("/test", func(c *fiber.Ctx) error {
 		return c.SendString("ok")
 	})
@@ -634,17 +634,17 @@ func TestMiddlewareChain(t *testing.T) {
 }
 
 func TestMiddlewareChainInsufficientRole(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:    "user-chain",
 		Email: "chain@test.com",
-		Role:  models.RoleViewer,
+		Role:  entities.RoleViewer,
 	}
 
 	token, _ := GenerateToken(testSecret, user, 1*time.Hour)
 
 	app := setupAuthApp()
 	app.Use(JWTAuth(testSecret))
-	app.Use(RequireRole(models.RoleAdmin))
+	app.Use(RequireRole(entities.RoleAdmin))
 	app.Get("/test", func(c *fiber.Ctx) error {
 		return c.SendString("ok")
 	})
@@ -662,11 +662,11 @@ func TestMiddlewareChainInsufficientRole(t *testing.T) {
 }
 
 func TestGenerateTokenFields(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:        "user-gen",
 		Email:     "gen@test.com",
 		Name:      "Gen User",
-		Role:      models.RoleAdmin,
+		Role:      entities.RoleAdmin,
 		ProjectID: "proj-gen",
 	}
 
@@ -701,7 +701,7 @@ func TestGenerateTokenFields(t *testing.T) {
 	if claims.Name != "Gen User" {
 		t.Errorf("Expected name 'Gen User', got '%s'", claims.Name)
 	}
-	if claims.Role != models.RoleAdmin {
+	if claims.Role != entities.RoleAdmin {
 		t.Errorf("Expected role admin, got '%s'", claims.Role)
 	}
 	if claims.ProjectID != "proj-gen" {
@@ -757,10 +757,10 @@ func TestRequestContext(t *testing.T) {
 }
 
 func TestJWTAuthCaseInsensitiveBearer(t *testing.T) {
-	user := &models.User{
+	user := &entities.User{
 		ID:    "user-ci",
 		Email: "ci@test.com",
-		Role:  models.RoleDeveloper,
+		Role:  entities.RoleDeveloper,
 	}
 
 	token, _ := GenerateToken(testSecret, user, 1*time.Hour)

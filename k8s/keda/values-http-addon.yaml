@@ -1,0 +1,32 @@
+# KEDA HTTP Add-on Helm chart values
+# https://github.com/kedacore/http-add-on
+
+interceptor:
+  replicas:
+    min: 1
+    max: 2
+  resources:
+    limits:
+      cpu: 250m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+scaler:
+  resources:
+    limits:
+      cpu: 250m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+operator:
+  resources:
+    limits:
+      cpu: 250m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi

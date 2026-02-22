@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -23,22 +23,22 @@ func NewPostgresAdminRepository(pool *pgxpool.Pool) *PostgresAdminRepository {
 	return &PostgresAdminRepository{pool: pool}
 }
 
-func (s *PostgresAdminRepository) GetSettings(ctx context.Context) (*models.PlatformSettings, error) {
-	var ps models.PlatformSettings
+func (s *PostgresAdminRepository) GetSettings(ctx context.Context) (*entities.PlatformSettings, error) {
+	var ps entities.PlatformSettings
 	err := s.pool.QueryRow(ctx,
 		`SELECT platform_name, base_domain, provider, default_region, region_label, auto_backups, retention_days
 		 FROM platform_settings WHERE id = 1`,
 	).Scan(&ps.PlatformName, &ps.BaseDomain, &ps.Provider, &ps.DefaultRegion, &ps.RegionLabel, &ps.AutoBackups, &ps.RetentionDays)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return &models.PlatformSettings{PlatformName: "Zenith"}, nil
+			return &entities.PlatformSettings{PlatformName: "Zenith"}, nil
 		}
 		return nil, fmt.Errorf("get settings: %w", err)
 	}
 	return &ps, nil
 }
 
-func (s *PostgresAdminRepository) UpdateSettings(ctx context.Context, update *models.PlatformSettings) (*models.PlatformSettings, error) {
+func (s *PostgresAdminRepository) UpdateSettings(ctx context.Context, update *entities.PlatformSettings) (*entities.PlatformSettings, error) {
 	// Upsert: read current, merge non-empty fields, write back
 	current, err := s.GetSettings(ctx)
 	if err != nil {
@@ -86,16 +86,16 @@ func (s *PostgresAdminRepository) UpdateSettings(ctx context.Context, update *mo
 	return current, nil
 }
 
-func (s *PostgresAdminRepository) ListModules(ctx context.Context) ([]models.Module, error) {
+func (s *PostgresAdminRepository) ListModules(ctx context.Context) ([]entities.Module, error) {
 	rows, err := s.pool.Query(ctx, `SELECT name, installed, latest, status, description FROM modules ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list modules: %w", err)
 	}
 	defer rows.Close()
 
-	var modules []models.Module
+	var modules []entities.Module
 	for rows.Next() {
-		var m models.Module
+		var m entities.Module
 		if err := rows.Scan(&m.Name, &m.Installed, &m.Latest, &m.Status, &m.Description); err != nil {
 			return nil, fmt.Errorf("scan module: %w", err)
 		}
@@ -104,8 +104,8 @@ func (s *PostgresAdminRepository) ListModules(ctx context.Context) ([]models.Mod
 	return modules, rows.Err()
 }
 
-func (s *PostgresAdminRepository) GetModule(ctx context.Context, name string) (*models.Module, error) {
-	var m models.Module
+func (s *PostgresAdminRepository) GetModule(ctx context.Context, name string) (*entities.Module, error) {
+	var m entities.Module
 	err := s.pool.QueryRow(ctx,
 		`SELECT name, installed, latest, status, description FROM modules WHERE name = $1`, name,
 	).Scan(&m.Name, &m.Installed, &m.Latest, &m.Status, &m.Description)
@@ -118,8 +118,8 @@ func (s *PostgresAdminRepository) GetModule(ctx context.Context, name string) (*
 	return &m, nil
 }
 
-func (s *PostgresAdminRepository) UpdateModule(ctx context.Context, name string) (*models.Module, error) {
-	var m models.Module
+func (s *PostgresAdminRepository) UpdateModule(ctx context.Context, name string) (*entities.Module, error) {
+	var m entities.Module
 	err := s.pool.QueryRow(ctx,
 		`UPDATE modules SET installed = latest, status = 'up_to_date' WHERE name = $1
 		 RETURNING name, installed, latest, status, description`, name,
@@ -133,7 +133,7 @@ func (s *PostgresAdminRepository) UpdateModule(ctx context.Context, name string)
 	return &m, nil
 }
 
-func (s *PostgresAdminRepository) ListAuditLog(ctx context.Context, limit, offset int) ([]models.AuditEntry, error) {
+func (s *PostgresAdminRepository) ListAuditLog(ctx context.Context, limit, offset int) ([]entities.AuditEntry, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -147,21 +147,21 @@ func (s *PostgresAdminRepository) ListAuditLog(ctx context.Context, limit, offse
 	}
 	defer rows.Close()
 
-	var entries []models.AuditEntry
+	var entries []entities.AuditEntry
 	for rows.Next() {
-		var e models.AuditEntry
+		var e entities.AuditEntry
 		if err := rows.Scan(&e.Time, &e.Actor, &e.Action, &e.Cluster); err != nil {
 			return nil, fmt.Errorf("scan audit entry: %w", err)
 		}
 		entries = append(entries, e)
 	}
 	if entries == nil {
-		entries = []models.AuditEntry{}
+		entries = []entities.AuditEntry{}
 	}
 	return entries, rows.Err()
 }
 
-func (s *PostgresAdminRepository) AddAuditEntry(ctx context.Context, entry models.AuditEntry) error {
+func (s *PostgresAdminRepository) AddAuditEntry(ctx context.Context, entry entities.AuditEntry) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO audit_log (time, actor, action, cluster) VALUES ($1, $2, $3, $4)`,
 		entry.Time, entry.Actor, entry.Action, entry.Cluster,
@@ -172,9 +172,9 @@ func (s *PostgresAdminRepository) AddAuditEntry(ctx context.Context, entry model
 	return nil
 }
 
-func (s *PostgresAdminRepository) GetPlatformUpdate(_ context.Context) (*models.PlatformUpdate, error) {
+func (s *PostgresAdminRepository) GetPlatformUpdate(_ context.Context) (*entities.PlatformUpdate, error) {
 	// Platform update info is not DB-driven yet — return static values.
-	return &models.PlatformUpdate{
+	return &entities.PlatformUpdate{
 		Version:         "v1.3.0",
 		Current:         "v1.2.1",
 		ReleasedAt:      "February 10, 2026",
@@ -183,23 +183,23 @@ func (s *PostgresAdminRepository) GetPlatformUpdate(_ context.Context) (*models.
 	}, nil
 }
 
-func (s *PostgresAdminRepository) ListUpdateHistory(ctx context.Context) ([]models.UpdateHistoryEntry, error) {
+func (s *PostgresAdminRepository) ListUpdateHistory(ctx context.Context) ([]entities.UpdateHistoryEntry, error) {
 	rows, err := s.pool.Query(ctx, `SELECT version, date, status FROM update_history ORDER BY date DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list update history: %w", err)
 	}
 	defer rows.Close()
 
-	var entries []models.UpdateHistoryEntry
+	var entries []entities.UpdateHistoryEntry
 	for rows.Next() {
-		var e models.UpdateHistoryEntry
+		var e entities.UpdateHistoryEntry
 		if err := rows.Scan(&e.Version, &e.Date, &e.Status); err != nil {
 			return nil, fmt.Errorf("scan update history: %w", err)
 		}
 		entries = append(entries, e)
 	}
 	if entries == nil {
-		entries = []models.UpdateHistoryEntry{}
+		entries = []entities.UpdateHistoryEntry{}
 	}
 	return entries, rows.Err()
 }

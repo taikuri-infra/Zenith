@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -26,7 +26,7 @@ func NewMeteringHandler(metering store.MeteringRepository, customers store.Custo
 // RecordUsage records a resource usage snapshot (internal endpoint).
 // POST /api/v1/internal/metering
 func (h *MeteringHandler) RecordUsage(c *fiber.Ctx) error {
-	var input models.MeteringInput
+	var input dto.MeteringInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -85,7 +85,7 @@ func (h *MeteringHandler) GetCustomerUsage(c *fiber.Ctx) error {
 	latest, err := h.metering.GetLatestUsage(c.Context(), id)
 	if err != nil {
 		// No usage data yet — return zero usage with ceilings
-		return c.JSON(models.CustomerUsage{
+		return c.JSON(dto.CustomerUsage{
 			CPUCeiling: plan.CPUCores,
 			RAMCeiling: plan.RAMGB,
 			S3Ceiling:  plan.S3TB,
@@ -95,7 +95,7 @@ func (h *MeteringHandler) GetCustomerUsage(c *fiber.Ctx) error {
 		})
 	}
 
-	usage := models.CustomerUsage{
+	usage := dto.CustomerUsage{
 		CPUCores:    latest.CPUCores,
 		CPUCeiling:  plan.CPUCores,
 		CPUPercent:  safePercent(latest.CPUCores, plan.CPUCores),

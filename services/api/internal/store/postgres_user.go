@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -27,7 +27,7 @@ func NewPostgresUserRepository(pool *pgxpool.Pool) *PostgresUserRepository {
 	return &PostgresUserRepository{pool: pool}
 }
 
-func (s *PostgresUserRepository) Create(ctx context.Context, email, password, name string, role models.Role) (*models.User, error) {
+func (s *PostgresUserRepository) Create(ctx context.Context, email, password, name string, role entities.Role) (*entities.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -49,7 +49,7 @@ func (s *PostgresUserRepository) Create(ctx context.Context, email, password, na
 		return nil, fmt.Errorf("insert user: %w", err)
 	}
 
-	return &models.User{
+	return &entities.User{
 		ID:        id,
 		Email:     email,
 		Name:      name,
@@ -91,6 +91,6 @@ func scanStoredUser(row pgx.Row) (*StoredUser, error) {
 		}
 		return nil, fmt.Errorf("scan user: %w", err)
 	}
-	u.Role = models.Role(role)
+	u.Role = entities.Role(role)
 	return &u, nil
 }

@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,9 +25,9 @@ func NewPostgresMeteringRepository(pool *pgxpool.Pool) *PostgresMeteringReposito
 	return &PostgresMeteringRepository{pool: pool}
 }
 
-func (r *PostgresMeteringRepository) RecordUsage(ctx context.Context, input *models.MeteringInput) (*models.ResourceUsage, error) {
+func (r *PostgresMeteringRepository) RecordUsage(ctx context.Context, input *dto.MeteringInput) (*entities.ResourceUsage, error) {
 	id := uuid.New().String()
-	var entry models.ResourceUsage
+	var entry entities.ResourceUsage
 
 	err := r.pool.QueryRow(ctx,
 		`INSERT INTO resource_usage (id, customer_id, cpu_cores, ram_gb, s3_tb, db_storage_gb, volume_gb, lb_count)
@@ -42,8 +43,8 @@ func (r *PostgresMeteringRepository) RecordUsage(ctx context.Context, input *mod
 	return &entry, nil
 }
 
-func (r *PostgresMeteringRepository) GetLatestUsage(ctx context.Context, customerID string) (*models.ResourceUsage, error) {
-	var entry models.ResourceUsage
+func (r *PostgresMeteringRepository) GetLatestUsage(ctx context.Context, customerID string) (*entities.ResourceUsage, error) {
+	var entry entities.ResourceUsage
 	err := r.pool.QueryRow(ctx,
 		`SELECT id, customer_id, cpu_cores, ram_gb, s3_tb, db_storage_gb, volume_gb, lb_count, recorded_at
 		 FROM resource_usage WHERE customer_id = $1 ORDER BY recorded_at DESC LIMIT 1`, customerID,
@@ -58,7 +59,7 @@ func (r *PostgresMeteringRepository) GetLatestUsage(ctx context.Context, custome
 	return &entry, nil
 }
 
-func (r *PostgresMeteringRepository) GetUsageHistory(ctx context.Context, customerID string, days int) ([]models.UsageHistoryEntry, error) {
+func (r *PostgresMeteringRepository) GetUsageHistory(ctx context.Context, customerID string, days int) ([]dto.UsageHistoryEntry, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT date_trunc('day', recorded_at)::date AS date,
 		        AVG(cpu_cores), MAX(cpu_cores),
@@ -73,9 +74,9 @@ func (r *PostgresMeteringRepository) GetUsageHistory(ctx context.Context, custom
 	}
 	defer rows.Close()
 
-	var result []models.UsageHistoryEntry
+	var result []dto.UsageHistoryEntry
 	for rows.Next() {
-		var e models.UsageHistoryEntry
+		var e dto.UsageHistoryEntry
 		var date string
 		if err := rows.Scan(&date, &e.CPUAvg, &e.CPUMax, &e.RAMAvg, &e.RAMMax,
 			&e.DBStorageGB, &e.VolumeGB, &e.LBCount); err != nil {
@@ -85,13 +86,13 @@ func (r *PostgresMeteringRepository) GetUsageHistory(ctx context.Context, custom
 		result = append(result, e)
 	}
 	if result == nil {
-		result = []models.UsageHistoryEntry{}
+		result = []dto.UsageHistoryEntry{}
 	}
 	return result, rows.Err()
 }
 
-func (r *PostgresMeteringRepository) GetPlatformUsageSummary(ctx context.Context) (*models.PlatformUsageSummary, error) {
-	var summary models.PlatformUsageSummary
+func (r *PostgresMeteringRepository) GetPlatformUsageSummary(ctx context.Context) (*dto.PlatformUsageSummary, error) {
+	var summary dto.PlatformUsageSummary
 	err := r.pool.QueryRow(ctx,
 		`SELECT COALESCE(SUM(cpu_cores), 0),
 		        COALESCE(SUM(ram_gb), 0),

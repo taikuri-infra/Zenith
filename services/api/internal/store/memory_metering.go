@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/google/uuid"
 )
 
@@ -19,14 +20,14 @@ var _ MeteringRepository = (*MemoryMeteringRepository)(nil)
 // MemoryMeteringRepository provides an in-memory store for metering data.
 type MemoryMeteringRepository struct {
 	mu    sync.RWMutex
-	usage map[string][]models.ResourceUsage // keyed by customerID
+	usage map[string][]entities.ResourceUsage // keyed by customerID
 }
 
 // NewMemoryMeteringRepository creates a MemoryMeteringRepository pre-seeded with
 // 30 days of daily usage snapshots for the 3 demo customers.
 func NewMemoryMeteringRepository() *MemoryMeteringRepository {
 	r := &MemoryMeteringRepository{
-		usage: make(map[string][]models.ResourceUsage),
+		usage: make(map[string][]entities.ResourceUsage),
 	}
 
 	rng := rand.New(rand.NewSource(42))
@@ -52,12 +53,12 @@ func NewMemoryMeteringRepository() *MemoryMeteringRepository {
 	}
 
 	for _, p := range profiles {
-		entries := make([]models.ResourceUsage, 0, 30)
+		entries := make([]entities.ResourceUsage, 0, 30)
 		for d := 29; d >= 0; d-- {
 			t := now.Add(-time.Duration(d) * 24 * time.Hour)
 			cpu := p.cpuMin + rng.Float64()*(p.cpuMax-p.cpuMin)
 			ram := p.ramMin + rng.Float64()*(p.ramMax-p.ramMin)
-			entries = append(entries, models.ResourceUsage{
+			entries = append(entries, entities.ResourceUsage{
 				ID:          uuid.New().String(),
 				CustomerID:  p.id,
 				CPUCores:    math.Round(cpu*100) / 100,
@@ -75,11 +76,11 @@ func NewMemoryMeteringRepository() *MemoryMeteringRepository {
 	return r
 }
 
-func (r *MemoryMeteringRepository) RecordUsage(_ context.Context, input *models.MeteringInput) (*models.ResourceUsage, error) {
+func (r *MemoryMeteringRepository) RecordUsage(_ context.Context, input *dto.MeteringInput) (*entities.ResourceUsage, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	entry := models.ResourceUsage{
+	entry := entities.ResourceUsage{
 		ID:          uuid.New().String(),
 		CustomerID:  input.CustomerID,
 		CPUCores:    input.CPUCores,
@@ -95,7 +96,7 @@ func (r *MemoryMeteringRepository) RecordUsage(_ context.Context, input *models.
 	return &entry, nil
 }
 
-func (r *MemoryMeteringRepository) GetLatestUsage(_ context.Context, customerID string) (*models.ResourceUsage, error) {
+func (r *MemoryMeteringRepository) GetLatestUsage(_ context.Context, customerID string) (*entities.ResourceUsage, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -108,13 +109,13 @@ func (r *MemoryMeteringRepository) GetLatestUsage(_ context.Context, customerID 
 	return &latest, nil
 }
 
-func (r *MemoryMeteringRepository) GetUsageHistory(_ context.Context, customerID string, days int) ([]models.UsageHistoryEntry, error) {
+func (r *MemoryMeteringRepository) GetUsageHistory(_ context.Context, customerID string, days int) ([]dto.UsageHistoryEntry, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	entries := r.usage[customerID]
 	if len(entries) == 0 {
-		return []models.UsageHistoryEntry{}, nil
+		return []dto.UsageHistoryEntry{}, nil
 	}
 
 	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
@@ -162,9 +163,9 @@ func (r *MemoryMeteringRepository) GetUsageHistory(_ context.Context, customerID
 		b.count++
 	}
 
-	result := make([]models.UsageHistoryEntry, 0, len(buckets))
+	result := make([]dto.UsageHistoryEntry, 0, len(buckets))
 	for date, b := range buckets {
-		result = append(result, models.UsageHistoryEntry{
+		result = append(result, dto.UsageHistoryEntry{
 			Date:        date,
 			CPUAvg:      math.Round(b.cpuSum/float64(b.count)*100) / 100,
 			CPUMax:      math.Round(b.cpuMax*100) / 100,
@@ -180,7 +181,7 @@ func (r *MemoryMeteringRepository) GetUsageHistory(_ context.Context, customerID
 	return result, nil
 }
 
-func (r *MemoryMeteringRepository) GetPlatformUsageSummary(_ context.Context) (*models.PlatformUsageSummary, error) {
+func (r *MemoryMeteringRepository) GetPlatformUsageSummary(_ context.Context) (*dto.PlatformUsageSummary, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -198,7 +199,7 @@ func (r *MemoryMeteringRepository) GetPlatformUsageSummary(_ context.Context) (*
 		reporting++
 	}
 
-	return &models.PlatformUsageSummary{
+	return &dto.PlatformUsageSummary{
 		TotalCPU:           math.Round(totalCPU*100) / 100,
 		TotalRAM:           math.Round(totalRAM*100) / 100,
 		TotalStorage:       math.Round(totalStorage*100) / 100,

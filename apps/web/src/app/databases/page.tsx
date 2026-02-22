@@ -5,56 +5,31 @@ import { StatusBadge } from "@/components/status-badge";
 import { PageWithTableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
-import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
-import { useProject } from "@/hooks/use-project";
-import { type Database } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
+import { type AppDatabase } from "@/lib/api";
 import Link from "next/link";
-import { useState, useEffect } from "react";
 
 const engineBadge: Record<string, { label: string; className: string }> = {
   postgresql: { label: "P", className: "bg-blue-500/20 text-blue-400" },
   mysql: { label: "M", className: "bg-orange-500/20 text-orange-400" },
-  mongodb: { label: "M", className: "bg-green-500/20 text-green-400" },
   redis: { label: "R", className: "bg-red-500/20 text-red-400" },
 };
 
-const defaultVersions: Record<string, string> = {
-  postgresql: "16.1",
-  mysql: "8.0",
-  mongodb: "7.0",
-  redis: "7.2",
-};
-
 export default function DatabasesPage() {
-  const projectId = useProject();
-  const { databases } = getApi();
+  const { userDatabases } = getApi();
 
   const {
-    data: dbsData,
+    data: dbList,
     loading,
     error,
     refetch,
-  } = useApi(() => databases.list(projectId), [projectId]);
-
-  const [dbList, setDbList] = useState<Database[]>([]);
-  const [showCreate, setShowCreate] = useState(false);
-  const [formName, setFormName] = useState("");
-  const [formEngine, setFormEngine] = useState("postgresql");
-  const [formVersion, setFormVersion] = useState("16.1");
-  const [formStorage, setFormStorage] = useState("20Gi");
-
-  useEffect(() => {
-    if (dbsData?.items) {
-      setDbList(dbsData.items);
-    }
-  }, [dbsData]);
+  } = useApi(() => userDatabases.list(), []);
 
   if (loading) {
     return (
       <Shell>
-        <PageWithTableSkeleton cols={10} rows={3} />
+        <PageWithTableSkeleton cols={7} rows={3} />
       </Shell>
     );
   }
@@ -67,35 +42,10 @@ export default function DatabasesPage() {
     );
   }
 
-  const runningCount = dbList.filter((d) => d.status === "running").length;
-  const pgCount = dbList.filter((d) => d.engine === "postgresql").length;
-  const redisCount = dbList.filter((d) => d.engine === "redis").length;
-
-  const handleCreate = () => {
-    if (!formName.trim()) return;
-    const portMap: Record<string, number> = {
-      postgresql: 5432,
-      mysql: 3306,
-      mongodb: 27017,
-      redis: 6379,
-    };
-    const newDb: Database = {
-      name: formName.trim(),
-      engine: formEngine,
-      version: formVersion,
-      storage: formStorage,
-      status: "creating",
-      connection_string: `${formEngine}://${formName.trim()}:${portMap[formEngine] || 5432}`,
-      port: portMap[formEngine] || 5432,
-      created_at: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    };
-    setDbList((prev) => [...prev, newDb]);
-    setShowCreate(false);
-    setFormName("");
-    setFormEngine("postgresql");
-    setFormVersion("16.1");
-    setFormStorage("20Gi");
-  };
+  const dbs: AppDatabase[] = dbList || [];
+  const readyCount = dbs.filter((d) => d.status === "ready").length;
+  const pgCount = dbs.filter((d) => d.engine === "postgresql").length;
+  const redisCount = dbs.filter((d) => d.engine === "redis").length;
 
   return (
     <Shell>
@@ -104,17 +54,14 @@ export default function DatabasesPage() {
           <div>
             <h1 className="text-lg font-semibold text-white">Databases</h1>
             <p className="text-sm text-neutral-500">
-              {dbList.length} instances, {runningCount} running
+              {dbs.length} instances, {readyCount} ready
               {pgCount > 0 ? `, ${pgCount} PostgreSQL` : ""}
               {redisCount > 0 ? `, ${redisCount} Redis` : ""}
             </p>
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="rounded-lg bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 text-sm transition-colors"
-          >
-            + Create Instance
-          </button>
+          <p className="text-xs text-neutral-600">
+            Databases are managed per-app. Go to an app&apos;s Databases tab to create one.
+          </p>
         </div>
 
         {/* Filter bar */}
@@ -148,11 +95,10 @@ export default function DatabasesPage() {
         </div>
 
         {/* Table or Empty State */}
-        {dbList.length === 0 ? (
+        {dbs.length === 0 ? (
           <EmptyState
             title="No databases yet"
-            description="Create your first database instance to get started."
-            actionLabel="+ Create Instance"
+            description="Go to an app and add a database from the Databases tab."
           />
         ) : (
           <div className="overflow-hidden rounded-lg border border-border">
@@ -161,19 +107,19 @@ export default function DatabasesPage() {
                 <thead>
                   <tr className="border-b border-border bg-surface-100">
                     <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
-                      DB Identifier
+                      Name
                     </th>
                     <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
                       Engine
                     </th>
                     <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
-                      Version
+                      App
                     </th>
                     <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
                       Status
                     </th>
                     <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
-                      Storage
+                      Size
                     </th>
                     <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">
                       Port
@@ -184,7 +130,7 @@ export default function DatabasesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dbList.map((db) => {
+                  {dbs.map((db) => {
                     const badge = engineBadge[db.engine] ?? {
                       label: "?",
                       className: "bg-neutral-500/20 text-neutral-400",
@@ -192,16 +138,13 @@ export default function DatabasesPage() {
 
                     return (
                       <tr
-                        key={db.name}
+                        key={db.id}
                         className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors"
                       >
                         <td className="whitespace-nowrap px-4 py-3">
-                          <Link
-                            href={`/databases/${db.name}`}
-                            className="font-medium text-white hover:text-accent-400 transition-colors"
-                          >
+                          <span className="font-medium text-white">
                             {db.name}
-                          </Link>
+                          </span>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           <span
@@ -213,20 +156,25 @@ export default function DatabasesPage() {
                             {db.engine}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
-                          {db.version}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <Link
+                            href={`/apps/${db.app_id}`}
+                            className="text-xs text-accent-400 hover:underline"
+                          >
+                            {db.app_id.slice(0, 8)}...
+                          </Link>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
-                          <StatusBadge status={db.status as "running" | "creating" | "stopped"} />
+                          <StatusBadge status={db.status as "ready" | "running" | "creating" | "stopped"} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-400">
-                          {db.storage}
+                          {db.size_mb} / {db.max_size_mb} MB
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
                           {db.port}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-xs text-neutral-400">
-                          {db.created_at}
+                          {new Date(db.created_at).toLocaleDateString()}
                         </td>
                       </tr>
                     );
@@ -237,80 +185,6 @@ export default function DatabasesPage() {
           </div>
         )}
       </div>
-
-      {showCreate && (
-        <Modal title="Create Database Instance" onClose={() => setShowCreate(false)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleCreate();
-            }}
-            className="space-y-3"
-          >
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Name</label>
-              <input
-                type="text"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="my-database"
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Engine</label>
-              <select
-                value={formEngine}
-                onChange={(e) => {
-                  setFormEngine(e.target.value);
-                  setFormVersion(defaultVersions[e.target.value] || "");
-                }}
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              >
-                <option value="postgresql">PostgreSQL</option>
-                <option value="mysql">MySQL</option>
-                <option value="mongodb">MongoDB</option>
-                <option value="redis">Redis</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Version</label>
-              <input
-                type="text"
-                value={formVersion}
-                onChange={(e) => setFormVersion(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Storage</label>
-              <input
-                type="text"
-                value={formStorage}
-                onChange={(e) => setFormStorage(e.target.value)}
-                placeholder="20Gi"
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
-              >
-                Create
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
     </Shell>
   );
 }

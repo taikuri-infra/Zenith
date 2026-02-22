@@ -1,94 +1,106 @@
-# Zenith - AI Agent Configuration
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
 
-## What is Zenith?
-100% free, open-source, Kubernetes-native PaaS on Hetzner Cloud.
-- One command installs everything: `zen install --provider hetzner --token hc_xxx`
-- Users get: Apps, Databases, Storage, Auth, Gateway, Monitoring, Registry
-- Operators get: Mission Control (cluster management, upgrades, modules)
-- Domain: freezenith.com
+These instructions are for AI assistants working in this project.
 
-## Project Structure
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
+# 🧙 CLAUDE.MD - AI AGENT CONFIGURATION
+
+> **⚠️ CRITICAL: This file is identical to `AGENTS.md`.**
+> **You MUST read `AGENTS.md` COMPLETELY for all rules and commands.**
+
+---
+
+## 📌 Purpose
+
+This file exists so **Claude CLI** can automatically detect the project context.
+
+**All rules, CLI commands, and architecture guidelines are in `AGENTS.md`.**
+
+---
+
+## 🚨 MANDATORY STEPS
+
+When you open this project:
+
+1. **READ `AGENTS.md` COMPLETELY** - It contains all Lich Framework rules
+2. **READ `.lich/rules/ai-behavior.md`** - Lich-first decision logic
+3. **READ `agentlog.md`** - Project change history
+
+---
+
+## ⚡ Quick Reference
+
+```bash
+# First time setup
+lich setup           # Configure AI tools
+
+# Development
+lich start           # Start dev environment
+lich stop            # Stop everything
+
+# Code Generation (MANDATORY - never write manually)
+lich make entity <name>
+lich make service <name>
+lich make api <name>
+
+# CI (Continuous Integration)
+lich ci setup        # Setup act for local CI
+lich ci backend      # Backend CI (Docker)
+lich ci backend -l   # Backend CI (local, fast)
+lich ci web          # Web CI
+lich ci admin        # Admin CI
+lich ci landing      # Landing CI
+
+# Deploy
+lich deploy setup            # Configure SSH, paths
+lich deploy stage admin      # Deploy to staging
+lich deploy prod backend -v v1.2.3  # Deploy to prod
+
+# Quality
+lich test            # Run tests
+lich lint --fix      # Fix linting
+lich security        # Security scan
+lich doctor          # Health check
+
+# Database
+lich migration create "msg"
+lich migration up
 ```
-/opt/zenith/
-├── apps/
-│   ├── web/              # User-facing platform (Next.js 15, port 3000)
-│   ├── mission-control/  # Management plane (Next.js 15, port 3100, ms.{domain})
-│   └── landing/          # freezenith.com (TODO)
-├── packages/
-│   └── ui/               # Shared design system
-├── services/
-│   ├── api/              # Go API server (TODO)
-│   ├── operator/         # Zenith K8s operator (TODO)
-│   └── auth/             # Auth service - Keycloak-like (TODO)
-├── cli/                  # zen CLI - Go + Charm TUI (TODO)
-├── helm/                 # Helm charts (TODO)
-├── docs/                 # Architecture & design docs
-│   ├── ARCHITECTURE.md   # System architecture
-│   ├── FRONTEND.md       # Frontend design spec
-│   ├── PHASES.md         # Implementation phases (~456 tasks)
-│   ├── MICROSERVICES.md  # Service design
-│   └── DESIGN.md         # Visual design system
-├── CLAUDE.md             # THIS FILE - AI agent entry point
-└── TASKS.md              # Implementation tasks - READ THIS TO START WORKING
-```
 
-## Must Read Before Working
-1. **TASKS.md** - Prioritized implementation tasks (START HERE)
-2. **docs/ARCHITECTURE.md** - System architecture and decisions
-3. **docs/FRONTEND.md** - Frontend page designs
-4. **docs/PHASES.md** - Full implementation phases
+---
 
-## Tech Stack
-| Component | Technology |
-|-----------|-----------|
-| Frontend | Next.js 15, TypeScript, Tailwind CSS, Lucide icons |
-| Backend API | Go (Fiber/Echo), CRD-driven |
-| Operator | Go, controller-runtime, kubebuilder |
-| CLI | Go, Cobra, Charm (bubbletea, lipgloss, bubbles, huh) |
-| Auth | Keycloak-like (OpenID Connect + SAML), per-tenant realms |
-| API Gateway | Kong (Kubernetes Operator, CRDs) |
-| Monitoring | Grafana + Loki + Prometheus |
-| Registry | Harbor or custom (ECR-like) |
-| Database Operators | CNPG (PostgreSQL), Redis Operator, MongoDB Operator |
-| Cluster Management | CAPI + CAPH (Cluster API Provider Hetzner) |
-| Infrastructure | Hetzner Cloud (servers, volumes, LBs, DNS, object storage) |
+## 📚 Files to Read
 
-## Architecture
-```
-Management Plane (€5 CX22 - single server):
-  k3s + CAPI + CAPH + Mission Control
-  Mission Control IS the management plane (not just a UI)
-  Self-service: operator manages everything from MC after zen install
-  URL: ms.{domain} (e.g., ms.embermind.app)
+| Priority | File | Purpose |
+|----------|------|---------|
+| 🔴 HIGH | `AGENTS.md` | **Master AI prompt - READ FIRST** |
+| 🔴 HIGH | `agentlog.md` | Change history - ALWAYS UPDATE |
+| 🔴 HIGH | `.lich/rules/ai-behavior.md` | Lich-first decision logic |
+| 🟡 MED | `.lich/rules/backend.md` | Backend architecture |
+| 🟡 MED | `.lich/rules/frontend.md` | Frontend architecture |
+| 🟡 MED | `.lich/rules/ui-ux.md` | UI/UX design rules |
+| 🟢 LOW | `.lich/workflows/` | Step-by-step guides |
 
-Workload Clusters (CAPI-managed):
-  Zenith Operator → watches CRDs → creates Hetzner resources
-  Service Operators → CNPG, Redis, etc.
-  Web Platform → user-facing dashboard (cloud.{domain})
-  Kong API Gateway → Backend Services (JWT, rate limiting, CORS)
+---
 
-Domain Convention:
-  ms.{domain}    → Mission Control (operator management plane)
-  cloud.{domain} → Web Platform (user-facing dashboard)
-  Root domain    → reserved for customer use
-```
+## 🔗 Reminder
 
-## Current State (Feb 2026)
-- Frontend mockups: Web platform (17 pages) + Mission Control (10 pages)
-- Design system: Dark theme, emerald accent, shared UI package
-- Architecture docs: Complete
-- Backend API: Not started
-- Zenith Operator: Not started
-- CLI: Not started
-- Auth Service: Not started
-- Helm Charts: Not started
+**AGENTS.md = CLAUDE.md**
 
-## Key Decisions
-- Everything is a CRD. User creates app -> Backend creates CRD -> Operator reconciles.
-- Mission Control IS the management plane. CAPI + CAPH run on the same k3s. Everything self-service after `zen install`.
-- Auth is built-in (not external Keycloak). Each tenant gets a realm.
-- Kong for API Gateway (has K8s operator, integrates with JWT).
-- CAPI for cluster lifecycle (zero-downtime K8s upgrades).
-- GitOps-friendly: `zen export`, `zen apply`, `zen diff`.
-- UX must be dead simple. Progressive disclosure. No jargon.
-- Customer domain convention: `ms.{domain}` for MC, `cloud.{domain}` for web. Root domain stays for customer.
+Both files enforce the same rules. If you're reading this, go read `AGENTS.md`.
+
+**🧙 Meta Architect Activated.**

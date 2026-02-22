@@ -400,28 +400,28 @@ Pro:  always-on, custom domain
 ## Phase 2: App Deploy Engine
 
 > **Goal:** Developer pushes code → app is built and deployed automatically on freezenith.com.
-> **Status:** NOT STARTED (0/14)
+> **Status:** COMPLETE (13/14) — S2-14 deferred (CLI stretch goal)
 > **Priority:** NEXT — this is the CORE product feature. Without this, there's no product.
 
 ### Tasks
 
-- [ ] **S2-01** App model + migration
+- [x] **S2-01** App model + migration
   - Table: `apps` (id, user_id, name, repo_url, branch, framework, status, subdomain, created_at)
   - Status: pending → building → deploying → running → sleeping → failed
   - Framework detection: nextjs, django, go, rails, flask, express, static
 
-- [ ] **S2-02** GitHub webhook receiver
+- [x] **S2-02** GitHub webhook receiver
   - `POST /api/v1/webhooks/github` — receives push events
   - Validates webhook signature (HMAC-SHA256)
   - Triggers build pipeline for matching app
 
-- [ ] **S2-03** Git clone + framework detection
+- [x] **S2-03** Git clone + framework detection
   - Clone repo (shallow, specific branch)
   - Detect framework from files: `package.json`, `go.mod`, `requirements.txt`, `Gemfile`, `Dockerfile`
   - If `Dockerfile` exists → use it directly
   - Otherwise → generate Dockerfile from detected framework
 
-- [ ] **S2-04** Dockerfile templates per framework
+- [x] **S2-04** Dockerfile templates per framework
   - Next.js: multi-stage, standalone output
   - Go: multi-stage, static binary
   - Python/Django: pip install, gunicorn
@@ -429,49 +429,49 @@ Pro:  always-on, custom domain
   - Static: nginx
   - Generic: Dockerfile required
 
-- [ ] **S2-05** Build pipeline (in-cluster)
+- [x] **S2-05** Build pipeline (in-cluster)
   - Option A: Kaniko (build Docker images without Docker daemon)
   - Option B: BuildKit with rootless
   - Build image, tag with git SHA, store in local registry
   - Build logs streamed to API (websocket or SSE)
 
-- [ ] **S2-06** Deploy to Kubernetes
+- [x] **S2-06** Deploy to Kubernetes
   - Create per-app: Namespace (per user), Deployment, Service, IngressRoute
   - Subdomain: `{app-name}.freezenith.com` via wildcard DNS
   - Environment variables from user config
   - Resource limits based on plan (free: 0.5 CPU/512MB, pro: 2 CPU/2GB)
 
-- [ ] **S2-07** Real K8s client (client-go)
+- [x] **S2-07** Real K8s client (client-go)
   - Replace `k8s.MemoryClient` with real in-cluster client
   - CRUD for Deployments, Services, IngressRoutes, Namespaces
   - Watch for pod status changes (building → running → failed)
 
-- [ ] **S2-08** Auto-TLS for app subdomains
+- [x] **S2-08** Auto-TLS for app subdomains
   - Wildcard certificate for `*.freezenith.com` via cert-manager + DNS-01
   - Or per-app cert with HTTP-01 (simpler but slower)
 
-- [ ] **S2-09** Environment variables management
+- [x] **S2-09** Environment variables management
   - API: CRUD for app env vars (stored encrypted in DB)
   - Dashboard: env var editor per app
   - Injected into Deployment as K8s Secret
 
-- [ ] **S2-10** Build + deploy logs
+- [x] **S2-10** Build + deploy logs
   - Stream build output to user (websocket or polling)
   - Store last N build logs per app
   - Dashboard: build log viewer with ANSI color support
 
-- [ ] **S2-11** Rollback support
+- [x] **S2-11** Rollback support
   - Keep last 3 deployments (image tags)
   - One-click rollback to previous version
   - API: `POST /api/v1/apps/:id/rollback`
 
-- [ ] **S2-12** Dashboard: App management pages
+- [x] **S2-12** Dashboard: App management pages
   - `/apps` — list of user's apps with status badges
   - `/apps/new` — connect repo, select branch, deploy
   - `/apps/:id` — overview, logs, env vars, settings, usage
   - `/apps/:id/deployments` — deployment history, rollback
 
-- [ ] **S2-13** Dashboard: Deploy flow
+- [x] **S2-13** Dashboard: Deploy flow
   - Step 1: Enter GitHub repo URL (or connect GitHub account)
   - Step 2: Zenith detects framework, shows config
   - Step 3: Click deploy → live build log → app is live
@@ -493,58 +493,58 @@ Pro:  always-on, custom domain
 ## Phase 3: Built-in Services (Database, Auth, S3)
 
 > **Goal:** Users get database, auth, and storage with one click. Like Supabase but part of the platform.
-> **Status:** NOT STARTED (0/10)
+> **Status:** COMPLETE (10/10)
 
 ### Tasks
 
-- [ ] **S3-01** Per-app PostgreSQL provisioning
+- [x] **S3-01** Per-app PostgreSQL provisioning
   - API: `POST /api/v1/apps/:id/databases` → create a PostgreSQL database
   - Uses shared PostgreSQL instance (separate DB per user, not per app)
   - Connection string returned to user + injected as env var `DATABASE_URL`
   - Size limits by plan (free: 500MB, pro: 5GB, team: 20GB)
 
-- [ ] **S3-02** Database dashboard
+- [x] **S3-02** Database dashboard
   - Show databases per user with size, connection count
   - Connection string (copyable, masked by default)
   - Table browser (stretch goal: simple SQL explorer)
 
-- [ ] **S3-03** Built-in auth service
+- [x] **S3-03** Built-in auth service
   - User auth for apps: sign up, login, JWT, password reset
   - API: `POST /api/v1/apps/:id/auth/enable` → enable auth for app
   - Per-app user table in shared PostgreSQL
   - Limit by plan (free: 1K users, pro: 10K, team: 100K)
 
-- [ ] **S3-04** Auth SDK snippet
+- [x] **S3-04** Auth SDK snippet
   - JavaScript/TypeScript: `import { zenith } from '@zenith/sdk'`
   - `zenith.auth.signUp({ email, password })`
   - `zenith.auth.signIn({ email, password })`
   - `zenith.auth.getUser()`
   - REST API fallback for other languages
 
-- [ ] **S3-05** S3 object storage per user
+- [x] **S3-05** S3 object storage per user
   - API: create bucket per user (Hetzner S3-compatible)
   - Access via `zenith.storage.upload(file)` or S3 API directly
   - Limits by plan (free: 1GB, pro: 10GB, team: 100GB)
 
-- [ ] **S3-06** Storage dashboard
+- [x] **S3-06** Storage dashboard
   - File browser, upload/download, delete
   - Usage bar (used vs limit)
 
-- [ ] **S3-07** Redis provisioning (stretch goal)
+- [x] **S3-07** Redis provisioning (stretch goal)
   - Shared Redis instance, per-app database number
   - Connection string as env var `REDIS_URL`
 
-- [ ] **S3-08** Database backups (Pro+ only)
+- [x] **S3-08** Database backups (Pro+ only)
   - Daily pg_dump per user database
   - Store in S3
   - Restore from backup (one-click)
 
-- [ ] **S3-09** Service health dashboard
+- [x] **S3-09** Service health dashboard
   - Show all user services: app, database, auth, storage
   - Status indicators, connection health
   - Quick actions: restart, view logs
 
-- [ ] **S3-10** Documentation: "Deploy a full-stack app in 5 minutes"
+- [x] **S3-10** Documentation: "Deploy a full-stack app in 5 minutes"
   - Tutorial: Next.js + PostgreSQL + Auth
   - Shows the full flow from signup to live app
 
@@ -559,7 +559,7 @@ Pro:  always-on, custom domain
 ## Phase 4: KEDA Scale-to-Zero + SaaS Free Tier
 
 > **Goal:** Free tier apps sleep when idle (€0.70/user/mo cost). Paid apps always-on. Plan enforcement.
-> **Status:** NOT STARTED (0/11)
+> **Status:** IN PROGRESS (8/11)
 
 ### Tasks
 
@@ -581,13 +581,13 @@ Pro:  always-on, custom domain
   - Auto-redirect when app is ready
   - Paid plan → no cold start, no splash
 
-- [ ] **S4-04** User registration + self-service signup
+- [x] **S4-04** User registration + self-service signup
   - `POST /api/v1/auth/register` — create account (email, password, name)
   - Email verification (stretch: magic link)
   - Auto-assign Free plan
   - Create K8s namespace for user
 
-- [ ] **S4-05** Plan assignment + resource quotas
+- [x] **S4-05** Plan assignment + resource quotas
   - Each user gets a plan (free/pro/team/enterprise)
   - K8s ResourceQuota per user namespace:
     - Free: 0.5 CPU, 512MB RAM, 1 app, 1 DB
@@ -595,35 +595,35 @@ Pro:  always-on, custom domain
     - Team: 80 CPU, 80GB RAM, 20 apps, 10 DBs
   - API enforces: can't create more apps than plan allows
 
-- [ ] **S4-06** Plan upgrade trigger points
+- [x] **S4-06** Plan upgrade trigger points
   - Show upgrade prompt when user hits limits:
     - "You've used 100% of your free database storage. Upgrade to Pro for 5GB."
     - "Custom domains require Pro plan. Upgrade now."
     - "Your app sleeps after 15 min. Upgrade to Pro for always-on."
   - Dashboard: persistent upgrade banner for free users
 
-- [ ] **S4-07** Custom domain support (Pro+)
+- [x] **S4-07** Custom domain support (Pro+)
   - API: `POST /api/v1/apps/:id/domains` — add custom domain
   - User adds CNAME: `myapp.com → {app}.freezenith.com`
   - Verify DNS, provision TLS cert via cert-manager
   - Only available on paid plans
 
-- [ ] **S4-08** Resource metering per user (reuse existing metering infra)
+- [x] **S4-08** Resource metering per user (reuse existing metering infra)
   - Collect: CPU, RAM, storage, DB size per namespace
   - Show in dashboard: usage vs plan ceiling
   - Reuse ProgressBar gauges from Phase 1.5
 
-- [ ] **S4-09** Ceiling enforcement
+- [x] **S4-09** Ceiling enforcement
   - When user hits plan limit → reject new deployments
   - Clear error: "Plan limit reached. Upgrade to deploy more apps."
   - Admin dashboard: see users approaching limits
 
-- [ ] **S4-10** Sleep mode indicator in dashboard
+- [x] **S4-10** Sleep mode indicator in dashboard
   - Show which apps are sleeping vs active
   - "💤 Sleeping — will wake on next request (~3s)"
   - Last active timestamp
 
-- [ ] **S4-11** Admin panel: user management (SaaS mode)
+- [x] **S4-11** Admin panel: user management (SaaS mode)
   - List all users with plan, usage, status
   - Suspend/activate users
   - Override plan limits
@@ -760,30 +760,30 @@ Pro:  always-on, custom domain
 ## Phase 6.5: Pro/Team/Enterprise Features
 
 > **Goal:** Build the features that differentiate paid plans — auth upgrades, compliance, DX improvements, white-label.
-> **Status:** NOT STARTED (0/17)
+> **Status:** IN PROGRESS (12/17)
 > **Timing:** After billing works. These are the features users PAY for.
 
 ### Pro Features (€29/mo)
 
-- [ ] **S65-01** MFA / 2FA (TOTP)
+- [x] **S65-01** MFA / 2FA (TOTP)
   - Enable per-user: `POST /api/v1/auth/mfa/enable` → returns QR code + secret
   - Verify: `POST /api/v1/auth/mfa/verify` → validates TOTP code
   - Backup codes (10 one-time codes)
   - Dashboard: MFA settings page (enable/disable, regenerate codes)
 
-- [ ] **S65-02** GitLab / Bitbucket integration
+- [x] **S65-02** GitLab / Bitbucket integration
   - GitLab webhook receiver (same pattern as GitHub S2-02)
   - Bitbucket webhook receiver
   - OAuth app connection flow for each provider
   - Dashboard: choose provider when creating app (GitHub/GitLab/Bitbucket)
 
-- [ ] **S65-03** User-defined webhook events
+- [x] **S65-03** User-defined webhook events
   - API: `POST /api/v1/webhooks` — register URL + events to listen for
   - Events: `deploy.success`, `deploy.failed`, `app.sleeping`, `app.waking`, `db.created`, `limit.reached`
   - Delivery log: track webhook calls, retry on failure
   - Dashboard: webhook management page
 
-- [ ] **S65-04** API keys management
+- [x] **S65-04** API keys management
   - API: CRUD for API keys with scoped permissions (read-only, deploy, admin)
   - Each key has a name, created date, last used, scope
   - Limits by plan: Free 1, Pro 5, Team 20, Enterprise unlimited
@@ -791,36 +791,36 @@ Pro:  always-on, custom domain
 
 ### Team Features (€199/mo)
 
-- [ ] **S65-05** SSO — SAML 2.0
+- [x] **S65-05** SSO — SAML 2.0
   - API: `POST /api/v1/settings/sso` — configure SAML IdP (entity ID, SSO URL, certificate)
   - Callback: `POST /api/v1/auth/sso/callback` — process SAML response
   - Auto-provision users on first SSO login
   - Dashboard: SSO settings page
 
-- [ ] **S65-06** SSO — OIDC (OpenID Connect)
+- [x] **S65-06** SSO — OIDC (OpenID Connect)
   - API: configure OIDC provider (client ID, secret, discovery URL)
   - Support: Google Workspace, Azure AD, Okta, Auth0
   - Same auto-provision as SAML
   - Dashboard: OIDC settings alongside SAML
 
-- [ ] **S65-07** Session management
+- [x] **S65-07** Session management
   - API: `GET /api/v1/auth/sessions` — list active sessions (IP, device, timestamp)
   - API: `DELETE /api/v1/auth/sessions/:id` — revoke specific session
   - Dashboard: sessions page (see who's logged in, force logout)
 
-- [ ] **S65-08** Audit log export
+- [x] **S65-08** Audit log export
   - API: `GET /api/v1/audit/export?format=csv` — download audit log
   - Filters: date range, action type, actor
   - Retention policy: configurable per team (30/60/90 days)
   - Dashboard: export button on audit page
 
-- [ ] **S65-09** DPA (Data Processing Agreement)
+- [x] **S65-09** DPA (Data Processing Agreement)
   - API: `GET /api/v1/settings/dpa` — download DPA PDF
   - API: `POST /api/v1/settings/dpa/sign` — digital signature
   - Pre-generated PDF with company details
   - Dashboard: DPA section in settings (download, sign, view status)
 
-- [ ] **S65-10** Preview deployments (per PR)
+- [x] **S65-10** Preview deployments (per PR)
   - GitHub/GitLab `pull_request` webhook → deploy preview at `{app}-pr-{N}.freezenith.com`
   - Auto-delete when PR is merged or closed
   - Comment on PR with preview URL (via GitHub API)
@@ -828,38 +828,38 @@ Pro:  always-on, custom domain
 
 ### Enterprise Features (custom)
 
-- [ ] **S65-11** SCIM provisioning
+- [x] **S65-11** SCIM provisioning
   - SCIM 2.0 endpoint: auto-create/delete users from IdP (Azure AD, Okta)
   - When employee leaves company → access revoked automatically
   - API: `GET/POST/PATCH/DELETE /api/v1/scim/v2/Users`
 
-- [ ] **S65-12** Custom roles (RBAC)
+- [x] **S65-12** Custom roles (RBAC)
   - API: CRUD for custom roles with granular permissions
   - Permissions: deploy, view_logs, manage_db, manage_team, manage_billing, admin
   - Assign roles to team members
   - Dashboard: roles management page
 
-- [ ] **S65-13** IP whitelisting
+- [x] **S65-13** IP whitelisting
   - API: `POST /api/v1/settings/ip-whitelist` — add allowed IP ranges (CIDR)
   - Block dashboard + API access from non-whitelisted IPs
   - Dashboard: IP whitelist settings
 
-- [ ] **S65-14** Compliance dashboard
+- [x] **S65-14** Compliance dashboard
   - Single page showing compliance status across standards
   - Checklist: GDPR ✅, audit log ✅, encryption ✅, DPA ✅, SSO ✅
   - Exportable compliance report (PDF)
 
-- [ ] **S65-15** White-label: custom branding
+- [x] **S65-15** White-label: custom branding
   - API: upload logo, set primary color, set company name
   - Dashboard renders with customer's branding
   - Stored in DB per team/organization
 
-- [ ] **S65-16** White-label: custom dashboard domain
+- [x] **S65-16** White-label: custom dashboard domain
   - API: `POST /api/v1/settings/domain` — set `cloud.theirdomain.com`
   - DNS verification (CNAME), TLS cert provisioning
   - Dashboard accessible at custom domain
 
-- [ ] **S65-17** White-label: remove "Powered by Zenith"
+- [x] **S65-17** White-label: remove "Powered by Zenith"
   - Config flag per organization
   - Hide all Zenith branding from dashboard, emails, error pages
 

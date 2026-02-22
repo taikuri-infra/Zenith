@@ -7,7 +7,8 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/capi"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -35,7 +36,7 @@ func NewAdminHandler(k8sClient k8s.Client, capiClient *capi.Client, adminStore s
 func (h *AdminHandler) GetDashboardStats(c *fiber.Ctx) error {
 	clusters, err := h.capiClient.ListClusters(c.Context())
 	if err != nil {
-		clusters = []models.Cluster{}
+		clusters = []entities.Cluster{}
 	}
 
 	allHealthy := true
@@ -67,7 +68,7 @@ func (h *AdminHandler) GetDashboardStats(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(models.DashboardStats{
+	return c.JSON(entities.DashboardStats{
 		ClusterCount:     len(clusters),
 		AllHealthy:       allHealthy,
 		TenantCount:      tenantCount,
@@ -108,7 +109,7 @@ func (h *AdminHandler) GetCluster(c *fiber.Ctx) error {
 // CreateCluster provisions a new CAPI cluster.
 // POST /api/v1/admin/clusters
 func (h *AdminHandler) CreateCluster(c *fiber.Ctx) error {
-	var input models.CreateClusterInput
+	var input dto.CreateClusterInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -139,7 +140,7 @@ func (h *AdminHandler) CreateCluster(c *fiber.Ctx) error {
 		return NewConflict("cluster already exists")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:    time.Now().Format("15:04"),
 		Actor:   actorFromContext(c),
 		Action:  "Created cluster " + input.Name,
@@ -161,7 +162,7 @@ func (h *AdminHandler) DeleteCluster(c *fiber.Ctx) error {
 		return NewNotFound("cluster")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:    time.Now().Format("15:04"),
 		Actor:   actorFromContext(c),
 		Action:  "Deleted cluster " + name,
@@ -179,7 +180,7 @@ func (h *AdminHandler) UpgradeCluster(c *fiber.Ctx) error {
 		return NewBadRequest("cluster name is required")
 	}
 
-	var input models.UpgradeClusterInput
+	var input dto.UpgradeClusterInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -191,7 +192,7 @@ func (h *AdminHandler) UpgradeCluster(c *fiber.Ctx) error {
 		return NewNotFound("cluster")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:    time.Now().Format("15:04"),
 		Actor:   actorFromContext(c),
 		Action:  "Initiated upgrade to " + input.Version,
@@ -211,7 +212,7 @@ func (h *AdminHandler) ListTenants(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to list tenants")
 	}
 
-	tenants := make([]models.Tenant, 0, len(projects))
+	tenants := make([]entities.Tenant, 0, len(projects))
 	for _, p := range projects {
 		tenants = append(tenants, projectToTenant(p))
 	}
@@ -258,7 +259,7 @@ func (h *AdminHandler) SuspendTenant(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to suspend tenant")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Suspended tenant " + id,
@@ -287,7 +288,7 @@ func (h *AdminHandler) InstallModule(c *fiber.Ctx) error {
 		return NewBadRequest("module name is required")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Installed module " + name,
@@ -304,7 +305,7 @@ func (h *AdminHandler) UninstallModule(c *fiber.Ctx) error {
 		return NewBadRequest("module name is required")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Uninstalled module " + name,
@@ -326,7 +327,7 @@ func (h *AdminHandler) UpdateModule(c *fiber.Ctx) error {
 		return NewNotFound("module")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Updated module " + name + " to " + mod.Installed,
@@ -351,7 +352,7 @@ func (h *AdminHandler) UpdateAllModules(c *fiber.Ctx) error {
 		}
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Updated all modules (" + strconv.Itoa(updated) + " updated)",
@@ -390,7 +391,7 @@ func (h *AdminHandler) CheckUpdates(c *fiber.Ctx) error {
 // ApplyUpdate applies a platform update (placeholder).
 // POST /api/v1/admin/updates/apply
 func (h *AdminHandler) ApplyUpdate(c *fiber.Ctx) error {
-	var input models.ApplyUpdateInput
+	var input dto.ApplyUpdateInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -398,7 +399,7 @@ func (h *AdminHandler) ApplyUpdate(c *fiber.Ctx) error {
 		return NewBadRequest("version is required")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Applied platform update " + input.Version,
@@ -425,10 +426,10 @@ func (h *AdminHandler) GetInfraOverview(c *fiber.Ctx) error {
 	clusters, _ := h.capiClient.ListClusters(c.Context())
 
 	totalServers := 0
-	resources := make([]models.InfraNode, 0)
+	resources := make([]entities.InfraNode, 0)
 	for _, cl := range clusters {
 		totalServers += cl.Nodes
-		resources = append(resources, models.InfraNode{
+		resources = append(resources, entities.InfraNode{
 			Name:        cl.Name + "-pool",
 			Type:        "CX22",
 			Count:       cl.Nodes,
@@ -440,7 +441,7 @@ func (h *AdminHandler) GetInfraOverview(c *fiber.Ctx) error {
 	// Management plane is always 1 server
 	managementServers := 1
 	totalServers += managementServers
-	resources = append(resources, models.InfraNode{
+	resources = append(resources, entities.InfraNode{
 		Name:        "management-plane",
 		Type:        "CX22",
 		Count:       managementServers,
@@ -448,7 +449,7 @@ func (h *AdminHandler) GetInfraOverview(c *fiber.Ctx) error {
 		MonthlyCost: "EUR 5.00",
 	})
 
-	return c.JSON(models.InfraOverview{
+	return c.JSON(entities.InfraOverview{
 		Servers:       totalServers,
 		Volumes:       len(clusters) * 2,
 		VolumeSize:    strconv.Itoa(len(clusters)*20) + " GB",
@@ -476,7 +477,7 @@ func (h *AdminHandler) GetPlatformState(c *fiber.Ctx) error {
 		updateAvailable = update.Version
 	}
 
-	return c.JSON(models.PlatformState{
+	return c.JSON(entities.PlatformState{
 		PlatformVersion:       "v1.2.1",
 		UpdateAvailable:       updateAvailable,
 		InstalledDate:         "2026-01-15",
@@ -496,7 +497,7 @@ func (h *AdminHandler) ExportState(c *fiber.Ctx) error {
 	settings, _ := h.store.GetSettings(c.Context())
 	modules, _ := h.store.ListModules(c.Context())
 
-	tenants := make([]models.Tenant, 0, len(projects))
+	tenants := make([]entities.Tenant, 0, len(projects))
 	for _, p := range projects {
 		tenants = append(tenants, projectToTenant(p))
 	}
@@ -533,7 +534,7 @@ func (h *AdminHandler) GetSettings(c *fiber.Ctx) error {
 // UpdateSettings updates platform settings.
 // PATCH /api/v1/admin/settings (also supports PUT)
 func (h *AdminHandler) UpdateSettings(c *fiber.Ctx) error {
-	var input models.PlatformSettings
+	var input entities.PlatformSettings
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -543,7 +544,7 @@ func (h *AdminHandler) UpdateSettings(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update settings")
 	}
 
-	_ = h.store.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.store.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Updated platform settings",
@@ -566,7 +567,7 @@ func actorFromContext(c *fiber.Ctx) string {
 }
 
 // projectToTenant converts a Project CRD to a Tenant model.
-func projectToTenant(p *k8s.CRDObject) models.Tenant {
+func projectToTenant(p *k8s.CRDObject) entities.Tenant {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(p.Spec, &spec)
 
@@ -584,7 +585,7 @@ func projectToTenant(p *k8s.CRDObject) models.Tenant {
 		status = "suspended"
 	}
 
-	return models.Tenant{
+	return entities.Tenant{
 		Name:      displayName,
 		Plan:      plan,
 		Apps:      0,

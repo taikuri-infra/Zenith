@@ -9,18 +9,25 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dotechhq/zenith/services/api/docs"
+	"github.com/dotechhq/zenith/services/api/internal/autoscale"
 	"github.com/dotechhq/zenith/services/api/internal/capi"
 	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/config"
+	"github.com/dotechhq/zenith/services/api/internal/deploy"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
+	"github.com/dotechhq/zenith/services/api/internal/hetzner"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
-	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/dotechhq/zenith/services/api/internal/store"
+	stripeClient "github.com/dotechhq/zenith/services/api/internal/stripe"
 	"github.com/dotechhq/zenith/services/api/internal/store/migrations"
+	"github.com/dotechhq/zenith/services/api/internal/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
@@ -42,6 +49,7 @@ func main() {
 	var adminRepo store.AdminRepository
 	var customerRepo store.CustomerRepository
 	var meteringRepo store.MeteringRepository
+	var appRepo store.AppRepository
 
 	if cfg.DatabaseURL != "" {
 		log.Println("Connecting to PostgreSQL...")
@@ -61,20 +69,51 @@ func main() {
 		adminRepo = store.NewPostgresAdminRepository(pool)
 		customerRepo = store.NewPostgresCustomerRepository(pool)
 		meteringRepo = store.NewPostgresMeteringRepository(pool)
+		appRepo = store.NewPostgresAppRepository(pool)
 	} else {
 		log.Println("No DATABASE_URL set — using in-memory stores")
 		userRepo = store.NewMemoryUserRepository()
 		adminRepo = store.NewMemoryAdminRepository()
 		customerRepo = store.NewMemoryCustomerRepository()
 		meteringRepo = store.NewMemoryMeteringRepository()
+		appRepo = store.NewMemoryAppRepository()
 	}
 
 	// Seed admin user
 	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
-		if _, err := userRepo.Create(ctx, cfg.AdminEmail, cfg.AdminPassword, "Admin", models.RoleOwner); err != nil {
+		if _, err := userRepo.Create(ctx, cfg.AdminEmail, cfg.AdminPassword, "Admin", entities.RoleOwner); err != nil {
 			log.Printf("Admin seed skipped: %v", err)
 		} else {
 			log.Printf("Admin user seeded: %s", cfg.AdminEmail)
+		}
+	}
+
+	log.Printf("Zenith mode: %s", cfg.Mode)
+	if cfg.Mode == "standalone" {
+		log.Println("Running in standalone mode — multi-tenant and billing features disabled")
+	}
+
+	// OpenTelemetry (opt-in: only when OTEL_EXPORTER_OTLP_ENDPOINT is set)
+	if cfg.OTELEndpoint != "" {
+		otelShutdown, err := telemetry.Init(ctx, telemetry.Config{
+			ServiceName:    "zenith-api",
+			ServiceVersion: Version,
+			OTLPEndpoint:   cfg.OTELEndpoint,
+			Environment:    cfg.Environment,
+			Insecure:       cfg.OTELInsecure,
+			SampleRate:     cfg.OTELSampleRate,
+		})
+		if err != nil {
+			log.Printf("[WARN] OpenTelemetry init failed: %v (continuing without tracing)", err)
+		} else {
+			defer func() {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := otelShutdown(shutdownCtx); err != nil {
+					log.Printf("[WARN] OpenTelemetry shutdown error: %v", err)
+				}
+			}()
+			log.Printf("OpenTelemetry enabled → %s", cfg.OTELEndpoint)
 		}
 	}
 
@@ -96,12 +135,28 @@ func main() {
 	}))
 	app.Use(middleware.RequestContext())
 
-	provisioner := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, pool)
+	// OpenTelemetry middleware (only effective when OTel SDK is initialized)
+	if cfg.OTELEndpoint != "" {
+		app.Use(telemetry.Middleware(telemetry.MiddlewareConfig{
+			SkipPaths: []string{"/health", "/ready"},
+		}))
+		log.Println("OpenTelemetry tracing middleware active")
+	}
+
+	docs.RegisterRoutes(app)
+	provisioner, autoscaler := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, appRepo, pool)
 
 	// Start cluster sync if provisioner is available
 	if provisioner != nil {
 		provisioner.StartSync(30 * time.Second)
 		log.Println("Cluster provisioner sync started (30s interval)")
+	}
+
+	// Start autoscaler if enabled
+	if autoscaler != nil {
+		autoscaler.Start(time.Duration(cfg.AutoscalerInterval) * time.Second)
+		log.Printf("Hetzner autoscaler started (%ds interval, min=%d, max=%d)",
+			cfg.AutoscalerInterval, cfg.AutoscalerMinNodes, cfg.AutoscalerMaxNodes)
 	}
 
 	go func() {
@@ -117,6 +172,10 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+	if autoscaler != nil {
+		autoscaler.Stop()
+		log.Println("Hetzner autoscaler stopped")
+	}
 	if provisioner != nil {
 		provisioner.Stop()
 		log.Println("Cluster provisioner stopped")
@@ -131,18 +190,31 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserRepository, adminRepo store.AdminRepository, customerRepo store.CustomerRepository, meteringRepo store.MeteringRepository, pool *pgxpool.Pool) *cluster.Provisioner {
+func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserRepository, adminRepo store.AdminRepository, customerRepo store.CustomerRepository, meteringRepo store.MeteringRepository, appRepo store.AppRepository, pool *pgxpool.Pool) (*cluster.Provisioner, *autoscale.Autoscaler) {
 	app.Get("/health", handlers.HealthCheck(Version, BuildTime, GitCommit))
 	app.Get("/ready", handlers.ReadinessCheck(pool))
 
-	// K8s client (in-memory for dev, real client for production)
-	k8sClient := k8s.NewMemoryClient()
+	// K8s client (in-memory for dev, real client-go for production)
+	var k8sClient k8s.Client
+	if cfg.K8sMode == "real" {
+		realClient, err := k8s.NewRealClient()
+		if err != nil {
+			log.Fatalf("failed to create real K8s client: %v", err)
+		}
+		k8sClient = realClient
+		log.Println("[k8s] using real client-go connection")
+	} else {
+		k8sClient = k8s.NewMemoryClient()
+		log.Println("[k8s] using in-memory client (dev mode)")
+	}
 
-	// CAPI client
-	capiClient := capi.NewClient(k8sClient)
-
-	// Cluster provisioner
-	provisioner := cluster.NewProvisioner(capiClient, customerRepo, adminRepo)
+	// CAPI client + provisioner (SaaS mode only)
+	var capiClient *capi.Client
+	var provisioner *cluster.Provisioner
+	if cfg.Mode == "saas" {
+		capiClient = capi.NewClient(k8sClient)
+		provisioner = cluster.NewProvisioner(capiClient, customerRepo, adminRepo)
+	}
 
 	// Handlers
 	projectHandler := handlers.NewProjectHandler(k8sClient)
@@ -150,21 +222,62 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	dbHandler := handlers.NewDatabaseHandler(k8sClient)
 	storageHandler := handlers.NewStorageHandler(k8sClient)
 	adminHandler := handlers.NewAdminHandler(k8sClient, capiClient, adminRepo)
-	customerHandler := handlers.NewCustomerHandler(customerRepo, adminRepo, provisioner)
-	meteringHandler := handlers.NewMeteringHandler(meteringRepo, customerRepo)
+	var customerHandler *handlers.CustomerHandler
+	var meteringHandler *handlers.MeteringHandler
+	if cfg.Mode == "saas" {
+		customerHandler = handlers.NewCustomerHandler(customerRepo, adminRepo, provisioner)
+		meteringHandler = handlers.NewMeteringHandler(meteringRepo, customerRepo)
+	}
 	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
+
+	// Plan management (Phase 4 — user plan + limits)
+	planRepo := store.NewMemoryUserPlanRepository()
+
+	// Phase 2 handlers
+	logHub := deploy.NewLogHub(500)
+	eventHub := deploy.NewEventHub(50)
+	builder := deploy.NewBuilder(appRepo, cfg.BuildWorkDir, cfg.Registry, k8sClient, logHub)
+	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
+	pipeline := deploy.NewPipeline(builder, deployer, appRepo, logHub, eventHub)
+
+	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain)
+	webhookHandler := handlers.NewWebhookHandler(appRepo, pipeline, cfg.GitHubWebhookSecret)
+	deployHandler := handlers.NewDeployHandler(appRepo)
+	logHandler := handlers.NewLogHandler(appRepo, logHub)
+
+	secretHandler, err := handlers.NewSecretHandler(appRepo, cfg.SecretsKey)
+	if err != nil {
+		log.Fatalf("invalid SECRETS_ENCRYPTION_KEY: %v", err)
+	}
+
+	eventHandler := handlers.NewEventHandler(eventHub)
+	backstageHandler := handlers.NewBackstageHandler(k8sClient)
 
 	api := app.Group("/api/v1")
 	api.Get("/version", handlers.VersionInfo(Version, BuildTime, GitCommit))
 
-	// Public auth routes (no token required)
-	authRoutes := api.Group("/auth")
+	// Public auth routes (no token required) — rate limited
+	authLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 60 * time.Second,
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Too many requests. Please try again later.",
+			})
+		},
+	})
+	authRoutes := api.Group("/auth", authLimiter)
 	authRoutes.Post("/login", authHandler.Login)
 	authRoutes.Post("/register", authHandler.Register)
 	authRoutes.Post("/refresh", authHandler.Refresh)
 
-	// Internal routes (metering agent)
-	if cfg.InternalSecret != "" {
+	// Webhook routes (no auth — uses HMAC signature)
+	api.Post("/webhooks/github", webhookHandler.HandlePush)
+	api.Post("/webhooks/gitlab", webhookHandler.HandleGitLabPush)
+	api.Post("/webhooks/bitbucket", webhookHandler.HandleBitbucketPush)
+
+	// Internal routes (metering agent — SaaS only)
+	if cfg.Mode == "saas" && cfg.InternalSecret != "" {
 		internal := api.Group("/internal", middleware.RequireInternalSecret(cfg.InternalSecret))
 		internal.Post("/metering", meteringHandler.RecordUsage)
 	}
@@ -172,22 +285,238 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	// Protected routes
 	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret))
 
-	// Projects
+	// Projects (legacy CRD-based)
 	projects := protected.Group("/projects")
 	projects.Post("/", projectHandler.Create)
 	projects.Get("/", projectHandler.List)
 	projects.Get("/:id", projectHandler.Get)
 	projects.Put("/:id", projectHandler.Update)
-	projects.Delete("/:id", middleware.RequireRole(models.RoleOwner), projectHandler.Delete)
+	projects.Delete("/:id", middleware.RequireRole(entities.RoleOwner), projectHandler.Delete)
 
-	// Apps (nested under projects)
-	apps := protected.Group("/projects/:id/apps")
-	apps.Post("/", appHandler.Create)
-	apps.Get("/", appHandler.List)
-	apps.Get("/:name", appHandler.Get)
-	apps.Put("/:name", appHandler.Update)
-	apps.Delete("/:name", appHandler.Delete)
-	apps.Post("/:name/redeploy", appHandler.Redeploy)
+	// Apps — legacy CRD-based (under /projects/:id/apps)
+	legacyApps := protected.Group("/projects/:id/apps")
+	legacyApps.Post("/", appHandler.Create)
+	legacyApps.Get("/", appHandler.List)
+	legacyApps.Get("/:name", appHandler.Get)
+	legacyApps.Put("/:name", appHandler.Update)
+	legacyApps.Delete("/:name", appHandler.Delete)
+	legacyApps.Post("/:name/redeploy", appHandler.Redeploy)
+
+	// Apps — Phase 2 (under /apps)
+	apps := protected.Group("/apps")
+	apps.Post("/", appHandlerV2.Create)
+	apps.Get("/", appHandlerV2.List)
+	apps.Get("/:appId", appHandlerV2.Get)
+	apps.Delete("/:appId", appHandlerV2.Delete)
+
+	// Deployments (nested under /apps/:appId)
+	apps.Get("/:appId/deployments", deployHandler.ListDeployments)
+	apps.Get("/:appId/deployments/:deployId", deployHandler.GetDeployment)
+	apps.Post("/:appId/rollback", deployHandler.Rollback)
+
+	// Env vars (nested under /apps/:appId)
+	apps.Put("/:appId/env", deployHandler.SetEnvVars)
+	apps.Get("/:appId/env", deployHandler.GetEnvVars)
+	apps.Delete("/:appId/env/:key", deployHandler.DeleteEnvVar)
+
+	// Secrets (nested under /apps/:appId) — only if SECRETS_ENCRYPTION_KEY is set
+	if secretHandler != nil {
+		apps.Get("/:appId/secrets", secretHandler.ListSecrets)
+		apps.Post("/:appId/secrets", secretHandler.SetSecret)
+		apps.Get("/:appId/secrets/:key/value", secretHandler.GetSecretValue)
+		apps.Delete("/:appId/secrets/:key", secretHandler.DeleteSecret)
+	}
+
+	// Databases (Phase 3 — per-app provisioning under /apps/:appId)
+	dbRepo := store.NewMemoryDatabaseRepository()
+	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbRepo, appRepo)
+	apps.Post("/:appId/databases", dbHandlerV2.Create)
+	apps.Get("/:appId/databases", dbHandlerV2.List)
+	apps.Get("/:appId/databases/:dbId", dbHandlerV2.Get)
+	apps.Delete("/:appId/databases/:dbId", dbHandlerV2.Delete)
+	protected.Get("/databases", dbHandlerV2.ListByUser)
+
+	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
+	backupRepo := store.NewMemoryBackupRepository()
+	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo)
+	apps.Post("/:appId/databases/:dbId/backups", backupHandler.Create)
+	apps.Get("/:appId/databases/:dbId/backups", backupHandler.List)
+	apps.Get("/:appId/databases/:dbId/backups/:backupId", backupHandler.Get)
+	apps.Delete("/:appId/databases/:dbId/backups/:backupId", backupHandler.Delete)
+	apps.Post("/:appId/databases/:dbId/backups/:backupId/restore", backupHandler.Restore)
+	protected.Get("/backups", backupHandler.ListByUser)
+
+	// Storage (Phase 3 — per-app S3-compatible storage)
+	storageRepo := store.NewMemoryStorageRepository()
+	storageHandlerV2 := handlers.NewStorageHandlerV2(storageRepo, appRepo)
+	apps.Post("/:appId/storage", storageHandlerV2.Create)
+	apps.Get("/:appId/storage", storageHandlerV2.List)
+	apps.Get("/:appId/storage/:bucketId", storageHandlerV2.Get)
+	apps.Delete("/:appId/storage/:bucketId", storageHandlerV2.Delete)
+	protected.Get("/storage-buckets", storageHandlerV2.ListByUser)
+
+	// App Auth (Phase 3 — built-in auth per app)
+	appAuthRepo := store.NewMemoryAppAuthRepository()
+	appAuthHandler := handlers.NewAppAuthHandler(appAuthRepo, appRepo)
+	apps.Get("/:appId/auth", appAuthHandler.Status)
+	apps.Post("/:appId/auth/enable", appAuthHandler.Enable)
+	apps.Post("/:appId/auth/disable", appAuthHandler.Disable)
+	apps.Get("/:appId/auth/users", appAuthHandler.ListUsers)
+	apps.Delete("/:appId/auth/users/:userId", appAuthHandler.DeleteUser)
+
+	// Public app auth routes (signup/login — no platform JWT required)
+	publicAppAuth := api.Group("/apps/:appId/auth")
+	publicAppAuth.Post("/signup", appAuthHandler.Signup)
+	publicAppAuth.Post("/login", appAuthHandler.Login)
+
+	planHandler := handlers.NewPlanHandler(planRepo, appRepo, dbRepo, storageRepo, appAuthRepo)
+	protected.Get("/plan", planHandler.GetMyPlan)
+	protected.Post("/plan/upgrade", planHandler.UpgradePlan)
+
+	// Stripe Billing (Phase 6)
+	billingRepo := store.NewMemoryBillingRepository()
+	var stripeAPI stripeClient.StripeAPI
+	if cfg.StripeBillingEnabled && cfg.StripeSecretKey != "" {
+		stripeAPI = stripeClient.NewClient(cfg.StripeSecretKey, cfg.StripeWebhookSecret)
+		planHandler.SetStripeEnabled(true)
+		log.Println("[billing] Stripe billing enabled")
+	} else {
+		log.Println("[billing] Stripe billing disabled (direct plan changes allowed)")
+	}
+
+	billingHandler := handlers.NewBillingHandler(
+		stripeAPI, billingRepo, planRepo, appRepo, dbRepo, storageRepo, appAuthRepo,
+		cfg.StripeProPriceID, cfg.StripeTeamPriceID, cfg.BaseDomain,
+	)
+	protected.Get("/billing", billingHandler.GetBillingStatus)
+	protected.Post("/billing/checkout", billingHandler.CreateCheckoutSession)
+	protected.Post("/billing/portal", billingHandler.CreatePortalSession)
+	protected.Post("/billing/cancel", billingHandler.CancelSubscription)
+	protected.Get("/billing/invoices", billingHandler.ListInvoices)
+
+	// Stripe webhook (unauthenticated — uses Stripe signature verification)
+	if stripeAPI != nil {
+		webhookHandlerStripe := handlers.NewStripeWebhookHandler(
+			stripeAPI, billingRepo, planRepo,
+			cfg.StripeProPriceID, cfg.StripeTeamPriceID,
+		)
+		api.Post("/webhooks/stripe", webhookHandlerStripe.HandleEvent)
+	}
+
+	// Custom Domains (Phase 4 — Pro+ only)
+	domainRepo := store.NewMemoryDomainRepository()
+	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
+	apps.Post("/:appId/domains", domainHandler.Add)
+	apps.Get("/:appId/domains", domainHandler.List)
+	apps.Delete("/:appId/domains/:domainId", domainHandler.Delete)
+	protected.Get("/domains", domainHandler.ListByUser)
+
+	// API Keys (Phase 6.5)
+	apiKeyRepo := store.NewMemoryAPIKeyRepository()
+	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyRepo, planRepo)
+	protected.Post("/api-keys", apiKeyHandler.Create)
+	protected.Get("/api-keys", apiKeyHandler.List)
+	protected.Delete("/api-keys/:keyId", apiKeyHandler.Delete)
+
+	// Sessions (Phase 6.5)
+	sessionRepo := store.NewMemorySessionRepository()
+	sessionHandler := handlers.NewSessionHandler(sessionRepo)
+	protected.Get("/auth/sessions", sessionHandler.List)
+	protected.Delete("/auth/sessions/:sessionId", sessionHandler.Revoke)
+	protected.Delete("/auth/sessions", sessionHandler.RevokeAll)
+
+	// MFA (Phase 6.5 — Pro+ only)
+	mfaRepo := store.NewMemoryMFARepository()
+	mfaHandler := handlers.NewMFAHandler(mfaRepo, planRepo)
+	protected.Get("/auth/mfa", mfaHandler.GetStatus)
+	protected.Post("/auth/mfa/enable", mfaHandler.Enable)
+	protected.Post("/auth/mfa/verify", mfaHandler.Verify)
+	protected.Post("/auth/mfa/disable", mfaHandler.Disable)
+	protected.Post("/auth/mfa/backup-codes", mfaHandler.RegenerateBackupCodes)
+
+	// User Webhooks (Phase 6.5 — Pro+ only)
+	userWebhookRepo := store.NewMemoryUserWebhookRepository()
+	userWebhookHandler := handlers.NewUserWebhookHandler(userWebhookRepo, planRepo)
+	protected.Post("/webhooks", userWebhookHandler.Create)
+	protected.Get("/webhooks", userWebhookHandler.List)
+	protected.Put("/webhooks/:webhookId", userWebhookHandler.Update)
+	protected.Delete("/webhooks/:webhookId", userWebhookHandler.Delete)
+	protected.Get("/webhooks/:webhookId/deliveries", userWebhookHandler.ListDeliveries)
+
+	// Custom Roles / RBAC (Phase 6.5 — Team+ only)
+	roleRepo := store.NewMemoryRoleRepository()
+	roleHandler := handlers.NewRoleHandler(roleRepo, planRepo)
+	protected.Post("/roles", roleHandler.Create)
+	protected.Get("/roles", roleHandler.List)
+	protected.Get("/roles/permissions", roleHandler.ListPermissions)
+	protected.Put("/roles/:roleId", roleHandler.Update)
+	protected.Delete("/roles/:roleId", roleHandler.Delete)
+	protected.Post("/roles/:roleId/assign", roleHandler.AssignRole)
+	protected.Get("/roles/:roleId/assignments", roleHandler.ListAssignments)
+	protected.Delete("/roles/:roleId/assignments/:assignmentId", roleHandler.RemoveAssignment)
+
+	// IP Whitelisting (Phase 6.5 — Enterprise only)
+	ipRepo := store.NewMemoryIPWhitelistRepository()
+	ipHandler := handlers.NewIPWhitelistHandler(ipRepo, planRepo)
+	protected.Post("/settings/ip-whitelist", ipHandler.Add)
+	protected.Get("/settings/ip-whitelist", ipHandler.List)
+	protected.Delete("/settings/ip-whitelist/:entryId", ipHandler.Delete)
+
+	// Compliance Dashboard (Phase 6.5)
+	complianceHandler := handlers.NewComplianceHandler(mfaRepo, ipRepo, planRepo, adminRepo)
+	protected.Get("/compliance", complianceHandler.GetStatus)
+
+	// DPA + White-label Branding (Phase 6.5)
+	brandingRepo := store.NewMemoryBrandingRepository()
+	brandingHandler := handlers.NewBrandingHandler(brandingRepo, planRepo)
+	protected.Get("/settings/dpa", brandingHandler.GetDPA)
+	protected.Post("/settings/dpa/sign", brandingHandler.SignDPA)
+	protected.Get("/settings/branding", brandingHandler.GetBranding)
+	protected.Put("/settings/branding", brandingHandler.UpdateBranding)
+	protected.Post("/settings/domain", brandingHandler.SetDashboardDomain)
+
+	// SSO (Phase 6.5 — Team+ only)
+	ssoRepo := store.NewMemorySSORepository()
+	ssoHandler := handlers.NewSSOHandler(ssoRepo, planRepo)
+	protected.Post("/settings/sso/saml", ssoHandler.ConfigureSAML)
+	protected.Post("/settings/sso/oidc", ssoHandler.ConfigureOIDC)
+	protected.Get("/settings/sso", ssoHandler.ListConfigs)
+	protected.Delete("/settings/sso/:configId", ssoHandler.DeleteConfig)
+
+	// Preview Deployments (Phase 6.5 — Team+ only)
+	previewRepo := store.NewMemoryPreviewRepository()
+	previewHandler := handlers.NewPreviewHandler(previewRepo, appRepo, planRepo)
+	apps.Post("/:appId/previews", previewHandler.Create)
+	apps.Get("/:appId/previews", previewHandler.List)
+	apps.Delete("/:appId/previews/:previewId", previewHandler.Delete)
+
+	// SCIM 2.0 Provisioning (Phase 6.5 — Enterprise only, SaaS only)
+	if cfg.Mode == "saas" {
+		scimHandler := handlers.NewSCIMHandler(userRepo, planRepo)
+		scim := api.Group("/scim/v2")
+		scim.Get("/Users", scimHandler.ListUsers)
+		scim.Get("/Users/:userId", scimHandler.GetUser)
+		scim.Post("/Users", scimHandler.CreateUser)
+		scim.Delete("/Users/:userId", scimHandler.DeleteUser)
+	}
+
+	// Releases (nested under /apps/:appId) — versioned image deployment
+	releaseHandler := handlers.NewReleaseHandler(appRepo, pipeline)
+	apps.Post("/:appId/releases", releaseHandler.CreateRelease)
+	apps.Get("/:appId/releases", releaseHandler.ListReleases)
+	apps.Post("/:appId/releases/:releaseId/deploy", releaseHandler.DeployRelease)
+
+	// Build/deploy log streaming (nested under /apps/:appId/deployments/:did)
+	apps.Get("/:appId/deployments/:did/logs", logHandler.StreamLogs)
+	apps.Get("/:appId/deployments/:did/logs/history", logHandler.GetLogs)
+
+	// Real-time deployment events (SSE)
+	protected.Get("/events", eventHandler.StreamEvents)
+	protected.Get("/events/history", eventHandler.GetRecentEvents)
+
+	// Backstage catalog integration
+	protected.Get("/backstage/catalog", backstageHandler.GetCatalog)
+	protected.Get("/backstage/catalog/:kind", backstageHandler.GetCatalogByKind)
 
 	// Databases (nested under projects)
 	databases := protected.Group("/projects/:id/databases")
@@ -206,43 +535,47 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	storage.Delete("/:name", storageHandler.Delete)
 
 	// Admin routes (Mission Control) - require admin role
-	admin := protected.Group("/admin", middleware.RequireRole(models.RoleAdmin))
+	admin := protected.Group("/admin", middleware.RequireRole(entities.RoleAdmin))
 
 	// Dashboard
 	admin.Get("/dashboard/stats", adminHandler.GetDashboardStats)
-	admin.Get("/dashboard/usage", meteringHandler.GetPlatformUsageSummary)
 
-	// Customer management
-	admin.Post("/customers", customerHandler.CreateCustomer)
-	admin.Get("/customers", customerHandler.ListCustomers)
-	admin.Get("/customers/stats", customerHandler.GetCustomerStats) // before :id
-	admin.Get("/customers/:id", customerHandler.GetCustomer)
-	admin.Get("/customers/:id/usage", meteringHandler.GetCustomerUsage)
-	admin.Get("/customers/:id/usage/history", meteringHandler.GetCustomerUsageHistory)
-	admin.Put("/customers/:id", customerHandler.UpdateCustomer)
-	admin.Post("/customers/:id/suspend", customerHandler.SuspendCustomer)
-	admin.Post("/customers/:id/activate", customerHandler.ActivateCustomer)
-	admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
-	admin.Get("/customers/:id/cluster", customerHandler.GetCustomerCluster)
-	admin.Post("/customers/:id/cluster/scale", customerHandler.ScaleCluster)
-	admin.Post("/customers/:id/cluster/upgrade", customerHandler.UpgradeCluster)
+	// SaaS-only admin routes: customer mgmt, metering, cluster, tenants, plan admin
+	if cfg.Mode == "saas" {
+		admin.Get("/dashboard/usage", meteringHandler.GetPlatformUsageSummary)
 
-	// Plan management
-	admin.Get("/plans", customerHandler.ListPlans)
-	admin.Post("/plans", customerHandler.CreatePlan)
-	admin.Put("/plans/:id", customerHandler.UpdatePlan)
+		// Customer management
+		admin.Post("/customers", customerHandler.CreateCustomer)
+		admin.Get("/customers", customerHandler.ListCustomers)
+		admin.Get("/customers/stats", customerHandler.GetCustomerStats) // before :id
+		admin.Get("/customers/:id", customerHandler.GetCustomer)
+		admin.Get("/customers/:id/usage", meteringHandler.GetCustomerUsage)
+		admin.Get("/customers/:id/usage/history", meteringHandler.GetCustomerUsageHistory)
+		admin.Put("/customers/:id", customerHandler.UpdateCustomer)
+		admin.Post("/customers/:id/suspend", customerHandler.SuspendCustomer)
+		admin.Post("/customers/:id/activate", customerHandler.ActivateCustomer)
+		admin.Delete("/customers/:id", customerHandler.DeleteCustomer)
+		admin.Get("/customers/:id/cluster", customerHandler.GetCustomerCluster)
+		admin.Post("/customers/:id/cluster/scale", customerHandler.ScaleCluster)
+		admin.Post("/customers/:id/cluster/upgrade", customerHandler.UpgradeCluster)
 
-	// Cluster management (CAPI)
-	admin.Get("/clusters", adminHandler.ListClusters)
-	admin.Post("/clusters", adminHandler.CreateCluster)
-	admin.Get("/clusters/:name", adminHandler.GetCluster)
-	admin.Delete("/clusters/:name", adminHandler.DeleteCluster)
-	admin.Post("/clusters/:name/upgrade", adminHandler.UpgradeCluster)
+		// Plan management (admin)
+		admin.Get("/plans", customerHandler.ListPlans)
+		admin.Post("/plans", customerHandler.CreatePlan)
+		admin.Put("/plans/:id", customerHandler.UpdatePlan)
 
-	// Tenant management
-	admin.Get("/tenants", adminHandler.ListTenants)
-	admin.Get("/tenants/:id", adminHandler.GetTenant)
-	admin.Post("/tenants/:id/suspend", adminHandler.SuspendTenant)
+		// Cluster management (CAPI)
+		admin.Get("/clusters", adminHandler.ListClusters)
+		admin.Post("/clusters", adminHandler.CreateCluster)
+		admin.Get("/clusters/:name", adminHandler.GetCluster)
+		admin.Delete("/clusters/:name", adminHandler.DeleteCluster)
+		admin.Post("/clusters/:name/upgrade", adminHandler.UpgradeCluster)
+
+		// Tenant management
+		admin.Get("/tenants", adminHandler.ListTenants)
+		admin.Get("/tenants/:id", adminHandler.GetTenant)
+		admin.Post("/tenants/:id/suspend", adminHandler.SuspendTenant)
+	}
 
 	// Module management
 	admin.Get("/modules", adminHandler.ListModules)
@@ -251,8 +584,23 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	admin.Post("/modules/:name/uninstall", adminHandler.UninstallModule)
 	admin.Post("/modules/:name/update", adminHandler.UpdateModule)
 
+	// User management (SaaS — Phase 4)
+	adminUserHandler := handlers.NewAdminUserHandler(userRepo, planRepo, appRepo, dbRepo, storageRepo)
+	admin.Get("/users/:userId", adminUserHandler.GetUser)
+	admin.Post("/users/:userId/plan", adminUserHandler.SetUserPlan)
+	admin.Get("/users/:userId/apps", adminUserHandler.ListUserApps)
+	admin.Get("/users/:userId/databases", adminUserHandler.ListUserDatabases)
+
+	// Admin Billing Overview (Phase 6 — SaaS only)
+	if cfg.Mode == "saas" {
+		admin.Get("/billing/overview", billingHandler.GetAdminBillingOverview)
+	}
+
 	// Audit log
 	admin.Get("/audit", adminHandler.ListAuditLog)
+	auditExportHandler := handlers.NewAuditExportHandler(adminRepo)
+	admin.Get("/audit/export/csv", auditExportHandler.ExportCSV)
+	admin.Get("/audit/export/json", auditExportHandler.ExportJSON)
 
 	// Platform updates
 	admin.Get("/updates/check", adminHandler.CheckUpdates)
@@ -271,5 +619,38 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	admin.Put("/settings", adminHandler.UpdateSettings)
 	admin.Patch("/settings", adminHandler.UpdateSettings)
 
-	return provisioner
+	// Hetzner Autoscaler (Phase 5 — SaaS only)
+	var as *autoscale.Autoscaler
+	if cfg.Mode == "saas" {
+		autoscaleRepo := store.NewMemoryAutoscaleRepository()
+		autoscaleHandler := handlers.NewAutoscaleHandler(autoscaleRepo)
+		admin.Get("/autoscaler/status", autoscaleHandler.GetStatus)
+		admin.Get("/autoscaler/nodes", autoscaleHandler.ListNodes)
+		admin.Get("/autoscaler/events", autoscaleHandler.ListEvents)
+
+		// Create autoscaler if enabled and token present
+		if cfg.AutoscalerEnabled && cfg.HetznerToken != "" {
+			hetznerClient := hetzner.NewClient(cfg.HetznerToken)
+			metricsProvider := autoscale.NewK8sMetricsProvider(k8sClient)
+			asCfg := entities.AutoscalerConfig{
+				MinNodes:     cfg.AutoscalerMinNodes,
+				MaxNodes:     cfg.AutoscalerMaxNodes,
+				ScaleUpCPU:   80,
+				ScaleUpRAM:   80,
+				ScaleDownCPU: 40,
+				ScaleDownRAM: 40,
+				CooldownUp:   5 * time.Minute,
+				CooldownDown: 15 * time.Minute,
+				BudgetCapEUR: 450,
+				ServerType:   cfg.HetznerServerType,
+				Location:     cfg.HetznerLocation,
+			}
+			as = autoscale.NewAutoscaler(hetznerClient, metricsProvider, autoscaleRepo, adminRepo, asCfg, cfg.K3sToken, "https://"+cfg.BaseDomain+":6443")
+			log.Println("[autoscaler] Hetzner autoscaler configured")
+		} else {
+			log.Println("[autoscaler] disabled (AUTOSCALER_ENABLED=false or HCLOUD_TOKEN not set)")
+		}
+	}
+
+	return provisioner, as
 }

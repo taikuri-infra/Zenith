@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -30,7 +30,7 @@ func NewMemoryUserRepository() *MemoryUserRepository {
 }
 
 // Create adds a new user. Returns an error if the email is already taken.
-func (s *MemoryUserRepository) Create(_ context.Context, email, password, name string, role models.Role) (*models.User, error) {
+func (s *MemoryUserRepository) Create(_ context.Context, email, password, name string, role entities.Role) (*entities.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -45,7 +45,7 @@ func (s *MemoryUserRepository) Create(_ context.Context, email, password, name s
 
 	now := time.Now()
 	user := &StoredUser{
-		User: models.User{
+		User: entities.User{
 			ID:        uuid.New().String(),
 			Email:     email,
 			Name:      name,

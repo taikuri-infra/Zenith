@@ -1,0 +1,169 @@
+package handlers
+
+import (
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/gofiber/fiber/v2"
+)
+
+// DatabaseHandlerV2 manages per-app database provisioning (Phase 3 deploy engine).
+type DatabaseHandlerV2 struct {
+	dbRepo  store.DatabaseRepository
+	appRepo store.AppRepository
+}
+
+// NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
+func NewDatabaseHandlerV2(dbRepo store.DatabaseRepository, appRepo store.AppRepository) *DatabaseHandlerV2 {
+	return &DatabaseHandlerV2{dbRepo: dbRepo, appRepo: appRepo}
+}
+
+// Create provisions a new database for an app.
+// POST /api/v1/apps/:appId/databases
+func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
+	appID := c.Params("appId")
+	userID, _ := c.Locals("user_id").(string)
+
+	// Verify app exists and belongs to user
+	app, err := h.appRepo.GetApp(c.Context(), appID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "app not found")
+	}
+	if app.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your app")
+	}
+
+	var input dto.CreateDatabaseInput
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	if input.Engine == "" {
+		input.Engine = entities.DatabaseEnginePostgres
+	}
+
+	db, err := h.dbRepo.CreateDatabase(c.Context(), appID, userID, &input)
+	if err != nil {
+		return fiber.NewError(fiber.StatusConflict, err.Error())
+	}
+
+	// Auto-inject connection string as env var
+	if memRepo, ok := h.dbRepo.(*store.MemoryDatabaseRepository); ok {
+		if pw, ok := memRepo.GetPassword(db.ID); ok {
+			connStr := db.ConnectionString(pw)
+			envKey := envKeyForEngine(db.Engine)
+			h.appRepo.SetEnvVars(c.Context(), appID, map[string]string{envKey: connStr})
+		}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, ""))
+}
+
+// List returns all databases for an app.
+// GET /api/v1/apps/:appId/databases
+func (h *DatabaseHandlerV2) List(c *fiber.Ctx) error {
+	appID := c.Params("appId")
+
+	dbs, err := h.dbRepo.ListDatabasesByApp(c.Context(), appID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	result := make([]dto.DatabaseInfo, len(dbs))
+	for i, db := range dbs {
+		result[i] = toDatabaseInfoV2(&db, "")
+	}
+	return c.JSON(result)
+}
+
+// Get returns a single database with connection string.
+// GET /api/v1/apps/:appId/databases/:dbId
+func (h *DatabaseHandlerV2) Get(c *fiber.Ctx) error {
+	dbID := c.Params("dbId")
+
+	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "database not found")
+	}
+
+	// Include connection string for the owner
+	connStr := ""
+	if memRepo, ok := h.dbRepo.(*store.MemoryDatabaseRepository); ok {
+		if pw, ok := memRepo.GetPassword(db.ID); ok {
+			connStr = db.ConnectionString(pw)
+		}
+	}
+
+	return c.JSON(toDatabaseInfoV2(db, connStr))
+}
+
+// Delete deprovisions a database.
+// DELETE /api/v1/apps/:appId/databases/:dbId
+func (h *DatabaseHandlerV2) Delete(c *fiber.Ctx) error {
+	dbID := c.Params("dbId")
+	userID, _ := c.Locals("user_id").(string)
+
+	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "database not found")
+	}
+	if db.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your database")
+	}
+
+	if err := h.dbRepo.DeleteDatabase(c.Context(), dbID); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	// Remove auto-injected env var
+	envKey := envKeyForEngine(db.Engine)
+	h.appRepo.DeleteEnvVar(c.Context(), db.AppID, envKey)
+
+	return c.JSON(fiber.Map{"message": "database deleted"})
+}
+
+// ListByUser returns all databases for the authenticated user.
+// GET /api/v1/databases
+func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+
+	dbs, err := h.dbRepo.ListDatabasesByUser(c.Context(), userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	result := make([]dto.DatabaseInfo, len(dbs))
+	for i, db := range dbs {
+		result[i] = toDatabaseInfoV2(&db, "")
+	}
+	return c.JSON(result)
+}
+
+func envKeyForEngine(engine entities.DatabaseEngine) string {
+	switch engine {
+	case entities.DatabaseEngineRedis:
+		return "REDIS_URL"
+	case entities.DatabaseEngineMySQL:
+		return "MYSQL_URL"
+	default:
+		return "DATABASE_URL"
+	}
+}
+
+func toDatabaseInfoV2(db *entities.UserDatabase, connStr string) dto.DatabaseInfo {
+	return dto.DatabaseInfo{
+		ID:               db.ID,
+		AppID:            db.AppID,
+		Name:             db.Name,
+		Engine:           db.Engine,
+		Host:             db.Host,
+		Port:             db.Port,
+		DBName:           db.DBName,
+		DBUser:           db.DBUser,
+		ConnectionString: connStr,
+		SizeMB:           db.SizeMB,
+		MaxSizeMB:        db.MaxSizeMB,
+		Status:           db.Status,
+		CreatedAt:        db.CreatedAt.Format("2006-01-02T15:04:05Z"),
+	}
+}

@@ -8,7 +8,8 @@ import (
 
 	"strings"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/google/uuid"
 )
 
@@ -23,20 +24,20 @@ var _ CustomerRepository = (*MemoryCustomerRepository)(nil)
 // MemoryCustomerRepository provides an in-memory store for customers and plans.
 type MemoryCustomerRepository struct {
 	mu        sync.RWMutex
-	plans     map[string]*models.Plan
-	customers map[string]*models.Customer
+	plans     map[string]*entities.Plan
+	customers map[string]*entities.Customer
 }
 
 // NewMemoryCustomerRepository creates a MemoryCustomerRepository pre-seeded with demo data.
 func NewMemoryCustomerRepository() *MemoryCustomerRepository {
 	now := time.Now()
 	r := &MemoryCustomerRepository{
-		plans:     make(map[string]*models.Plan),
-		customers: make(map[string]*models.Customer),
+		plans:     make(map[string]*entities.Plan),
+		customers: make(map[string]*entities.Customer),
 	}
 
 	// Seed plans
-	seedPlans := []models.Plan{
+	seedPlans := []entities.Plan{
 		{ID: "plan-starter", Name: "Starter", CPUCores: 4, RAMGB: 8, S3TB: 0, DBStorageGB: 10, VolumeGB: 50, LBCount: 1, PriceCents: 9900, Currency: "EUR", BillingCycle: "monthly", Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "plan-pro", Name: "Pro", CPUCores: 16, RAMGB: 32, S3TB: 1, DBStorageGB: 100, VolumeGB: 500, LBCount: 3, PriceCents: 49900, Currency: "EUR", BillingCycle: "monthly", Active: true, CreatedAt: now, UpdatedAt: now},
 		{ID: "plan-enterprise", Name: "Enterprise", CPUCores: 64, RAMGB: 128, S3TB: 10, DBStorageGB: 1000, VolumeGB: 5000, LBCount: 10, PriceCents: 199900, Currency: "EUR", BillingCycle: "monthly", Active: true, CreatedAt: now, UpdatedAt: now},
@@ -46,7 +47,7 @@ func NewMemoryCustomerRepository() *MemoryCustomerRepository {
 	}
 
 	// Seed customers
-	seedCustomers := []models.Customer{
+	seedCustomers := []entities.Customer{
 		{ID: "cust-001", Name: "Embermind", Domain: "embermind.app", PlanID: "plan-pro", ContactEmail: "ops@embermind.app", ContactName: "Sarah Chen", Status: "active", ClusterStatus: "running", CAPIClusterName: "embermind-app", ClusterRegion: "fsn1", ClusterNodes: 3, ClusterK8sVersion: "v1.31.2", Notes: "", CreatedAt: now.Add(-30 * 24 * time.Hour), UpdatedAt: now},
 		{ID: "cust-002", Name: "Acme Corp", Domain: "acme-corp.com", PlanID: "plan-pro", ContactEmail: "infra@acme-corp.com", ContactName: "James Wilson", Status: "active", ClusterStatus: "running", CAPIClusterName: "acme-corp-com", ClusterRegion: "fsn1", ClusterNodes: 3, ClusterK8sVersion: "v1.31.2", Notes: "", CreatedAt: now.Add(-20 * 24 * time.Hour), UpdatedAt: now},
 		{ID: "cust-003", Name: "Starship IO", Domain: "starship.io", PlanID: "plan-starter", ContactEmail: "admin@starship.io", ContactName: "Alex Rivera", Status: "active", ClusterStatus: "running", CAPIClusterName: "starship-io", ClusterRegion: "fsn1", ClusterNodes: 3, ClusterK8sVersion: "v1.31.2", Notes: "", CreatedAt: now.Add(-10 * 24 * time.Hour), UpdatedAt: now},
@@ -58,7 +59,7 @@ func NewMemoryCustomerRepository() *MemoryCustomerRepository {
 	return r
 }
 
-func (r *MemoryCustomerRepository) CreatePlan(_ context.Context, input *models.CreatePlanInput) (*models.Plan, error) {
+func (r *MemoryCustomerRepository) CreatePlan(_ context.Context, input *dto.CreatePlanInput) (*entities.Plan, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -69,7 +70,7 @@ func (r *MemoryCustomerRepository) CreatePlan(_ context.Context, input *models.C
 	}
 
 	now := time.Now()
-	plan := &models.Plan{
+	plan := &entities.Plan{
 		ID:           uuid.New().String(),
 		Name:         input.Name,
 		CPUCores:     input.CPUCores,
@@ -97,7 +98,7 @@ func (r *MemoryCustomerRepository) CreatePlan(_ context.Context, input *models.C
 	return &copied, nil
 }
 
-func (r *MemoryCustomerRepository) GetPlan(_ context.Context, id string) (*models.Plan, error) {
+func (r *MemoryCustomerRepository) GetPlan(_ context.Context, id string) (*entities.Plan, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -109,18 +110,18 @@ func (r *MemoryCustomerRepository) GetPlan(_ context.Context, id string) (*model
 	return &copied, nil
 }
 
-func (r *MemoryCustomerRepository) ListPlans(_ context.Context) ([]models.Plan, error) {
+func (r *MemoryCustomerRepository) ListPlans(_ context.Context) ([]entities.Plan, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	plans := make([]models.Plan, 0, len(r.plans))
+	plans := make([]entities.Plan, 0, len(r.plans))
 	for _, p := range r.plans {
 		plans = append(plans, *p)
 	}
 	return plans, nil
 }
 
-func (r *MemoryCustomerRepository) UpdatePlan(_ context.Context, id string, input *models.UpdatePlanInput) (*models.Plan, error) {
+func (r *MemoryCustomerRepository) UpdatePlan(_ context.Context, id string, input *dto.UpdatePlanInput) (*entities.Plan, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -174,7 +175,7 @@ func (r *MemoryCustomerRepository) UpdatePlan(_ context.Context, id string, inpu
 	return &copied, nil
 }
 
-func (r *MemoryCustomerRepository) CreateCustomer(_ context.Context, input *models.CreateCustomerInput) (*models.Customer, error) {
+func (r *MemoryCustomerRepository) CreateCustomer(_ context.Context, input *dto.CreateCustomerInput) (*entities.Customer, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -191,7 +192,7 @@ func (r *MemoryCustomerRepository) CreateCustomer(_ context.Context, input *mode
 	}
 
 	now := time.Now()
-	customer := &models.Customer{
+	customer := &entities.Customer{
 		ID:                uuid.New().String(),
 		Name:              input.Name,
 		Domain:            input.Domain,
@@ -214,7 +215,7 @@ func (r *MemoryCustomerRepository) CreateCustomer(_ context.Context, input *mode
 	return &copied, nil
 }
 
-func (r *MemoryCustomerRepository) GetCustomer(_ context.Context, id string) (*models.Customer, error) {
+func (r *MemoryCustomerRepository) GetCustomer(_ context.Context, id string) (*entities.Customer, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -230,11 +231,11 @@ func (r *MemoryCustomerRepository) GetCustomer(_ context.Context, id string) (*m
 	return &copied, nil
 }
 
-func (r *MemoryCustomerRepository) ListCustomers(_ context.Context) ([]models.Customer, error) {
+func (r *MemoryCustomerRepository) ListCustomers(_ context.Context) ([]entities.Customer, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	customers := make([]models.Customer, 0, len(r.customers))
+	customers := make([]entities.Customer, 0, len(r.customers))
 	for _, c := range r.customers {
 		copied := *c
 		if plan, ok := r.plans[c.PlanID]; ok {
@@ -246,7 +247,7 @@ func (r *MemoryCustomerRepository) ListCustomers(_ context.Context) ([]models.Cu
 	return customers, nil
 }
 
-func (r *MemoryCustomerRepository) UpdateCustomer(_ context.Context, id string, input *models.UpdateCustomerInput) (*models.Customer, error) {
+func (r *MemoryCustomerRepository) UpdateCustomer(_ context.Context, id string, input *dto.UpdateCustomerInput) (*entities.Customer, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -303,7 +304,7 @@ func (r *MemoryCustomerRepository) DeleteCustomer(_ context.Context, id string) 
 	return nil
 }
 
-func (r *MemoryCustomerRepository) SuspendCustomer(_ context.Context, id string) (*models.Customer, error) {
+func (r *MemoryCustomerRepository) SuspendCustomer(_ context.Context, id string) (*entities.Customer, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -322,7 +323,7 @@ func (r *MemoryCustomerRepository) SuspendCustomer(_ context.Context, id string)
 	return &copied, nil
 }
 
-func (r *MemoryCustomerRepository) ActivateCustomer(_ context.Context, id string) (*models.Customer, error) {
+func (r *MemoryCustomerRepository) ActivateCustomer(_ context.Context, id string) (*entities.Customer, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -381,7 +382,7 @@ func (r *MemoryCustomerRepository) UpdateClusterInfo(_ context.Context, id strin
 	return nil
 }
 
-func (r *MemoryCustomerRepository) GetCustomerByClusterName(_ context.Context, clusterName string) (*models.Customer, error) {
+func (r *MemoryCustomerRepository) GetCustomerByClusterName(_ context.Context, clusterName string) (*entities.Customer, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -398,26 +399,26 @@ func (r *MemoryCustomerRepository) GetCustomerByClusterName(_ context.Context, c
 	return nil, fmt.Errorf("customer not found")
 }
 
-func (r *MemoryCustomerRepository) ListProvisioningCustomers(_ context.Context) ([]models.Customer, error) {
+func (r *MemoryCustomerRepository) ListProvisioningCustomers(_ context.Context) ([]entities.Customer, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var result []models.Customer
+	var result []entities.Customer
 	for _, c := range r.customers {
-		if c.ClusterStatus == models.ClusterStatusPending ||
-			c.ClusterStatus == models.ClusterStatusProvisioning ||
-			c.ClusterStatus == models.ClusterStatusInstalling {
+		if c.ClusterStatus == entities.ClusterStatusPending ||
+			c.ClusterStatus == entities.ClusterStatusProvisioning ||
+			c.ClusterStatus == entities.ClusterStatusInstalling {
 			copied := *c
 			result = append(result, copied)
 		}
 	}
 	if result == nil {
-		result = []models.Customer{}
+		result = []entities.Customer{}
 	}
 	return result, nil
 }
 
-func (r *MemoryCustomerRepository) GetCustomerStats(_ context.Context) (*models.CustomerStats, error) {
+func (r *MemoryCustomerRepository) GetCustomerStats(_ context.Context) (*entities.CustomerStats, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -440,7 +441,7 @@ func (r *MemoryCustomerRepository) GetCustomerStats(_ context.Context) (*models.
 		}
 	}
 
-	return &models.CustomerStats{
+	return &entities.CustomerStats{
 		TotalCustomers:  total,
 		ActiveCustomers: active,
 		MRR:             fmt.Sprintf("€%d", mrrCents/100),

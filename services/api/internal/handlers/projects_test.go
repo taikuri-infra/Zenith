@@ -7,9 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -25,7 +26,7 @@ func setupProjectApp() (*fiber.App, *handlers.ProjectHandler) {
 func injectUser(c *fiber.Ctx) error {
 	c.Locals("user_id", "user-123")
 	c.Locals("email", "test@example.com")
-	c.Locals("role", models.RoleOwner)
+	c.Locals("role", entities.RoleOwner)
 	return c.Next()
 }
 
@@ -145,7 +146,7 @@ func TestListProjects(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var result models.ListResponse[handlers.ProjectResponse]
+	var result dto.ListResponse[handlers.ProjectResponse]
 	json.NewDecoder(resp.Body).Decode(&result)
 
 	if len(result.Items) != 2 {
@@ -486,7 +487,7 @@ func TestListProjectsEmpty(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var result models.ListResponse[handlers.ProjectResponse]
+	var result dto.ListResponse[handlers.ProjectResponse]
 	json.NewDecoder(resp.Body).Decode(&result)
 
 	if len(result.Items) != 0 {

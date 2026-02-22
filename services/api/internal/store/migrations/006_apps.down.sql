@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS app_env_vars;
+DROP TABLE IF EXISTS deployments;
+DROP TABLE IF EXISTS apps;

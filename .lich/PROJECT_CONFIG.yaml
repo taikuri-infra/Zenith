@@ -1,0 +1,44 @@
+# Project Configuration
+
+# This file is machine-readable for AI agents
+
+project:
+  name: "moneyFactory"
+  slug: "moneyfactory"
+  type: "saas_platform"
+  description: "A brief description of the project"
+
+author:
+  name: "Your Name"
+  email: "your@email.com"
+
+stack:
+  backend: fastapi
+  frontend: nextjs
+  landing: astro
+  database: postgresql
+  cache: yes
+  auth: jwt_builtin
+
+features:
+  i18n: yes
+  tls: yes
+  temporal: yes
+  wordpress: yes
+  structured_logging: yes
+
+settings:
+  default_language: en
+  domain: localhost
+
+ports:
+  web: 3000
+  admin: 3002
+  landing: 4321
+  api: 8000
+  traefik: 8090
+  postgres: 5432
+  redis: 6379
+
+  temporal: 7233
+  temporal_ui: 8088

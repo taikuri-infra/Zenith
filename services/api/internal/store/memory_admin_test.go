@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 )
 
 func TestMemoryAdminSettings(t *testing.T) {
@@ -19,7 +19,7 @@ func TestMemoryAdminSettings(t *testing.T) {
 		t.Errorf("Expected default platform name 'Zenith', got '%s'", settings.PlatformName)
 	}
 
-	updated, err := s.UpdateSettings(ctx, &models.PlatformSettings{
+	updated, err := s.UpdateSettings(ctx, &entities.PlatformSettings{
 		PlatformName: "My Platform",
 		BaseDomain:   "example.com",
 	})
@@ -96,7 +96,7 @@ func TestMemoryAdminAuditLog(t *testing.T) {
 	}
 	initialCount := len(entries)
 
-	if err := s.AddAuditEntry(ctx, models.AuditEntry{
+	if err := s.AddAuditEntry(ctx, entities.AuditEntry{
 		Time:   "10:00",
 		Actor:  "test",
 		Action: "test action",

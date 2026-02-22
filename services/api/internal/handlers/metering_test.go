@@ -9,9 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
-	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -45,7 +46,7 @@ func TestRecordUsage(t *testing.T) {
 		t.Fatalf("Expected 201, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var usage models.ResourceUsage
+	var usage entities.ResourceUsage
 	json.NewDecoder(resp.Body).Decode(&usage)
 
 	if usage.CustomerID != "cust-001" {
@@ -106,7 +107,7 @@ func TestGetCustomerUsage(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var usage models.CustomerUsage
+	var usage dto.CustomerUsage
 	json.NewDecoder(resp.Body).Decode(&usage)
 
 	// Memory repo is seeded with data for cust-001 (Embermind, Pro plan)
@@ -146,7 +147,7 @@ func TestGetCustomerUsageNoData(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var usage models.CustomerUsage
+	var usage dto.CustomerUsage
 	json.NewDecoder(resp.Body).Decode(&usage)
 
 	// Should return zero usage with ceilings
@@ -190,7 +191,7 @@ func TestGetCustomerUsageHistory(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var history []models.UsageHistoryEntry
+	var history []dto.UsageHistoryEntry
 	json.NewDecoder(resp.Body).Decode(&history)
 
 	if len(history) == 0 {
@@ -240,7 +241,7 @@ func TestGetPlatformUsageSummary(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var summary models.PlatformUsageSummary
+	var summary dto.PlatformUsageSummary
 	json.NewDecoder(resp.Body).Decode(&summary)
 
 	if summary.CustomersReporting != 3 {
@@ -321,15 +322,15 @@ func TestInternalSecretAuthValid(t *testing.T) {
 // emptyMeteringRepo is a MeteringRepository that always returns "no data".
 type emptyMeteringRepo struct{}
 
-func (r *emptyMeteringRepo) RecordUsage(_ context.Context, _ *models.MeteringInput) (*models.ResourceUsage, error) {
+func (r *emptyMeteringRepo) RecordUsage(_ context.Context, _ *dto.MeteringInput) (*entities.ResourceUsage, error) {
 	return nil, fmt.Errorf("not implemented")
 }
-func (r *emptyMeteringRepo) GetLatestUsage(_ context.Context, _ string) (*models.ResourceUsage, error) {
+func (r *emptyMeteringRepo) GetLatestUsage(_ context.Context, _ string) (*entities.ResourceUsage, error) {
 	return nil, fmt.Errorf("no usage data found")
 }
-func (r *emptyMeteringRepo) GetUsageHistory(_ context.Context, _ string, _ int) ([]models.UsageHistoryEntry, error) {
-	return []models.UsageHistoryEntry{}, nil
+func (r *emptyMeteringRepo) GetUsageHistory(_ context.Context, _ string, _ int) ([]dto.UsageHistoryEntry, error) {
+	return []dto.UsageHistoryEntry{}, nil
 }
-func (r *emptyMeteringRepo) GetPlatformUsageSummary(_ context.Context) (*models.PlatformUsageSummary, error) {
-	return &models.PlatformUsageSummary{}, nil
+func (r *emptyMeteringRepo) GetPlatformUsageSummary(_ context.Context) (*dto.PlatformUsageSummary, error) {
+	return &dto.PlatformUsageSummary{}, nil
 }
