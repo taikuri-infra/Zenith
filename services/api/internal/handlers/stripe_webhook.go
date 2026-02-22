@@ -6,35 +6,19 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
-	stripeClient "github.com/dotechhq/zenith/services/api/internal/stripe"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 	gostripe "github.com/stripe/stripe-go/v82"
 )
 
 // StripeWebhookHandler processes incoming Stripe webhook events.
 type StripeWebhookHandler struct {
-	stripe      stripeClient.StripeAPI
-	billingRepo store.BillingRepository
-	planRepo    store.UserPlanRepository
-	proPriceID  string
-	teamPriceID string
+	billingSvc *services.BillingService
 }
 
 // NewStripeWebhookHandler creates a new StripeWebhookHandler.
-func NewStripeWebhookHandler(
-	stripe stripeClient.StripeAPI,
-	billingRepo store.BillingRepository,
-	planRepo store.UserPlanRepository,
-	proPriceID, teamPriceID string,
-) *StripeWebhookHandler {
-	return &StripeWebhookHandler{
-		stripe:      stripe,
-		billingRepo: billingRepo,
-		planRepo:    planRepo,
-		proPriceID:  proPriceID,
-		teamPriceID: teamPriceID,
-	}
+func NewStripeWebhookHandler(billingSvc *services.BillingService) *StripeWebhookHandler {
+	return &StripeWebhookHandler{billingSvc: billingSvc}
 }
 
 // HandleEvent processes a Stripe webhook event.
@@ -43,7 +27,7 @@ func (h *StripeWebhookHandler) HandleEvent(c *fiber.Ctx) error {
 	payload := c.Body()
 	signature := c.Get("Stripe-Signature")
 
-	event, err := h.stripe.ConstructWebhookEvent(payload, signature)
+	event, err := h.billingSvc.Stripe().ConstructWebhookEvent(payload, signature)
 	if err != nil {
 		log.Printf("[stripe-webhook] signature verification failed: %v", err)
 		return fiber.NewError(fiber.StatusBadRequest, "invalid webhook signature")
@@ -87,15 +71,15 @@ func (h *StripeWebhookHandler) handleCheckoutCompleted(c *fiber.Ctx, event *gost
 	customerID := session.Customer.ID
 	subscriptionID := session.Subscription.ID
 
-	// Store customer mapping
-	if err := h.billingRepo.SetStripeCustomerID(c.Context(), userID, customerID); err != nil {
+	billingRepo := h.billingSvc.BillingRepo()
+	planRepo := h.billingSvc.PlanRepo()
+
+	if err := billingRepo.SetStripeCustomerID(c.Context(), userID, customerID); err != nil {
 		log.Printf("[stripe-webhook] failed to set customer ID: %v", err)
 	}
 
-	// Determine price ID from tier
-	_, priceID := PriceForTier(tier, h.proPriceID, h.teamPriceID)
+	_, priceID := services.PriceForTier(tier, h.billingSvc.ProPriceID(), h.billingSvc.TeamPriceID())
 
-	// Create subscription record
 	sub := &entities.Subscription{
 		ID:                   "sub_" + subscriptionID,
 		UserID:               userID,
@@ -107,12 +91,11 @@ func (h *StripeWebhookHandler) handleCheckoutCompleted(c *fiber.Ctx, event *gost
 		CurrentPeriodStart:   time.Now(),
 		CurrentPeriodEnd:     time.Now().Add(30 * 24 * time.Hour),
 	}
-	if err := h.billingRepo.CreateSubscription(c.Context(), sub); err != nil {
+	if err := billingRepo.CreateSubscription(c.Context(), sub); err != nil {
 		log.Printf("[stripe-webhook] failed to create subscription: %v", err)
 	}
 
-	// Upgrade user plan
-	if _, err := h.planRepo.SetUserPlan(c.Context(), userID, tier); err != nil {
+	if _, err := planRepo.SetUserPlan(c.Context(), userID, tier); err != nil {
 		log.Printf("[stripe-webhook] failed to set user plan: %v", err)
 	}
 
@@ -127,9 +110,10 @@ func (h *StripeWebhookHandler) handleInvoicePaid(c *fiber.Ctx, event *gostripe.E
 		return c.JSON(fiber.Map{"received": true})
 	}
 
+	billingRepo := h.billingSvc.BillingRepo()
 	customerID := invoice.Customer.ID
 
-	userID, err := h.billingRepo.GetUserByStripeCustomerID(c.Context(), customerID)
+	userID, err := billingRepo.GetUserByStripeCustomerID(c.Context(), customerID)
 	if err != nil {
 		log.Printf("[stripe-webhook] no user for customer %s: %v", customerID, err)
 		return c.JSON(fiber.Map{"received": true})
@@ -148,7 +132,7 @@ func (h *StripeWebhookHandler) handleInvoicePaid(c *fiber.Ctx, event *gostripe.E
 		PeriodEnd:       time.Unix(invoice.PeriodEnd, 0),
 	}
 
-	if err := h.billingRepo.UpsertInvoice(c.Context(), inv); err != nil {
+	if err := billingRepo.UpsertInvoice(c.Context(), inv); err != nil {
 		log.Printf("[stripe-webhook] failed to upsert invoice: %v", err)
 	}
 
@@ -165,7 +149,7 @@ func (h *StripeWebhookHandler) handleInvoicePaymentFailed(c *fiber.Ctx, event *g
 
 	subID := invoiceSubscriptionID(&invoice)
 	if subID != "" {
-		if err := h.billingRepo.UpdateSubscriptionStatus(c.Context(), subID, entities.SubscriptionPastDue); err != nil {
+		if err := h.billingSvc.BillingRepo().UpdateSubscriptionStatus(c.Context(), subID, entities.SubscriptionPastDue); err != nil {
 			log.Printf("[stripe-webhook] failed to mark subscription past_due: %v", err)
 		}
 		log.Printf("[stripe-webhook] subscription %s marked past_due (payment failed)", subID)
@@ -191,24 +175,25 @@ func (h *StripeWebhookHandler) handleSubscriptionUpdated(c *fiber.Ctx, event *go
 		return c.JSON(fiber.Map{"received": true})
 	}
 
+	billingRepo := h.billingSvc.BillingRepo()
+	planRepo := h.billingSvc.PlanRepo()
+
 	status := mapStripeStatus(sub.Status)
-	if err := h.billingRepo.UpdateSubscriptionStatus(c.Context(), sub.ID, status); err != nil {
+	if err := billingRepo.UpdateSubscriptionStatus(c.Context(), sub.ID, status); err != nil {
 		log.Printf("[stripe-webhook] failed to update subscription status: %v", err)
 	}
 
-	// Check if price changed (plan change via Stripe portal)
 	if len(sub.Items.Data) > 0 {
 		newPriceID := sub.Items.Data[0].Price.ID
-		tier := h.tierFromPriceID(newPriceID)
+		tier := tierFromPriceID(newPriceID, h.billingSvc.ProPriceID(), h.billingSvc.TeamPriceID())
 		if tier != "" {
-			if err := h.billingRepo.UpdateSubscriptionTier(c.Context(), sub.ID, tier, newPriceID); err != nil {
+			if err := billingRepo.UpdateSubscriptionTier(c.Context(), sub.ID, tier, newPriceID); err != nil {
 				log.Printf("[stripe-webhook] failed to update subscription tier: %v", err)
 			}
 
-			// Also update user plan
-			existing, err := h.billingRepo.GetSubscriptionByStripeID(c.Context(), sub.ID)
+			existing, err := billingRepo.GetSubscriptionByStripeID(c.Context(), sub.ID)
 			if err == nil && existing != nil {
-				if _, err := h.planRepo.SetUserPlan(c.Context(), existing.UserID, tier); err != nil {
+				if _, err := planRepo.SetUserPlan(c.Context(), existing.UserID, tier); err != nil {
 					log.Printf("[stripe-webhook] failed to update user plan: %v", err)
 				}
 			}
@@ -226,14 +211,16 @@ func (h *StripeWebhookHandler) handleSubscriptionDeleted(c *fiber.Ctx, event *go
 		return c.JSON(fiber.Map{"received": true})
 	}
 
-	if err := h.billingRepo.UpdateSubscriptionStatus(c.Context(), sub.ID, entities.SubscriptionCanceled); err != nil {
+	billingRepo := h.billingSvc.BillingRepo()
+	planRepo := h.billingSvc.PlanRepo()
+
+	if err := billingRepo.UpdateSubscriptionStatus(c.Context(), sub.ID, entities.SubscriptionCanceled); err != nil {
 		log.Printf("[stripe-webhook] failed to mark subscription canceled: %v", err)
 	}
 
-	// Downgrade user to Free
-	existing, err := h.billingRepo.GetSubscriptionByStripeID(c.Context(), sub.ID)
+	existing, err := billingRepo.GetSubscriptionByStripeID(c.Context(), sub.ID)
 	if err == nil && existing != nil {
-		if _, err := h.planRepo.SetUserPlan(c.Context(), existing.UserID, entities.PlanFree); err != nil {
+		if _, err := planRepo.SetUserPlan(c.Context(), existing.UserID, entities.PlanFree); err != nil {
 			log.Printf("[stripe-webhook] failed to downgrade user to free: %v", err)
 		}
 		log.Printf("[stripe-webhook] user %s downgraded to free (subscription deleted)", existing.UserID)
@@ -242,11 +229,11 @@ func (h *StripeWebhookHandler) handleSubscriptionDeleted(c *fiber.Ctx, event *go
 	return c.JSON(fiber.Map{"received": true})
 }
 
-func (h *StripeWebhookHandler) tierFromPriceID(priceID string) entities.PlanTier {
+func tierFromPriceID(priceID, proPriceID, teamPriceID string) entities.PlanTier {
 	switch priceID {
-	case h.proPriceID:
+	case proPriceID:
 		return entities.PlanPro
-	case h.teamPriceID:
+	case teamPriceID:
 		return entities.PlanTeam
 	default:
 		return ""

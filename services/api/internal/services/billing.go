@@ -1,0 +1,239 @@
+package services
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
+	stripeClient "github.com/dotechhq/zenith/services/api/internal/stripe"
+)
+
+// PriceForTier returns (priceCents, priceID) for a given tier.
+func PriceForTier(tier entities.PlanTier, proPriceID, teamPriceID string) (int, string) {
+	switch tier {
+	case entities.PlanPro:
+		return 2900, proPriceID
+	case entities.PlanTeam:
+		return 19900, teamPriceID
+	default:
+		return 0, ""
+	}
+}
+
+// BillingService handles billing business logic.
+type BillingService struct {
+	stripe      stripeClient.StripeAPI
+	billingRepo ports.BillingRepository
+	planRepo    ports.UserPlanRepository
+	appRepo     ports.AppRepository
+	dbRepo      ports.DatabaseRepository
+	storageRepo ports.StorageRepository
+	authRepo    ports.AppAuthRepository
+	proPriceID  string
+	teamPriceID string
+	baseDomain  string
+}
+
+// NewBillingService creates a new BillingService.
+func NewBillingService(
+	stripe stripeClient.StripeAPI,
+	billingRepo ports.BillingRepository,
+	planRepo ports.UserPlanRepository,
+	appRepo ports.AppRepository,
+	dbRepo ports.DatabaseRepository,
+	storageRepo ports.StorageRepository,
+	authRepo ports.AppAuthRepository,
+	proPriceID, teamPriceID, baseDomain string,
+) *BillingService {
+	return &BillingService{
+		stripe:      stripe,
+		billingRepo: billingRepo,
+		planRepo:    planRepo,
+		appRepo:     appRepo,
+		dbRepo:      dbRepo,
+		storageRepo: storageRepo,
+		authRepo:    authRepo,
+		proPriceID:  proPriceID,
+		teamPriceID: teamPriceID,
+		baseDomain:  baseDomain,
+	}
+}
+
+// GetBillingStatus returns the user's plan, subscription, and usage info.
+func (s *BillingService) GetBillingStatus(ctx context.Context, userID string) (*dto.BillingStatusResponse, error) {
+	plan, err := s.planRepo.GetUserPlan(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	usage := s.calculateUsage(ctx, userID)
+	priceCents, _ := PriceForTier(plan.Tier, s.proPriceID, s.teamPriceID)
+
+	resp := &dto.BillingStatusResponse{
+		Tier:          string(plan.Tier),
+		BillingStatus: "none",
+		PriceCents:    priceCents,
+		Currency:      "eur",
+		Limits:        plan.Limits,
+		Usage:         usage,
+		StripeEnabled: s.stripe != nil,
+	}
+
+	sub, err := s.billingRepo.GetSubscriptionByUser(ctx, userID)
+	if err == nil && sub != nil {
+		resp.BillingStatus = string(sub.Status)
+		resp.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
+		periodEnd := sub.CurrentPeriodEnd.Format("2006-01-02T15:04:05Z")
+		resp.PeriodEnd = &periodEnd
+	}
+
+	return resp, nil
+}
+
+// CreateCheckoutSession creates a Stripe checkout session and returns the URL.
+func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID, userEmail, tierStr string) (*dto.CheckoutResponse, error) {
+	if s.stripe == nil {
+		return nil, fmt.Errorf("Stripe billing is not enabled")
+	}
+
+	tier := entities.PlanTier(tierStr)
+	_, priceID := PriceForTier(tier, s.proPriceID, s.teamPriceID)
+	if priceID == "" {
+		return nil, fmt.Errorf("invalid tier or tier not available for checkout")
+	}
+
+	plan, _ := s.planRepo.GetUserPlan(ctx, userID)
+	if plan != nil && plan.Tier == tier {
+		return nil, fmt.Errorf("you are already on the %s plan", tierStr)
+	}
+
+	customerID, _ := s.billingRepo.GetStripeCustomerID(ctx, userID)
+
+	successURL := "https://" + s.baseDomain + "/billing?success=true"
+	cancelURL := "https://" + s.baseDomain + "/billing?canceled=true"
+
+	result, err := s.stripe.CreateCheckoutSession(ctx, stripeClient.CheckoutParams{
+		CustomerID: customerID,
+		PriceID:    priceID,
+		SuccessURL: successURL,
+		CancelURL:  cancelURL,
+		UserEmail:  userEmail,
+		Metadata: map[string]string{
+			"user_id": userID,
+			"tier":    tierStr,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create checkout session")
+	}
+
+	return &dto.CheckoutResponse{
+		CheckoutURL: result.URL,
+		SessionID:   result.SessionID,
+	}, nil
+}
+
+// CreatePortalSession creates a Stripe customer portal session.
+func (s *BillingService) CreatePortalSession(ctx context.Context, userID string) (*dto.PortalResponse, error) {
+	if s.stripe == nil {
+		return nil, fmt.Errorf("Stripe billing is not enabled")
+	}
+
+	customerID, _ := s.billingRepo.GetStripeCustomerID(ctx, userID)
+	if customerID == "" {
+		return nil, fmt.Errorf("no Stripe customer found; subscribe first")
+	}
+
+	returnURL := "https://" + s.baseDomain + "/billing"
+
+	result, err := s.stripe.CreatePortalSession(ctx, customerID, returnURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create portal session")
+	}
+
+	return &dto.PortalResponse{PortalURL: result.URL}, nil
+}
+
+// CancelSubscription cancels the user's subscription.
+func (s *BillingService) CancelSubscription(ctx context.Context, userID string, immediate bool) error {
+	if s.stripe == nil {
+		return fmt.Errorf("Stripe billing is not enabled")
+	}
+
+	sub, err := s.billingRepo.GetSubscriptionByUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("no active subscription found")
+	}
+
+	return s.stripe.CancelSubscription(ctx, sub.StripeSubscriptionID, !immediate)
+}
+
+// ListInvoices returns the user's invoice history.
+func (s *BillingService) ListInvoices(ctx context.Context, userID string) ([]dto.InvoiceResponse, error) {
+	invoices, err := s.billingRepo.ListInvoicesByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]dto.InvoiceResponse, 0, len(invoices))
+	for _, inv := range invoices {
+		items = append(items, dto.InvoiceResponse{
+			ID:          inv.ID,
+			AmountCents: inv.AmountCents,
+			Currency:    inv.Currency,
+			Status:      string(inv.Status),
+			InvoiceURL:  inv.InvoiceURL,
+			InvoicePDF:  inv.InvoicePDF,
+			PeriodStart: inv.PeriodStart.Format("2006-01-02T15:04:05Z"),
+			PeriodEnd:   inv.PeriodEnd.Format("2006-01-02T15:04:05Z"),
+			CreatedAt:   inv.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		})
+	}
+
+	return items, nil
+}
+
+// GetAdminBillingOverview returns admin billing metrics.
+func (s *BillingService) GetAdminBillingOverview(ctx context.Context) (*dto.AdminBillingOverviewResponse, error) {
+	overview, err := s.billingRepo.GetBillingOverview(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.AdminBillingOverviewResponse{
+		MRRCents:            overview.MRRCents,
+		ActiveSubscriptions: overview.ActiveSubscriptions,
+		PastDueCount:        overview.PastDueCount,
+		CanceledThisMonth:   overview.CanceledThisMonth,
+		ChurnRatePercent:    overview.ChurnRatePercent,
+	}, nil
+}
+
+// ProPriceID returns the configured Pro price ID.
+func (s *BillingService) ProPriceID() string { return s.proPriceID }
+
+// TeamPriceID returns the configured Team price ID.
+func (s *BillingService) TeamPriceID() string { return s.teamPriceID }
+
+// BillingRepo exposes the billing repository for webhook handler usage.
+func (s *BillingService) BillingRepo() ports.BillingRepository { return s.billingRepo }
+
+// PlanRepo exposes the plan repository for webhook handler usage.
+func (s *BillingService) PlanRepo() ports.UserPlanRepository { return s.planRepo }
+
+// Stripe exposes the Stripe API for webhook handler usage.
+func (s *BillingService) Stripe() stripeClient.StripeAPI { return s.stripe }
+
+func (s *BillingService) calculateUsage(ctx context.Context, userID string) dto.PlanUsage {
+	appCount, _ := s.appRepo.CountAppsByUser(ctx, userID)
+	dbCount, _ := s.dbRepo.CountDatabasesByUser(ctx, userID)
+	bucketCount, _ := s.storageRepo.CountBucketsByUser(ctx, userID)
+
+	return dto.PlanUsage{
+		Apps:      appCount,
+		Databases: dbCount,
+		Buckets:   bucketCount,
+	}
+}

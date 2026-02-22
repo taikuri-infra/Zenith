@@ -12,6 +12,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -21,7 +22,7 @@ func setupAdminApp() (*fiber.App, *handlers.AdminHandler) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
 	store := store.NewMemoryAdminRepository()
-	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 	return app, handler
 }
 
@@ -906,7 +907,7 @@ func TestListAuditLogEmptyStore(t *testing.T) {
 	capiClient := capi.NewClient(k8sClient)
 	// Create a store but clear the audit log manually
 	store := store.NewMemoryAdminRepository()
-	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 	app.Use(injectAdmin)
 	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
 
@@ -1104,7 +1105,7 @@ func TestSuspendTenantSuccess(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
 	store := store.NewMemoryAdminRepository()
-	h := handlers.NewAdminHandler(k8sClient, capiClient, store)
+	h := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	fiberApp.Use(injectAdmin)
@@ -1155,7 +1156,7 @@ func TestListTenantsWithProjects(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
 	store := store.NewMemoryAdminRepository()
-	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	fiberApp.Use(injectAdmin)
@@ -1209,7 +1210,7 @@ func TestDashboardStatsWithClusters(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
 	store := store.NewMemoryAdminRepository()
-	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	fiberApp.Use(injectAdmin)
@@ -1259,7 +1260,7 @@ func TestDashboardStatsWithSuspendedTenant(t *testing.T) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
 	store := store.NewMemoryAdminRepository()
-	handler := handlers.NewAdminHandler(k8sClient, capiClient, store)
+	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	fiberApp.Use(injectAdmin)

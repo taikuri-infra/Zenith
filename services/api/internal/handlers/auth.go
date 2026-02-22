@@ -1,26 +1,16 @@
 package handlers
 
 import (
-	"time"
-
-	"github.com/dotechhq/zenith/services/api/internal/middleware"
-	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
 
-const (
-	accessTokenExpiry  = 1 * time.Hour
-	refreshTokenExpiry = 7 * 24 * time.Hour
-)
-
 type AuthHandler struct {
-	store     store.UserRepository
-	jwtSecret string
+	svc *services.AuthService
 }
 
-func NewAuthHandler(userStore store.UserRepository, jwtSecret string) *AuthHandler {
-	return &AuthHandler{store: userStore, jwtSecret: jwtSecret}
+func NewAuthHandler(svc *services.AuthService) *AuthHandler {
+	return &AuthHandler{svc: svc}
 }
 
 type loginRequest struct {
@@ -55,12 +45,17 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "email and password are required")
 	}
 
-	user, err := h.store.GetByEmail(c.Context(), req.Email)
-	if err != nil || !h.store.CheckPassword(user, req.Password) {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid email or password")
+	tokens, err := h.svc.Login(c.Context(), req.Email, req.Password)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
 
-	return h.issueTokens(c, &user.User)
+	return c.JSON(tokenResponse{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+		TokenType:    "bearer",
+		ExpiresIn:    tokens.ExpiresIn,
+	})
 }
 
 // Register creates a new user and returns JWT tokens.
@@ -76,19 +71,17 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "password must be at least 8 characters")
 	}
 
-	// First user gets owner role, subsequent users get developer
-	role := entities.RoleDeveloper
-	count, err := h.store.Count(c.Context())
-	if err == nil && count == 0 {
-		role = entities.RoleOwner
-	}
-
-	user, err := h.store.Create(c.Context(), req.Email, req.Password, req.Name, role)
+	tokens, err := h.svc.Register(c.Context(), req.Email, req.Password, req.Name)
 	if err != nil {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	}
 
-	return h.issueTokens(c, user)
+	return c.JSON(tokenResponse{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+		TokenType:    "bearer",
+		ExpiresIn:    tokens.ExpiresIn,
+	})
 }
 
 // Refresh exchanges a refresh token for new access + refresh tokens.
@@ -101,35 +94,15 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "refresh_token is required")
 	}
 
-	// Validate the refresh token (it's a JWT too)
-	claims, err := middleware.ParseToken(h.jwtSecret, req.RefreshToken)
+	tokens, err := h.svc.Refresh(c.Context(), req.RefreshToken)
 	if err != nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired refresh token")
-	}
-
-	user, err := h.store.GetByID(c.Context(), claims.Subject)
-	if err != nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "user not found")
-	}
-
-	return h.issueTokens(c, &user.User)
-}
-
-func (h *AuthHandler) issueTokens(c *fiber.Ctx, user *entities.User) error {
-	accessToken, err := middleware.GenerateToken(h.jwtSecret, user, accessTokenExpiry)
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "failed to generate access token")
-	}
-
-	refreshToken, err := middleware.GenerateToken(h.jwtSecret, user, refreshTokenExpiry)
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "failed to generate refresh token")
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
 
 	return c.JSON(tokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
 		TokenType:    "bearer",
-		ExpiresIn:    int(accessTokenExpiry.Seconds()),
+		ExpiresIn:    tokens.ExpiresIn,
 	})
 }

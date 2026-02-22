@@ -1,30 +1,19 @@
 package handlers
 
 import (
-	"strings"
-	"time"
-
-	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
 
 // CustomerHandler serves all /api/v1/admin/customers/* and /api/v1/admin/plans/* endpoints.
 type CustomerHandler struct {
-	store       store.CustomerRepository
-	admin       store.AdminRepository
-	provisioner *cluster.Provisioner
+	svc *services.CustomerService
 }
 
 // NewCustomerHandler creates a new CustomerHandler.
-func NewCustomerHandler(customerStore store.CustomerRepository, adminStore store.AdminRepository, provisioner *cluster.Provisioner) *CustomerHandler {
-	return &CustomerHandler{
-		store:       customerStore,
-		admin:       adminStore,
-		provisioner: provisioner,
-	}
+func NewCustomerHandler(svc *services.CustomerService) *CustomerHandler {
+	return &CustomerHandler{svc: svc}
 }
 
 // ---------- Customers ----------
@@ -32,7 +21,7 @@ func NewCustomerHandler(customerStore store.CustomerRepository, adminStore store
 // ListCustomers returns all customers.
 // GET /api/v1/admin/customers
 func (h *CustomerHandler) ListCustomers(c *fiber.Ctx) error {
-	customers, err := h.store.ListCustomers(c.Context())
+	customers, err := h.svc.ListCustomers(c.Context())
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to list customers")
 	}
@@ -42,7 +31,7 @@ func (h *CustomerHandler) ListCustomers(c *fiber.Ctx) error {
 // GetCustomerStats returns aggregate customer statistics.
 // GET /api/v1/admin/customers/stats
 func (h *CustomerHandler) GetCustomerStats(c *fiber.Ctx) error {
-	stats, err := h.store.GetCustomerStats(c.Context())
+	stats, err := h.svc.GetCustomerStats(c.Context())
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to get customer stats")
 	}
@@ -57,9 +46,9 @@ func (h *CustomerHandler) GetCustomer(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	customer, err := h.store.GetCustomer(c.Context(), id)
+	customer, err := h.svc.GetCustomer(c.Context(), id)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if services.IsNotFound(err) {
 			return NewNotFound("customer")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to get customer")
@@ -88,31 +77,15 @@ func (h *CustomerHandler) CreateCustomer(c *fiber.Ctx) error {
 		return NewBadRequest("contactEmail is required")
 	}
 
-	customer, err := h.store.CreateCustomer(c.Context(), &input)
+	customer, err := h.svc.CreateCustomer(c.Context(), &input, actorFromContext(c))
 	if err != nil {
-		if strings.Contains(err.Error(), "domain already in use") {
+		if services.IsDomainConflict(err) {
 			return NewConflict("domain already in use")
 		}
-		if strings.Contains(err.Error(), "plan not found") {
+		if services.IsNotFound(err) {
 			return NewBadRequest("plan not found")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create customer")
-	}
-
-	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
-		Time:   time.Now().Format("15:04"),
-		Actor:  actorFromContext(c),
-		Action: "Created customer " + input.Name + " (" + input.Domain + ")",
-	})
-
-	// Trigger cluster provisioning in background
-	if h.provisioner != nil {
-		go func() {
-			if err := h.provisioner.ProvisionCluster(c.Context(), customer); err != nil {
-				// Logged internally; status set to error in DB
-				_ = err
-			}
-		}()
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(customer)
@@ -131,22 +104,16 @@ func (h *CustomerHandler) UpdateCustomer(c *fiber.Ctx) error {
 		return NewBadRequest("invalid request body")
 	}
 
-	customer, err := h.store.UpdateCustomer(c.Context(), id, &input)
+	customer, err := h.svc.UpdateCustomer(c.Context(), id, &input, actorFromContext(c))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if services.IsNotFound(err) {
 			return NewNotFound("customer")
 		}
-		if strings.Contains(err.Error(), "domain already in use") {
+		if services.IsDomainConflict(err) {
 			return NewConflict("domain already in use")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update customer")
 	}
-
-	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
-		Time:   time.Now().Format("15:04"),
-		Actor:  actorFromContext(c),
-		Action: "Updated customer " + customer.Name,
-	})
 
 	return c.JSON(customer)
 }
@@ -159,29 +126,12 @@ func (h *CustomerHandler) DeleteCustomer(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	// Get customer for audit log and cluster teardown before deleting
-	customer, _ := h.store.GetCustomer(c.Context(), id)
-	customerName := id
-	if customer != nil {
-		customerName = customer.Name
-		// Teardown cluster before deleting customer
-		if h.provisioner != nil {
-			_ = h.provisioner.TeardownCluster(c.Context(), customer)
-		}
-	}
-
-	if err := h.store.DeleteCustomer(c.Context(), id); err != nil {
-		if strings.Contains(err.Error(), "not found") {
+	if err := h.svc.DeleteCustomer(c.Context(), id, actorFromContext(c)); err != nil {
+		if services.IsNotFound(err) {
 			return NewNotFound("customer")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to delete customer")
 	}
-
-	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
-		Time:   time.Now().Format("15:04"),
-		Actor:  actorFromContext(c),
-		Action: "Deleted customer " + customerName,
-	})
 
 	return c.JSON(fiber.Map{"message": "customer deleted"})
 }
@@ -194,19 +144,13 @@ func (h *CustomerHandler) SuspendCustomer(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	customer, err := h.store.SuspendCustomer(c.Context(), id)
+	customer, err := h.svc.SuspendCustomer(c.Context(), id, actorFromContext(c))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if services.IsNotFound(err) {
 			return NewNotFound("customer")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to suspend customer")
 	}
-
-	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
-		Time:   time.Now().Format("15:04"),
-		Actor:  actorFromContext(c),
-		Action: "Suspended customer " + customer.Name,
-	})
 
 	return c.JSON(customer)
 }
@@ -219,19 +163,13 @@ func (h *CustomerHandler) ActivateCustomer(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	customer, err := h.store.ActivateCustomer(c.Context(), id)
+	customer, err := h.svc.ActivateCustomer(c.Context(), id, actorFromContext(c))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if services.IsNotFound(err) {
 			return NewNotFound("customer")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to activate customer")
 	}
-
-	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
-		Time:   time.Now().Format("15:04"),
-		Actor:  actorFromContext(c),
-		Action: "Activated customer " + customer.Name,
-	})
 
 	return c.JSON(customer)
 }
@@ -246,41 +184,15 @@ func (h *CustomerHandler) GetCustomerCluster(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	customer, err := h.store.GetCustomer(c.Context(), id)
+	result, err := h.svc.GetCustomerCluster(c.Context(), id)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if services.IsNotFound(err) {
 			return NewNotFound("customer")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to get customer")
 	}
 
-	if customer.CAPIClusterName == "" {
-		return c.JSON(fiber.Map{
-			"clusterStatus": customer.ClusterStatus,
-			"message":       "no cluster provisioned",
-		})
-	}
-
-	if h.provisioner == nil {
-		return c.JSON(fiber.Map{
-			"clusterStatus":   customer.ClusterStatus,
-			"capiClusterName": customer.CAPIClusterName,
-			"clusterRegion":   customer.ClusterRegion,
-			"clusterNodes":    customer.ClusterNodes,
-			"k8sVersion":      customer.ClusterK8sVersion,
-		})
-	}
-
-	cluster, err := h.provisioner.GetCluster(c.Context(), customer.CAPIClusterName)
-	if err != nil {
-		return c.JSON(fiber.Map{
-			"clusterStatus":   customer.ClusterStatus,
-			"capiClusterName": customer.CAPIClusterName,
-			"error":           err.Error(),
-		})
-	}
-
-	return c.JSON(cluster)
+	return c.JSON(result)
 }
 
 // ScaleCluster scales the customer's cluster.
@@ -300,19 +212,10 @@ func (h *CustomerHandler) ScaleCluster(c *fiber.Ctx) error {
 		return NewBadRequest("nodes must be at least 1")
 	}
 
-	customer, err := h.store.GetCustomer(c.Context(), id)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+	if err := h.svc.ScaleCluster(c.Context(), id, input.Nodes); err != nil {
+		if services.IsNotFound(err) {
 			return NewNotFound("customer")
 		}
-		return fiber.NewError(fiber.StatusInternalServerError, "failed to get customer")
-	}
-
-	if h.provisioner == nil {
-		return fiber.NewError(fiber.StatusServiceUnavailable, "cluster provisioner not available")
-	}
-
-	if err := h.provisioner.ScaleCluster(c.Context(), customer, input.Nodes); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to scale cluster: "+err.Error())
 	}
 
@@ -336,19 +239,10 @@ func (h *CustomerHandler) UpgradeCluster(c *fiber.Ctx) error {
 		return NewBadRequest("version is required")
 	}
 
-	customer, err := h.store.GetCustomer(c.Context(), id)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+	if err := h.svc.UpgradeCluster(c.Context(), id, input.Version); err != nil {
+		if services.IsNotFound(err) {
 			return NewNotFound("customer")
 		}
-		return fiber.NewError(fiber.StatusInternalServerError, "failed to get customer")
-	}
-
-	if h.provisioner == nil {
-		return fiber.NewError(fiber.StatusServiceUnavailable, "cluster provisioner not available")
-	}
-
-	if err := h.provisioner.UpgradeCluster(c.Context(), customer, input.Version); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to upgrade cluster: "+err.Error())
 	}
 
@@ -360,7 +254,7 @@ func (h *CustomerHandler) UpgradeCluster(c *fiber.Ctx) error {
 // ListPlans returns all plans.
 // GET /api/v1/admin/plans
 func (h *CustomerHandler) ListPlans(c *fiber.Ctx) error {
-	plans, err := h.store.ListPlans(c.Context())
+	plans, err := h.svc.ListPlans(c.Context())
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to list plans")
 	}
@@ -388,19 +282,13 @@ func (h *CustomerHandler) CreatePlan(c *fiber.Ctx) error {
 		return NewBadRequest("priceCents must be positive")
 	}
 
-	plan, err := h.store.CreatePlan(c.Context(), &input)
+	plan, err := h.svc.CreatePlan(c.Context(), &input, actorFromContext(c))
 	if err != nil {
-		if strings.Contains(err.Error(), "already exists") {
+		if services.IsPlanConflict(err) {
 			return NewConflict("plan name already exists")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create plan")
 	}
-
-	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
-		Time:   time.Now().Format("15:04"),
-		Actor:  actorFromContext(c),
-		Action: "Created plan " + input.Name,
-	})
 
 	return c.Status(fiber.StatusCreated).JSON(plan)
 }
@@ -418,22 +306,16 @@ func (h *CustomerHandler) UpdatePlan(c *fiber.Ctx) error {
 		return NewBadRequest("invalid request body")
 	}
 
-	plan, err := h.store.UpdatePlan(c.Context(), id, &input)
+	plan, err := h.svc.UpdatePlan(c.Context(), id, &input, actorFromContext(c))
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if services.IsNotFound(err) {
 			return NewNotFound("plan")
 		}
-		if strings.Contains(err.Error(), "already exists") {
+		if services.IsPlanConflict(err) {
 			return NewConflict("plan name already exists")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update plan")
 	}
-
-	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
-		Time:   time.Now().Format("15:04"),
-		Actor:  actorFromContext(c),
-		Action: "Updated plan " + plan.Name,
-	})
 
 	return c.JSON(plan)
 }
