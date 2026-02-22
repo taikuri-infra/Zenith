@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/hetzner"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/hetznerclient"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 // MetricsProvider returns aggregate cluster CPU/RAM utilization.
@@ -18,10 +18,10 @@ type MetricsProvider interface {
 
 // Autoscaler monitors cluster utilization and scales Hetzner worker nodes.
 type Autoscaler struct {
-	hetznerClient hetzner.HetznerAPI
+	hetznerClient hetznerclient.HetznerAPI
 	metrics       MetricsProvider
-	repo          store.AutoscaleRepository
-	adminRepo     store.AdminRepository
+	repo          ports.AutoscaleRepository
+	adminRepo     ports.AdminRepository
 	config        entities.AutoscalerConfig
 	k3sJoinToken  string
 	k3sServerURL  string
@@ -33,10 +33,10 @@ type Autoscaler struct {
 
 // NewAutoscaler creates a new Autoscaler.
 func NewAutoscaler(
-	hetznerClient hetzner.HetznerAPI,
+	hetznerClient hetznerclient.HetznerAPI,
 	metrics MetricsProvider,
-	repo store.AutoscaleRepository,
-	adminRepo store.AdminRepository,
+	repo ports.AutoscaleRepository,
+	adminRepo ports.AdminRepository,
 	config entities.AutoscalerConfig,
 	k3sJoinToken string,
 	k3sServerURL string,
@@ -183,7 +183,7 @@ curl -sfL https://get.k3s.io | K3S_URL="%s" K3S_TOKEN="%s" sh -s - agent
 }
 
 // scaleDown removes the least-utilized node.
-func (a *Autoscaler) scaleDown(ctx context.Context, servers []hetzner.ServerResult, nodeCount int, cpuPct, ramPct float64) {
+func (a *Autoscaler) scaleDown(ctx context.Context, servers []hetznerclient.ServerResult, nodeCount int, cpuPct, ramPct float64) {
 	if len(servers) == 0 {
 		return
 	}

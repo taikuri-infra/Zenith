@@ -3,19 +3,19 @@ package handlers
 import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // DomainHandler manages custom domain operations.
 type DomainHandler struct {
-	domainRepo store.DomainRepository
-	appRepo    store.AppRepository
-	planRepo   store.UserPlanRepository
+	domainRepo ports.DomainRepository
+	appRepo    ports.AppRepository
+	planRepo   ports.UserPlanRepository
 }
 
 // NewDomainHandler creates a new DomainHandler.
-func NewDomainHandler(domainRepo store.DomainRepository, appRepo store.AppRepository, planRepo store.UserPlanRepository) *DomainHandler {
+func NewDomainHandler(domainRepo ports.DomainRepository, appRepo ports.AppRepository, planRepo ports.UserPlanRepository) *DomainHandler {
 	return &DomainHandler{domainRepo: domainRepo, appRepo: appRepo, planRepo: planRepo}
 }
 

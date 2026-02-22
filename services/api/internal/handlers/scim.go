@@ -2,17 +2,17 @@ package handlers
 
 import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // SCIMHandler implements SCIM 2.0 user provisioning endpoints.
 type SCIMHandler struct {
-	userRepo store.UserRepository
-	planRepo store.UserPlanRepository
+	userRepo ports.UserRepository
+	planRepo ports.UserPlanRepository
 }
 
-func NewSCIMHandler(userRepo store.UserRepository, planRepo store.UserPlanRepository) *SCIMHandler {
+func NewSCIMHandler(userRepo ports.UserRepository, planRepo ports.UserPlanRepository) *SCIMHandler {
 	return &SCIMHandler{userRepo: userRepo, planRepo: planRepo}
 }
 

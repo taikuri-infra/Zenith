@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 )
 
 func TestGenerateK8sResources(t *testing.T) {
@@ -124,8 +124,8 @@ func TestResourcesSerializeToJSON(t *testing.T) {
 // --- Deployer tests ---
 
 func TestDeployerDeployApp(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	repo := store.NewMemoryAppRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	repo := memory.NewMemoryAppRepository()
 	deployer := NewDeployer(k8sClient, repo, nil, "freezenith.com")
 
 	// Create an app
@@ -152,8 +152,8 @@ func TestDeployerDeployApp(t *testing.T) {
 }
 
 func TestDeployerDeleteApp(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	repo := store.NewMemoryAppRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	repo := memory.NewMemoryAppRepository()
 	deployer := NewDeployer(k8sClient, repo, nil, "freezenith.com")
 
 	app := &entities.App{

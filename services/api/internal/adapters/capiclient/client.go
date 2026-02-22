@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 "github.com/dotechhq/zenith/services/api/internal/entities"
 )
@@ -18,14 +18,14 @@ const (
 	KindCluster = "Cluster"
 )
 
-// Client wraps the k8s.Client to provide CAPI-specific operations
+// Client wraps the k8sclient.Client to provide CAPI-specific operations
 // using unstructured resources (no imported CAPI Go types).
 type Client struct {
-	k8s k8s.Client
+	k8s k8sclient.Client
 }
 
 // NewClient creates a new CAPI client wrapping the given Kubernetes client.
-func NewClient(k8sClient k8s.Client) *Client {
+func NewClient(k8sClient k8sclient.Client) *Client {
 	return &Client{k8s: k8sClient}
 }
 
@@ -39,10 +39,10 @@ func (c *Client) CreateCluster(ctx context.Context, input dto.CreateClusterInput
 		"tenant":     input.Tenant,
 	})
 
-	crd := &k8s.CRDObject{
+	crd := &k8sclient.CRDObject{
 		APIVersion: "cluster.x-k8s.io/v1beta1",
 		Kind:       KindCluster,
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      input.Name,
 			Namespace: CAPINamespace,
 			Labels: map[string]string{
@@ -138,7 +138,7 @@ func (c *Client) UpgradeCluster(ctx context.Context, name, version string) error
 }
 
 // crdToCluster converts a CRDObject into a entities.Cluster.
-func crdToCluster(crd *k8s.CRDObject) *entities.Cluster {
+func crdToCluster(crd *k8sclient.CRDObject) *entities.Cluster {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(crd.Spec, &spec)
 

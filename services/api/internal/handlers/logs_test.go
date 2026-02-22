@@ -6,16 +6,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
-func setupLogTest() (*fiber.App, *handlers.LogHandler, *deploy.LogHub, store.AppRepository) {
+func setupLogTest() (*fiber.App, *handlers.LogHandler, *deploy.LogHub, ports.AppRepository) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	repo := store.NewMemoryAppRepository()
+	repo := memory.NewMemoryAppRepository()
 	hub := deploy.NewLogHub(100)
 	logHandler := handlers.NewLogHandler(repo, hub)
 	return app, logHandler, hub, repo

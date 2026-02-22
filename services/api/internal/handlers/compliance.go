@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -14,13 +14,13 @@ type ComplianceCheck struct {
 }
 
 type ComplianceHandler struct {
-	mfaRepo   store.MFARepository
-	ipRepo    store.IPWhitelistRepository
-	planRepo  store.UserPlanRepository
-	adminRepo store.AdminRepository
+	mfaRepo   ports.MFARepository
+	ipRepo    ports.IPWhitelistRepository
+	planRepo  ports.UserPlanRepository
+	adminRepo ports.AdminRepository
 }
 
-func NewComplianceHandler(mfaRepo store.MFARepository, ipRepo store.IPWhitelistRepository, planRepo store.UserPlanRepository, adminRepo store.AdminRepository) *ComplianceHandler {
+func NewComplianceHandler(mfaRepo ports.MFARepository, ipRepo ports.IPWhitelistRepository, planRepo ports.UserPlanRepository, adminRepo ports.AdminRepository) *ComplianceHandler {
 	return &ComplianceHandler{mfaRepo: mfaRepo, ipRepo: ipRepo, planRepo: planRepo, adminRepo: adminRepo}
 }
 

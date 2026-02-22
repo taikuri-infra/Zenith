@@ -11,19 +11,19 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 "github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // WebhookHandler handles GitHub webhook events.
 type WebhookHandler struct {
-	appRepo       store.AppRepository
+	appRepo       ports.AppRepository
 	pipeline      *deploy.Pipeline
 	webhookSecret string
 }
 
 // NewWebhookHandler creates a new WebhookHandler.
-func NewWebhookHandler(appRepo store.AppRepository, pipeline *deploy.Pipeline, webhookSecret string) *WebhookHandler {
+func NewWebhookHandler(appRepo ports.AppRepository, pipeline *deploy.Pipeline, webhookSecret string) *WebhookHandler {
 	return &WebhookHandler{appRepo: appRepo, pipeline: pipeline, webhookSecret: webhookSecret}
 }
 

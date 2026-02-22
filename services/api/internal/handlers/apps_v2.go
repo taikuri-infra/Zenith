@@ -5,19 +5,19 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 "github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // AppHandlerV2 handles app CRUD operations using the AppRepository.
 // This replaces the original CRD-based AppHandler for Phase 2.
 type AppHandlerV2 struct {
-	appRepo    store.AppRepository
+	appRepo    ports.AppRepository
 	baseDomain string
 }
 
 // NewAppHandlerV2 creates a new AppHandlerV2.
-func NewAppHandlerV2(appRepo store.AppRepository, baseDomain string) *AppHandlerV2 {
+func NewAppHandlerV2(appRepo ports.AppRepository, baseDomain string) *AppHandlerV2 {
 	return &AppHandlerV2{appRepo: appRepo, baseDomain: baseDomain}
 }
 

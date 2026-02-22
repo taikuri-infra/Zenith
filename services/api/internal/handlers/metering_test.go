@@ -9,18 +9,18 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
-	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
 func setupMeteringApp() (*fiber.App, *handlers.MeteringHandler) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	customerStore := store.NewMemoryCustomerRepository()
-	meteringStore := store.NewMemoryMeteringRepository()
+	customerStore := memory.NewMemoryCustomerRepository()
+	meteringStore := memory.NewMemoryMeteringRepository()
 	handler := handlers.NewMeteringHandler(meteringStore, customerStore)
 	return app, handler
 }
@@ -127,7 +127,7 @@ func TestGetCustomerUsage(t *testing.T) {
 
 func TestGetCustomerUsageNoData(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	customerStore := store.NewMemoryCustomerRepository()
+	customerStore := memory.NewMemoryCustomerRepository()
 	// Create metering repo WITHOUT seed data
 	meteringStore := &emptyMeteringRepo{}
 	handler := handlers.NewMeteringHandler(meteringStore, customerStore)
@@ -259,8 +259,8 @@ func TestGetPlatformUsageSummary(t *testing.T) {
 
 func TestInternalSecretAuthMissing(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	customerStore := store.NewMemoryCustomerRepository()
-	meteringStore := store.NewMemoryMeteringRepository()
+	customerStore := memory.NewMemoryCustomerRepository()
+	meteringStore := memory.NewMemoryMeteringRepository()
 	handler := handlers.NewMeteringHandler(meteringStore, customerStore)
 
 	internal := app.Group("/api/v1/internal", middleware.RequireInternalSecret("test-secret"))
@@ -278,8 +278,8 @@ func TestInternalSecretAuthMissing(t *testing.T) {
 
 func TestInternalSecretAuthInvalid(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	customerStore := store.NewMemoryCustomerRepository()
-	meteringStore := store.NewMemoryMeteringRepository()
+	customerStore := memory.NewMemoryCustomerRepository()
+	meteringStore := memory.NewMemoryMeteringRepository()
 	handler := handlers.NewMeteringHandler(meteringStore, customerStore)
 
 	internal := app.Group("/api/v1/internal", middleware.RequireInternalSecret("test-secret"))
@@ -298,8 +298,8 @@ func TestInternalSecretAuthInvalid(t *testing.T) {
 
 func TestInternalSecretAuthValid(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	customerStore := store.NewMemoryCustomerRepository()
-	meteringStore := store.NewMemoryMeteringRepository()
+	customerStore := memory.NewMemoryCustomerRepository()
+	meteringStore := memory.NewMemoryMeteringRepository()
 	handler := handlers.NewMeteringHandler(meteringStore, customerStore)
 
 	internal := app.Group("/api/v1/internal", middleware.RequireInternalSecret("test-secret"))

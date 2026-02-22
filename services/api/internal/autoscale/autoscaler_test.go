@@ -5,31 +5,32 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/autoscale"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/hetzner"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/hetznerclient"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"time"
 )
 
 // --- mock HetznerAPI ---
 
 type mockHetzner struct {
-	servers   map[int64]*hetzner.ServerResult
+	servers   map[int64]*hetznerclient.ServerResult
 	nextID    int64
 	createErr error
 }
 
 func newMockHetzner() *mockHetzner {
-	return &mockHetzner{servers: make(map[int64]*hetzner.ServerResult), nextID: 1000}
+	return &mockHetzner{servers: make(map[int64]*hetznerclient.ServerResult), nextID: 1000}
 }
 
-func (m *mockHetzner) CreateServer(_ context.Context, name, serverType, _, _ string) (*hetzner.ServerResult, error) {
+func (m *mockHetzner) CreateServer(_ context.Context, name, serverType, _, _ string) (*hetznerclient.ServerResult, error) {
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
 	m.nextID++
-	s := &hetzner.ServerResult{
+	s := &hetznerclient.ServerResult{
 		ID: m.nextID, Name: name, PublicIPv4: "10.0.0.1",
 		Status: "running", ServerType: serverType,
 		CPUCores: 4, RAMMB: 8192, MonthlyCost: 15.59,
@@ -43,15 +44,15 @@ func (m *mockHetzner) DeleteServer(_ context.Context, id int64) error {
 	return nil
 }
 
-func (m *mockHetzner) ListServers(_ context.Context) ([]hetzner.ServerResult, error) {
-	out := make([]hetzner.ServerResult, 0, len(m.servers))
+func (m *mockHetzner) ListServers(_ context.Context) ([]hetznerclient.ServerResult, error) {
+	out := make([]hetznerclient.ServerResult, 0, len(m.servers))
 	for _, s := range m.servers {
 		out = append(out, *s)
 	}
 	return out, nil
 }
 
-func (m *mockHetzner) GetServer(_ context.Context, id int64) (*hetzner.ServerResult, error) {
+func (m *mockHetzner) GetServer(_ context.Context, id int64) (*hetznerclient.ServerResult, error) {
 	s, ok := m.servers[id]
 	if !ok {
 		return nil, fmt.Errorf("not found")
@@ -104,8 +105,8 @@ func defaultConfig() entities.AutoscalerConfig {
 	}
 }
 
-func buildAutoscaler(h *mockHetzner, m *mockMetrics, cfg entities.AutoscalerConfig) (*autoscale.Autoscaler, store.AutoscaleRepository) {
-	repo := store.NewMemoryAutoscaleRepository()
+func buildAutoscaler(h *mockHetzner, m *mockMetrics, cfg entities.AutoscalerConfig) (*autoscale.Autoscaler, ports.AutoscaleRepository) {
+	repo := memory.NewMemoryAutoscaleRepository()
 	admin := &mockAdminRepo{}
 	as := autoscale.NewAutoscaler(h, m, repo, admin, cfg, "test-token", "https://k3s.example.com:6443")
 	return as, repo

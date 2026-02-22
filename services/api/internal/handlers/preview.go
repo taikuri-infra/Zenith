@@ -4,17 +4,17 @@ import (
 	"fmt"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 type PreviewHandler struct {
-	previewRepo store.PreviewRepository
-	appRepo     store.AppRepository
-	planRepo    store.UserPlanRepository
+	previewRepo ports.PreviewRepository
+	appRepo     ports.AppRepository
+	planRepo    ports.UserPlanRepository
 }
 
-func NewPreviewHandler(previewRepo store.PreviewRepository, appRepo store.AppRepository, planRepo store.UserPlanRepository) *PreviewHandler {
+func NewPreviewHandler(previewRepo ports.PreviewRepository, appRepo ports.AppRepository, planRepo ports.UserPlanRepository) *PreviewHandler {
 	return &PreviewHandler{previewRepo: previewRepo, appRepo: appRepo, planRepo: planRepo}
 }
 

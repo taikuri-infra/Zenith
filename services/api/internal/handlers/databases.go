@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
 type DatabaseHandler struct {
-	k8sClient k8s.Client
+	k8sClient k8sclient.Client
 }
 
-func NewDatabaseHandler(client k8s.Client) *DatabaseHandler {
+func NewDatabaseHandler(client k8sclient.Client) *DatabaseHandler {
 	return &DatabaseHandler{k8sClient: client}
 }
 
@@ -118,10 +118,10 @@ func (h *DatabaseHandler) Create(c *fiber.Ctx) error {
 		"name":     req.Name,
 	})
 
-	crd := &k8s.CRDObject{
+	crd := &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Database",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      dbID,
 			Namespace: namespace,
 			Labels: map[string]string{
@@ -236,7 +236,7 @@ func (h *DatabaseHandler) CreateBackup(c *fiber.Ctx) error {
 	})
 }
 
-func dbCRDToResponse(crd *k8s.CRDObject, projectID string) DatabaseResponse {
+func dbCRDToResponse(crd *k8sclient.CRDObject, projectID string) DatabaseResponse {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(crd.Spec, &spec)
 

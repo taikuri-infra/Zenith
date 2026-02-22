@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/gofiber/fiber/v2"
 )
 
 func setupAppTest() (*fiber.App, *handlers.AppHandler) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	client := k8s.NewMemoryClient()
+	client := k8sclient.NewMemoryClient()
 	handler := handlers.NewAppHandler(client)
 	return app, handler
 }

@@ -2,20 +2,20 @@ package handlers
 
 import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/pkg/crypto"
 	"github.com/gofiber/fiber/v2"
 )
 
 // SecretHandler handles encrypted key-value secrets per app.
 type SecretHandler struct {
-	appRepo    store.AppRepository
+	appRepo    ports.AppRepository
 	cryptoKey  []byte
 }
 
 // NewSecretHandler creates a SecretHandler with the decoded AES key.
 // Returns nil if the key is empty (dev mode — secrets disabled).
-func NewSecretHandler(appRepo store.AppRepository, hexKey string) (*SecretHandler, error) {
+func NewSecretHandler(appRepo ports.AppRepository, hexKey string) (*SecretHandler, error) {
 	if hexKey == "" {
 		return nil, nil //nolint:nilnil // intentional: dev mode
 	}

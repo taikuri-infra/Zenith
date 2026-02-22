@@ -7,21 +7,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/services"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/gofiber/fiber/v2"
 )
 
 func setupAdminApp() (*fiber.App, *handlers.AdminHandler) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	k8sClient := k8s.NewMemoryClient()
-	capiClient := capi.NewClient(k8sClient)
-	store := store.NewMemoryAdminRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	capiClient := capiclient.NewClient(k8sClient)
+	store := memory.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 	return app, handler
 }
@@ -903,10 +903,10 @@ func TestAuditLogPopulatedByActions(t *testing.T) {
 
 func TestListAuditLogEmptyStore(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	k8sClient := k8s.NewMemoryClient()
-	capiClient := capi.NewClient(k8sClient)
+	k8sClient := k8sclient.NewMemoryClient()
+	capiClient := capiclient.NewClient(k8sClient)
 	// Create a store but clear the audit log manually
-	store := store.NewMemoryAdminRepository()
+	store := memory.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 	app.Use(injectAdmin)
 	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
@@ -1102,9 +1102,9 @@ func TestGetTenantNotFound(t *testing.T) {
 
 func TestSuspendTenantSuccess(t *testing.T) {
 	// We need to use the k8sClient directly to create a project
-	k8sClient := k8s.NewMemoryClient()
-	capiClient := capi.NewClient(k8sClient)
-	store := store.NewMemoryAdminRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	capiClient := capiclient.NewClient(k8sClient)
+	store := memory.NewMemoryAdminRepository()
 	h := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
@@ -1117,10 +1117,10 @@ func TestSuspendTenantSuccess(t *testing.T) {
 		"displayName": "Test Tenant",
 		"plan":        "pro",
 	})
-	k8sClient.CreateCRD(nil, &k8s.CRDObject{
+	k8sClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata:   k8s.ObjectMeta{Name: "test-tenant"},
+		Metadata:   k8sclient.ObjectMeta{Name: "test-tenant"},
 		Spec:       projSpec,
 	})
 
@@ -1153,9 +1153,9 @@ func TestSuspendTenantSuccess(t *testing.T) {
 }
 
 func TestListTenantsWithProjects(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	capiClient := capi.NewClient(k8sClient)
-	store := store.NewMemoryAdminRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	capiClient := capiclient.NewClient(k8sClient)
+	store := memory.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
@@ -1168,10 +1168,10 @@ func TestListTenantsWithProjects(t *testing.T) {
 			"displayName": name,
 			"plan":        "free",
 		})
-		k8sClient.CreateCRD(nil, &k8s.CRDObject{
+		k8sClient.CreateCRD(nil, &k8sclient.CRDObject{
 			APIVersion: "zenith.dev/v1alpha1",
 			Kind:       "Project",
-			Metadata:   k8s.ObjectMeta{Name: name},
+			Metadata:   k8sclient.ObjectMeta{Name: name},
 			Spec:       projSpec,
 		})
 	}
@@ -1207,9 +1207,9 @@ func TestApplyUpdateInvalidBody(t *testing.T) {
 }
 
 func TestDashboardStatsWithClusters(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	capiClient := capi.NewClient(k8sClient)
-	store := store.NewMemoryAdminRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	capiClient := capiclient.NewClient(k8sClient)
+	store := memory.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
@@ -1228,10 +1228,10 @@ func TestDashboardStatsWithClusters(t *testing.T) {
 	projSpec, _ := json.Marshal(map[string]interface{}{
 		"displayName": "Test",
 	})
-	k8sClient.CreateCRD(nil, &k8s.CRDObject{
+	k8sClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata:   k8s.ObjectMeta{Name: "proj1"},
+		Metadata:   k8sclient.ObjectMeta{Name: "proj1"},
 		Spec:       projSpec,
 	})
 
@@ -1257,9 +1257,9 @@ func TestDashboardStatsWithClusters(t *testing.T) {
 }
 
 func TestDashboardStatsWithSuspendedTenant(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	capiClient := capi.NewClient(k8sClient)
-	store := store.NewMemoryAdminRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	capiClient := capiclient.NewClient(k8sClient)
+	store := memory.NewMemoryAdminRepository()
 	handler := handlers.NewAdminHandler(services.NewAdminService(k8sClient, capiClient, store))
 
 	fiberApp := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
@@ -1270,10 +1270,10 @@ func TestDashboardStatsWithSuspendedTenant(t *testing.T) {
 	projSpec, _ := json.Marshal(map[string]interface{}{
 		"displayName": "Suspended",
 	})
-	k8sClient.CreateCRD(nil, &k8s.CRDObject{
+	k8sClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:        "suspended-proj",
 			Annotations: map[string]string{"zenith.dev/suspended": "true"},
 		},

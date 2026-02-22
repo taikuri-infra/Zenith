@@ -3,18 +3,19 @@ package handlers
 import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/gofiber/fiber/v2"
 )
 
 // DatabaseHandlerV2 manages per-app database provisioning (Phase 3 deploy engine).
 type DatabaseHandlerV2 struct {
-	dbRepo  store.DatabaseRepository
-	appRepo store.AppRepository
+	dbRepo  ports.DatabaseRepository
+	appRepo ports.AppRepository
 }
 
 // NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
-func NewDatabaseHandlerV2(dbRepo store.DatabaseRepository, appRepo store.AppRepository) *DatabaseHandlerV2 {
+func NewDatabaseHandlerV2(dbRepo ports.DatabaseRepository, appRepo ports.AppRepository) *DatabaseHandlerV2 {
 	return &DatabaseHandlerV2{dbRepo: dbRepo, appRepo: appRepo}
 }
 
@@ -48,7 +49,7 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 	}
 
 	// Auto-inject connection string as env var
-	if memRepo, ok := h.dbRepo.(*store.MemoryDatabaseRepository); ok {
+	if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
 		if pw, ok := memRepo.GetPassword(db.ID); ok {
 			connStr := db.ConnectionString(pw)
 			envKey := envKeyForEngine(db.Engine)
@@ -88,7 +89,7 @@ func (h *DatabaseHandlerV2) Get(c *fiber.Ctx) error {
 
 	// Include connection string for the owner
 	connStr := ""
-	if memRepo, ok := h.dbRepo.(*store.MemoryDatabaseRepository); ok {
+	if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
 		if pw, ok := memRepo.GetPassword(db.ID); ok {
 			connStr = db.ConnectionString(pw)
 		}

@@ -8,20 +8,20 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 // AdminService handles Mission Control admin business logic.
 type AdminService struct {
-	capiClient *capi.Client
-	k8sClient  k8s.Client
+	capiClient *capiclient.Client
+	k8sClient  k8sclient.Client
 	store      ports.AdminRepository
 }
 
 // NewAdminService creates a new AdminService.
-func NewAdminService(k8sClient k8s.Client, capiClient *capi.Client, store ports.AdminRepository) *AdminService {
+func NewAdminService(k8sClient k8sclient.Client, capiClient *capiclient.Client, store ports.AdminRepository) *AdminService {
 	return &AdminService{capiClient: capiClient, k8sClient: k8sClient, store: store}
 }
 
@@ -380,7 +380,7 @@ func (s *AdminService) UpdateSettings(ctx context.Context, input *entities.Platf
 }
 
 // projectToTenant converts a Project CRD to a Tenant model.
-func projectToTenant(p *k8s.CRDObject) entities.Tenant {
+func projectToTenant(p *k8sclient.CRDObject) entities.Tenant {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(p.Spec, &spec)
 

@@ -1,18 +1,18 @@
 package handlers
 
 import (
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // APIKeyHandler manages API key operations.
 type APIKeyHandler struct {
-	keyRepo  store.APIKeyRepository
-	planRepo store.UserPlanRepository
+	keyRepo  ports.APIKeyRepository
+	planRepo ports.UserPlanRepository
 }
 
 // NewAPIKeyHandler creates a new APIKeyHandler.
-func NewAPIKeyHandler(keyRepo store.APIKeyRepository, planRepo store.UserPlanRepository) *APIKeyHandler {
+func NewAPIKeyHandler(keyRepo ports.APIKeyRepository, planRepo ports.UserPlanRepository) *APIKeyHandler {
 	return &APIKeyHandler{keyRepo: keyRepo, planRepo: planRepo}
 }
 

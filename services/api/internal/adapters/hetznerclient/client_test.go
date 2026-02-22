@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dotechhq/zenith/services/api/internal/hetzner"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/hetznerclient"
 )
 
 // mockHetznerAPI is a test double for HetznerAPI.
 type mockHetznerAPI struct {
-	servers   map[int64]*hetzner.ServerResult
+	servers   map[int64]*hetznerclient.ServerResult
 	nextID    int64
 	createErr error
 	deleteErr error
@@ -20,17 +20,17 @@ type mockHetznerAPI struct {
 
 func newMockHetznerAPI() *mockHetznerAPI {
 	return &mockHetznerAPI{
-		servers: make(map[int64]*hetzner.ServerResult),
+		servers: make(map[int64]*hetznerclient.ServerResult),
 		nextID:  1000,
 	}
 }
 
-func (m *mockHetznerAPI) CreateServer(_ context.Context, name, serverType, location, _ string) (*hetzner.ServerResult, error) {
+func (m *mockHetznerAPI) CreateServer(_ context.Context, name, serverType, location, _ string) (*hetznerclient.ServerResult, error) {
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
 	m.nextID++
-	srv := &hetzner.ServerResult{
+	srv := &hetznerclient.ServerResult{
 		ID:          m.nextID,
 		Name:        name,
 		PublicIPv4:  fmt.Sprintf("10.0.0.%d", m.nextID%256),
@@ -55,18 +55,18 @@ func (m *mockHetznerAPI) DeleteServer(_ context.Context, serverID int64) error {
 	return nil
 }
 
-func (m *mockHetznerAPI) ListServers(_ context.Context) ([]hetzner.ServerResult, error) {
+func (m *mockHetznerAPI) ListServers(_ context.Context) ([]hetznerclient.ServerResult, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
-	result := make([]hetzner.ServerResult, 0, len(m.servers))
+	result := make([]hetznerclient.ServerResult, 0, len(m.servers))
 	for _, s := range m.servers {
 		result = append(result, *s)
 	}
 	return result, nil
 }
 
-func (m *mockHetznerAPI) GetServer(_ context.Context, serverID int64) (*hetzner.ServerResult, error) {
+func (m *mockHetznerAPI) GetServer(_ context.Context, serverID int64) (*hetznerclient.ServerResult, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
@@ -171,4 +171,4 @@ func TestGetServerNotFound(t *testing.T) {
 }
 
 // Ensure mockHetznerAPI satisfies HetznerAPI
-var _ hetzner.HetznerAPI = (*mockHetznerAPI)(nil)
+var _ hetznerclient.HetznerAPI = (*mockHetznerAPI)(nil)

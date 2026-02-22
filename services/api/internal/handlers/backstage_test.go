@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/gofiber/fiber/v2"
 )
 
-func setupBackstageTest() (*fiber.App, *handlers.BackstageHandler, *k8s.MemoryClient) {
+func setupBackstageTest() (*fiber.App, *handlers.BackstageHandler, *k8sclient.MemoryClient) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	client := k8s.NewMemoryClient()
+	client := k8sclient.NewMemoryClient()
 	handler := handlers.NewBackstageHandler(client)
 	return app, handler, client
 }
@@ -50,10 +50,10 @@ func TestBackstageGetCatalogWithProject(t *testing.T) {
 		"owner":       "user@test.com",
 		"plan":        "pro",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name: "myproj",
 			Labels: map[string]string{
 				"zenith.dev/owner": "user@test.com",
@@ -100,10 +100,10 @@ func TestBackstageGetCatalogWithAppsAndDatabases(t *testing.T) {
 		"displayName": "Test Project",
 		"owner":       "user@test.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name: "testproj",
 			Labels: map[string]string{
 				"zenith.dev/owner": "user@test.com",
@@ -119,10 +119,10 @@ func TestBackstageGetCatalogWithAppsAndDatabases(t *testing.T) {
 		"port":     8080,
 		"domain":   "app.example.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "App",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "web-app",
 			Namespace: "zenith-testproj",
 			Labels: map[string]string{
@@ -138,10 +138,10 @@ func TestBackstageGetCatalogWithAppsAndDatabases(t *testing.T) {
 		"engine":  "postgresql",
 		"version": "16",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Database",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "main-db",
 			Namespace: "zenith-testproj",
 			Labels: map[string]string{
@@ -191,18 +191,18 @@ func TestBackstageGetCatalogByKind(t *testing.T) {
 		"displayName": "Test",
 		"owner":       "user@test.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata:   k8s.ObjectMeta{Name: "proj1"},
+		Metadata:   k8sclient.ObjectMeta{Name: "proj1"},
 		Spec:       projSpec,
 	})
 
 	appSpec, _ := json.Marshal(map[string]interface{}{"image": "nginx:latest"})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "App",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "my-app",
 			Namespace: "zenith-proj1",
 			Labels:    map[string]string{"zenith.dev/app-name": "my-app"},
@@ -248,10 +248,10 @@ func TestBackstageEntityAnnotations(t *testing.T) {
 		"displayName": "Annotated Project",
 		"owner":       "owner@test.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name: "annotproj",
 			Labels: map[string]string{
 				"zenith.dev/owner": "owner@test.com",
@@ -265,10 +265,10 @@ func TestBackstageEntityAnnotations(t *testing.T) {
 		"domain": "api.example.com",
 		"appRef": "web-app",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Domain",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "api-domain",
 			Namespace: "zenith-annotproj",
 			Labels:    map[string]string{"zenith.dev/project": "annotproj"},
@@ -310,10 +310,10 @@ func TestBackstageGetCatalogWithStorageBuckets(t *testing.T) {
 		"displayName": "Storage Project",
 		"owner":       "user@test.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name: "storageproj",
 			Labels: map[string]string{
 				"zenith.dev/owner": "user@test.com",
@@ -329,10 +329,10 @@ func TestBackstageGetCatalogWithStorageBuckets(t *testing.T) {
 		"region":     "fsn1",
 		"name":       "cdn-assets",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "StorageBucket",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "sb-12345678",
 			Namespace: "zenith-storageproj",
 			Labels: map[string]string{
@@ -398,10 +398,10 @@ func TestBackstageGetCatalogWithDomains(t *testing.T) {
 		"displayName": "Domain Project",
 		"owner":       "user@test.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name: "domainproj",
 			Labels: map[string]string{
 				"zenith.dev/owner": "user@test.com",
@@ -415,10 +415,10 @@ func TestBackstageGetCatalogWithDomains(t *testing.T) {
 		"domain": "api.myapp.com",
 		"appRef": "web-service",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Domain",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "api-domain",
 			Namespace: "zenith-domainproj",
 			Labels:    map[string]string{"zenith.dev/project": "domainproj"},
@@ -472,18 +472,18 @@ func TestBackstageGetCatalogByKindSystem(t *testing.T) {
 		"displayName": "Test",
 		"owner":       "user@test.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata:   k8s.ObjectMeta{Name: "proj1"},
+		Metadata:   k8sclient.ObjectMeta{Name: "proj1"},
 		Spec:       projSpec,
 	})
 
 	appSpec, _ := json.Marshal(map[string]interface{}{"image": "nginx:latest"})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "App",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "my-app",
 			Namespace: "zenith-proj1",
 			Labels:    map[string]string{"zenith.dev/app-name": "my-app"},
@@ -518,18 +518,18 @@ func TestBackstageGetCatalogByKindResource(t *testing.T) {
 
 	// Create project + database (Resource)
 	projSpec, _ := json.Marshal(map[string]interface{}{"displayName": "Test"})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata:   k8s.ObjectMeta{Name: "proj1"},
+		Metadata:   k8sclient.ObjectMeta{Name: "proj1"},
 		Spec:       projSpec,
 	})
 
 	dbSpec, _ := json.Marshal(map[string]interface{}{"engine": "postgresql", "version": "16"})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Database",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "db1",
 			Namespace: "zenith-proj1",
 		},
@@ -557,18 +557,18 @@ func TestBackstageGetCatalogByKindAPI(t *testing.T) {
 	app.Get("/api/v1/backstage/catalog/:kind", handler.GetCatalogByKind)
 
 	projSpec, _ := json.Marshal(map[string]interface{}{"displayName": "Test"})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata:   k8s.ObjectMeta{Name: "proj1"},
+		Metadata:   k8sclient.ObjectMeta{Name: "proj1"},
 		Spec:       projSpec,
 	})
 
 	domainSpec, _ := json.Marshal(map[string]interface{}{"domain": "api.test.com", "appRef": "web"})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Domain",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "test-domain",
 			Namespace: "zenith-proj1",
 		},
@@ -622,10 +622,10 @@ func TestBackstageComponentWithDomain(t *testing.T) {
 		"displayName": "Test",
 		"owner":       "user@test.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:   "proj1",
 			Labels: map[string]string{"zenith.dev/owner": "user@test.com"},
 		},
@@ -637,10 +637,10 @@ func TestBackstageComponentWithDomain(t *testing.T) {
 		"image":  "nginx:latest",
 		"domain": "web.example.com",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "App",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "web-app",
 			Namespace: "zenith-proj1",
 			Labels:    map[string]string{"zenith.dev/app-name": "web"},
@@ -675,10 +675,10 @@ func TestBackstageProjectOwnerFallback(t *testing.T) {
 	projSpec, _ := json.Marshal(map[string]interface{}{
 		"displayName": "No Owner",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata:   k8s.ObjectMeta{Name: "noowner"},
+		Metadata:   k8sclient.ObjectMeta{Name: "noowner"},
 		Spec:       projSpec,
 	})
 
@@ -703,10 +703,10 @@ func TestBackstageDatabaseResourceTags(t *testing.T) {
 	app.Get("/api/v1/backstage/catalog", handler.GetCatalog)
 
 	projSpec, _ := json.Marshal(map[string]interface{}{"displayName": "Test"})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata:   k8s.ObjectMeta{Name: "proj1"},
+		Metadata:   k8sclient.ObjectMeta{Name: "proj1"},
 		Spec:       projSpec,
 	})
 
@@ -714,10 +714,10 @@ func TestBackstageDatabaseResourceTags(t *testing.T) {
 		"engine":  "postgresql",
 		"version": "16",
 	})
-	memClient.CreateCRD(nil, &k8s.CRDObject{
+	memClient.CreateCRD(nil, &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Database",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      "main-db",
 			Namespace: "zenith-proj1",
 		},

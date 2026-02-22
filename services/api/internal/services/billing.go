@@ -7,7 +7,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
-	stripeClient "github.com/dotechhq/zenith/services/api/internal/stripe"
+	stripeClient "github.com/dotechhq/zenith/services/api/internal/adapters/stripeclient"
 )
 
 // PriceForTier returns (priceCents, priceID) for a given tier.

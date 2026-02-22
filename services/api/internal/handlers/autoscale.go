@@ -1,17 +1,17 @@
 package handlers
 
 import (
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // AutoscaleHandler serves autoscaler admin endpoints.
 type AutoscaleHandler struct {
-	repo store.AutoscaleRepository
+	repo ports.AutoscaleRepository
 }
 
 // NewAutoscaleHandler creates a new AutoscaleHandler.
-func NewAutoscaleHandler(repo store.AutoscaleRepository) *AutoscaleHandler {
+func NewAutoscaleHandler(repo ports.AutoscaleRepository) *AutoscaleHandler {
 	return &AutoscaleHandler{repo: repo}
 }
 

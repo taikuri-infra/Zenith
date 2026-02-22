@@ -3,18 +3,18 @@ package handlers
 import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // StorageHandlerV2 manages per-app storage buckets (Phase 3).
 type StorageHandlerV2 struct {
-	storageRepo store.StorageRepository
-	appRepo     store.AppRepository
+	storageRepo ports.StorageRepository
+	appRepo     ports.AppRepository
 }
 
 // NewStorageHandlerV2 creates a new StorageHandlerV2.
-func NewStorageHandlerV2(storageRepo store.StorageRepository, appRepo store.AppRepository) *StorageHandlerV2 {
+func NewStorageHandlerV2(storageRepo ports.StorageRepository, appRepo ports.AppRepository) *StorageHandlerV2 {
 	return &StorageHandlerV2{storageRepo: storageRepo, appRepo: appRepo}
 }
 

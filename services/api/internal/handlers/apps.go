@@ -4,16 +4,16 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
 type AppHandler struct {
-	k8sClient k8s.Client
+	k8sClient k8sclient.Client
 }
 
-func NewAppHandler(client k8s.Client) *AppHandler {
+func NewAppHandler(client k8sclient.Client) *AppHandler {
 	return &AppHandler{k8sClient: client}
 }
 
@@ -86,10 +86,10 @@ func (h *AppHandler) Create(c *fiber.Ctx) error {
 		"domain":   req.Domain,
 	})
 
-	crd := &k8s.CRDObject{
+	crd := &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "App",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      appID,
 			Namespace: namespace,
 			Labels: map[string]string{
@@ -233,7 +233,7 @@ func (h *AppHandler) Redeploy(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "redeploy triggered"})
 }
 
-func appCRDToResponse(crd *k8s.CRDObject, projectID string) AppResponse {
+func appCRDToResponse(crd *k8sclient.CRDObject, projectID string) AppResponse {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(crd.Spec, &spec)
 

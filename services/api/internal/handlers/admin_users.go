@@ -3,26 +3,26 @@ package handlers
 import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // AdminUserHandler manages platform users from the admin panel (Phase 4).
 type AdminUserHandler struct {
-	userRepo    store.UserRepository
-	planRepo    store.UserPlanRepository
-	appRepo     store.AppRepository
-	dbRepo      store.DatabaseRepository
-	storageRepo store.StorageRepository
+	userRepo    ports.UserRepository
+	planRepo    ports.UserPlanRepository
+	appRepo     ports.AppRepository
+	dbRepo      ports.DatabaseRepository
+	storageRepo ports.StorageRepository
 }
 
 // NewAdminUserHandler creates a new AdminUserHandler.
 func NewAdminUserHandler(
-	userRepo store.UserRepository,
-	planRepo store.UserPlanRepository,
-	appRepo store.AppRepository,
-	dbRepo store.DatabaseRepository,
-	storageRepo store.StorageRepository,
+	userRepo ports.UserRepository,
+	planRepo ports.UserPlanRepository,
+	appRepo ports.AppRepository,
+	dbRepo ports.DatabaseRepository,
+	storageRepo ports.StorageRepository,
 ) *AdminUserHandler {
 	return &AdminUserHandler{
 		userRepo:    userRepo,

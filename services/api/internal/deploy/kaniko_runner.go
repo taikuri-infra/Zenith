@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 )
 
 const (
@@ -20,12 +20,12 @@ const (
 // completion. It is nil-safe — if the runner is nil (no k8s client in dev
 // mode), calling Build is a no-op that returns immediately with nil error.
 type KanikoRunner struct {
-	k8sClient k8s.Client
+	k8sClient k8sclient.Client
 	logHub    *LogHub
 }
 
 // NewKanikoRunner creates a KanikoRunner. Both arguments are optional (nil-safe).
-func NewKanikoRunner(k8sClient k8s.Client, logHub *LogHub) *KanikoRunner {
+func NewKanikoRunner(k8sClient k8sclient.Client, logHub *LogHub) *KanikoRunner {
 	if k8sClient == nil {
 		return nil
 	}
@@ -51,7 +51,7 @@ func (r *KanikoRunner) Build(ctx context.Context, spec *KanikoJobSpec, deploymen
 	log.Printf("[kaniko] Submitting job %s in namespace %s", spec.Name, kanikoNamespace)
 
 	// 1. Create the K8s Job
-	job := &k8s.JobObject{
+	job := &k8sclient.JobObject{
 		Name:      spec.Name,
 		Namespace: kanikoNamespace,
 		Labels: map[string]string{

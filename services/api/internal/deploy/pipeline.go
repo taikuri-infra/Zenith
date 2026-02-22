@@ -7,15 +7,15 @@ import (
 	"sync"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 // Pipeline manages async build+deploy operations.
 type Pipeline struct {
 	builder  *Builder
 	deployer *Deployer
-	appRepo  store.AppRepository
+	appRepo  ports.AppRepository
 	logHub   *LogHub
 	eventHub *EventHub
 	mu       sync.Mutex
@@ -23,7 +23,7 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new Pipeline.
-func NewPipeline(builder *Builder, deployer *Deployer, appRepo store.AppRepository, logHub *LogHub, eventHub *EventHub) *Pipeline {
+func NewPipeline(builder *Builder, deployer *Deployer, appRepo ports.AppRepository, logHub *LogHub, eventHub *EventHub) *Pipeline {
 	return &Pipeline{
 		builder:  builder,
 		deployer: deployer,
