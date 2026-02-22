@@ -4,16 +4,17 @@ import (
 	"context"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 func TestDeployAppFreeTier(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	appRepo := store.NewMemoryAppRepository()
-	planRepo := store.NewMemoryUserPlanRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	appRepo := memory.NewMemoryAppRepository()
+	planRepo := memory.NewMemoryUserPlanRepository()
 
 	ctx := context.Background()
 
@@ -45,9 +46,9 @@ func TestDeployAppFreeTier(t *testing.T) {
 }
 
 func TestDeployAppPaidTier(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	appRepo := store.NewMemoryAppRepository()
-	planRepo := store.NewMemoryUserPlanRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	appRepo := memory.NewMemoryAppRepository()
+	planRepo := memory.NewMemoryUserPlanRepository()
 
 	ctx := context.Background()
 
@@ -78,9 +79,9 @@ func TestDeployAppPaidTier(t *testing.T) {
 }
 
 func TestDeleteAppCleansUpHTTPScaledObject(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	appRepo := store.NewMemoryAppRepository()
-	planRepo := store.NewMemoryUserPlanRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	appRepo := memory.NewMemoryAppRepository()
+	planRepo := memory.NewMemoryUserPlanRepository()
 
 	ctx := context.Background()
 
@@ -112,8 +113,8 @@ func TestDeleteAppCleansUpHTTPScaledObject(t *testing.T) {
 }
 
 func TestDeployAppNilPlanRepo(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
-	appRepo := store.NewMemoryAppRepository()
+	k8sClient := k8sclient.NewMemoryClient()
+	appRepo := memory.NewMemoryAppRepository()
 
 	ctx := context.Background()
 
@@ -136,7 +137,7 @@ func TestDeployAppNilPlanRepo(t *testing.T) {
 }
 
 // createTestApp is a helper that creates a test app via the app repo.
-func createTestApp(t *testing.T, ctx context.Context, appRepo store.AppRepository, userID, name string) *entities.App {
+func createTestApp(t *testing.T, ctx context.Context, appRepo ports.AppRepository, userID, name string) *entities.App {
 	t.Helper()
 	app, err := appRepo.CreateApp(ctx, &dto.CreateAppInput{
 		UserID:  userID,

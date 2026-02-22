@@ -3,7 +3,7 @@ package handlers
 import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/services"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -51,7 +51,7 @@ func (h *PlanHandler) UpgradePlan(c *fiber.Ctx) error {
 }
 
 // CheckLimit is a middleware factory that checks plan limits before resource creation.
-func CheckLimit(planRepo store.UserPlanRepository, resource string, countFn func(c *fiber.Ctx, userID string) (int, error)) fiber.Handler {
+func CheckLimit(planRepo ports.UserPlanRepository, resource string, countFn func(c *fiber.Ctx, userID string) (int, error)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID, _ := c.Locals("user_id").(string)
 		if userID == "" {

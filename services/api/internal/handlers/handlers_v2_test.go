@@ -9,15 +9,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
-func setupV2Test() (*fiber.App, *handlers.AppHandlerV2, *handlers.DeployHandler, *handlers.WebhookHandler, store.AppRepository) {
+func setupV2Test() (*fiber.App, *handlers.AppHandlerV2, *handlers.DeployHandler, *handlers.WebhookHandler, ports.AppRepository) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	repo := store.NewMemoryAppRepository()
+	repo := memory.NewMemoryAppRepository()
 	appHandler := handlers.NewAppHandlerV2(repo, "freezenith.com")
 	deployHandler := handlers.NewDeployHandler(repo)
 	webhookHandler := handlers.NewWebhookHandler(repo, nil, "test-secret")
@@ -390,15 +391,15 @@ func TestDeleteEnvVar(t *testing.T) {
 
 // --- DatabaseHandlerV2 tests ---
 
-func setupDatabaseTest() (*fiber.App, *handlers.DatabaseHandlerV2, store.AppRepository, *store.MemoryDatabaseRepository) {
+func setupDatabaseTest() (*fiber.App, *handlers.DatabaseHandlerV2, ports.AppRepository, *memory.MemoryDatabaseRepository) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	appRepo := store.NewMemoryAppRepository()
-	dbRepo := store.NewMemoryDatabaseRepository()
+	appRepo := memory.NewMemoryAppRepository()
+	dbRepo := memory.NewMemoryDatabaseRepository()
 	dbHandler := handlers.NewDatabaseHandlerV2(dbRepo, appRepo)
 	return app, dbHandler, appRepo, dbRepo
 }
 
-func createTestApp(t *testing.T, fiberApp *fiber.App, appRepo store.AppRepository) string {
+func createTestApp(t *testing.T, fiberApp *fiber.App, appRepo ports.AppRepository) string {
 	t.Helper()
 	app, err := appRepo.CreateApp(nil, &dto.CreateAppInput{
 		UserID:  "user-1",

@@ -2,16 +2,16 @@ package handlers
 
 import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 type IPWhitelistHandler struct {
-	ipRepo   store.IPWhitelistRepository
-	planRepo store.UserPlanRepository
+	ipRepo   ports.IPWhitelistRepository
+	planRepo ports.UserPlanRepository
 }
 
-func NewIPWhitelistHandler(ipRepo store.IPWhitelistRepository, planRepo store.UserPlanRepository) *IPWhitelistHandler {
+func NewIPWhitelistHandler(ipRepo ports.IPWhitelistRepository, planRepo ports.UserPlanRepository) *IPWhitelistHandler {
 	return &IPWhitelistHandler{ipRepo: ipRepo, planRepo: planRepo}
 }
 

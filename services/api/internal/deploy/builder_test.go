@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
 )
 
 // --- Builder tests ---
 
 func TestNewBuilder(t *testing.T) {
-	repo := store.NewMemoryAppRepository()
+	repo := memory.NewMemoryAppRepository()
 	b := NewBuilder(repo, "", "", nil, nil)
 	if b.workDir != "/tmp/zenith-builds" {
 		t.Errorf("Expected default workDir, got '%s'", b.workDir)
@@ -22,7 +22,7 @@ func TestNewBuilder(t *testing.T) {
 }
 
 func TestNewBuilderCustom(t *testing.T) {
-	repo := store.NewMemoryAppRepository()
+	repo := memory.NewMemoryAppRepository()
 	b := NewBuilder(repo, "/builds", "ghcr.io/myorg", nil, nil)
 	if b.workDir != "/builds" {
 		t.Errorf("Expected '/builds', got '%s'", b.workDir)
@@ -108,7 +108,7 @@ func TestKanikoJobManifestLabels(t *testing.T) {
 // --- Pipeline tests ---
 
 func TestPipelineRunningCount(t *testing.T) {
-	repo := store.NewMemoryAppRepository()
+	repo := memory.NewMemoryAppRepository()
 	builder := NewBuilder(repo, "/tmp/test-builds", "test-registry", nil, nil)
 	pipeline := NewPipeline(builder, nil, repo, nil, nil)
 
@@ -118,7 +118,7 @@ func TestPipelineRunningCount(t *testing.T) {
 }
 
 func TestPipelineIsRunning(t *testing.T) {
-	repo := store.NewMemoryAppRepository()
+	repo := memory.NewMemoryAppRepository()
 	builder := NewBuilder(repo, "/tmp/test-builds", "test-registry", nil, nil)
 	pipeline := NewPipeline(builder, nil, repo, nil, nil)
 
@@ -128,7 +128,7 @@ func TestPipelineIsRunning(t *testing.T) {
 }
 
 func TestPipelineCancelNonExistent(t *testing.T) {
-	repo := store.NewMemoryAppRepository()
+	repo := memory.NewMemoryAppRepository()
 	builder := NewBuilder(repo, "/tmp/test-builds", "test-registry", nil, nil)
 	pipeline := NewPipeline(builder, nil, repo, nil, nil)
 

@@ -2,16 +2,16 @@ package handlers
 
 import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 type RoleHandler struct {
-	roleRepo store.RoleRepository
-	planRepo store.UserPlanRepository
+	roleRepo ports.RoleRepository
+	planRepo ports.UserPlanRepository
 }
 
-func NewRoleHandler(roleRepo store.RoleRepository, planRepo store.UserPlanRepository) *RoleHandler {
+func NewRoleHandler(roleRepo ports.RoleRepository, planRepo ports.UserPlanRepository) *RoleHandler {
 	return &RoleHandler{roleRepo: roleRepo, planRepo: planRepo}
 }
 

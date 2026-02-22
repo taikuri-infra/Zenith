@@ -5,17 +5,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // AuditExportHandler handles audit log export endpoints.
 type AuditExportHandler struct {
-	adminRepo store.AdminRepository
+	adminRepo ports.AdminRepository
 }
 
 // NewAuditExportHandler creates a new AuditExportHandler.
-func NewAuditExportHandler(adminRepo store.AdminRepository) *AuditExportHandler {
+func NewAuditExportHandler(adminRepo ports.AdminRepository) *AuditExportHandler {
 	return &AuditExportHandler{adminRepo: adminRepo}
 }
 

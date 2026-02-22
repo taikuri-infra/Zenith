@@ -2,17 +2,17 @@ package handlers
 
 import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // UserWebhookHandler handles user-defined webhook endpoints.
 type UserWebhookHandler struct {
-	webhookRepo store.UserWebhookRepository
-	planRepo    store.UserPlanRepository
+	webhookRepo ports.UserWebhookRepository
+	planRepo    ports.UserPlanRepository
 }
 
-func NewUserWebhookHandler(webhookRepo store.UserWebhookRepository, planRepo store.UserPlanRepository) *UserWebhookHandler {
+func NewUserWebhookHandler(webhookRepo ports.UserWebhookRepository, planRepo ports.UserPlanRepository) *UserWebhookHandler {
 	return &UserWebhookHandler{webhookRepo: webhookRepo, planRepo: planRepo}
 }
 

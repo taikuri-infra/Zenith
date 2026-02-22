@@ -4,16 +4,16 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
 type StorageHandler struct {
-	k8sClient k8s.Client
+	k8sClient k8sclient.Client
 }
 
-func NewStorageHandler(client k8s.Client) *StorageHandler {
+func NewStorageHandler(client k8sclient.Client) *StorageHandler {
 	return &StorageHandler{k8sClient: client}
 }
 
@@ -73,10 +73,10 @@ func (h *StorageHandler) Create(c *fiber.Ctx) error {
 		"name":       req.Name,
 	})
 
-	crd := &k8s.CRDObject{
+	crd := &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "StorageBucket",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      bucketID,
 			Namespace: namespace,
 			Labels: map[string]string{
@@ -156,7 +156,7 @@ func (h *StorageHandler) Delete(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "storage bucket scheduled for deletion"})
 }
 
-func storageCRDToResponse(crd *k8s.CRDObject, projectID string) StorageResponse {
+func storageCRDToResponse(crd *k8sclient.CRDObject, projectID string) StorageResponse {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(crd.Spec, &spec)
 

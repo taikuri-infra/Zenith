@@ -6,22 +6,22 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 // Deployer handles deploying built images to Kubernetes.
 type Deployer struct {
-	k8sClient  k8s.Client
-	appRepo    store.AppRepository
-	planRepo   store.UserPlanRepository
+	k8sClient  k8sclient.Client
+	appRepo    ports.AppRepository
+	planRepo   ports.UserPlanRepository
 	baseDomain string
 }
 
 // NewDeployer creates a new Deployer.
-func NewDeployer(k8sClient k8s.Client, appRepo store.AppRepository, planRepo store.UserPlanRepository, baseDomain string) *Deployer {
+func NewDeployer(k8sClient k8sclient.Client, appRepo ports.AppRepository, planRepo ports.UserPlanRepository, baseDomain string) *Deployer {
 	return &Deployer{
 		k8sClient:  k8sClient,
 		appRepo:    appRepo,
@@ -115,10 +115,10 @@ func (d *Deployer) applyCRD(ctx context.Context, kind, namespace, name string, r
 		return fmt.Errorf("failed to marshal resource: %w", err)
 	}
 
-	crd := &k8s.CRDObject{
+	crd := &k8sclient.CRDObject{
 		APIVersion: getAPIVersion(resource),
 		Kind:       kind,
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},

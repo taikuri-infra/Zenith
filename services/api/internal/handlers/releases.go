@@ -3,17 +3,17 @@ package handlers
 import (
 	"github.com/dotechhq/zenith/services/api/internal/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // ReleaseHandler manages app releases (versioned images from zenith-actions).
 type ReleaseHandler struct {
-	appRepo  store.AppRepository
+	appRepo  ports.AppRepository
 	pipeline *deploy.Pipeline
 }
 
-func NewReleaseHandler(appRepo store.AppRepository, pipeline *deploy.Pipeline) *ReleaseHandler {
+func NewReleaseHandler(appRepo ports.AppRepository, pipeline *deploy.Pipeline) *ReleaseHandler {
 	return &ReleaseHandler{appRepo: appRepo, pipeline: pipeline}
 }
 

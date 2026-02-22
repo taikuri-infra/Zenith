@@ -8,20 +8,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
 	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/services"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/gofiber/fiber/v2"
 )
 
 func setupCustomerApp() (*fiber.App, *handlers.CustomerHandler) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	customerStore := store.NewMemoryCustomerRepository()
-	adminStore := store.NewMemoryAdminRepository()
+	customerStore := memory.NewMemoryCustomerRepository()
+	adminStore := memory.NewMemoryAdminRepository()
 	svc := services.NewCustomerService(customerStore, adminStore, nil)
 	handler := handlers.NewCustomerHandler(svc)
 	return app, handler
@@ -675,11 +675,11 @@ func TestCustomerCRUDFlow(t *testing.T) {
 
 func setupCustomerAppWithProvisioner() (*fiber.App, *handlers.CustomerHandler) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
-	customerStore := store.NewMemoryCustomerRepository()
-	adminStore := store.NewMemoryAdminRepository()
+	customerStore := memory.NewMemoryCustomerRepository()
+	adminStore := memory.NewMemoryAdminRepository()
 	// Create provisioner with in-memory CAPI
-	k8sClient := k8s.NewMemoryClient()
-	capiClient := capi.NewClient(k8sClient)
+	k8sClient := k8sclient.NewMemoryClient()
+	capiClient := capiclient.NewClient(k8sClient)
 	provisioner := cluster.NewProvisioner(capiClient, customerStore, adminStore)
 	svc := services.NewCustomerService(customerStore, adminStore, provisioner)
 	handler := handlers.NewCustomerHandler(svc)

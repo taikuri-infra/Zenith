@@ -3,18 +3,18 @@ package handlers
 import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // BackupHandlerV2 manages database backups (Phase 3).
 type BackupHandlerV2 struct {
-	backupRepo store.BackupRepository
-	dbRepo     store.DatabaseRepository
+	backupRepo ports.BackupRepository
+	dbRepo     ports.DatabaseRepository
 }
 
 // NewBackupHandlerV2 creates a new BackupHandlerV2.
-func NewBackupHandlerV2(backupRepo store.BackupRepository, dbRepo store.DatabaseRepository) *BackupHandlerV2 {
+func NewBackupHandlerV2(backupRepo ports.BackupRepository, dbRepo ports.DatabaseRepository) *BackupHandlerV2 {
 	return &BackupHandlerV2{backupRepo: backupRepo, dbRepo: dbRepo}
 }
 

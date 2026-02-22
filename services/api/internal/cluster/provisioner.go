@@ -6,22 +6,22 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 // Provisioner orchestrates CAPI cluster lifecycle for customers.
 type Provisioner struct {
-	capi      *capi.Client
-	customers store.CustomerRepository
-	admin     store.AdminRepository
+	capi      *capiclient.Client
+	customers ports.CustomerRepository
+	admin     ports.AdminRepository
 	stopCh    chan struct{}
 }
 
 // NewProvisioner creates a new cluster Provisioner.
-func NewProvisioner(capiClient *capi.Client, customers store.CustomerRepository, admin store.AdminRepository) *Provisioner {
+func NewProvisioner(capiClient *capiclient.Client, customers ports.CustomerRepository, admin ports.AdminRepository) *Provisioner {
 	return &Provisioner{
 		capi:      capiClient,
 		customers: customers,

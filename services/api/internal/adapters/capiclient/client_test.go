@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 )
 
 func TestCreateAndGetCluster(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -53,7 +53,7 @@ func TestCreateAndGetCluster(t *testing.T) {
 }
 
 func TestCreateClusterWithTenant(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -80,7 +80,7 @@ func TestCreateClusterWithTenant(t *testing.T) {
 }
 
 func TestCreateClusterDuplicate(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -104,7 +104,7 @@ func TestCreateClusterDuplicate(t *testing.T) {
 }
 
 func TestGetClusterNotFound(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -115,7 +115,7 @@ func TestGetClusterNotFound(t *testing.T) {
 }
 
 func TestListClusters(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -144,7 +144,7 @@ func TestListClusters(t *testing.T) {
 }
 
 func TestListClustersEmpty(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -159,7 +159,7 @@ func TestListClustersEmpty(t *testing.T) {
 }
 
 func TestDeleteCluster(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -186,7 +186,7 @@ func TestDeleteCluster(t *testing.T) {
 }
 
 func TestDeleteClusterNotFound(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -197,7 +197,7 @@ func TestDeleteClusterNotFound(t *testing.T) {
 }
 
 func TestScaleCluster(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -228,7 +228,7 @@ func TestScaleCluster(t *testing.T) {
 }
 
 func TestScaleClusterNotFound(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -239,7 +239,7 @@ func TestScaleClusterNotFound(t *testing.T) {
 }
 
 func TestUpgradeCluster(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
@@ -270,7 +270,7 @@ func TestUpgradeCluster(t *testing.T) {
 }
 
 func TestUpgradeClusterNotFound(t *testing.T) {
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 

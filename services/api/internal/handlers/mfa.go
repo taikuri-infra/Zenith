@@ -4,17 +4,17 @@ import (
 	"fmt"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // MFAHandler handles MFA endpoints.
 type MFAHandler struct {
-	mfaRepo  store.MFARepository
-	planRepo store.UserPlanRepository
+	mfaRepo  ports.MFARepository
+	planRepo ports.UserPlanRepository
 }
 
-func NewMFAHandler(mfaRepo store.MFARepository, planRepo store.UserPlanRepository) *MFAHandler {
+func NewMFAHandler(mfaRepo ports.MFARepository, planRepo ports.UserPlanRepository) *MFAHandler {
 	return &MFAHandler{mfaRepo: mfaRepo, planRepo: planRepo}
 }
 

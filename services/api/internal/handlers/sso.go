@@ -2,16 +2,16 @@ package handlers
 
 import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 type SSOHandler struct {
-	ssoRepo  store.SSORepository
-	planRepo store.UserPlanRepository
+	ssoRepo  ports.SSORepository
+	planRepo ports.UserPlanRepository
 }
 
-func NewSSOHandler(ssoRepo store.SSORepository, planRepo store.UserPlanRepository) *SSOHandler {
+func NewSSOHandler(ssoRepo ports.SSORepository, planRepo ports.UserPlanRepository) *SSOHandler {
 	return &SSOHandler{ssoRepo: ssoRepo, planRepo: planRepo}
 }
 

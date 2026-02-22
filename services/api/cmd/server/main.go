@@ -10,20 +10,22 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/docs"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres/migrations"
+	stripeClient "github.com/dotechhq/zenith/services/api/internal/adapters/stripeclient"
 	"github.com/dotechhq/zenith/services/api/internal/autoscale"
-	"github.com/dotechhq/zenith/services/api/internal/capi"
 	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/config"
 	"github.com/dotechhq/zenith/services/api/internal/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/hetznerclient"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
-	"github.com/dotechhq/zenith/services/api/internal/hetzner"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
-	"github.com/dotechhq/zenith/services/api/internal/store"
-	stripeClient "github.com/dotechhq/zenith/services/api/internal/stripe"
-	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres/migrations"
 	"github.com/dotechhq/zenith/services/api/internal/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gofiber/fiber/v2"
@@ -46,38 +48,38 @@ func main() {
 
 	// Database (optional — falls back to in-memory stores when DATABASE_URL is empty)
 	var pool *pgxpool.Pool
-	var userRepo store.UserRepository
-	var adminRepo store.AdminRepository
-	var customerRepo store.CustomerRepository
-	var meteringRepo store.MeteringRepository
-	var appRepo store.AppRepository
+	var userRepo ports.UserRepository
+	var adminRepo ports.AdminRepository
+	var customerRepo ports.CustomerRepository
+	var meteringRepo ports.MeteringRepository
+	var appRepo ports.AppRepository
 
 	if cfg.DatabaseURL != "" {
 		log.Println("Connecting to PostgreSQL...")
-		if err := store.RunMigrations(cfg.DatabaseURL, migrations.FS); err != nil {
+		if err := postgres.RunMigrations(cfg.DatabaseURL, migrations.FS); err != nil {
 			log.Fatalf("Database migrations failed: %v", err)
 		}
 		log.Println("Migrations applied")
 
 		var err error
-		pool, err = store.NewPostgresPool(ctx, cfg.DatabaseURL)
+		pool, err = postgres.NewPostgresPool(ctx, cfg.DatabaseURL)
 		if err != nil {
 			log.Fatalf("Database connection failed: %v", err)
 		}
 		log.Println("Connected to PostgreSQL")
 
-		userRepo = store.NewPostgresUserRepository(pool)
-		adminRepo = store.NewPostgresAdminRepository(pool)
-		customerRepo = store.NewPostgresCustomerRepository(pool)
-		meteringRepo = store.NewPostgresMeteringRepository(pool)
-		appRepo = store.NewPostgresAppRepository(pool)
+		userRepo = postgres.NewPostgresUserRepository(pool)
+		adminRepo = postgres.NewPostgresAdminRepository(pool)
+		customerRepo = postgres.NewPostgresCustomerRepository(pool)
+		meteringRepo = postgres.NewPostgresMeteringRepository(pool)
+		appRepo = postgres.NewPostgresAppRepository(pool)
 	} else {
 		log.Println("No DATABASE_URL set — using in-memory stores")
-		userRepo = store.NewMemoryUserRepository()
-		adminRepo = store.NewMemoryAdminRepository()
-		customerRepo = store.NewMemoryCustomerRepository()
-		meteringRepo = store.NewMemoryMeteringRepository()
-		appRepo = store.NewMemoryAppRepository()
+		userRepo = memory.NewMemoryUserRepository()
+		adminRepo = memory.NewMemoryAdminRepository()
+		customerRepo = memory.NewMemoryCustomerRepository()
+		meteringRepo = memory.NewMemoryMeteringRepository()
+		appRepo = memory.NewMemoryAppRepository()
 	}
 
 	// Seed admin user
@@ -191,29 +193,29 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserRepository, adminRepo store.AdminRepository, customerRepo store.CustomerRepository, meteringRepo store.MeteringRepository, appRepo store.AppRepository, pool *pgxpool.Pool) (*cluster.Provisioner, *autoscale.Autoscaler) {
+func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserRepository, adminRepo ports.AdminRepository, customerRepo ports.CustomerRepository, meteringRepo ports.MeteringRepository, appRepo ports.AppRepository, pool *pgxpool.Pool) (*cluster.Provisioner, *autoscale.Autoscaler) {
 	app.Get("/health", handlers.HealthCheck(Version, BuildTime, GitCommit))
 	app.Get("/ready", handlers.ReadinessCheck(pool))
 
 	// K8s client (in-memory for dev, real client-go for production)
-	var k8sClient k8s.Client
+	var k8sClient k8sclient.Client
 	if cfg.K8sMode == "real" {
-		realClient, err := k8s.NewRealClient()
+		realClient, err := k8sclient.NewRealClient()
 		if err != nil {
 			log.Fatalf("failed to create real K8s client: %v", err)
 		}
 		k8sClient = realClient
 		log.Println("[k8s] using real client-go connection")
 	} else {
-		k8sClient = k8s.NewMemoryClient()
+		k8sClient = k8sclient.NewMemoryClient()
 		log.Println("[k8s] using in-memory client (dev mode)")
 	}
 
 	// CAPI client + provisioner (SaaS mode only)
-	var capiClient *capi.Client
+	var capiClient *capiclient.Client
 	var provisioner *cluster.Provisioner
 	if cfg.Mode == "saas" {
-		capiClient = capi.NewClient(k8sClient)
+		capiClient = capiclient.NewClient(k8sClient)
 		provisioner = cluster.NewProvisioner(capiClient, customerRepo, adminRepo)
 	}
 
@@ -241,7 +243,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	authHandler := handlers.NewAuthHandler(authSvc)
 
 	// Plan management (Phase 4 — user plan + limits)
-	planRepo := store.NewMemoryUserPlanRepository()
+	planRepo := memory.NewMemoryUserPlanRepository()
 
 	// Phase 2 handlers
 	logHub := deploy.NewLogHub(500)
@@ -338,7 +340,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	}
 
 	// Databases (Phase 3 — per-app provisioning under /apps/:appId)
-	dbRepo := store.NewMemoryDatabaseRepository()
+	dbRepo := memory.NewMemoryDatabaseRepository()
 	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbRepo, appRepo)
 	apps.Post("/:appId/databases", dbHandlerV2.Create)
 	apps.Get("/:appId/databases", dbHandlerV2.List)
@@ -347,7 +349,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Get("/databases", dbHandlerV2.ListByUser)
 
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
-	backupRepo := store.NewMemoryBackupRepository()
+	backupRepo := memory.NewMemoryBackupRepository()
 	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo)
 	apps.Post("/:appId/databases/:dbId/backups", backupHandler.Create)
 	apps.Get("/:appId/databases/:dbId/backups", backupHandler.List)
@@ -357,7 +359,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Get("/backups", backupHandler.ListByUser)
 
 	// Storage (Phase 3 — per-app S3-compatible storage)
-	storageRepo := store.NewMemoryStorageRepository()
+	storageRepo := memory.NewMemoryStorageRepository()
 	storageHandlerV2 := handlers.NewStorageHandlerV2(storageRepo, appRepo)
 	apps.Post("/:appId/storage", storageHandlerV2.Create)
 	apps.Get("/:appId/storage", storageHandlerV2.List)
@@ -366,7 +368,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Get("/storage-buckets", storageHandlerV2.ListByUser)
 
 	// App Auth (Phase 3 — built-in auth per app)
-	appAuthRepo := store.NewMemoryAppAuthRepository()
+	appAuthRepo := memory.NewMemoryAppAuthRepository()
 	appAuthHandler := handlers.NewAppAuthHandler(appAuthRepo, appRepo)
 	apps.Get("/:appId/auth", appAuthHandler.Status)
 	apps.Post("/:appId/auth/enable", appAuthHandler.Enable)
@@ -385,7 +387,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Post("/plan/upgrade", planHandler.UpgradePlan)
 
 	// Stripe Billing (Phase 6)
-	billingRepo := store.NewMemoryBillingRepository()
+	billingRepo := memory.NewMemoryBillingRepository()
 	var stripeAPI stripeClient.StripeAPI
 	if cfg.StripeBillingEnabled && cfg.StripeSecretKey != "" {
 		stripeAPI = stripeClient.NewClient(cfg.StripeSecretKey, cfg.StripeWebhookSecret)
@@ -413,7 +415,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	}
 
 	// Custom Domains (Phase 4 — Pro+ only)
-	domainRepo := store.NewMemoryDomainRepository()
+	domainRepo := memory.NewMemoryDomainRepository()
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	apps.Post("/:appId/domains", domainHandler.Add)
 	apps.Get("/:appId/domains", domainHandler.List)
@@ -421,21 +423,21 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Get("/domains", domainHandler.ListByUser)
 
 	// API Keys (Phase 6.5)
-	apiKeyRepo := store.NewMemoryAPIKeyRepository()
+	apiKeyRepo := memory.NewMemoryAPIKeyRepository()
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyRepo, planRepo)
 	protected.Post("/api-keys", apiKeyHandler.Create)
 	protected.Get("/api-keys", apiKeyHandler.List)
 	protected.Delete("/api-keys/:keyId", apiKeyHandler.Delete)
 
 	// Sessions (Phase 6.5)
-	sessionRepo := store.NewMemorySessionRepository()
+	sessionRepo := memory.NewMemorySessionRepository()
 	sessionHandler := handlers.NewSessionHandler(sessionRepo)
 	protected.Get("/auth/sessions", sessionHandler.List)
 	protected.Delete("/auth/sessions/:sessionId", sessionHandler.Revoke)
 	protected.Delete("/auth/sessions", sessionHandler.RevokeAll)
 
 	// MFA (Phase 6.5 — Pro+ only)
-	mfaRepo := store.NewMemoryMFARepository()
+	mfaRepo := memory.NewMemoryMFARepository()
 	mfaHandler := handlers.NewMFAHandler(mfaRepo, planRepo)
 	protected.Get("/auth/mfa", mfaHandler.GetStatus)
 	protected.Post("/auth/mfa/enable", mfaHandler.Enable)
@@ -444,7 +446,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Post("/auth/mfa/backup-codes", mfaHandler.RegenerateBackupCodes)
 
 	// User Webhooks (Phase 6.5 — Pro+ only)
-	userWebhookRepo := store.NewMemoryUserWebhookRepository()
+	userWebhookRepo := memory.NewMemoryUserWebhookRepository()
 	userWebhookHandler := handlers.NewUserWebhookHandler(userWebhookRepo, planRepo)
 	protected.Post("/webhooks", userWebhookHandler.Create)
 	protected.Get("/webhooks", userWebhookHandler.List)
@@ -453,7 +455,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Get("/webhooks/:webhookId/deliveries", userWebhookHandler.ListDeliveries)
 
 	// Custom Roles / RBAC (Phase 6.5 — Team+ only)
-	roleRepo := store.NewMemoryRoleRepository()
+	roleRepo := memory.NewMemoryRoleRepository()
 	roleHandler := handlers.NewRoleHandler(roleRepo, planRepo)
 	protected.Post("/roles", roleHandler.Create)
 	protected.Get("/roles", roleHandler.List)
@@ -465,7 +467,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Delete("/roles/:roleId/assignments/:assignmentId", roleHandler.RemoveAssignment)
 
 	// IP Whitelisting (Phase 6.5 — Enterprise only)
-	ipRepo := store.NewMemoryIPWhitelistRepository()
+	ipRepo := memory.NewMemoryIPWhitelistRepository()
 	ipHandler := handlers.NewIPWhitelistHandler(ipRepo, planRepo)
 	protected.Post("/settings/ip-whitelist", ipHandler.Add)
 	protected.Get("/settings/ip-whitelist", ipHandler.List)
@@ -476,7 +478,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Get("/compliance", complianceHandler.GetStatus)
 
 	// DPA + White-label Branding (Phase 6.5)
-	brandingRepo := store.NewMemoryBrandingRepository()
+	brandingRepo := memory.NewMemoryBrandingRepository()
 	brandingHandler := handlers.NewBrandingHandler(brandingRepo, planRepo)
 	protected.Get("/settings/dpa", brandingHandler.GetDPA)
 	protected.Post("/settings/dpa/sign", brandingHandler.SignDPA)
@@ -485,7 +487,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Post("/settings/domain", brandingHandler.SetDashboardDomain)
 
 	// SSO (Phase 6.5 — Team+ only)
-	ssoRepo := store.NewMemorySSORepository()
+	ssoRepo := memory.NewMemorySSORepository()
 	ssoHandler := handlers.NewSSOHandler(ssoRepo, planRepo)
 	protected.Post("/settings/sso/saml", ssoHandler.ConfigureSAML)
 	protected.Post("/settings/sso/oidc", ssoHandler.ConfigureOIDC)
@@ -493,7 +495,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	protected.Delete("/settings/sso/:configId", ssoHandler.DeleteConfig)
 
 	// Preview Deployments (Phase 6.5 — Team+ only)
-	previewRepo := store.NewMemoryPreviewRepository()
+	previewRepo := memory.NewMemoryPreviewRepository()
 	previewHandler := handlers.NewPreviewHandler(previewRepo, appRepo, planRepo)
 	apps.Post("/:appId/previews", previewHandler.Create)
 	apps.Get("/:appId/previews", previewHandler.List)
@@ -631,7 +633,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	// Hetzner Autoscaler (Phase 5 — SaaS only)
 	var as *autoscale.Autoscaler
 	if cfg.Mode == "saas" {
-		autoscaleRepo := store.NewMemoryAutoscaleRepository()
+		autoscaleRepo := memory.NewMemoryAutoscaleRepository()
 		autoscaleHandler := handlers.NewAutoscaleHandler(autoscaleRepo)
 		admin.Get("/autoscaler/status", autoscaleHandler.GetStatus)
 		admin.Get("/autoscaler/nodes", autoscaleHandler.ListNodes)
@@ -639,7 +641,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 
 		// Create autoscaler if enabled and token present
 		if cfg.AutoscalerEnabled && cfg.HetznerToken != "" {
-			hetznerClient := hetzner.NewClient(cfg.HetznerToken)
+			hetznerClient := hetznerclient.NewClient(cfg.HetznerToken)
 			metricsProvider := autoscale.NewK8sMetricsProvider(k8sClient)
 			asCfg := entities.AutoscalerConfig{
 				MinNodes:     cfg.AutoscalerMinNodes,

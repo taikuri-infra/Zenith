@@ -3,17 +3,17 @@ package autoscale
 import (
 	"context"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 )
 
 // K8sMetricsProvider fetches aggregate cluster metrics from Kubernetes.
 // In dev/memory mode it returns safe mid-range values.
 type K8sMetricsProvider struct {
-	client k8s.Client
+	client k8sclient.Client
 }
 
 // NewK8sMetricsProvider creates a metrics provider backed by the k8s client.
-func NewK8sMetricsProvider(client k8s.Client) *K8sMetricsProvider {
+func NewK8sMetricsProvider(client k8sclient.Client) *K8sMetricsProvider {
 	return &K8sMetricsProvider{client: client}
 }
 

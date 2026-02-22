@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 )
 
 func makeTestApp() *entities.App {
@@ -48,7 +48,7 @@ func TestNewKanikoRunnerNilClient(t *testing.T) {
 // TestKanikoRunnerBuildSuccess uses MemoryClient to simulate a successful build.
 func TestKanikoRunnerBuildSuccess(t *testing.T) {
 	hub := NewLogHub(100)
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	runner := NewKanikoRunner(k8sClient, hub)
 
 	if runner == nil {
@@ -75,7 +75,7 @@ func TestKanikoRunnerBuildSuccess(t *testing.T) {
 // TestKanikoRunnerLogsEmitted confirms that MemoryClient fake logs are emitted to LogHub.
 func TestKanikoRunnerLogsEmitted(t *testing.T) {
 	hub := NewLogHub(100)
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	runner := NewKanikoRunner(k8sClient, hub)
 
 	app := makeTestApp()
@@ -95,9 +95,9 @@ func TestKanikoRunnerLogsEmitted(t *testing.T) {
 // TestKanikoRunnerBuilderIntegration tests the full Builder → KanikoRunner flow
 // in dev (repository-only) mode using MemoryClient (no real clone).
 func TestKanikoRunnerBuilderIntegration(t *testing.T) {
-	repo := store.NewMemoryAppRepository()
+	repo := memory.NewMemoryAppRepository()
 	hub := NewLogHub(100)
-	k8sClient := k8s.NewMemoryClient()
+	k8sClient := k8sclient.NewMemoryClient()
 	// Build with k8sClient — but we won't actually call BuildApp (no git)
 	// Just verify NewBuilder constructs correctly with the new signature.
 	builder := NewBuilder(repo, "/tmp/test", "registry.example.com", k8sClient, hub)

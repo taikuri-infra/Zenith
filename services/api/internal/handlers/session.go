@@ -1,17 +1,17 @@
 package handlers
 
 import (
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // SessionHandler manages user session operations.
 type SessionHandler struct {
-	sessionRepo store.SessionRepository
+	sessionRepo ports.SessionRepository
 }
 
 // NewSessionHandler creates a new SessionHandler.
-func NewSessionHandler(sessionRepo store.SessionRepository) *SessionHandler {
+func NewSessionHandler(sessionRepo ports.SessionRepository) *SessionHandler {
 	return &SessionHandler{sessionRepo: sessionRepo}
 }
 

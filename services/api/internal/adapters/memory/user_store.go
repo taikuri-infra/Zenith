@@ -1,4 +1,4 @@
-package store
+package memory
 
 import (
 	"context"
@@ -7,24 +7,25 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // Compile-time interface check.
-var _ UserRepository = (*MemoryUserRepository)(nil)
+var _ ports.UserRepository = (*MemoryUserRepository)(nil)
 
 // MemoryUserRepository is a thread-safe, in-memory user store.
 type MemoryUserRepository struct {
-	users   map[string]*StoredUser // keyed by ID
-	byEmail map[string]string     // email -> ID
+	users   map[string]*ports.StoredUser // keyed by ID
+	byEmail map[string]string           // email -> ID
 	mu      sync.RWMutex
 }
 
 // NewMemoryUserRepository returns an empty in-memory user store.
 func NewMemoryUserRepository() *MemoryUserRepository {
 	return &MemoryUserRepository{
-		users:   make(map[string]*StoredUser),
+		users:   make(map[string]*ports.StoredUser),
 		byEmail: make(map[string]string),
 	}
 }
@@ -44,7 +45,7 @@ func (s *MemoryUserRepository) Create(_ context.Context, email, password, name s
 	}
 
 	now := time.Now()
-	user := &StoredUser{
+	user := &ports.StoredUser{
 		User: entities.User{
 			ID:        uuid.New().String(),
 			Email:     email,
@@ -62,7 +63,7 @@ func (s *MemoryUserRepository) Create(_ context.Context, email, password, name s
 }
 
 // GetByEmail returns the stored user for the given email.
-func (s *MemoryUserRepository) GetByEmail(_ context.Context, email string) (*StoredUser, error) {
+func (s *MemoryUserRepository) GetByEmail(_ context.Context, email string) (*ports.StoredUser, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -74,7 +75,7 @@ func (s *MemoryUserRepository) GetByEmail(_ context.Context, email string) (*Sto
 }
 
 // GetByID returns the stored user for the given ID.
-func (s *MemoryUserRepository) GetByID(_ context.Context, id string) (*StoredUser, error) {
+func (s *MemoryUserRepository) GetByID(_ context.Context, id string) (*ports.StoredUser, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -86,7 +87,7 @@ func (s *MemoryUserRepository) GetByID(_ context.Context, id string) (*StoredUse
 }
 
 // CheckPassword returns true if the password matches the stored hash.
-func (s *MemoryUserRepository) CheckPassword(user *StoredUser, password string) bool {
+func (s *MemoryUserRepository) CheckPassword(user *ports.StoredUser, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) == nil
 }
 

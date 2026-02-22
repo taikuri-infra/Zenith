@@ -2,16 +2,16 @@ package handlers
 
 import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 type BrandingHandler struct {
-	brandingRepo store.BrandingRepository
-	planRepo     store.UserPlanRepository
+	brandingRepo ports.BrandingRepository
+	planRepo     ports.UserPlanRepository
 }
 
-func NewBrandingHandler(brandingRepo store.BrandingRepository, planRepo store.UserPlanRepository) *BrandingHandler {
+func NewBrandingHandler(brandingRepo ports.BrandingRepository, planRepo ports.UserPlanRepository) *BrandingHandler {
 	return &BrandingHandler{brandingRepo: brandingRepo, planRepo: planRepo}
 }
 

@@ -10,7 +10,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -18,7 +18,7 @@ func setupProjectApp() (*fiber.App, *handlers.ProjectHandler) {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: handlers.ErrorHandler,
 	})
-	client := k8s.NewMemoryClient()
+	client := k8sclient.NewMemoryClient()
 	handler := handlers.NewProjectHandler(client)
 	return app, handler
 }

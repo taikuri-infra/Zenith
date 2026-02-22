@@ -3,17 +3,17 @@ package handlers
 import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 "github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // DeployHandler handles deployment and env var operations.
 type DeployHandler struct {
-	appRepo store.AppRepository
+	appRepo ports.AppRepository
 }
 
 // NewDeployHandler creates a new DeployHandler.
-func NewDeployHandler(appRepo store.AppRepository) *DeployHandler {
+func NewDeployHandler(appRepo ports.AppRepository) *DeployHandler {
 	return &DeployHandler{appRepo: appRepo}
 }
 

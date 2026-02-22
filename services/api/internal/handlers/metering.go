@@ -5,18 +5,18 @@ import (
 	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // MeteringHandler serves metering and usage endpoints.
 type MeteringHandler struct {
-	metering  store.MeteringRepository
-	customers store.CustomerRepository
+	metering  ports.MeteringRepository
+	customers ports.CustomerRepository
 }
 
 // NewMeteringHandler creates a new MeteringHandler.
-func NewMeteringHandler(metering store.MeteringRepository, customers store.CustomerRepository) *MeteringHandler {
+func NewMeteringHandler(metering ports.MeteringRepository, customers ports.CustomerRepository) *MeteringHandler {
 	return &MeteringHandler{
 		metering:  metering,
 		customers: customers,

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 // BuildResult contains the output of a build pipeline execution.
@@ -24,7 +24,7 @@ type BuildResult struct {
 
 // Builder orchestrates the build pipeline for an app deployment.
 type Builder struct {
-	appRepo       store.AppRepository
+	appRepo       ports.AppRepository
 	workDir       string
 	registry      string
 	kanikoRunner  *KanikoRunner
@@ -34,7 +34,7 @@ type Builder struct {
 //
 //   - k8sClient: optional — if nil, Kaniko build is skipped (dev mode).
 //   - logHub: optional — if non-nil, build log lines are streamed in real time.
-func NewBuilder(appRepo store.AppRepository, workDir, registry string, k8sClient k8s.Client, logHub *LogHub) *Builder {
+func NewBuilder(appRepo ports.AppRepository, workDir, registry string, k8sClient k8sclient.Client, logHub *LogHub) *Builder {
 	if workDir == "" {
 		workDir = "/tmp/zenith-builds"
 	}

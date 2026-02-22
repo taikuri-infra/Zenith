@@ -5,18 +5,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 )
 
-func newTestProvisioner() (*Provisioner, *store.MemoryCustomerRepository) {
-	k8sClient := k8s.NewMemoryClient()
-	capiClient := capi.NewClient(k8sClient)
-	customerRepo := store.NewMemoryCustomerRepository()
-	adminRepo := store.NewMemoryAdminRepository()
+func newTestProvisioner() (*Provisioner, *memory.MemoryCustomerRepository) {
+	k8sClient := k8sclient.NewMemoryClient()
+	capiClient := capiclient.NewClient(k8sClient)
+	customerRepo := memory.NewMemoryCustomerRepository()
+	adminRepo := memory.NewMemoryAdminRepository()
 	p := NewProvisioner(capiClient, customerRepo, adminRepo)
 	return p, customerRepo
 }
@@ -198,7 +198,7 @@ func TestDomainToClusterName(t *testing.T) {
 
 	for _, tc := range tests {
 		// Test indirectly via CreateCustomer which sets CAPIClusterName
-		repo := store.NewMemoryCustomerRepository()
+		repo := memory.NewMemoryCustomerRepository()
 		cust, err := repo.CreateCustomer(context.Background(), &dto.CreateCustomerInput{
 			Name:         "Test",
 			Domain:       tc.domain,

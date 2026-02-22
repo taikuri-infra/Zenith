@@ -7,18 +7,18 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/deploy"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
 
 // LogHandler handles deployment log streaming via SSE (Server-Sent Events).
 type LogHandler struct {
-	appRepo store.AppRepository
+	appRepo ports.AppRepository
 	logHub  *deploy.LogHub
 }
 
 // NewLogHandler creates a new LogHandler.
-func NewLogHandler(appRepo store.AppRepository, logHub *deploy.LogHub) *LogHandler {
+func NewLogHandler(appRepo ports.AppRepository, logHub *deploy.LogHub) *LogHandler {
 	return &LogHandler{
 		appRepo: appRepo,
 		logHub:  logHub,

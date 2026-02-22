@@ -6,17 +6,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
 type ProjectHandler struct {
-	k8sClient k8s.Client
+	k8sClient k8sclient.Client
 }
 
-func NewProjectHandler(client k8s.Client) *ProjectHandler {
+func NewProjectHandler(client k8sclient.Client) *ProjectHandler {
 	return &ProjectHandler{k8sClient: client}
 }
 
@@ -82,10 +82,10 @@ func (h *ProjectHandler) Create(c *fiber.Ctx) error {
 		"region":      req.Region,
 	})
 
-	crd := &k8s.CRDObject{
+	crd := &k8sclient.CRDObject{
 		APIVersion: "zenith.dev/v1alpha1",
 		Kind:       "Project",
-		Metadata: k8s.ObjectMeta{
+		Metadata: k8sclient.ObjectMeta{
 			Name: slug + "-" + id,
 			Labels: map[string]string{
 				"zenith.dev/project":      slug,

@@ -4,17 +4,17 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/dotechhq/zenith/services/api/internal/k8s"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/gofiber/fiber/v2"
 )
 
 // BackstageHandler serves Backstage catalog entities generated from Zenith CRDs.
 type BackstageHandler struct {
-	k8sClient k8s.Client
+	k8sClient k8sclient.Client
 }
 
 // NewBackstageHandler creates a new BackstageHandler.
-func NewBackstageHandler(client k8s.Client) *BackstageHandler {
+func NewBackstageHandler(client k8sclient.Client) *BackstageHandler {
 	return &BackstageHandler{k8sClient: client}
 }
 
@@ -150,7 +150,7 @@ func (h *BackstageHandler) collectAllEntities(c *fiber.Ctx) ([]BackstageEntity, 
 }
 
 // projectToBackstageSystem converts a Zenith Project CRD to a Backstage System entity.
-func projectToBackstageSystem(p *k8s.CRDObject) BackstageEntity {
+func projectToBackstageSystem(p *k8sclient.CRDObject) BackstageEntity {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(p.Spec, &spec)
 
@@ -180,7 +180,7 @@ func projectToBackstageSystem(p *k8s.CRDObject) BackstageEntity {
 }
 
 // appToBackstageComponent converts a Zenith App CRD to a Backstage Component entity.
-func appToBackstageComponent(a *k8s.CRDObject, project, owner string) BackstageEntity {
+func appToBackstageComponent(a *k8sclient.CRDObject, project, owner string) BackstageEntity {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(a.Spec, &spec)
 
@@ -232,7 +232,7 @@ func appToBackstageComponent(a *k8s.CRDObject, project, owner string) BackstageE
 }
 
 // databaseToBackstageResource converts a Zenith Database CRD to a Backstage Resource entity.
-func databaseToBackstageResource(d *k8s.CRDObject, project, owner string) BackstageEntity {
+func databaseToBackstageResource(d *k8sclient.CRDObject, project, owner string) BackstageEntity {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(d.Spec, &spec)
 
@@ -263,7 +263,7 @@ func databaseToBackstageResource(d *k8s.CRDObject, project, owner string) Backst
 }
 
 // storageBucketToBackstageResource converts a Zenith StorageBucket CRD to a Backstage Resource entity.
-func storageBucketToBackstageResource(b *k8s.CRDObject, project, owner string) BackstageEntity {
+func storageBucketToBackstageResource(b *k8sclient.CRDObject, project, owner string) BackstageEntity {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(b.Spec, &spec)
 
@@ -300,7 +300,7 @@ func storageBucketToBackstageResource(b *k8s.CRDObject, project, owner string) B
 }
 
 // domainToBackstageAPI converts a Zenith Domain CRD to a Backstage API entity.
-func domainToBackstageAPI(d *k8s.CRDObject, project, owner string) BackstageEntity {
+func domainToBackstageAPI(d *k8sclient.CRDObject, project, owner string) BackstageEntity {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(d.Spec, &spec)
 

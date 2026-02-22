@@ -5,7 +5,7 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/store"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -18,12 +18,12 @@ const (
 
 // AppAuthHandler manages per-app authentication (Phase 3 built-in auth).
 type AppAuthHandler struct {
-	authRepo store.AppAuthRepository
-	appRepo  store.AppRepository
+	authRepo ports.AppAuthRepository
+	appRepo  ports.AppRepository
 }
 
 // NewAppAuthHandler creates a new AppAuthHandler.
-func NewAppAuthHandler(authRepo store.AppAuthRepository, appRepo store.AppRepository) *AppAuthHandler {
+func NewAppAuthHandler(authRepo ports.AppAuthRepository, appRepo ports.AppRepository) *AppAuthHandler {
 	return &AppAuthHandler{authRepo: authRepo, appRepo: appRepo}
 }
 
