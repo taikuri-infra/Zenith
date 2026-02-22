@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -15,7 +15,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 	Email     string      `json:"email"`
 	Name      string      `json:"name"`
-	Role      models.Role `json:"role"`
+	Role      entities.Role `json:"role"`
 	ProjectID string      `json:"project_id,omitempty"`
 }
 
@@ -57,7 +57,7 @@ func JWTAuth(secret string) fiber.Handler {
 }
 
 // APIKeyAuth validates API keys from the X-API-Key header
-func APIKeyAuth(validateKey func(key string) (*models.APIKey, error)) fiber.Handler {
+func APIKeyAuth(validateKey func(key string) (*entities.APIKey, error)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		apiKey := c.Get("X-API-Key")
 		if apiKey == "" {
@@ -72,7 +72,7 @@ func APIKeyAuth(validateKey func(key string) (*models.APIKey, error)) fiber.Hand
 		c.Locals("user_id", key.UserID)
 		c.Locals("project_id", key.ProjectID)
 		c.Locals("api_key", key)
-		c.Locals("role", models.RoleDeveloper) // API keys get developer role by default
+		c.Locals("role", entities.RoleDeveloper) // API keys get developer role by default
 
 		return c.Next()
 	}
@@ -92,18 +92,18 @@ func RequireAuth(secret string) fiber.Handler {
 }
 
 // RequireRole ensures the user has at least the given role
-func RequireRole(minRole models.Role) fiber.Handler {
+func RequireRole(minRole entities.Role) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		role, ok := c.Locals("role").(models.Role)
+		role, ok := c.Locals("role").(entities.Role)
 		if !ok {
 			return fiber.NewError(fiber.StatusForbidden, "no role assigned")
 		}
 
-		roleOrder := map[models.Role]int{
-			models.RoleOwner:     4,
-			models.RoleAdmin:     3,
-			models.RoleDeveloper: 2,
-			models.RoleViewer:    1,
+		roleOrder := map[entities.Role]int{
+			entities.RoleOwner:     4,
+			entities.RoleAdmin:     3,
+			entities.RoleDeveloper: 2,
+			entities.RoleViewer:    1,
 		}
 
 		if roleOrder[role] < roleOrder[minRole] {
@@ -117,7 +117,7 @@ func RequireRole(minRole models.Role) fiber.Handler {
 // RequireScope checks if the API key has the required scope
 func RequireScope(scope string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		key, ok := c.Locals("api_key").(*models.APIKey)
+		key, ok := c.Locals("api_key").(*entities.APIKey)
 		if !ok {
 			// Not using API key, skip scope check
 			return c.Next()
@@ -146,7 +146,7 @@ func RequireInternalSecret(secret string) fiber.Handler {
 }
 
 // GenerateToken creates a JWT token for a user
-func GenerateToken(secret string, user *models.User, expiry time.Duration) (string, error) {
+func GenerateToken(secret string, user *entities.User, expiry time.Duration) (string, error) {
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,

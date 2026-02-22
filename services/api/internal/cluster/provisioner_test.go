@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 )
 
@@ -25,7 +26,7 @@ func TestProvisionCluster(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a new customer
-	cust, err := customerRepo.CreateCustomer(ctx, &models.CreateCustomerInput{
+	cust, err := customerRepo.CreateCustomer(ctx, &dto.CreateCustomerInput{
 		Name:         "TestCo",
 		Domain:       "testco.dev",
 		PlanID:       "plan-starter",
@@ -50,7 +51,7 @@ func TestProvisionCluster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCustomer failed: %v", err)
 	}
-	if updated.ClusterStatus != models.ClusterStatusProvisioning {
+	if updated.ClusterStatus != entities.ClusterStatusProvisioning {
 		t.Errorf("Expected status 'provisioning', got '%s'", updated.ClusterStatus)
 	}
 
@@ -92,7 +93,7 @@ func TestTeardownCluster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCustomer failed: %v", err)
 	}
-	if updated.ClusterStatus != models.ClusterStatusDeleting {
+	if updated.ClusterStatus != entities.ClusterStatusDeleting {
 		t.Errorf("Expected status 'deleting', got '%s'", updated.ClusterStatus)
 	}
 }
@@ -102,7 +103,7 @@ func TestTeardownClusterNoClusterName(t *testing.T) {
 	ctx := context.Background()
 
 	// Customer with empty cluster name
-	cust := &models.Customer{
+	cust := &entities.Customer{
 		ID:              "test-empty",
 		CAPIClusterName: "",
 	}
@@ -118,7 +119,7 @@ func TestScaleCluster(t *testing.T) {
 	ctx := context.Background()
 
 	// Provision a customer cluster first
-	cust, _ := customerRepo.CreateCustomer(ctx, &models.CreateCustomerInput{
+	cust, _ := customerRepo.CreateCustomer(ctx, &dto.CreateCustomerInput{
 		Name:         "ScaleCo",
 		Domain:       "scaleco.io",
 		PlanID:       "plan-pro",
@@ -154,7 +155,7 @@ func TestUpgradeCluster(t *testing.T) {
 	p, customerRepo := newTestProvisioner()
 	ctx := context.Background()
 
-	cust, _ := customerRepo.CreateCustomer(ctx, &models.CreateCustomerInput{
+	cust, _ := customerRepo.CreateCustomer(ctx, &dto.CreateCustomerInput{
 		Name:         "UpgradeCo",
 		Domain:       "upgradeco.io",
 		PlanID:       "plan-pro",
@@ -198,7 +199,7 @@ func TestDomainToClusterName(t *testing.T) {
 	for _, tc := range tests {
 		// Test indirectly via CreateCustomer which sets CAPIClusterName
 		repo := store.NewMemoryCustomerRepository()
-		cust, err := repo.CreateCustomer(context.Background(), &models.CreateCustomerInput{
+		cust, err := repo.CreateCustomer(context.Background(), &dto.CreateCustomerInput{
 			Name:         "Test",
 			Domain:       tc.domain,
 			PlanID:       "plan-starter",
@@ -218,7 +219,7 @@ func TestSyncUpdatesClusterStatus(t *testing.T) {
 	ctx := context.Background()
 
 	// Create customer and provision
-	cust, _ := customerRepo.CreateCustomer(ctx, &models.CreateCustomerInput{
+	cust, _ := customerRepo.CreateCustomer(ctx, &dto.CreateCustomerInput{
 		Name:         "SyncCo",
 		Domain:       "syncco.dev",
 		PlanID:       "plan-starter",
@@ -230,7 +231,7 @@ func TestSyncUpdatesClusterStatus(t *testing.T) {
 
 	// Customer should be in provisioning state
 	updated, _ := customerRepo.GetCustomer(ctx, cust.ID)
-	if updated.ClusterStatus != models.ClusterStatusProvisioning {
+	if updated.ClusterStatus != entities.ClusterStatusProvisioning {
 		t.Fatalf("Expected provisioning, got %s", updated.ClusterStatus)
 	}
 
@@ -239,7 +240,7 @@ func TestSyncUpdatesClusterStatus(t *testing.T) {
 
 	// Verify status updated to running
 	synced, _ := customerRepo.GetCustomer(ctx, cust.ID)
-	if synced.ClusterStatus != models.ClusterStatusRunning {
+	if synced.ClusterStatus != entities.ClusterStatusRunning {
 		t.Errorf("Expected status 'running' after sync, got '%s'", synced.ClusterStatus)
 	}
 }

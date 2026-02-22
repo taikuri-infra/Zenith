@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -151,9 +151,9 @@ func (h *ProjectHandler) List(c *fiber.Ctx) error {
 		result = []ProjectResponse{}
 	}
 
-	return c.JSON(models.ListResponse[ProjectResponse]{
+	return c.JSON(dto.ListResponse[ProjectResponse]{
 		Items: result,
-		Pagination: models.Pagination{
+		Pagination: dto.Pagination{
 			Page:     1,
 			PageSize: len(result),
 			Total:    len(result),

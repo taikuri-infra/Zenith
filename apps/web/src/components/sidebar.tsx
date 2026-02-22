@@ -17,17 +17,22 @@ import {
   BookOpen,
   CreditCard,
   Settings,
+  Rocket,
 } from "lucide-react";
+
+const isStandalone = process.env.NEXT_PUBLIC_ZENITH_MODE !== "saas";
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  saasOnly?: boolean;
 }
 
 interface NavSection {
   label: string;
   items: NavItem[];
+  saasOnly?: boolean;
 }
 
 const navSections: NavSection[] = [
@@ -41,6 +46,7 @@ const navSections: NavSection[] = [
     label: "COMPUTE",
     items: [
       { name: "Apps", href: "/apps", icon: Boxes },
+      { name: "Deploy Engine", href: "/deploy", icon: Rocket },
       { name: "Databases", href: "/databases", icon: Database },
       { name: "Storage", href: "/storage", icon: HardDrive },
     ],
@@ -48,7 +54,7 @@ const navSections: NavSection[] = [
   {
     label: "NETWORKING",
     items: [
-      { name: "Gateway", href: "/gateway", icon: Network },
+      { name: "Gateway", href: "/gateway", icon: Network, saasOnly: true },
       { name: "Domains", href: "/networking", icon: Globe },
     ],
   },
@@ -68,15 +74,16 @@ const navSections: NavSection[] = [
   },
   {
     label: "INFRASTRUCTURE",
+    saasOnly: true,
     items: [
-      { name: "Planets", href: "/planets", icon: Server },
+      { name: "Planets", href: "/planets", icon: Server, saasOnly: true },
     ],
   },
 ];
 
 const bottomNav: NavItem[] = [
   { name: "Docs", href: "/docs", icon: BookOpen },
-  { name: "Billing", href: "/billing", icon: CreditCard },
+  { name: "Billing", href: "/billing", icon: CreditCard, saasOnly: true },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -108,47 +115,57 @@ export function Sidebar() {
 
       {/* Main nav with sections */}
       <nav className="flex-1 overflow-y-auto px-3 py-3">
-        {navSections.map((section, sectionIdx) => (
-          <div key={section.label} className={sectionIdx > 0 ? "mt-4" : ""}>
-            <div className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-600">
-              {section.label}
-            </div>
-            <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors ${
-                    isActive(item.href)
-                      ? "bg-accent-500/15 text-accent-400 font-medium"
-                      : "text-neutral-400 hover:bg-surface-300 hover:text-white"
-                  }`}
-                >
-                  <item.icon className="h-4 w-4 flex-shrink-0" />
-                  {item.name}
-                </Link>
-              ))}
-            </div>
-          </div>
-        ))}
+        {navSections
+          .filter((s) => !isStandalone || !s.saasOnly)
+          .map((section, sectionIdx) => {
+            const items = section.items.filter(
+              (item) => !isStandalone || !item.saasOnly
+            );
+            if (items.length === 0) return null;
+            return (
+              <div key={section.label} className={sectionIdx > 0 ? "mt-4" : ""}>
+                <div className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-600">
+                  {section.label}
+                </div>
+                <div className="space-y-0.5">
+                  {items.map((item) => (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors ${
+                        isActive(item.href)
+                          ? "bg-accent-500/15 text-accent-400 font-medium"
+                          : "text-neutral-400 hover:bg-surface-300 hover:text-white"
+                      }`}
+                    >
+                      <item.icon className="h-4 w-4 flex-shrink-0" />
+                      {item.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
       </nav>
 
       {/* Bottom nav */}
       <div className="border-t border-border px-3 py-3 space-y-0.5">
-        {bottomNav.map((item) => (
-          <Link
-            key={item.name}
-            href={item.href}
-            className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors ${
-              isActive(item.href)
-                ? "bg-accent-500/15 text-accent-400 font-medium"
-                : "text-neutral-400 hover:bg-surface-300 hover:text-white"
-            }`}
-          >
-            <item.icon className="h-4 w-4 flex-shrink-0" />
-            {item.name}
-          </Link>
-        ))}
+        {bottomNav
+          .filter((item) => !isStandalone || !item.saasOnly)
+          .map((item) => (
+            <Link
+              key={item.name}
+              href={item.href}
+              className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors ${
+                isActive(item.href)
+                  ? "bg-accent-500/15 text-accent-400 font-medium"
+                  : "text-neutral-400 hover:bg-surface-300 hover:text-white"
+              }`}
+            >
+              <item.icon className="h-4 w-4 flex-shrink-0" />
+              {item.name}
+            </Link>
+          ))}
       </div>
     </aside>
   );

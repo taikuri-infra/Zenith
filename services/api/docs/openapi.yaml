@@ -1,0 +1,5805 @@
+openapi: 3.0.3
+info:
+  title: Zenith API
+  description: |
+    Zenith is an open-core Platform-as-a-Service (PaaS) for deploying apps,
+    databases, and storage on Kubernetes. This spec covers public, protected,
+    admin, webhook, internal, and legacy endpoints.
+  version: 1.0.0
+  contact:
+    name: DoTech
+    url: https://freezenith.com
+  license:
+    name: BSL 1.1
+    url: https://github.com/dotechhq/zenith/blob/main/LICENSE
+servers:
+  - url: https://api.freezenith.com
+    description: Production
+  - url: http://127.0.0.1:8080
+    description: Local development
+
+tags:
+  - name: Health
+    description: Liveness and readiness probes
+  - name: Auth
+    description: User authentication (login, register, refresh)
+  - name: Apps
+    description: Application CRUD (Phase 2)
+  - name: Deployments
+    description: Deployment history and rollback
+  - name: Environment Variables
+    description: Per-app environment variable management
+  - name: Secrets
+    description: Encrypted per-app secrets (requires SECRETS_ENCRYPTION_KEY)
+  - name: Databases
+    description: Per-app managed databases
+  - name: Database Backups
+    description: Database backup and restore (Pro+)
+  - name: Storage Buckets
+    description: S3-compatible object storage per app
+  - name: App Auth
+    description: Built-in authentication per app
+  - name: App Auth (Public)
+    description: Public signup/login for app end-users
+  - name: Plans
+    description: User plan and usage limits
+  - name: Custom Domains
+    description: Custom domain management (Pro+)
+  - name: API Keys
+    description: Personal API key management
+  - name: Sessions
+    description: Active session management
+  - name: MFA
+    description: Multi-factor authentication (Pro+)
+  - name: User Webhooks
+    description: Webhook subscriptions for deployment events (Pro+)
+  - name: Custom Roles
+    description: Role-based access control (Team+)
+  - name: IP Whitelist
+    description: IP allowlist for API access (Enterprise)
+  - name: Compliance
+    description: Compliance dashboard
+  - name: Branding & DPA
+    description: White-label branding and DPA (Enterprise)
+  - name: SSO
+    description: SAML/OIDC single sign-on (Team+)
+  - name: Preview Deployments
+    description: PR-based preview environments (Team+)
+  - name: SCIM
+    description: SCIM 2.0 user provisioning (Enterprise)
+  - name: Releases
+    description: Versioned image releases
+  - name: Build Logs
+    description: Build/deploy log streaming
+  - name: Events
+    description: Real-time deployment event streaming (SSE)
+  - name: Backstage
+    description: Backstage catalog integration
+  - name: Inbound Webhooks
+    description: Git provider push webhooks (GitHub, GitLab, Bitbucket)
+  - name: Internal
+    description: Internal endpoints (metering agent)
+  - name: Admin Dashboard
+    description: Platform dashboard stats and usage
+  - name: Admin Customers
+    description: Customer lifecycle management
+  - name: Admin Plans
+    description: Plan CRUD for admin
+  - name: Admin Clusters
+    description: CAPI cluster management
+  - name: Admin Tenants
+    description: Tenant management
+  - name: Admin Modules
+    description: Platform module management
+  - name: Admin Users
+    description: SaaS user administration
+  - name: Admin Audit
+    description: Audit log and export
+  - name: Admin Updates
+    description: Platform update management
+  - name: Admin Infrastructure
+    description: Infrastructure overview
+  - name: Admin State
+    description: Platform state and export
+  - name: Admin Settings
+    description: Platform settings
+  - name: Legacy Projects
+    description: CRD-based project management (legacy)
+  - name: Legacy Apps
+    description: CRD-based app management under projects (legacy)
+  - name: Legacy Databases
+    description: CRD-based database management under projects (legacy)
+  - name: Legacy Storage
+    description: CRD-based storage management under projects (legacy)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token from /api/v1/auth/login
+    InternalSecret:
+      type: apiKey
+      in: header
+      name: X-Internal-Secret
+      description: Shared secret for internal metering endpoints
+    WebhookSignature:
+      type: apiKey
+      in: header
+      name: X-Hub-Signature-256
+      description: HMAC-SHA256 signature for inbound webhooks
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIError'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIError'
+    Forbidden:
+      description: Forbidden — insufficient role
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIError'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIError'
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/APIError'
+
+  schemas:
+    # ── Common ──
+    APIError:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: invalid request body
+        detail:
+          type: string
+      required: [code, message]
+
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    MessageWithCount:
+      type: object
+      properties:
+        message:
+          type: string
+        count:
+          type: integer
+
+    # ── Auth ──
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+      required: [email, password]
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        name:
+          type: string
+      required: [email, password, name]
+
+    RefreshRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+      required: [refresh_token]
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          description: Seconds until access token expires
+          example: 3600
+
+    Role:
+      type: string
+      enum: [owner, admin, developer, viewer]
+
+    # ── Apps ──
+    CreateAppV2Request:
+      type: object
+      properties:
+        name:
+          type: string
+        repo_url:
+          type: string
+        branch:
+          type: string
+      required: [name, repo_url]
+
+    AppV2Response:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        repo_url:
+          type: string
+        branch:
+          type: string
+        framework:
+          $ref: '#/components/schemas/Framework'
+        status:
+          $ref: '#/components/schemas/AppStatus'
+        subdomain:
+          type: string
+        url:
+          type: string
+        port:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AppStatus:
+      type: string
+      enum: [pending, building, deploying, running, sleeping, failed, stopped]
+
+    Framework:
+      type: string
+      enum: [nextjs, go, python, django, rails, flask, express, static, dockerfile, unknown]
+
+    AppListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppV2Response'
+        total:
+          type: integer
+
+    # ── Deployments ──
+    Deployment:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        image_tag:
+          type: string
+        git_sha:
+          type: string
+        status:
+          $ref: '#/components/schemas/DeploymentStatus'
+        build_log:
+          type: string
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    DeploymentStatus:
+      type: string
+      enum: [pending, building, deploying, active, superseded, failed]
+
+    # ── Environment Variables ──
+    EnvVar:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        key:
+          type: string
+        value:
+          type: string
+
+    SetEnvVarsRequest:
+      type: object
+      properties:
+        vars:
+          type: object
+          additionalProperties:
+            type: string
+      required: [vars]
+
+    # ── Secrets ──
+    Secret:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        key:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    SecretWithValue:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        key:
+          type: string
+        value:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateSecretInput:
+      type: object
+      properties:
+        key:
+          type: string
+          maxLength: 256
+        value:
+          type: string
+      required: [key, value]
+
+    # ── Databases ──
+    CreateDatabaseInput:
+      type: object
+      properties:
+        engine:
+          $ref: '#/components/schemas/DatabaseEngine'
+        name:
+          type: string
+      required: [engine]
+
+    DatabaseEngine:
+      type: string
+      enum: [postgresql, mysql, redis]
+
+    DatabaseStatus:
+      type: string
+      enum: [provisioning, ready, error, deleting]
+
+    DatabaseInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        name:
+          type: string
+        engine:
+          $ref: '#/components/schemas/DatabaseEngine'
+        host:
+          type: string
+        port:
+          type: integer
+        db_name:
+          type: string
+        db_user:
+          type: string
+        connection_string:
+          type: string
+        size_mb:
+          type: integer
+        max_size_mb:
+          type: integer
+        status:
+          $ref: '#/components/schemas/DatabaseStatus'
+        created_at:
+          type: string
+
+    # ── Database Backups ──
+    CreateBackupInput:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/BackupType'
+
+    BackupType:
+      type: string
+      enum: [manual, scheduled]
+
+    BackupStatus:
+      type: string
+      enum: [pending, running, completed, failed]
+
+    BackupInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        database_id:
+          type: string
+        type:
+          $ref: '#/components/schemas/BackupType'
+        status:
+          $ref: '#/components/schemas/BackupStatus'
+        size_mb:
+          type: integer
+        error:
+          type: string
+        created_at:
+          type: string
+
+    # ── Storage Buckets ──
+    CreateBucketInput:
+      type: object
+      properties:
+        name:
+          type: string
+        access:
+          $ref: '#/components/schemas/BucketAccess'
+      required: [name]
+
+    BucketAccess:
+      type: string
+      enum: [private, public]
+
+    BucketStatus:
+      type: string
+      enum: [creating, active, error, deleting]
+
+    BucketInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        name:
+          type: string
+        access:
+          $ref: '#/components/schemas/BucketAccess'
+        region:
+          type: string
+        size_mb:
+          type: integer
+        max_size_mb:
+          type: integer
+        objects:
+          type: integer
+        status:
+          $ref: '#/components/schemas/BucketStatus'
+        endpoint:
+          type: string
+        created_at:
+          type: string
+
+    # ── App Auth ──
+    AppAuthConfigResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        user_count:
+          type: integer
+        max_users:
+          type: integer
+
+    AppAuthSignupInput:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+      required: [email, password, name]
+
+    AppAuthLoginInput:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required: [email, password]
+
+    AppAuthTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+
+    AppAuthUserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        verified:
+          type: boolean
+        created_at:
+          type: string
+
+    # ── Plans ──
+    PlanTier:
+      type: string
+      enum: [free, pro, team, enterprise]
+
+    PlanLimits:
+      type: object
+      properties:
+        max_apps:
+          type: integer
+        max_databases:
+          type: integer
+        max_db_size_mb:
+          type: integer
+        max_auth_users:
+          type: integer
+        max_storage_mb:
+          type: integer
+        max_buckets:
+          type: integer
+        max_cpu_millis:
+          type: integer
+        max_ram_mb:
+          type: integer
+        max_team_members:
+          type: integer
+        backups_enabled:
+          type: boolean
+        custom_domain:
+          type: boolean
+        always_on:
+          type: boolean
+        sleep_after_mins:
+          type: integer
+
+    PlanUsage:
+      type: object
+      properties:
+        apps:
+          type: integer
+        databases:
+          type: integer
+        storage_mb:
+          type: integer
+        auth_users:
+          type: integer
+        buckets:
+          type: integer
+
+    UserPlanResponse:
+      type: object
+      properties:
+        tier:
+          $ref: '#/components/schemas/PlanTier'
+        limits:
+          $ref: '#/components/schemas/PlanLimits'
+        usage:
+          $ref: '#/components/schemas/PlanUsage'
+
+    UpgradePlanRequest:
+      type: object
+      properties:
+        tier:
+          $ref: '#/components/schemas/PlanTier'
+      required: [tier]
+
+    # ── Custom Domains ──
+    AddDomainInput:
+      type: object
+      properties:
+        domain:
+          type: string
+      required: [domain]
+
+    DomainStatus:
+      type: string
+      enum: [pending, verified, active, failed]
+
+    DomainInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        domain:
+          type: string
+        status:
+          $ref: '#/components/schemas/DomainStatus'
+        tls_ready:
+          type: boolean
+        created_at:
+          type: string
+
+    # ── API Keys ──
+    CreateAPIKeyInput:
+      type: object
+      properties:
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        expires_in_days:
+          type: integer
+      required: [name]
+
+    APIKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        key_prefix:
+          type: string
+        key:
+          type: string
+          description: Full key — only returned on creation
+        scopes:
+          type: array
+          items:
+            type: string
+        user_id:
+          type: string
+        project_id:
+          type: string
+        last_used_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Sessions ──
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        ip_address:
+          type: string
+        user_agent:
+          type: string
+        device:
+          type: string
+        current:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+
+    # ── MFA ──
+    MFAStatusResponse:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/MFAStatus'
+        enabled_at:
+          type: string
+          format: date-time
+
+    MFAStatus:
+      type: string
+      enum: [disabled, pending, enabled]
+
+    MFAEnableResponse:
+      type: object
+      properties:
+        secret:
+          type: string
+        qr_url:
+          type: string
+        backup_codes:
+          type: array
+          items:
+            type: string
+
+    MFACodeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+      required: [code]
+
+    MFABackupCodesResponse:
+      type: object
+      properties:
+        backup_codes:
+          type: array
+          items:
+            type: string
+
+    # ── User Webhooks ──
+    CreateUserWebhookInput:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEvent'
+        secret:
+          type: string
+      required: [url, events]
+
+    WebhookEvent:
+      type: string
+      enum: [deploy.success, deploy.failed, app.sleeping, app.waking, db.created, limit.reached]
+
+    UserWebhook:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        url:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEvent'
+        secret:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WebhookDeliveryStatus:
+      type: string
+      enum: [pending, success, failed]
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+        webhook_id:
+          type: string
+        event:
+          $ref: '#/components/schemas/WebhookEvent'
+        payload:
+          type: string
+        status:
+          $ref: '#/components/schemas/WebhookDeliveryStatus'
+        status_code:
+          type: integer
+        error:
+          type: string
+        attempts:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Custom Roles ──
+    Permission:
+      type: string
+      enum: [deploy, view_logs, manage_db, manage_team, manage_billing, admin]
+
+    CreateRoleInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+      required: [name, permissions]
+
+    CustomRole:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AssignRoleInput:
+      type: object
+      properties:
+        member_id:
+          type: string
+      required: [member_id]
+
+    RoleAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+        role_id:
+          type: string
+        member_id:
+          type: string
+        assigned_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # ── IP Whitelist ──
+    AddIPWhitelistInput:
+      type: object
+      properties:
+        cidr:
+          type: string
+          example: 192.168.1.0/24
+        description:
+          type: string
+      required: [cidr]
+
+    IPWhitelistEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        cidr:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Compliance ──
+    ComplianceCheck:
+      type: object
+      properties:
+        category:
+          type: string
+        item:
+          type: string
+        status:
+          type: string
+          enum: [pass, fail, partial, na]
+        description:
+          type: string
+
+    ComplianceResponse:
+      type: object
+      properties:
+        tier:
+          $ref: '#/components/schemas/PlanTier'
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceCheck'
+
+    # ── Branding & DPA ──
+    DPARecord:
+      type: object
+      properties:
+        user_id:
+          type: string
+        status:
+          type: string
+          enum: [unsigned, signed]
+        signed_by:
+          type: string
+        signed_at:
+          type: string
+          format: date-time
+        ip_address:
+          type: string
+
+    BrandingConfig:
+      type: object
+      properties:
+        user_id:
+          type: string
+        company_name:
+          type: string
+        logo_url:
+          type: string
+        primary_color:
+          type: string
+          example: "#4F46E5"
+        dashboard_domain:
+          type: string
+        domain_verified:
+          type: boolean
+        hide_branding:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+
+    SetDashboardDomainInput:
+      type: object
+      properties:
+        domain:
+          type: string
+      required: [domain]
+
+    # ── SSO ──
+    SSOProvider:
+      type: string
+      enum: [saml, oidc]
+
+    ConfigureSAMLInput:
+      type: object
+      properties:
+        entity_id:
+          type: string
+        sso_url:
+          type: string
+        certificate:
+          type: string
+      required: [entity_id, sso_url, certificate]
+
+    ConfigureOIDCInput:
+      type: object
+      properties:
+        client_id:
+          type: string
+        client_secret:
+          type: string
+        discovery_url:
+          type: string
+      required: [client_id, client_secret, discovery_url]
+
+    SSOConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        provider:
+          $ref: '#/components/schemas/SSOProvider'
+        entity_id:
+          type: string
+        sso_url:
+          type: string
+        certificate:
+          type: string
+        client_id:
+          type: string
+        discovery_url:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Preview Deployments ──
+    CreatePreviewInput:
+      type: object
+      properties:
+        branch:
+          type: string
+        pr_number:
+          type: integer
+      required: [branch]
+
+    PreviewDeployment:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        pr_number:
+          type: integer
+        branch:
+          type: string
+        url:
+          type: string
+        status:
+          type: string
+        git_sha:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── SCIM ──
+    SCIMUser:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+        userName:
+          type: string
+        name:
+          type: object
+          properties:
+            formatted:
+              type: string
+        emails:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              primary:
+                type: boolean
+        active:
+          type: boolean
+
+    SCIMListResponse:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        totalResults:
+          type: integer
+        Resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SCIMUser'
+
+    SCIMCreateUserInput:
+      type: object
+      properties:
+        schemas:
+          type: array
+          items:
+            type: string
+        userName:
+          type: string
+        name:
+          type: object
+          properties:
+            formatted:
+              type: string
+        emails:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              primary:
+                type: boolean
+        password:
+          type: string
+      required: [userName, password]
+
+    # ── Releases ──
+    CreateReleaseInput:
+      type: object
+      properties:
+        image:
+          type: string
+        git_sha:
+          type: string
+        branch:
+          type: string
+        message:
+          type: string
+      required: [image]
+
+    Release:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        image:
+          type: string
+        git_sha:
+          type: string
+        branch:
+          type: string
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Events ──
+    DeployEvent:
+      type: object
+      properties:
+        type:
+          type: string
+        app_id:
+          type: string
+        app_name:
+          type: string
+        deployment_id:
+          type: string
+        status:
+          type: string
+        image:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+
+    LogEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+        level:
+          type: string
+        message:
+          type: string
+
+    # ── Inbound Webhooks ──
+    GitHubPushEvent:
+      type: object
+      properties:
+        ref:
+          type: string
+        after:
+          type: string
+        repository:
+          type: object
+          properties:
+            full_name:
+              type: string
+            clone_url:
+              type: string
+        head_commit:
+          type: object
+          properties:
+            id:
+              type: string
+            message:
+              type: string
+
+    # ── Legacy Projects ──
+    CreateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        plan:
+          type: string
+        region:
+          type: string
+      required: [name]
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        plan:
+          type: string
+
+    ProjectResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        owner:
+          type: string
+        plan:
+          type: string
+        region:
+          type: string
+        phase:
+          type: string
+        namespace:
+          type: string
+        app_count:
+          type: integer
+        db_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Admin: Customers ──
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        domain:
+          type: string
+        planId:
+          type: string
+        plan:
+          $ref: '#/components/schemas/AdminPlan'
+        status:
+          type: string
+        contactEmail:
+          type: string
+        contactName:
+          type: string
+        notes:
+          type: string
+        capiClusterName:
+          type: string
+        clusterStatus:
+          type: string
+        clusterNodes:
+          type: integer
+        clusterRegion:
+          type: string
+        clusterK8sVersion:
+          type: string
+        clusterEndpoint:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCustomerInput:
+      type: object
+      properties:
+        name:
+          type: string
+        domain:
+          type: string
+        planId:
+          type: string
+        contactEmail:
+          type: string
+        contactName:
+          type: string
+      required: [name, domain, planId, contactEmail, contactName]
+
+    UpdateCustomerInput:
+      type: object
+      properties:
+        name:
+          type: string
+        domain:
+          type: string
+        planId:
+          type: string
+        contactEmail:
+          type: string
+        contactName:
+          type: string
+        notes:
+          type: string
+
+    CustomerStats:
+      type: object
+      properties:
+        totalCustomers:
+          type: integer
+        activeCustomers:
+          type: integer
+        mrr:
+          type: string
+        newThisMonth:
+          type: integer
+
+    ScaleClusterInput:
+      type: object
+      properties:
+        nodes:
+          type: integer
+      required: [nodes]
+
+    # ── Admin: Plans ──
+    AdminPlan:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        cpuCores:
+          type: integer
+        ramGb:
+          type: integer
+        s3Tb:
+          type: integer
+        dbStorageGb:
+          type: integer
+        volumeGb:
+          type: integer
+        lbCount:
+          type: integer
+        storageGb:
+          type: integer
+        s3StorageTb:
+          type: integer
+        loadBalancer:
+          type: integer
+        priceCents:
+          type: integer
+        currency:
+          type: string
+        billingCycle:
+          type: string
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreatePlanInput:
+      type: object
+      properties:
+        name:
+          type: string
+        cpuCores:
+          type: integer
+        ramGb:
+          type: integer
+        s3Tb:
+          type: integer
+        dbStorageGb:
+          type: integer
+        volumeGb:
+          type: integer
+        lbCount:
+          type: integer
+        storageGb:
+          type: integer
+        s3StorageTb:
+          type: integer
+        loadBalancer:
+          type: integer
+        priceCents:
+          type: integer
+        currency:
+          type: string
+        billingCycle:
+          type: string
+      required: [name]
+
+    UpdatePlanInput:
+      type: object
+      properties:
+        name:
+          type: string
+        cpuCores:
+          type: integer
+        ramGb:
+          type: integer
+        s3Tb:
+          type: integer
+        dbStorageGb:
+          type: integer
+        volumeGb:
+          type: integer
+        lbCount:
+          type: integer
+        storageGb:
+          type: integer
+        s3StorageTb:
+          type: integer
+        loadBalancer:
+          type: integer
+        priceCents:
+          type: integer
+        currency:
+          type: string
+        billingCycle:
+          type: string
+        active:
+          type: boolean
+
+    # ── Admin: Clusters ──
+    AdminCluster:
+      type: object
+      properties:
+        name:
+          type: string
+        k8sVersion:
+          type: string
+        nodes:
+          type: integer
+        region:
+          type: string
+        type:
+          type: string
+        tenant:
+          type: string
+        cpuPercent:
+          type: integer
+        ramPercent:
+          type: integer
+        pods:
+          $ref: '#/components/schemas/ResourcePair'
+        pvcs:
+          $ref: '#/components/schemas/ResourcePair'
+        status:
+          type: string
+        upgradeAvailable:
+          type: string
+
+    ResourcePair:
+      type: object
+      properties:
+        used:
+          type: integer
+        total:
+          type: integer
+
+    CreateClusterInput:
+      type: object
+      properties:
+        name:
+          type: string
+        region:
+          type: string
+        type:
+          type: string
+          enum: [shared, dedicated]
+        tenant:
+          type: string
+        nodes:
+          type: integer
+        k8sVersion:
+          type: string
+      required: [name, region, k8sVersion]
+
+    UpgradeClusterInput:
+      type: object
+      properties:
+        version:
+          type: string
+      required: [version]
+
+    # ── Admin: Tenants ──
+    Tenant:
+      type: object
+      properties:
+        name:
+          type: string
+        plan:
+          type: string
+        apps:
+          type: integer
+        databases:
+          type: integer
+        cpuUsed:
+          type: string
+        cpuLimit:
+          type: string
+        ramUsed:
+          type: string
+        ramLimit:
+          type: string
+        status:
+          type: string
+
+    # ── Admin: Modules ──
+    Module:
+      type: object
+      properties:
+        name:
+          type: string
+        installed:
+          type: string
+        latest:
+          type: string
+        status:
+          type: string
+        description:
+          type: string
+
+    # ── Admin: Audit ──
+    AuditEntry:
+      type: object
+      properties:
+        time:
+          type: string
+        actor:
+          type: string
+        action:
+          type: string
+        cluster:
+          type: string
+
+    # ── Admin: Updates ──
+    PlatformUpdate:
+      type: object
+      properties:
+        version:
+          type: string
+        current:
+          type: string
+        releasedAt:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        breakingChanges:
+          type: boolean
+
+    UpdateHistoryEntry:
+      type: object
+      properties:
+        version:
+          type: string
+        date:
+          type: string
+        status:
+          type: string
+
+    ApplyUpdateInput:
+      type: object
+      properties:
+        version:
+          type: string
+      required: [version]
+
+    # ── Admin: Infrastructure ──
+    InfraOverview:
+      type: object
+      properties:
+        servers:
+          type: integer
+        volumes:
+          type: integer
+        volumeSize:
+          type: string
+        loadBalancers:
+          type: integer
+        lbPublic:
+          type: integer
+        lbInternal:
+          type: integer
+        monthlyCost:
+          type: string
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfraNode'
+
+    InfraNode:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        count:
+          type: integer
+        cluster:
+          type: string
+        monthlyCost:
+          type: string
+
+    # ── Admin: Platform State ──
+    PlatformState:
+      type: object
+      properties:
+        platformVersion:
+          type: string
+        updateAvailable:
+          type: string
+        installedDate:
+          type: string
+        installedDaysAgo:
+          type: integer
+        managementK8sVersion:
+          type: string
+        managementK8sUpToDate:
+          type: boolean
+        domain:
+          type: string
+        wildcardTls:
+          type: boolean
+
+    # ── Admin: Settings ──
+    PlatformSettings:
+      type: object
+      properties:
+        platformName:
+          type: string
+        baseDomain:
+          type: string
+        provider:
+          type: string
+        defaultRegion:
+          type: string
+        regionLabel:
+          type: string
+        autoBackups:
+          type: boolean
+        retentionDays:
+          type: integer
+
+    # ── Admin: Dashboard ──
+    DashboardStats:
+      type: object
+      properties:
+        clusterCount:
+          type: integer
+        allHealthy:
+          type: boolean
+        tenantCount:
+          type: integer
+        activeToday:
+          type: integer
+        monthlyCost:
+          type: string
+        costProvider:
+          type: string
+        updatesAvailable:
+          type: integer
+
+    # ── Admin: Metering ──
+    MeteringInput:
+      type: object
+      properties:
+        customerId:
+          type: string
+        cpuCores:
+          type: number
+        ramGb:
+          type: number
+        s3Tb:
+          type: number
+        dbStorageGb:
+          type: number
+        volumeGb:
+          type: number
+        lbCount:
+          type: integer
+      required: [customerId]
+
+    CustomerUsage:
+      type: object
+      properties:
+        cpuCores:
+          type: number
+        cpuCeiling:
+          type: integer
+        cpuPercent:
+          type: number
+        ramGb:
+          type: number
+        ramCeiling:
+          type: integer
+        ramPercent:
+          type: number
+        s3Tb:
+          type: number
+        s3Ceiling:
+          type: integer
+        s3Percent:
+          type: number
+        dbStorageGb:
+          type: number
+        dbCeiling:
+          type: integer
+        dbPercent:
+          type: number
+        volumeGb:
+          type: number
+        volCeiling:
+          type: integer
+        volPercent:
+          type: number
+        lbCount:
+          type: integer
+        lbCeiling:
+          type: integer
+        lbPercent:
+          type: number
+        recordedAt:
+          type: string
+          format: date-time
+
+    UsageHistoryEntry:
+      type: object
+      properties:
+        date:
+          type: string
+        cpuAvg:
+          type: number
+        cpuMax:
+          type: number
+        ramAvg:
+          type: number
+        ramMax:
+          type: number
+        dbStorageGb:
+          type: number
+        volumeGb:
+          type: number
+        lbCount:
+          type: integer
+
+    PlatformUsageSummary:
+      type: object
+      properties:
+        totalCpu:
+          type: number
+        totalRam:
+          type: number
+        totalStorage:
+          type: number
+        customersReporting:
+          type: integer
+
+    # ── Admin: Users ──
+    AdminUserInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        tier:
+          $ref: '#/components/schemas/PlanTier'
+        usage:
+          $ref: '#/components/schemas/PlanUsage'
+
+    SetUserPlanInput:
+      type: object
+      properties:
+        tier:
+          type: string
+      required: [tier]
+
+    # ── Health ──
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+        buildTime:
+          type: string
+        gitCommit:
+          type: string
+
+    VersionResponse:
+      type: object
+      properties:
+        version:
+          type: string
+        buildTime:
+          type: string
+        gitCommit:
+          type: string
+
+paths:
+  # ════════════════════════════════════════
+  # Health
+  # ════════════════════════════════════════
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /ready:
+    get:
+      operationId: readinessCheck
+      tags: [Health]
+      summary: Readiness probe (checks DB connection)
+      security: []
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '503':
+          description: Not ready
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ════════════════════════════════════════
+  # Version & Auth
+  # ════════════════════════════════════════
+  /api/v1/version:
+    get:
+      operationId: getVersion
+      tags: [Health]
+      summary: API version info
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: Authenticate user and get JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/register:
+    post:
+      operationId: register
+      tags: [Auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: User created and tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Apps (Phase 2)
+  # ════════════════════════════════════════
+  /api/v1/apps:
+    post:
+      operationId: createApp
+      tags: [Apps]
+      summary: Create a new app
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppV2Request'
+      responses:
+        '201':
+          description: App created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppV2Response'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      operationId: listApps
+      tags: [Apps]
+      summary: List all apps for the authenticated user
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}:
+    get:
+      operationId: getApp
+      tags: [Apps]
+      summary: Get app by ID
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppV2Response'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteApp
+      tags: [Apps]
+      summary: Delete an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: App deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Deployments
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/deployments:
+    get:
+      operationId: listDeployments
+      tags: [Deployments]
+      summary: List deployments for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deployment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/apps/{appId}/deployments/{deployId}:
+    get:
+      operationId: getDeployment
+      tags: [Deployments]
+      summary: Get a specific deployment
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: deployId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/apps/{appId}/rollback:
+    post:
+      operationId: rollbackApp
+      tags: [Deployments]
+      summary: Rollback to the previous deployment
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rollback initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Environment Variables
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/env:
+    put:
+      operationId: setEnvVars
+      tags: [Environment Variables]
+      summary: Set environment variables for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetEnvVarsRequest'
+      responses:
+        '200':
+          description: Environment variables updated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EnvVar'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      operationId: getEnvVars
+      tags: [Environment Variables]
+      summary: Get environment variables for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EnvVar'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/apps/{appId}/env/{key}:
+    delete:
+      operationId: deleteEnvVar
+      tags: [Environment Variables]
+      summary: Delete an environment variable
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Secrets
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/secrets:
+    get:
+      operationId: listSecrets
+      tags: [Secrets]
+      summary: List secrets (keys only, no values)
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Secret'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: setSecret
+      tags: [Secrets]
+      summary: Create or update a secret
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecretInput'
+      responses:
+        '200':
+          description: Secret set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Secret'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/apps/{appId}/secrets/{key}/value:
+    get:
+      operationId: getSecretValue
+      tags: [Secrets]
+      summary: Get decrypted secret value
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretWithValue'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/apps/{appId}/secrets/{key}:
+    delete:
+      operationId: deleteSecret
+      tags: [Secrets]
+      summary: Delete a secret
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Databases
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/databases:
+    post:
+      operationId: createDatabase
+      tags: [Databases]
+      summary: Provision a database for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDatabaseInput'
+      responses:
+        '201':
+          description: Database created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      operationId: listDatabases
+      tags: [Databases]
+      summary: List databases for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatabaseInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/databases/{dbId}:
+    get:
+      operationId: getDatabase
+      tags: [Databases]
+      summary: Get database details
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dbId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteDatabase
+      tags: [Databases]
+      summary: Delete a database
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dbId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/databases:
+    get:
+      operationId: listDatabasesByUser
+      tags: [Databases]
+      summary: List all databases owned by the authenticated user
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatabaseInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Database Backups
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/databases/{dbId}/backups:
+    post:
+      operationId: createBackup
+      tags: [Database Backups]
+      summary: Create a database backup (Pro+)
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dbId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackupInput'
+      responses:
+        '201':
+          description: Backup created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupInfo'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      operationId: listBackups
+      tags: [Database Backups]
+      summary: List backups for a database
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dbId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BackupInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/databases/{dbId}/backups/{backupId}:
+    get:
+      operationId: getBackup
+      tags: [Database Backups]
+      summary: Get backup details
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dbId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteBackup
+      tags: [Database Backups]
+      summary: Delete a backup
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dbId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/apps/{appId}/databases/{dbId}/backups/{backupId}/restore:
+    post:
+      operationId: restoreBackup
+      tags: [Database Backups]
+      summary: Restore a database from backup
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dbId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Restore initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/backups:
+    get:
+      operationId: listBackupsByUser
+      tags: [Database Backups]
+      summary: List all backups owned by the authenticated user
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BackupInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Storage Buckets
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/storage:
+    post:
+      operationId: createBucket
+      tags: [Storage Buckets]
+      summary: Create a storage bucket for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBucketInput'
+      responses:
+        '201':
+          description: Bucket created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BucketInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      operationId: listBuckets
+      tags: [Storage Buckets]
+      summary: List storage buckets for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BucketInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/storage/{bucketId}:
+    get:
+      operationId: getBucket
+      tags: [Storage Buckets]
+      summary: Get bucket details
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: bucketId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BucketInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteBucket
+      tags: [Storage Buckets]
+      summary: Delete a storage bucket
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: bucketId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/storage-buckets:
+    get:
+      operationId: listBucketsByUser
+      tags: [Storage Buckets]
+      summary: List all buckets owned by the authenticated user
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BucketInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # App Auth (protected — platform JWT)
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/auth:
+    get:
+      operationId: getAppAuthStatus
+      tags: [App Auth]
+      summary: Get app auth configuration
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppAuthConfigResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/auth/enable:
+    post:
+      operationId: enableAppAuth
+      tags: [App Auth]
+      summary: Enable built-in auth for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Auth enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppAuthConfigResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/auth/disable:
+    post:
+      operationId: disableAppAuth
+      tags: [App Auth]
+      summary: Disable built-in auth for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Auth disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/auth/users:
+    get:
+      operationId: listAppAuthUsers
+      tags: [App Auth]
+      summary: List users registered via app auth
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppAuthUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/auth/users/{userId}:
+    delete:
+      operationId: deleteAppAuthUser
+      tags: [App Auth]
+      summary: Delete an app auth user
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # App Auth (public — no platform JWT)
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/auth/signup:
+    post:
+      operationId: appAuthSignup
+      tags: [App Auth (Public)]
+      summary: Sign up as an end-user of an app
+      security: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppAuthSignupInput'
+      responses:
+        '200':
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppAuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/apps/{appId}/auth/login:
+    post:
+      operationId: appAuthLogin
+      tags: [App Auth (Public)]
+      summary: Log in as an end-user of an app
+      security: []
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppAuthLoginInput'
+      responses:
+        '200':
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppAuthTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Plans
+  # ════════════════════════════════════════
+  /api/v1/plan:
+    get:
+      operationId: getMyPlan
+      tags: [Plans]
+      summary: Get current user plan and usage
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPlanResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/plan/upgrade:
+    post:
+      operationId: upgradePlan
+      tags: [Plans]
+      summary: Upgrade to a higher plan tier
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpgradePlanRequest'
+      responses:
+        '200':
+          description: Plan upgraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ════════════════════════════════════════
+  # Custom Domains
+  # ════════════════════════════════════════
+  /api/v1/apps/{appId}/domains:
+    post:
+      operationId: addDomain
+      tags: [Custom Domains]
+      summary: Add a custom domain to an app (Pro+)
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDomainInput'
+      responses:
+        '201':
+          description: Domain added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainInfo'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      operationId: listDomains
+      tags: [Custom Domains]
+      summary: List custom domains for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DomainInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/domains/{domainId}:
+    delete:
+      operationId: deleteDomain
+      tags: [Custom Domains]
+      summary: Remove a custom domain
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: domainId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/domains:
+    get:
+      operationId: listDomainsByUser
+      tags: [Custom Domains]
+      summary: List all custom domains owned by the authenticated user
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DomainInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # API Keys
+  # ════════════════════════════════════════
+  /api/v1/api-keys:
+    post:
+      operationId: createAPIKey
+      tags: [API Keys]
+      summary: Create a new API key
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAPIKeyInput'
+      responses:
+        '201':
+          description: API key created (full key shown once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      operationId: listAPIKeys
+      tags: [API Keys]
+      summary: List API keys
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/APIKey'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/api-keys/{keyId}:
+    delete:
+      operationId: deleteAPIKey
+      tags: [API Keys]
+      summary: Revoke an API key
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Sessions
+  # ════════════════════════════════════════
+  /api/v1/auth/sessions:
+    get:
+      operationId: listSessions
+      tags: [Sessions]
+      summary: List active sessions
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: revokeAllSessions
+      tags: [Sessions]
+      summary: Revoke all sessions except current
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: All other sessions revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageWithCount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/sessions/{sessionId}:
+    delete:
+      operationId: revokeSession
+      tags: [Sessions]
+      summary: Revoke a specific session
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # MFA
+  # ════════════════════════════════════════
+  /api/v1/auth/mfa:
+    get:
+      operationId: getMFAStatus
+      tags: [MFA]
+      summary: Get MFA enrollment status (Pro+)
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFAStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/mfa/enable:
+    post:
+      operationId: enableMFA
+      tags: [MFA]
+      summary: Start MFA enrollment — returns TOTP secret and backup codes
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Enrollment started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFAEnableResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/auth/mfa/verify:
+    post:
+      operationId: verifyMFA
+      tags: [MFA]
+      summary: Verify TOTP code to complete MFA enrollment
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MFACodeRequest'
+      responses:
+        '200':
+          description: MFA verified and enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/mfa/disable:
+    post:
+      operationId: disableMFA
+      tags: [MFA]
+      summary: Disable MFA (requires valid TOTP code)
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MFACodeRequest'
+      responses:
+        '200':
+          description: MFA disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/mfa/backup-codes:
+    post:
+      operationId: regenerateBackupCodes
+      tags: [MFA]
+      summary: Regenerate backup codes (requires valid TOTP code)
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MFACodeRequest'
+      responses:
+        '200':
+          description: New backup codes generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFABackupCodesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ════════════════════════════════════════
+  # User Webhooks
+  # ════════════════════════════════════════
+  /api/v1/webhooks:
+    post:
+      operationId: createUserWebhook
+      tags: [User Webhooks]
+      summary: Create a webhook subscription (Pro+)
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserWebhookInput'
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWebhook'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      operationId: listUserWebhooks
+      tags: [User Webhooks]
+      summary: List webhook subscriptions
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserWebhook'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/webhooks/{webhookId}:
+    put:
+      operationId: updateUserWebhook
+      tags: [User Webhooks]
+      summary: Update a webhook subscription
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserWebhookInput'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserWebhook'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteUserWebhook
+      tags: [User Webhooks]
+      summary: Delete a webhook subscription
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/webhooks/{webhookId}/deliveries:
+    get:
+      operationId: listWebhookDeliveries
+      tags: [User Webhooks]
+      summary: List delivery attempts for a webhook
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebhookDelivery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Custom Roles
+  # ════════════════════════════════════════
+  /api/v1/roles:
+    post:
+      operationId: createRole
+      tags: [Custom Roles]
+      summary: Create a custom role (Team+)
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleInput'
+      responses:
+        '201':
+          description: Role created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomRole'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      operationId: listRoles
+      tags: [Custom Roles]
+      summary: List custom roles
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CustomRole'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/roles/permissions:
+    get:
+      operationId: listPermissions
+      tags: [Custom Roles]
+      summary: List all available permissions
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/roles/{roleId}:
+    put:
+      operationId: updateRole
+      tags: [Custom Roles]
+      summary: Update a custom role
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleInput'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteRole
+      tags: [Custom Roles]
+      summary: Delete a custom role
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/roles/{roleId}/assign:
+    post:
+      operationId: assignRole
+      tags: [Custom Roles]
+      summary: Assign a role to a team member
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleInput'
+      responses:
+        '201':
+          description: Role assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/roles/{roleId}/assignments:
+    get:
+      operationId: listRoleAssignments
+      tags: [Custom Roles]
+      summary: List assignments for a role
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoleAssignment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/roles/{roleId}/assignments/{assignmentId}:
+    delete:
+      operationId: removeRoleAssignment
+      tags: [Custom Roles]
+      summary: Remove a role assignment
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # IP Whitelist, Compliance, Branding, SSO, Previews
+  # ════════════════════════════════════════
+  /api/v1/settings/ip-whitelist:
+    post:
+      operationId: addIPWhitelistEntry
+      tags: [IP Whitelist]
+      summary: Add an IP allowlist entry (Enterprise)
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddIPWhitelistInput'
+      responses:
+        '201':
+          description: Entry added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IPWhitelistEntry'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      operationId: listIPWhitelist
+      tags: [IP Whitelist]
+      summary: List IP allowlist entries
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IPWhitelistEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/settings/ip-whitelist/{entryId}:
+    delete:
+      operationId: deleteIPWhitelistEntry
+      tags: [IP Whitelist]
+      summary: Remove an IP allowlist entry
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/compliance:
+    get:
+      operationId: getComplianceStatus
+      tags: [Compliance]
+      summary: Get compliance dashboard
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/settings/dpa:
+    get:
+      operationId: getDPA
+      tags: [Branding & DPA]
+      summary: Get DPA status
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DPARecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/settings/dpa/sign:
+    post:
+      operationId: signDPA
+      tags: [Branding & DPA]
+      summary: Sign the Data Processing Agreement
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: DPA signed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DPARecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/settings/branding:
+    get:
+      operationId: getBranding
+      tags: [Branding & DPA]
+      summary: Get branding configuration (Enterprise)
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandingConfig'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      operationId: updateBranding
+      tags: [Branding & DPA]
+      summary: Update branding configuration
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrandingConfig'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandingConfig'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/settings/domain:
+    post:
+      operationId: setDashboardDomain
+      tags: [Branding & DPA]
+      summary: Set a custom dashboard domain
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetDashboardDomainInput'
+      responses:
+        '200':
+          description: Domain set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/settings/sso/saml:
+    post:
+      operationId: configureSAML
+      tags: [SSO]
+      summary: Configure SAML SSO (Team+)
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigureSAMLInput'
+      responses:
+        '201':
+          description: SAML configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SSOConfig'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/settings/sso/oidc:
+    post:
+      operationId: configureOIDC
+      tags: [SSO]
+      summary: Configure OIDC SSO (Team+)
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigureOIDCInput'
+      responses:
+        '201':
+          description: OIDC configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SSOConfig'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/settings/sso:
+    get:
+      operationId: listSSOConfigs
+      tags: [SSO]
+      summary: List SSO configurations
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SSOConfig'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/settings/sso/{configId}:
+    delete:
+      operationId: deleteSSOConfig
+      tags: [SSO]
+      summary: Delete an SSO configuration
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/previews:
+    post:
+      operationId: createPreview
+      tags: [Preview Deployments]
+      summary: Create a preview deployment (Team+)
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePreviewInput'
+      responses:
+        '201':
+          description: Preview created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewDeployment'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      operationId: listPreviews
+      tags: [Preview Deployments]
+      summary: List preview deployments for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PreviewDeployment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/previews/{previewId}:
+    delete:
+      operationId: deletePreview
+      tags: [Preview Deployments]
+      summary: Delete a preview deployment
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: previewId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # SCIM, Releases, Logs, Events, Backstage, Webhooks, Internal
+  # ════════════════════════════════════════
+  /api/v1/scim/v2/Users:
+    get:
+      operationId: scimListUsers
+      tags: [SCIM]
+      summary: List users (SCIM 2.0, Enterprise)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SCIMListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      operationId: scimCreateUser
+      tags: [SCIM]
+      summary: Provision a user (SCIM 2.0)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SCIMCreateUserInput'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SCIMUser'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/scim/v2/Users/{userId}:
+    get:
+      operationId: scimGetUser
+      tags: [SCIM]
+      summary: Get a user (SCIM 2.0)
+      security: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SCIMUser'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: scimDeleteUser
+      tags: [SCIM]
+      summary: Deprovision a user (SCIM 2.0)
+      security: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/apps/{appId}/releases:
+    post:
+      operationId: createRelease
+      tags: [Releases]
+      summary: Create a versioned release
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReleaseInput'
+      responses:
+        '201':
+          description: Release created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      operationId: listReleases
+      tags: [Releases]
+      summary: List releases for an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Release'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/releases/{releaseId}/deploy:
+    post:
+      operationId: deployRelease
+      tags: [Releases]
+      summary: Deploy a specific release
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deployment started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/apps/{appId}/deployments/{did}/logs:
+    get:
+      operationId: streamBuildLogs
+      tags: [Build Logs]
+      summary: Stream build/deploy logs (SSE)
+      description: Server-Sent Events stream of build log lines. Set Accept text/event-stream.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: did
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE stream of log entries
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/apps/{appId}/deployments/{did}/logs/history:
+    get:
+      operationId: getBuildLogs
+      tags: [Build Logs]
+      summary: Get historical build logs
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: did
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/events:
+    get:
+      operationId: streamEvents
+      tags: [Events]
+      summary: Stream deployment events (SSE)
+      description: Server-Sent Events stream for real-time deployment status updates.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: SSE stream of deployment events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/events/history:
+    get:
+      operationId: getRecentEvents
+      tags: [Events]
+      summary: Get recent deployment events
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeployEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/backstage/catalog:
+    get:
+      operationId: getBackstageCatalog
+      tags: [Backstage]
+      summary: Get Backstage catalog entities
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/backstage/catalog/{kind}:
+    get:
+      operationId: getBackstageCatalogByKind
+      tags: [Backstage]
+      summary: Get Backstage catalog entities by kind
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Inbound Webhooks (Git providers)
+  # ════════════════════════════════════════
+  /api/v1/webhooks/github:
+    post:
+      operationId: handleGitHubPush
+      tags: [Inbound Webhooks]
+      summary: Receive GitHub push webhook
+      security: [{WebhookSignature: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GitHubPushEvent'
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/webhooks/gitlab:
+    post:
+      operationId: handleGitLabPush
+      tags: [Inbound Webhooks]
+      summary: Receive GitLab push webhook
+      security: [{WebhookSignature: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/webhooks/bitbucket:
+    post:
+      operationId: handleBitbucketPush
+      tags: [Inbound Webhooks]
+      summary: Receive Bitbucket push webhook
+      security: [{WebhookSignature: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Internal
+  # ════════════════════════════════════════
+  /api/v1/internal/metering:
+    post:
+      operationId: recordUsage
+      tags: [Internal]
+      summary: Record resource usage snapshot (metering agent)
+      security: [{InternalSecret: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeteringInput'
+      responses:
+        '201':
+          description: Usage recorded
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Admin Dashboard
+  # ════════════════════════════════════════
+  /api/v1/admin/dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [Admin Dashboard]
+      summary: Get platform dashboard statistics
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStats'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/dashboard/usage:
+    get:
+      operationId: getPlatformUsageSummary
+      tags: [Admin Dashboard]
+      summary: Get aggregate platform usage
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformUsageSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Admin Customers
+  # ════════════════════════════════════════
+  /api/v1/admin/customers:
+    post:
+      operationId: createCustomer
+      tags: [Admin Customers]
+      summary: Create a new customer
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerInput'
+      responses:
+        '201':
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      operationId: listCustomers
+      tags: [Admin Customers]
+      summary: List all customers
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Customer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/customers/stats:
+    get:
+      operationId: getCustomerStats
+      tags: [Admin Customers]
+      summary: Get customer statistics (total, active, MRR)
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [Admin Customers]
+      summary: Get customer details
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updateCustomer
+      tags: [Admin Customers]
+      summary: Update a customer
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerInput'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteCustomer
+      tags: [Admin Customers]
+      summary: Delete a customer
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/customers/{id}/usage:
+    get:
+      operationId: getCustomerUsage
+      tags: [Admin Customers]
+      summary: Get customer resource usage vs plan ceilings
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerUsage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/customers/{id}/usage/history:
+    get:
+      operationId: getCustomerUsageHistory
+      tags: [Admin Customers]
+      summary: Get daily usage history for a customer
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsageHistoryEntry'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/customers/{id}/suspend:
+    post:
+      operationId: suspendCustomer
+      tags: [Admin Customers]
+      summary: Suspend a customer
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Customer suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/customers/{id}/activate:
+    post:
+      operationId: activateCustomer
+      tags: [Admin Customers]
+      summary: Activate a suspended customer
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Customer activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/customers/{id}/cluster:
+    get:
+      operationId: getCustomerCluster
+      tags: [Admin Customers]
+      summary: Get customer cluster info
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCluster'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/customers/{id}/cluster/scale:
+    post:
+      operationId: scaleCustomerCluster
+      tags: [Admin Customers]
+      summary: Scale a customer cluster
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScaleClusterInput'
+      responses:
+        '200':
+          description: Cluster scaled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/customers/{id}/cluster/upgrade:
+    post:
+      operationId: upgradeCustomerCluster
+      tags: [Admin Customers]
+      summary: Upgrade a customer cluster K8s version
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpgradeClusterInput'
+      responses:
+        '200':
+          description: Upgrade initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Admin Plans
+  # ════════════════════════════════════════
+  /api/v1/admin/plans:
+    get:
+      operationId: adminListPlans
+      tags: [Admin Plans]
+      summary: List all plans
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: adminCreatePlan
+      tags: [Admin Plans]
+      summary: Create a new plan
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanInput'
+      responses:
+        '201':
+          description: Plan created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/plans/{id}:
+    put:
+      operationId: adminUpdatePlan
+      tags: [Admin Plans]
+      summary: Update a plan
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlanInput'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPlan'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Admin Clusters
+  # ════════════════════════════════════════
+  /api/v1/admin/clusters:
+    get:
+      operationId: adminListClusters
+      tags: [Admin Clusters]
+      summary: List all CAPI clusters
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminCluster'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: adminCreateCluster
+      tags: [Admin Clusters]
+      summary: Provision a new CAPI cluster
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClusterInput'
+      responses:
+        '201':
+          description: Cluster created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCluster'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/admin/clusters/{name}:
+    get:
+      operationId: adminGetCluster
+      tags: [Admin Clusters]
+      summary: Get cluster details
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCluster'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: adminDeleteCluster
+      tags: [Admin Clusters]
+      summary: Delete a CAPI cluster
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cluster scheduled for deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/clusters/{name}/upgrade:
+    post:
+      operationId: adminUpgradeCluster
+      tags: [Admin Clusters]
+      summary: Upgrade cluster K8s version
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpgradeClusterInput'
+      responses:
+        '200':
+          description: Upgrade initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Admin Tenants
+  # ════════════════════════════════════════
+  /api/v1/admin/tenants:
+    get:
+      operationId: adminListTenants
+      tags: [Admin Tenants]
+      summary: List all tenants
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tenant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/tenants/{id}:
+    get:
+      operationId: adminGetTenant
+      tags: [Admin Tenants]
+      summary: Get tenant details
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/tenants/{id}/suspend:
+    post:
+      operationId: adminSuspendTenant
+      tags: [Admin Tenants]
+      summary: Suspend a tenant
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Admin Modules
+  # ════════════════════════════════════════
+  /api/v1/admin/modules:
+    get:
+      operationId: adminListModules
+      tags: [Admin Modules]
+      summary: List all platform modules
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Module'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/modules/update-all:
+    post:
+      operationId: adminUpdateAllModules
+      tags: [Admin Modules]
+      summary: Update all modules with available updates
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Modules updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageWithCount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/modules/{name}/install:
+    post:
+      operationId: adminInstallModule
+      tags: [Admin Modules]
+      summary: Install a platform module
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Installation initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/modules/{name}/uninstall:
+    post:
+      operationId: adminUninstallModule
+      tags: [Admin Modules]
+      summary: Uninstall a platform module
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Uninstallation initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/modules/{name}/update:
+    post:
+      operationId: adminUpdateModule
+      tags: [Admin Modules]
+      summary: Update a specific module
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Module updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Admin Users
+  # ════════════════════════════════════════
+  /api/v1/admin/users/{userId}:
+    get:
+      operationId: adminGetUser
+      tags: [Admin Users]
+      summary: Get user details with plan and usage
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/users/{userId}/plan:
+    post:
+      operationId: adminSetUserPlan
+      tags: [Admin Users]
+      summary: Set a user's plan tier
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserPlanInput'
+      responses:
+        '200':
+          description: Plan updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/users/{userId}/apps:
+    get:
+      operationId: adminListUserApps
+      tags: [Admin Users]
+      summary: List apps owned by a user
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppV2Response'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/users/{userId}/databases:
+    get:
+      operationId: adminListUserDatabases
+      tags: [Admin Users]
+      summary: List databases owned by a user
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatabaseInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Admin Audit
+  # ════════════════════════════════════════
+  /api/v1/admin/audit:
+    get:
+      operationId: adminListAuditLog
+      tags: [Admin Audit]
+      summary: List audit log entries
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/audit/export/csv:
+    get:
+      operationId: adminExportAuditCSV
+      tags: [Admin Audit]
+      summary: Export audit log as CSV
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/audit/export/json:
+    get:
+      operationId: adminExportAuditJSON
+      tags: [Admin Audit]
+      summary: Export audit log as JSON
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: JSON file
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Admin Updates, Infrastructure, State, Settings
+  # ════════════════════════════════════════
+  /api/v1/admin/updates/check:
+    get:
+      operationId: adminCheckUpdates
+      tags: [Admin Updates]
+      summary: Check for available platform updates
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformUpdate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/updates/apply:
+    post:
+      operationId: adminApplyUpdate
+      tags: [Admin Updates]
+      summary: Apply a platform update
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyUpdateInput'
+      responses:
+        '200':
+          description: Update initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/updates/history:
+    get:
+      operationId: adminListUpdateHistory
+      tags: [Admin Updates]
+      summary: List platform update history
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UpdateHistoryEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/infrastructure:
+    get:
+      operationId: adminGetInfraOverview
+      tags: [Admin Infrastructure]
+      summary: Get Hetzner infrastructure overview
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InfraOverview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/state:
+    get:
+      operationId: adminGetPlatformState
+      tags: [Admin State]
+      summary: Get platform state summary
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/state/export:
+    get:
+      operationId: adminExportState
+      tags: [Admin State]
+      summary: Export full platform state as JSON
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: JSON export file
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/settings:
+    get:
+      operationId: adminGetSettings
+      tags: [Admin Settings]
+      summary: Get platform settings
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      operationId: adminUpdateSettings
+      tags: [Admin Settings]
+      summary: Update platform settings
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformSettings'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      operationId: adminPatchSettings
+      tags: [Admin Settings]
+      summary: Partially update platform settings
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformSettings'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Legacy Projects
+  # ════════════════════════════════════════
+  /api/v1/projects:
+    post:
+      operationId: createProject
+      tags: [Legacy Projects]
+      summary: Create a project (legacy CRD-based)
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      operationId: listProjects
+      tags: [Legacy Projects]
+      summary: List projects
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/projects/{id}:
+    get:
+      operationId: getProject
+      tags: [Legacy Projects]
+      summary: Get project by ID
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updateProject
+      tags: [Legacy Projects]
+      summary: Update a project
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteProject
+      tags: [Legacy Projects]
+      summary: Delete a project (owner only)
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ════════════════════════════════════════
+  # Legacy Apps (under projects)
+  # ════════════════════════════════════════
+  /api/v1/projects/{id}/apps:
+    post:
+      operationId: legacyCreateApp
+      tags: [Legacy Apps]
+      summary: Create an app under a project
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: App created
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      operationId: legacyListApps
+      tags: [Legacy Apps]
+      summary: List apps in a project
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/projects/{id}/apps/{name}:
+    get:
+      operationId: legacyGetApp
+      tags: [Legacy Apps]
+      summary: Get an app by name
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: legacyUpdateApp
+      tags: [Legacy Apps]
+      summary: Update an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: legacyDeleteApp
+      tags: [Legacy Apps]
+      summary: Delete an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/projects/{id}/apps/{name}/redeploy:
+    post:
+      operationId: legacyRedeployApp
+      tags: [Legacy Apps]
+      summary: Redeploy an app
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Redeploy initiated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Legacy Databases (under projects)
+  # ════════════════════════════════════════
+  /api/v1/projects/{id}/databases:
+    post:
+      operationId: legacyCreateDatabase
+      tags: [Legacy Databases]
+      summary: Create a database in a project
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Database created
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      operationId: legacyListDatabases
+      tags: [Legacy Databases]
+      summary: List databases in a project
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/projects/{id}/databases/{name}:
+    get:
+      operationId: legacyGetDatabase
+      tags: [Legacy Databases]
+      summary: Get database by name
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: legacyDeleteDatabase
+      tags: [Legacy Databases]
+      summary: Delete a database
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/projects/{id}/databases/{name}/backups:
+    get:
+      operationId: legacyListDatabaseBackups
+      tags: [Legacy Databases]
+      summary: List backups for a database
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: legacyCreateDatabaseBackup
+      tags: [Legacy Databases]
+      summary: Create a database backup
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Backup created
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ════════════════════════════════════════
+  # Legacy Storage (under projects)
+  # ════════════════════════════════════════
+  /api/v1/projects/{id}/storage:
+    post:
+      operationId: legacyCreateStorage
+      tags: [Legacy Storage]
+      summary: Create storage in a project
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Storage created
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      operationId: legacyListStorage
+      tags: [Legacy Storage]
+      summary: List storage in a project
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/projects/{id}/storage/{name}:
+    get:
+      operationId: legacyGetStorage
+      tags: [Legacy Storage]
+      summary: Get storage by name
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: legacyDeleteStorage
+      tags: [Legacy Storage]
+      summary: Delete storage
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'

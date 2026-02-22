@@ -1,0 +1,20 @@
+# error-page-middleware.yaml — Traefik errors middleware for cold-start pages.
+# When KEDA interceptor returns 502/503 while waking a sleeping pod,
+# Traefik serves the branded splash page from cold-start-page service.
+# Applied to free-tier IngressRoutes only.
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cold-start-errors
+  namespace: zenith-apps
+  labels:
+    zenith.dev/managed-by: zenith
+spec:
+  errors:
+    status:
+      - "502-503"
+    service:
+      name: cold-start-page
+      port: 80
+    query: "/"

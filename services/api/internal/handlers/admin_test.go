@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/capi"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/models"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -28,7 +29,7 @@ func injectAdmin(c *fiber.Ctx) error {
 	c.Locals("user_id", "admin-001")
 	c.Locals("email", "admin@zenith.dev")
 	c.Locals("name", "Admin")
-	c.Locals("role", models.RoleAdmin)
+	c.Locals("role", entities.RoleAdmin)
 	return c.Next()
 }
 
@@ -51,7 +52,7 @@ func TestGetDashboardStats(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var stats models.DashboardStats
+	var stats entities.DashboardStats
 	json.NewDecoder(resp.Body).Decode(&stats)
 
 	if stats.CostProvider != "Hetzner Cloud" {
@@ -85,7 +86,7 @@ func TestCreateCluster(t *testing.T) {
 		t.Fatalf("Expected 201, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var cluster models.Cluster
+	var cluster entities.Cluster
 	json.NewDecoder(resp.Body).Decode(&cluster)
 
 	if cluster.Name != "test-cluster" {
@@ -194,7 +195,7 @@ func TestListClusters(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var clusters []models.Cluster
+	var clusters []entities.Cluster
 	json.NewDecoder(resp.Body).Decode(&clusters)
 
 	if len(clusters) != 2 {
@@ -221,7 +222,7 @@ func TestGetCluster(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var cluster models.Cluster
+	var cluster entities.Cluster
 	json.NewDecoder(resp.Body).Decode(&cluster)
 
 	if cluster.Name != "get-me" {
@@ -315,7 +316,7 @@ func TestUpgradeCluster(t *testing.T) {
 	getResp, _ := app.Test(getReq)
 	defer getResp.Body.Close()
 
-	var cluster models.Cluster
+	var cluster entities.Cluster
 	json.NewDecoder(getResp.Body).Decode(&cluster)
 
 	if cluster.K8sVersion != "v1.30.2" {
@@ -368,7 +369,7 @@ func TestListTenantsEmpty(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var tenants []models.Tenant
+	var tenants []entities.Tenant
 	json.NewDecoder(resp.Body).Decode(&tenants)
 
 	if len(tenants) != 0 {
@@ -404,7 +405,7 @@ func TestListModules(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var modules []models.Module
+	var modules []entities.Module
 	json.NewDecoder(resp.Body).Decode(&modules)
 
 	if len(modules) == 0 {
@@ -441,7 +442,7 @@ func TestUpdateModule(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var mod models.Module
+	var mod entities.Module
 	json.NewDecoder(resp.Body).Decode(&mod)
 
 	if mod.Status != "up_to_date" {
@@ -492,7 +493,7 @@ func TestUpdateAllModules(t *testing.T) {
 	listResp, _ := app.Test(listReq)
 	defer listResp.Body.Close()
 
-	var modules []models.Module
+	var modules []entities.Module
 	json.NewDecoder(listResp.Body).Decode(&modules)
 
 	for _, m := range modules {
@@ -543,7 +544,7 @@ func TestListAuditLog(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var entries []models.AuditEntry
+	var entries []entities.AuditEntry
 	json.NewDecoder(resp.Body).Decode(&entries)
 
 	if len(entries) == 0 {
@@ -564,7 +565,7 @@ func TestListAuditLogWithLimit(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var entries []models.AuditEntry
+	var entries []entities.AuditEntry
 	json.NewDecoder(resp.Body).Decode(&entries)
 
 	if len(entries) > 2 {
@@ -587,7 +588,7 @@ func TestCheckUpdates(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var update models.PlatformUpdate
+	var update entities.PlatformUpdate
 	json.NewDecoder(resp.Body).Decode(&update)
 
 	if update.Version == "" {
@@ -644,7 +645,7 @@ func TestListUpdateHistory(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var history []models.UpdateHistoryEntry
+	var history []entities.UpdateHistoryEntry
 	json.NewDecoder(resp.Body).Decode(&history)
 
 	if len(history) == 0 {
@@ -674,7 +675,7 @@ func TestGetInfraOverview(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var infra models.InfraOverview
+	var infra entities.InfraOverview
 	json.NewDecoder(resp.Body).Decode(&infra)
 
 	// 3 nodes + 1 management = 4
@@ -699,7 +700,7 @@ func TestGetInfraOverviewEmpty(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var infra models.InfraOverview
+	var infra entities.InfraOverview
 	json.NewDecoder(resp.Body).Decode(&infra)
 
 	// Only management plane server
@@ -723,7 +724,7 @@ func TestGetPlatformState(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var state models.PlatformState
+	var state entities.PlatformState
 	json.NewDecoder(resp.Body).Decode(&state)
 
 	if state.PlatformVersion == "" {
@@ -786,7 +787,7 @@ func TestGetSettings(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var settings models.PlatformSettings
+	var settings entities.PlatformSettings
 	json.NewDecoder(resp.Body).Decode(&settings)
 
 	if settings.PlatformName != "Zenith" {
@@ -819,7 +820,7 @@ func TestUpdateSettingsPATCH(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var updated models.PlatformSettings
+	var updated entities.PlatformSettings
 	json.NewDecoder(resp.Body).Decode(&updated)
 
 	if updated.PlatformName != "My Zenith" {
@@ -849,7 +850,7 @@ func TestUpdateSettingsPUT(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var updated models.PlatformSettings
+	var updated entities.PlatformSettings
 	json.NewDecoder(resp.Body).Decode(&updated)
 
 	if updated.PlatformName != "Updated Zenith" {
@@ -869,7 +870,7 @@ func TestAuditLogPopulatedByActions(t *testing.T) {
 	// Get initial audit count
 	initReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
 	initResp, _ := app.Test(initReq)
-	var initEntries []models.AuditEntry
+	var initEntries []entities.AuditEntry
 	json.NewDecoder(initResp.Body).Decode(&initEntries)
 	initialCount := len(initEntries)
 
@@ -888,7 +889,7 @@ func TestAuditLogPopulatedByActions(t *testing.T) {
 	auditResp, _ := app.Test(auditReq)
 	defer auditResp.Body.Close()
 
-	var entries []models.AuditEntry
+	var entries []entities.AuditEntry
 	json.NewDecoder(auditResp.Body).Decode(&entries)
 
 	expectedCount := initialCount + 2
@@ -918,7 +919,7 @@ func TestListAuditLogEmptyStore(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var entries []models.AuditEntry
+	var entries []entities.AuditEntry
 	json.NewDecoder(resp.Body).Decode(&entries)
 
 	if len(entries) != 0 {
@@ -940,7 +941,7 @@ func TestListAuditLogWithOffset(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var entries []models.AuditEntry
+	var entries []entities.AuditEntry
 	json.NewDecoder(resp.Body).Decode(&entries)
 
 	if len(entries) != 1 {
@@ -965,7 +966,7 @@ func TestUpdateSettingsPartialUpdate(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var updated models.PlatformSettings
+	var updated entities.PlatformSettings
 	json.NewDecoder(resp.Body).Decode(&updated)
 
 	if updated.BaseDomain != "newdomain.dev" {
@@ -1040,7 +1041,7 @@ func TestCreateClusterDefaultNodes(t *testing.T) {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
 
-	var cluster models.Cluster
+	var cluster entities.Cluster
 	json.NewDecoder(resp.Body).Decode(&cluster)
 
 	if cluster.Nodes != 1 {
@@ -1063,7 +1064,7 @@ func TestCreateClusterDefaultType(t *testing.T) {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
 
-	var cluster models.Cluster
+	var cluster entities.Cluster
 	json.NewDecoder(resp.Body).Decode(&cluster)
 
 	if cluster.Type != "shared" {
@@ -1142,7 +1143,7 @@ func TestSuspendTenantSuccess(t *testing.T) {
 	getReq := httptest.NewRequest("GET", "/api/v1/admin/tenants/test-tenant", nil)
 	getResp, _ := fiberApp.Test(getReq)
 
-	var tenant models.Tenant
+	var tenant entities.Tenant
 	json.NewDecoder(getResp.Body).Decode(&tenant)
 
 	if tenant.Status != "suspended" {
@@ -1182,7 +1183,7 @@ func TestListTenantsWithProjects(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var tenants []models.Tenant
+	var tenants []entities.Tenant
 	json.NewDecoder(resp.Body).Decode(&tenants)
 
 	if len(tenants) != 2 {
@@ -1215,7 +1216,7 @@ func TestDashboardStatsWithClusters(t *testing.T) {
 	fiberApp.Get("/api/v1/admin/dashboard/stats", handler.GetDashboardStats)
 
 	// Create a cluster and project to get real stats
-	capiClient.CreateCluster(nil, models.CreateClusterInput{
+	capiClient.CreateCluster(nil, dto.CreateClusterInput{
 		Name:       "test",
 		Region:     "fsn1",
 		K8sVersion: "v1.30.2",
@@ -1237,7 +1238,7 @@ func TestDashboardStatsWithClusters(t *testing.T) {
 	resp, _ := fiberApp.Test(req)
 	defer resp.Body.Close()
 
-	var stats models.DashboardStats
+	var stats entities.DashboardStats
 	json.NewDecoder(resp.Body).Decode(&stats)
 
 	if stats.ClusterCount != 1 {
@@ -1281,7 +1282,7 @@ func TestDashboardStatsWithSuspendedTenant(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/admin/dashboard/stats", nil)
 	resp, _ := fiberApp.Test(req)
 
-	var stats models.DashboardStats
+	var stats entities.DashboardStats
 	json.NewDecoder(resp.Body).Decode(&stats)
 
 	if stats.TenantCount != 1 {
@@ -1301,7 +1302,7 @@ func TestGetPlatformStateUpdateAvailable(t *testing.T) {
 	resp, _ := app.Test(req)
 	defer resp.Body.Close()
 
-	var state models.PlatformState
+	var state entities.PlatformState
 	json.NewDecoder(resp.Body).Decode(&state)
 
 	// Store has current=v1.2.1 and version=v1.3.0, so update is available
@@ -1340,7 +1341,7 @@ func TestActorFromContextFallback(t *testing.T) {
 	app, handler := setupAdminApp()
 	// Use middleware with no email/name to test fallback to "admin"
 	app.Use(func(c *fiber.Ctx) error {
-		c.Locals("role", models.RoleAdmin)
+		c.Locals("role", entities.RoleAdmin)
 		return c.Next()
 	})
 	app.Post("/api/v1/admin/modules/:name/install", handler.InstallModule)
@@ -1353,7 +1354,7 @@ func TestActorFromContextFallback(t *testing.T) {
 	auditResp, _ := app.Test(auditReq)
 	defer auditResp.Body.Close()
 
-	var entries []models.AuditEntry
+	var entries []entities.AuditEntry
 	json.NewDecoder(auditResp.Body).Decode(&entries)
 
 	// The newest entry should have actor "admin" (fallback)
@@ -1371,7 +1372,7 @@ func TestUninstallModuleAuditEntry(t *testing.T) {
 	// Get initial count
 	initReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
 	initResp, _ := app.Test(initReq)
-	var initEntries []models.AuditEntry
+	var initEntries []entities.AuditEntry
 	json.NewDecoder(initResp.Body).Decode(&initEntries)
 	initialCount := len(initEntries)
 
@@ -1393,7 +1394,7 @@ func TestUninstallModuleAuditEntry(t *testing.T) {
 	// Check audit log grew by 1
 	auditReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
 	auditResp, _ := app.Test(auditReq)
-	var entries []models.AuditEntry
+	var entries []entities.AuditEntry
 	json.NewDecoder(auditResp.Body).Decode(&entries)
 
 	if len(entries) != initialCount+1 {

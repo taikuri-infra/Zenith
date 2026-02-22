@@ -1,0 +1,30 @@
+# KEDA Helm chart values
+# https://github.com/kedacore/charts/tree/main/keda
+
+operator:
+  replicaCount: 1
+
+metricsServer:
+  replicaCount: 1
+
+resources:
+  operator:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  metricsServer:
+    limits:
+      cpu: 250m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+logging:
+  operator:
+    level: info
+  metricsServer:
+    level: "0"

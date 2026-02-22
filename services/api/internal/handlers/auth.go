@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -77,10 +77,10 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	}
 
 	// First user gets owner role, subsequent users get developer
-	role := models.RoleDeveloper
+	role := entities.RoleDeveloper
 	count, err := h.store.Count(c.Context())
 	if err == nil && count == 0 {
-		role = models.RoleOwner
+		role = entities.RoleOwner
 	}
 
 	user, err := h.store.Create(c.Context(), req.Email, req.Password, req.Name, role)
@@ -115,7 +115,7 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 	return h.issueTokens(c, &user.User)
 }
 
-func (h *AuthHandler) issueTokens(c *fiber.Ctx, user *models.User) error {
+func (h *AuthHandler) issueTokens(c *fiber.Ctx, user *entities.User) error {
 	accessToken, err := middleware.GenerateToken(h.jwtSecret, user, accessTokenExpiry)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to generate access token")

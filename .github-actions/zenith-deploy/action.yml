@@ -1,0 +1,99 @@
+name: "Zenith Deploy"
+description: "Build and push a Docker image, then register a new release with Zenith"
+
+inputs:
+  app-id:
+    description: "Zenith App ID (from panel Settings)"
+    required: true
+  token:
+    description: "Zenith API token"
+    required: true
+  api-url:
+    description: "Zenith API base URL"
+    required: false
+    default: "https://api.freezenith.com"
+  image:
+    description: "Full image name without tag (e.g. ghcr.io/org/myapp)"
+    required: true
+  registry:
+    description: "Container registry hostname (e.g. ghcr.io)"
+    required: false
+    default: "ghcr.io"
+  registry-username:
+    description: "Registry login username"
+    required: true
+  registry-password:
+    description: "Registry login password / token"
+    required: true
+  dockerfile:
+    description: "Path to Dockerfile"
+    required: false
+    default: "Dockerfile"
+  context:
+    description: "Docker build context"
+    required: false
+    default: "."
+
+outputs:
+  image-tag:
+    description: "Full image reference that was pushed"
+    value: ${{ steps.meta.outputs.image-tag }}
+  release-id:
+    description: "Zenith release ID"
+    value: ${{ steps.register.outputs.release-id }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set image tag
+      id: meta
+      shell: bash
+      run: |
+        SHA="${GITHUB_SHA::8}"
+        TAG="${{ inputs.image }}:${SHA}"
+        echo "image-tag=${TAG}" >> "$GITHUB_OUTPUT"
+        echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+    - name: Log in to registry
+      shell: bash
+      run: |
+        echo "${{ inputs.registry-password }}" | \
+          docker login "${{ inputs.registry }}" \
+          -u "${{ inputs.registry-username }}" --password-stdin
+
+    - name: Build image
+      shell: bash
+      run: |
+        docker build \
+          -f "${{ inputs.dockerfile }}" \
+          -t "${{ steps.meta.outputs.image-tag }}" \
+          "${{ inputs.context }}"
+
+    - name: Push image
+      shell: bash
+      run: docker push "${{ steps.meta.outputs.image-tag }}"
+
+    - name: Register release with Zenith
+      id: register
+      shell: bash
+      run: |
+        BODY=$(cat <<EOF
+        {
+          "image": "${{ steps.meta.outputs.image-tag }}",
+          "git_sha": "${{ github.sha }}",
+          "branch": "${{ github.ref_name }}",
+          "message": "${{ github.event.head_commit.message }}"
+        }
+        EOF
+        )
+
+        RESPONSE=$(curl -sf \
+          -X POST \
+          -H "Authorization: Bearer ${{ inputs.token }}" \
+          -H "Content-Type: application/json" \
+          -d "${BODY}" \
+          "${{ inputs.api-url }}/api/v1/apps/${{ inputs.app-id }}/releases")
+
+        RELEASE_ID=$(echo "${RESPONSE}" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+        echo "release-id=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
+        echo "✅ Release ${RELEASE_ID} registered — image: ${{ steps.meta.outputs.image-tag }}"

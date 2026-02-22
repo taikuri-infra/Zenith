@@ -3,17 +3,20 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
 	Port        int
 	Environment string
+	Mode        string // ZENITH_MODE: "standalone" (default) or "saas"
 	CORSOrigins string
 	LogLevel    string
 
 	// Kubernetes
-	KubeConfig  string
-	InCluster   bool
+	K8sMode    string // K8S_MODE: "memory" (default) or "real"
+	KubeConfig string
+	InCluster  bool
 
 	// Auth
 	JWTSecret     string
@@ -24,24 +27,84 @@ type Config struct {
 	// Internal
 	InternalSecret string
 
+	// Deploy
+	GitHubWebhookSecret string
+	BaseDomain          string
+	Registry            string // container registry for built images
+	BuildWorkDir        string // local temp dir for cloning repos
+
+	// Secrets encryption
+	SecretsKey string // SECRETS_ENCRYPTION_KEY: 64-char hex (32 bytes)
+
+	// OpenTelemetry (opt-in: only active when OTELEndpoint is set)
+	OTELEndpoint   string  // OTEL_EXPORTER_OTLP_ENDPOINT
+	OTELInsecure   bool    // OTEL_INSECURE (default: true for in-cluster)
+	OTELSampleRate float64 // OTEL_SAMPLE_RATE (0.0–1.0, default: 1.0)
+
 	// Database
 	DatabaseURL string
+
+	// Stripe Billing (Phase 6)
+	StripeBillingEnabled bool
+	StripeSecretKey      string
+	StripeWebhookSecret  string
+	StripeProPriceID     string
+	StripeTeamPriceID    string
+
+	// Hetzner Autoscaler (Phase 5)
+	HetznerToken        string
+	AutoscalerEnabled   bool
+	AutoscalerMinNodes  int
+	AutoscalerMaxNodes  int
+	AutoscalerInterval  int // seconds
+	HetznerServerType   string
+	HetznerLocation     string
+	K3sToken            string
 }
 
 func Load() *Config {
+	mode := getEnv("ZENITH_MODE", "standalone")
+	corsDefault := "*"
+	if mode == "standalone" {
+		corsDefault = "http://localhost:3000"
+	}
+
 	return &Config{
 		Port:        getEnvInt("PORT", 8080),
 		Environment: getEnv("ENVIRONMENT", "development"),
-		CORSOrigins: getEnv("CORS_ORIGINS", "*"),
+		Mode:        mode,
+		CORSOrigins: getEnv("CORS_ORIGINS", corsDefault),
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 		KubeConfig:  getEnv("KUBECONFIG", ""),
+		K8sMode:    getEnv("K8S_MODE", "memory"),
 		InCluster:   getEnvBool("IN_CLUSTER", false),
 		JWTSecret:     getEnv("JWT_SECRET", ""),
 		JWTIssuer:     getEnv("JWT_ISSUER", "zenith"),
 		AdminEmail:    getEnv("ADMIN_EMAIL", ""),
 		AdminPassword: getEnv("ADMIN_PASSWORD", ""),
 		InternalSecret: getEnv("INTERNAL_SECRET", ""),
-		DatabaseURL:    buildDatabaseURL(),
+		GitHubWebhookSecret: getEnv("GITHUB_WEBHOOK_SECRET", ""),
+		BaseDomain:          getEnv("BASE_DOMAIN", "freezenith.com"),
+		Registry:            getEnv("REGISTRY", "registry.freezenith.com"),
+		BuildWorkDir:        getEnv("BUILD_WORKDIR", "/tmp/zenith-builds"),
+		SecretsKey:          getEnv("SECRETS_ENCRYPTION_KEY", ""),
+		OTELEndpoint:        getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		OTELInsecure:        getEnvBool("OTEL_INSECURE", true),
+		OTELSampleRate:      getEnvFloat("OTEL_SAMPLE_RATE", 1.0),
+		DatabaseURL:         buildDatabaseURL(),
+		StripeBillingEnabled: getEnvBool("STRIPE_BILLING_ENABLED", false),
+		StripeSecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret:  getEnv("STRIPE_WEBHOOK_SECRET", ""),
+		StripeProPriceID:     getEnv("STRIPE_PRO_PRICE_ID", ""),
+		StripeTeamPriceID:    getEnv("STRIPE_TEAM_PRICE_ID", ""),
+		HetznerToken:        getEnv("HCLOUD_TOKEN", ""),
+		AutoscalerEnabled:   getEnvBool("AUTOSCALER_ENABLED", false),
+		AutoscalerMinNodes:  getEnvInt("AUTOSCALER_MIN_NODES", 2),
+		AutoscalerMaxNodes:  getEnvInt("AUTOSCALER_MAX_NODES", 10),
+		AutoscalerInterval:  getEnvInt("AUTOSCALER_INTERVAL", 60),
+		HetznerServerType:   getEnv("HETZNER_SERVER_TYPE", "cpx31"),
+		HetznerLocation:     getEnv("HETZNER_LOCATION", "fsn1"),
+		K3sToken:            getEnv("K3S_TOKEN", ""),
 	}
 }
 
@@ -84,6 +147,15 @@ func getEnvBool(key string, fallback bool) bool {
 	if val := os.Getenv(key); val != "" {
 		if b, err := strconv.ParseBool(val); err == nil {
 			return b
+		}
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if val := strings.TrimSpace(os.Getenv(key)); val != "" {
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
 		}
 	}
 	return fallback

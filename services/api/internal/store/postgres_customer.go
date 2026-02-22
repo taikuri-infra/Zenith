@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -28,7 +29,7 @@ func NewPostgresCustomerRepository(pool *pgxpool.Pool) *PostgresCustomerReposito
 
 // ---------- Plans ----------
 
-func (r *PostgresCustomerRepository) CreatePlan(ctx context.Context, input *models.CreatePlanInput) (*models.Plan, error) {
+func (r *PostgresCustomerRepository) CreatePlan(ctx context.Context, input *dto.CreatePlanInput) (*entities.Plan, error) {
 	now := time.Now()
 	id := uuid.New().String()
 
@@ -55,7 +56,7 @@ func (r *PostgresCustomerRepository) CreatePlan(ctx context.Context, input *mode
 		return nil, fmt.Errorf("insert plan: %w", err)
 	}
 
-	return &models.Plan{
+	return &entities.Plan{
 		ID: id, Name: input.Name, CPUCores: input.CPUCores, RAMGB: input.RAMGB,
 		S3TB: input.S3TB, DBStorageGB: input.DBStorageGB, VolumeGB: input.VolumeGB,
 		LBCount: input.LBCount, PriceCents: input.PriceCents, Currency: currency,
@@ -63,8 +64,8 @@ func (r *PostgresCustomerRepository) CreatePlan(ctx context.Context, input *mode
 	}, nil
 }
 
-func (r *PostgresCustomerRepository) GetPlan(ctx context.Context, id string) (*models.Plan, error) {
-	var p models.Plan
+func (r *PostgresCustomerRepository) GetPlan(ctx context.Context, id string) (*entities.Plan, error) {
+	var p entities.Plan
 	err := r.pool.QueryRow(ctx,
 		`SELECT id, name, cpu_cores, ram_gb, s3_tb, db_storage_gb, volume_gb, lb_count, price_cents, currency, billing_cycle, active, created_at, updated_at
 		 FROM plans WHERE id = $1`, id,
@@ -79,7 +80,7 @@ func (r *PostgresCustomerRepository) GetPlan(ctx context.Context, id string) (*m
 	return &p, nil
 }
 
-func (r *PostgresCustomerRepository) ListPlans(ctx context.Context) ([]models.Plan, error) {
+func (r *PostgresCustomerRepository) ListPlans(ctx context.Context) ([]entities.Plan, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, name, cpu_cores, ram_gb, s3_tb, db_storage_gb, volume_gb, lb_count, price_cents, currency, billing_cycle, active, created_at, updated_at
 		 FROM plans ORDER BY price_cents ASC`)
@@ -88,9 +89,9 @@ func (r *PostgresCustomerRepository) ListPlans(ctx context.Context) ([]models.Pl
 	}
 	defer rows.Close()
 
-	var plans []models.Plan
+	var plans []entities.Plan
 	for rows.Next() {
-		var p models.Plan
+		var p entities.Plan
 		if err := rows.Scan(&p.ID, &p.Name, &p.CPUCores, &p.RAMGB, &p.S3TB, &p.DBStorageGB, &p.VolumeGB,
 			&p.LBCount, &p.PriceCents, &p.Currency, &p.BillingCycle, &p.Active, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan plan: %w", err)
@@ -98,12 +99,12 @@ func (r *PostgresCustomerRepository) ListPlans(ctx context.Context) ([]models.Pl
 		plans = append(plans, p)
 	}
 	if plans == nil {
-		plans = []models.Plan{}
+		plans = []entities.Plan{}
 	}
 	return plans, rows.Err()
 }
 
-func (r *PostgresCustomerRepository) UpdatePlan(ctx context.Context, id string, input *models.UpdatePlanInput) (*models.Plan, error) {
+func (r *PostgresCustomerRepository) UpdatePlan(ctx context.Context, id string, input *dto.UpdatePlanInput) (*entities.Plan, error) {
 	// Read current, merge, write back
 	plan, err := r.GetPlan(ctx, id)
 	if err != nil {
@@ -164,7 +165,7 @@ func (r *PostgresCustomerRepository) UpdatePlan(ctx context.Context, id string, 
 
 // ---------- Customers ----------
 
-func (r *PostgresCustomerRepository) CreateCustomer(ctx context.Context, input *models.CreateCustomerInput) (*models.Customer, error) {
+func (r *PostgresCustomerRepository) CreateCustomer(ctx context.Context, input *dto.CreateCustomerInput) (*entities.Customer, error) {
 	now := time.Now()
 	id := uuid.New().String()
 	clusterName := domainToClusterName(input.Domain)
@@ -187,7 +188,7 @@ func (r *PostgresCustomerRepository) CreateCustomer(ctx context.Context, input *
 		return nil, fmt.Errorf("insert customer: %w", err)
 	}
 
-	return &models.Customer{
+	return &entities.Customer{
 		ID: id, Name: input.Name, Domain: input.Domain, PlanID: input.PlanID,
 		ContactEmail: input.ContactEmail, ContactName: input.ContactName,
 		Status: "active", ClusterStatus: "pending", CAPIClusterName: clusterName,
@@ -196,9 +197,9 @@ func (r *PostgresCustomerRepository) CreateCustomer(ctx context.Context, input *
 	}, nil
 }
 
-func (r *PostgresCustomerRepository) GetCustomer(ctx context.Context, id string) (*models.Customer, error) {
-	var c models.Customer
-	var p models.Plan
+func (r *PostgresCustomerRepository) GetCustomer(ctx context.Context, id string) (*entities.Customer, error) {
+	var c entities.Customer
+	var p entities.Plan
 	err := r.pool.QueryRow(ctx,
 		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status,
 		        c.capi_cluster_name, c.cluster_region, c.cluster_nodes, c.cluster_k8s_version,
@@ -219,7 +220,7 @@ func (r *PostgresCustomerRepository) GetCustomer(ctx context.Context, id string)
 	return &c, nil
 }
 
-func (r *PostgresCustomerRepository) ListCustomers(ctx context.Context) ([]models.Customer, error) {
+func (r *PostgresCustomerRepository) ListCustomers(ctx context.Context) ([]entities.Customer, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status,
 		        c.capi_cluster_name, c.cluster_region, c.cluster_nodes, c.cluster_k8s_version,
@@ -231,10 +232,10 @@ func (r *PostgresCustomerRepository) ListCustomers(ctx context.Context) ([]model
 	}
 	defer rows.Close()
 
-	var customers []models.Customer
+	var customers []entities.Customer
 	for rows.Next() {
-		var c models.Customer
-		var p models.Plan
+		var c entities.Customer
+		var p entities.Plan
 		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.PlanID, &c.ContactEmail, &c.ContactName, &c.Status, &c.ClusterStatus,
 			&c.CAPIClusterName, &c.ClusterRegion, &c.ClusterNodes, &c.ClusterK8sVersion,
 			&c.Notes, &c.CreatedAt, &c.UpdatedAt,
@@ -245,12 +246,12 @@ func (r *PostgresCustomerRepository) ListCustomers(ctx context.Context) ([]model
 		customers = append(customers, c)
 	}
 	if customers == nil {
-		customers = []models.Customer{}
+		customers = []entities.Customer{}
 	}
 	return customers, rows.Err()
 }
 
-func (r *PostgresCustomerRepository) UpdateCustomer(ctx context.Context, id string, input *models.UpdateCustomerInput) (*models.Customer, error) {
+func (r *PostgresCustomerRepository) UpdateCustomer(ctx context.Context, id string, input *dto.UpdateCustomerInput) (*entities.Customer, error) {
 	customer, err := r.GetCustomer(ctx, id)
 	if err != nil {
 		return nil, err
@@ -304,7 +305,7 @@ func (r *PostgresCustomerRepository) DeleteCustomer(ctx context.Context, id stri
 	return nil
 }
 
-func (r *PostgresCustomerRepository) SuspendCustomer(ctx context.Context, id string) (*models.Customer, error) {
+func (r *PostgresCustomerRepository) SuspendCustomer(ctx context.Context, id string) (*entities.Customer, error) {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE customers SET status = 'suspended', updated_at = $1 WHERE id = $2`, time.Now(), id)
 	if err != nil {
@@ -316,7 +317,7 @@ func (r *PostgresCustomerRepository) SuspendCustomer(ctx context.Context, id str
 	return r.GetCustomer(ctx, id)
 }
 
-func (r *PostgresCustomerRepository) ActivateCustomer(ctx context.Context, id string) (*models.Customer, error) {
+func (r *PostgresCustomerRepository) ActivateCustomer(ctx context.Context, id string) (*entities.Customer, error) {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE customers SET status = 'active', updated_at = $1 WHERE id = $2`, time.Now(), id)
 	if err != nil {
@@ -365,9 +366,9 @@ func (r *PostgresCustomerRepository) UpdateClusterInfo(ctx context.Context, id s
 	return nil
 }
 
-func (r *PostgresCustomerRepository) GetCustomerByClusterName(ctx context.Context, clusterName string) (*models.Customer, error) {
-	var c models.Customer
-	var p models.Plan
+func (r *PostgresCustomerRepository) GetCustomerByClusterName(ctx context.Context, clusterName string) (*entities.Customer, error) {
+	var c entities.Customer
+	var p entities.Plan
 	err := r.pool.QueryRow(ctx,
 		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status,
 		        c.capi_cluster_name, c.cluster_region, c.cluster_nodes, c.cluster_k8s_version,
@@ -388,7 +389,7 @@ func (r *PostgresCustomerRepository) GetCustomerByClusterName(ctx context.Contex
 	return &c, nil
 }
 
-func (r *PostgresCustomerRepository) ListProvisioningCustomers(ctx context.Context) ([]models.Customer, error) {
+func (r *PostgresCustomerRepository) ListProvisioningCustomers(ctx context.Context) ([]entities.Customer, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT c.id, c.name, c.domain, c.plan_id, c.contact_email, c.contact_name, c.status, c.cluster_status,
 		        c.capi_cluster_name, c.cluster_region, c.cluster_nodes, c.cluster_k8s_version,
@@ -399,9 +400,9 @@ func (r *PostgresCustomerRepository) ListProvisioningCustomers(ctx context.Conte
 	}
 	defer rows.Close()
 
-	var customers []models.Customer
+	var customers []entities.Customer
 	for rows.Next() {
-		var c models.Customer
+		var c entities.Customer
 		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.PlanID, &c.ContactEmail, &c.ContactName, &c.Status, &c.ClusterStatus,
 			&c.CAPIClusterName, &c.ClusterRegion, &c.ClusterNodes, &c.ClusterK8sVersion,
 			&c.Notes, &c.CreatedAt, &c.UpdatedAt); err != nil {
@@ -410,12 +411,12 @@ func (r *PostgresCustomerRepository) ListProvisioningCustomers(ctx context.Conte
 		customers = append(customers, c)
 	}
 	if customers == nil {
-		customers = []models.Customer{}
+		customers = []entities.Customer{}
 	}
 	return customers, rows.Err()
 }
 
-func (r *PostgresCustomerRepository) GetCustomerStats(ctx context.Context) (*models.CustomerStats, error) {
+func (r *PostgresCustomerRepository) GetCustomerStats(ctx context.Context) (*entities.CustomerStats, error) {
 	var total, active, newThisMonth int
 	var mrrCents int
 
@@ -443,7 +444,7 @@ func (r *PostgresCustomerRepository) GetCustomerStats(ctx context.Context) (*mod
 		return nil, fmt.Errorf("count new customers: %w", err)
 	}
 
-	return &models.CustomerStats{
+	return &entities.CustomerStats{
 		TotalCustomers:  total,
 		ActiveCustomers: active,
 		MRR:             fmt.Sprintf("€%d", mrrCents/100),

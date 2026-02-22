@@ -6,7 +6,8 @@ import (
 	"fmt"
 
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+"github.com/dotechhq/zenith/services/api/internal/entities"
 )
 
 const (
@@ -29,7 +30,7 @@ func NewClient(k8sClient k8s.Client) *Client {
 }
 
 // CreateCluster creates a CAPI Cluster resource in the management namespace.
-func (c *Client) CreateCluster(ctx context.Context, input models.CreateClusterInput) (*models.Cluster, error) {
+func (c *Client) CreateCluster(ctx context.Context, input dto.CreateClusterInput) (*entities.Cluster, error) {
 	spec, _ := json.Marshal(map[string]interface{}{
 		"k8sVersion": input.K8sVersion,
 		"nodes":      input.Nodes,
@@ -64,7 +65,7 @@ func (c *Client) CreateCluster(ctx context.Context, input models.CreateClusterIn
 }
 
 // GetCluster retrieves a single CAPI Cluster resource by name.
-func (c *Client) GetCluster(ctx context.Context, name string) (*models.Cluster, error) {
+func (c *Client) GetCluster(ctx context.Context, name string) (*entities.Cluster, error) {
 	crd, err := c.k8s.GetCRD(ctx, KindCluster, CAPINamespace, name)
 	if err != nil {
 		return nil, fmt.Errorf("get cluster %s: %w", name, err)
@@ -73,13 +74,13 @@ func (c *Client) GetCluster(ctx context.Context, name string) (*models.Cluster, 
 }
 
 // ListClusters returns all CAPI Cluster resources in the management namespace.
-func (c *Client) ListClusters(ctx context.Context) ([]models.Cluster, error) {
+func (c *Client) ListClusters(ctx context.Context) ([]entities.Cluster, error) {
 	crds, err := c.k8s.ListCRDs(ctx, KindCluster, CAPINamespace)
 	if err != nil {
 		return nil, fmt.Errorf("list clusters: %w", err)
 	}
 
-	clusters := make([]models.Cluster, 0, len(crds))
+	clusters := make([]entities.Cluster, 0, len(crds))
 	for _, crd := range crds {
 		clusters = append(clusters, *crdToCluster(crd))
 	}
@@ -136,8 +137,8 @@ func (c *Client) UpgradeCluster(ctx context.Context, name, version string) error
 	return nil
 }
 
-// crdToCluster converts a CRDObject into a models.Cluster.
-func crdToCluster(crd *k8s.CRDObject) *models.Cluster {
+// crdToCluster converts a CRDObject into a entities.Cluster.
+func crdToCluster(crd *k8s.CRDObject) *entities.Cluster {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(crd.Spec, &spec)
 
@@ -175,7 +176,7 @@ func crdToCluster(crd *k8s.CRDObject) *models.Cluster {
 
 	upgradeAvailable, _ := crd.Metadata.Annotations["zenith.dev/upgrade-available"]
 
-	return &models.Cluster{
+	return &entities.Cluster{
 		Name:             crd.Metadata.Name,
 		K8sVersion:       k8sVersion,
 		Nodes:            nodes,
@@ -184,8 +185,8 @@ func crdToCluster(crd *k8s.CRDObject) *models.Cluster {
 		Tenant:           tenant,
 		CPUPercent:       cpuPercent,
 		RAMPercent:       ramPercent,
-		Pods:             models.ResourcePair{Used: 0, Total: 0},
-		PVCs:             models.ResourcePair{Used: 0, Total: 0},
+		Pods:             entities.ResourcePair{Used: 0, Total: 0},
+		PVCs:             entities.ResourcePair{Used: 0, Total: 0},
 		Status:           status,
 		UpgradeAvailable: upgradeAvailable,
 	}

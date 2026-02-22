@@ -6,12 +6,13 @@ import (
 	"io"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/capi"
 	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -42,7 +43,7 @@ func TestListPlans(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var plans []models.Plan
+	var plans []entities.Plan
 	json.NewDecoder(resp.Body).Decode(&plans)
 
 	if len(plans) != 3 {
@@ -70,7 +71,7 @@ func TestCreatePlan(t *testing.T) {
 		t.Fatalf("Expected 201, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var plan models.Plan
+	var plan entities.Plan
 	json.NewDecoder(resp.Body).Decode(&plan)
 
 	if plan.Name != "Micro" {
@@ -138,7 +139,7 @@ func TestUpdatePlan(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var plan models.Plan
+	var plan entities.Plan
 	json.NewDecoder(resp.Body).Decode(&plan)
 
 	if plan.PriceCents != 12900 {
@@ -182,7 +183,7 @@ func TestListCustomers(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var customers []models.Customer
+	var customers []entities.Customer
 	json.NewDecoder(resp.Body).Decode(&customers)
 
 	if len(customers) != 3 {
@@ -217,7 +218,7 @@ func TestCreateCustomer(t *testing.T) {
 		t.Fatalf("Expected 201, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var customer models.Customer
+	var customer entities.Customer
 	json.NewDecoder(resp.Body).Decode(&customer)
 
 	if customer.Name != "NewCo" {
@@ -312,7 +313,7 @@ func TestGetCustomer(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var customer models.Customer
+	var customer entities.Customer
 	json.NewDecoder(resp.Body).Decode(&customer)
 
 	if customer.Name != "Embermind" {
@@ -358,7 +359,7 @@ func TestUpdateCustomer(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var customer models.Customer
+	var customer entities.Customer
 	json.NewDecoder(resp.Body).Decode(&customer)
 
 	if customer.Name != "Embermind LLC" {
@@ -443,7 +444,7 @@ func TestSuspendCustomer(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var customer models.Customer
+	var customer entities.Customer
 	json.NewDecoder(resp.Body).Decode(&customer)
 
 	if customer.Status != "suspended" {
@@ -484,7 +485,7 @@ func TestActivateCustomer(t *testing.T) {
 		t.Fatalf("Expected 200, got %d: %s", activateResp.StatusCode, string(b))
 	}
 
-	var customer models.Customer
+	var customer entities.Customer
 	json.NewDecoder(activateResp.Body).Decode(&customer)
 
 	if customer.Status != "active" {
@@ -523,7 +524,7 @@ func TestGetCustomerStats(t *testing.T) {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
 
-	var stats models.CustomerStats
+	var stats entities.CustomerStats
 	json.NewDecoder(resp.Body).Decode(&stats)
 
 	if stats.TotalCustomers != 3 {
@@ -551,7 +552,7 @@ func TestGetCustomerStatsAfterSuspend(t *testing.T) {
 	resp, _ := app.Test(req)
 	defer resp.Body.Close()
 
-	var stats models.CustomerStats
+	var stats entities.CustomerStats
 	json.NewDecoder(resp.Body).Decode(&stats)
 
 	if stats.TotalCustomers != 3 {
@@ -585,7 +586,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 		t.Fatalf("Create: Expected 201, got %d: %s", createResp.StatusCode, string(b))
 	}
 
-	var created models.Customer
+	var created entities.Customer
 	json.NewDecoder(createResp.Body).Decode(&created)
 	id := created.ID
 
@@ -597,7 +598,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 		t.Fatalf("Get: Expected 200, got %d", getResp.StatusCode)
 	}
 
-	var fetched models.Customer
+	var fetched entities.Customer
 	json.NewDecoder(getResp.Body).Decode(&fetched)
 
 	if fetched.Name != "FlowCo" {
@@ -614,7 +615,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 		t.Fatalf("Update: Expected 200, got %d", updateResp.StatusCode)
 	}
 
-	var updated models.Customer
+	var updated entities.Customer
 	json.NewDecoder(updateResp.Body).Decode(&updated)
 
 	if updated.Name != "FlowCo Inc." {
@@ -629,7 +630,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 		t.Fatalf("Suspend: Expected 200, got %d", suspendResp.StatusCode)
 	}
 
-	var suspended models.Customer
+	var suspended entities.Customer
 	json.NewDecoder(suspendResp.Body).Decode(&suspended)
 
 	if suspended.Status != "suspended" {
@@ -644,7 +645,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 		t.Fatalf("Activate: Expected 200, got %d", activateResp.StatusCode)
 	}
 
-	var activated models.Customer
+	var activated entities.Customer
 	json.NewDecoder(activateResp.Body).Decode(&activated)
 
 	if activated.Status != "active" {
@@ -725,7 +726,7 @@ func TestScaleClusterEndpoint(t *testing.T) {
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp, _ := app.Test(createReq)
 
-	var created models.Customer
+	var created entities.Customer
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	// Give goroutine time to provision
@@ -772,8 +773,11 @@ func TestUpgradeClusterEndpoint(t *testing.T) {
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp, _ := app.Test(createReq)
 
-	var created models.Customer
+	var created entities.Customer
 	json.NewDecoder(createResp.Body).Decode(&created)
+
+	// Allow async provisioning goroutine to create the cluster CRD
+	time.Sleep(100 * time.Millisecond)
 
 	// Upgrade
 	upgradeBody := `{"version":"v1.32.0"}`
@@ -821,7 +825,7 @@ func TestCreateCustomerSetsClusterFields(t *testing.T) {
 		t.Fatalf("Expected 201, got %d: %s", resp.StatusCode, string(b))
 	}
 
-	var customer models.Customer
+	var customer entities.Customer
 	json.NewDecoder(resp.Body).Decode(&customer)
 
 	if customer.CAPIClusterName != "cluster-co" {

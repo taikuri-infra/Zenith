@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
-	"github.com/dotechhq/zenith/services/api/internal/models"
 )
 
 func TestCreateAndGetCluster(t *testing.T) {
@@ -13,7 +13,7 @@ func TestCreateAndGetCluster(t *testing.T) {
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
-	input := models.CreateClusterInput{
+	input := dto.CreateClusterInput{
 		Name:       "test-cluster",
 		Region:     "fsn1",
 		Type:       "shared",
@@ -57,7 +57,7 @@ func TestCreateClusterWithTenant(t *testing.T) {
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
-	input := models.CreateClusterInput{
+	input := dto.CreateClusterInput{
 		Name:       "dedicated-cluster",
 		Region:     "nbg1",
 		Type:       "dedicated",
@@ -84,7 +84,7 @@ func TestCreateClusterDuplicate(t *testing.T) {
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
-	input := models.CreateClusterInput{
+	input := dto.CreateClusterInput{
 		Name:       "dup-cluster",
 		Region:     "fsn1",
 		Type:       "shared",
@@ -121,7 +121,7 @@ func TestListClusters(t *testing.T) {
 
 	// Create 3 clusters
 	for _, name := range []string{"alpha", "beta", "gamma"} {
-		input := models.CreateClusterInput{
+		input := dto.CreateClusterInput{
 			Name:       name,
 			Region:     "fsn1",
 			Type:       "shared",
@@ -163,7 +163,7 @@ func TestDeleteCluster(t *testing.T) {
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
-	input := models.CreateClusterInput{
+	input := dto.CreateClusterInput{
 		Name:       "to-delete",
 		Region:     "fsn1",
 		Type:       "shared",
@@ -201,7 +201,7 @@ func TestScaleCluster(t *testing.T) {
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
-	input := models.CreateClusterInput{
+	input := dto.CreateClusterInput{
 		Name:       "scale-me",
 		Region:     "fsn1",
 		Type:       "shared",
@@ -243,7 +243,7 @@ func TestUpgradeCluster(t *testing.T) {
 	client := NewClient(k8sClient)
 	ctx := context.Background()
 
-	input := models.CreateClusterInput{
+	input := dto.CreateClusterInput{
 		Name:       "upgrade-me",
 		Region:     "fsn1",
 		Type:       "shared",

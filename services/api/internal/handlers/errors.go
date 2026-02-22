@@ -47,3 +47,7 @@ func NewForbidden(detail string) *fiber.Error {
 func NewConflict(detail string) *fiber.Error {
 	return fiber.NewError(fiber.StatusConflict, detail)
 }
+
+func NewInternal(detail string) *fiber.Error {
+	return fiber.NewError(fiber.StatusInternalServerError, detail)
+}

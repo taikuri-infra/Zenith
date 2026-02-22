@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/cluster"
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -69,7 +70,7 @@ func (h *CustomerHandler) GetCustomer(c *fiber.Ctx) error {
 // CreateCustomer creates a new customer.
 // POST /api/v1/admin/customers
 func (h *CustomerHandler) CreateCustomer(c *fiber.Ctx) error {
-	var input models.CreateCustomerInput
+	var input dto.CreateCustomerInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -98,7 +99,7 @@ func (h *CustomerHandler) CreateCustomer(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create customer")
 	}
 
-	_ = h.admin.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Created customer " + input.Name + " (" + input.Domain + ")",
@@ -125,7 +126,7 @@ func (h *CustomerHandler) UpdateCustomer(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	var input models.UpdateCustomerInput
+	var input dto.UpdateCustomerInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -141,7 +142,7 @@ func (h *CustomerHandler) UpdateCustomer(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update customer")
 	}
 
-	_ = h.admin.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Updated customer " + customer.Name,
@@ -176,7 +177,7 @@ func (h *CustomerHandler) DeleteCustomer(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to delete customer")
 	}
 
-	_ = h.admin.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Deleted customer " + customerName,
@@ -201,7 +202,7 @@ func (h *CustomerHandler) SuspendCustomer(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to suspend customer")
 	}
 
-	_ = h.admin.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Suspended customer " + customer.Name,
@@ -226,7 +227,7 @@ func (h *CustomerHandler) ActivateCustomer(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to activate customer")
 	}
 
-	_ = h.admin.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Activated customer " + customer.Name,
@@ -290,7 +291,7 @@ func (h *CustomerHandler) ScaleCluster(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	var input models.ScaleClusterInput
+	var input dto.ScaleClusterInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -326,7 +327,7 @@ func (h *CustomerHandler) UpgradeCluster(c *fiber.Ctx) error {
 		return NewBadRequest("customer id is required")
 	}
 
-	var input models.UpgradeClusterInput
+	var input dto.UpgradeClusterInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -369,7 +370,7 @@ func (h *CustomerHandler) ListPlans(c *fiber.Ctx) error {
 // CreatePlan creates a new plan.
 // POST /api/v1/admin/plans
 func (h *CustomerHandler) CreatePlan(c *fiber.Ctx) error {
-	var input models.CreatePlanInput
+	var input dto.CreatePlanInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -395,7 +396,7 @@ func (h *CustomerHandler) CreatePlan(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create plan")
 	}
 
-	_ = h.admin.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Created plan " + input.Name,
@@ -412,7 +413,7 @@ func (h *CustomerHandler) UpdatePlan(c *fiber.Ctx) error {
 		return NewBadRequest("plan id is required")
 	}
 
-	var input models.UpdatePlanInput
+	var input dto.UpdatePlanInput
 	if err := c.BodyParser(&input); err != nil {
 		return NewBadRequest("invalid request body")
 	}
@@ -428,7 +429,7 @@ func (h *CustomerHandler) UpdatePlan(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update plan")
 	}
 
-	_ = h.admin.AddAuditEntry(c.Context(), models.AuditEntry{
+	_ = h.admin.AddAuditEntry(c.Context(), entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  actorFromContext(c),
 		Action: "Updated plan " + plan.Name,

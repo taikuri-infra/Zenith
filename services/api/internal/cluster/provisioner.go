@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/capi"
-	"github.com/dotechhq/zenith/services/api/internal/models"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
+"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 )
 
@@ -30,14 +31,14 @@ func NewProvisioner(capiClient *capi.Client, customers store.CustomerRepository,
 }
 
 // ProvisionCluster creates a CAPI cluster for a customer and updates DB status.
-func (p *Provisioner) ProvisionCluster(ctx context.Context, customer *models.Customer) error {
+func (p *Provisioner) ProvisionCluster(ctx context.Context, customer *entities.Customer) error {
 	// Update status to provisioning
-	if err := p.customers.UpdateClusterStatus(ctx, customer.ID, models.ClusterStatusProvisioning); err != nil {
+	if err := p.customers.UpdateClusterStatus(ctx, customer.ID, entities.ClusterStatusProvisioning); err != nil {
 		return err
 	}
 
 	// Create CAPI cluster CRD
-	input := models.CreateClusterInput{
+	input := dto.CreateClusterInput{
 		Name:       customer.CAPIClusterName,
 		Region:     customer.ClusterRegion,
 		Type:       "dedicated",
@@ -47,12 +48,12 @@ func (p *Provisioner) ProvisionCluster(ctx context.Context, customer *models.Cus
 	}
 
 	if _, err := p.capi.CreateCluster(ctx, input); err != nil {
-		_ = p.customers.UpdateClusterStatus(ctx, customer.ID, models.ClusterStatusError)
+		_ = p.customers.UpdateClusterStatus(ctx, customer.ID, entities.ClusterStatusError)
 		return err
 	}
 
 	// Audit log
-	_ = p.admin.AddAuditEntry(ctx, models.AuditEntry{
+	_ = p.admin.AddAuditEntry(ctx, entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  "system",
 		Action: "Provisioning cluster " + customer.CAPIClusterName + " for " + customer.Name,
@@ -62,18 +63,18 @@ func (p *Provisioner) ProvisionCluster(ctx context.Context, customer *models.Cus
 }
 
 // TeardownCluster deletes the CAPI cluster for a customer and updates DB status.
-func (p *Provisioner) TeardownCluster(ctx context.Context, customer *models.Customer) error {
+func (p *Provisioner) TeardownCluster(ctx context.Context, customer *entities.Customer) error {
 	if customer.CAPIClusterName == "" {
 		return nil
 	}
 
-	_ = p.customers.UpdateClusterStatus(ctx, customer.ID, models.ClusterStatusDeleting)
+	_ = p.customers.UpdateClusterStatus(ctx, customer.ID, entities.ClusterStatusDeleting)
 
 	if err := p.capi.DeleteCluster(ctx, customer.CAPIClusterName); err != nil {
 		log.Printf("Warning: failed to delete CAPI cluster %s: %v", customer.CAPIClusterName, err)
 	}
 
-	_ = p.admin.AddAuditEntry(ctx, models.AuditEntry{
+	_ = p.admin.AddAuditEntry(ctx, entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  "system",
 		Action: "Tearing down cluster " + customer.CAPIClusterName + " for " + customer.Name,
@@ -83,7 +84,7 @@ func (p *Provisioner) TeardownCluster(ctx context.Context, customer *models.Cust
 }
 
 // ScaleCluster scales the CAPI cluster and updates DB.
-func (p *Provisioner) ScaleCluster(ctx context.Context, customer *models.Customer, nodes int) error {
+func (p *Provisioner) ScaleCluster(ctx context.Context, customer *entities.Customer, nodes int) error {
 	if err := p.capi.ScaleCluster(ctx, customer.CAPIClusterName, nodes); err != nil {
 		return err
 	}
@@ -92,7 +93,7 @@ func (p *Provisioner) ScaleCluster(ctx context.Context, customer *models.Custome
 		return err
 	}
 
-	_ = p.admin.AddAuditEntry(ctx, models.AuditEntry{
+	_ = p.admin.AddAuditEntry(ctx, entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  "system",
 		Action: "Scaled cluster " + customer.CAPIClusterName + " to " + itoa(nodes) + " nodes",
@@ -102,7 +103,7 @@ func (p *Provisioner) ScaleCluster(ctx context.Context, customer *models.Custome
 }
 
 // UpgradeCluster upgrades the CAPI cluster K8s version and updates DB.
-func (p *Provisioner) UpgradeCluster(ctx context.Context, customer *models.Customer, version string) error {
+func (p *Provisioner) UpgradeCluster(ctx context.Context, customer *entities.Customer, version string) error {
 	if err := p.capi.UpgradeCluster(ctx, customer.CAPIClusterName, version); err != nil {
 		return err
 	}
@@ -111,7 +112,7 @@ func (p *Provisioner) UpgradeCluster(ctx context.Context, customer *models.Custo
 		return err
 	}
 
-	_ = p.admin.AddAuditEntry(ctx, models.AuditEntry{
+	_ = p.admin.AddAuditEntry(ctx, entities.AuditEntry{
 		Time:   time.Now().Format("15:04"),
 		Actor:  "system",
 		Action: "Upgrading cluster " + customer.CAPIClusterName + " to " + version,
@@ -121,7 +122,7 @@ func (p *Provisioner) UpgradeCluster(ctx context.Context, customer *models.Custo
 }
 
 // GetCluster retrieves the CAPI cluster resource for a customer.
-func (p *Provisioner) GetCluster(ctx context.Context, clusterName string) (*models.Cluster, error) {
+func (p *Provisioner) GetCluster(ctx context.Context, clusterName string) (*entities.Cluster, error) {
 	return p.capi.GetCluster(ctx, clusterName)
 }
 
@@ -171,9 +172,9 @@ func (p *Provisioner) syncOnce() {
 		var newStatus string
 		switch cluster.Status {
 		case "healthy":
-			newStatus = models.ClusterStatusRunning
+			newStatus = entities.ClusterStatusRunning
 		case "error":
-			newStatus = models.ClusterStatusError
+			newStatus = entities.ClusterStatusError
 		default:
 			continue
 		}
