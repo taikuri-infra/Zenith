@@ -1,0 +1,84 @@
+{{- if .Values.postgres.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-postgres
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-postgres" "component" "database") | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.port }}
+      targetPort: {{ .Values.postgres.port }}
+      protocol: TCP
+  selector:
+    app: zenith-postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zenith-postgres
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-postgres" "component" "database") | nindent 4 }}
+spec:
+  serviceName: zenith-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zenith-postgres
+  template:
+    metadata:
+      labels:
+        app: zenith-postgres
+        app.kubernetes.io/name: zenith-postgres
+        app.kubernetes.io/part-of: zenith
+        app.kubernetes.io/component: database
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.postgres.port }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.user }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-db-credentials
+                  key: db-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.user | quote }}]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.user | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}
+{{- end }}

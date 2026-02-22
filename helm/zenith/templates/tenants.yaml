@@ -1,0 +1,184 @@
+{{- range $name, $tenant := .Values.tenants }}
+---
+# =============================================
+# Tenant: {{ $name }}
+# =============================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $tenant.namespace }}
+  labels:
+    app.kubernetes.io/part-of: zenith
+    {{- range $k, $v := $tenant.labels }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+---
+# Redirect middleware for this tenant namespace
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-to-https
+  namespace: {{ $tenant.namespace }}
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# Mission Control deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-mc
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app: zenith-mc
+    app.kubernetes.io/name: zenith-mc
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mission-control
+    {{- range $k, $v := $tenant.labels }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  replicas: {{ $tenant.mc.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: zenith-mc
+  template:
+    metadata:
+      labels:
+        app: zenith-mc
+        app.kubernetes.io/name: zenith-mc
+        app.kubernetes.io/part-of: zenith
+        app.kubernetes.io/component: mission-control
+        {{- range $k, $v := $tenant.labels }}
+        {{ $k }}: {{ $v | quote }}
+        {{- end }}
+    spec:
+      containers:
+        - name: mission-control
+          image: {{ $tenant.mc.image }}
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 3100
+              protocol: TCP
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 250m
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-mc
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app: zenith-mc
+    app.kubernetes.io/name: zenith-mc
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mission-control
+spec:
+  ports:
+    - name: http
+      port: 3100
+      targetPort: 3100
+      protocol: TCP
+  selector:
+    app: zenith-mc
+---
+# Web Platform deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-web
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app: zenith-web
+    app.kubernetes.io/name: zenith-web
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: web
+    {{- range $k, $v := $tenant.labels }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  replicas: {{ $tenant.web.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: zenith-web
+  template:
+    metadata:
+      labels:
+        app: zenith-web
+        app.kubernetes.io/name: zenith-web
+        app.kubernetes.io/part-of: zenith
+        app.kubernetes.io/component: web
+        {{- range $k, $v := $tenant.labels }}
+        {{ $k }}: {{ $v | quote }}
+        {{- end }}
+    spec:
+      containers:
+        - name: web
+          image: {{ $tenant.web.image }}
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 250m
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-web
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app: zenith-web
+    app.kubernetes.io/name: zenith-web
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: web
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: zenith-web
+{{- end }}

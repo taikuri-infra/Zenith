@@ -4,6 +4,3 @@ metadata:
   name: {{ include "zenith.namespace" . }}
   labels:
     {{- include "zenith.labels" . | nindent 4 }}
-    {{- with .Values.namespace.labels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}

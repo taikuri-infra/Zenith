@@ -1,66 +1,37 @@
 {{/*
-Expand the name of the chart.
-*/}}
-{{- define "zenith.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{/*
-Create a default fully qualified app name.
-*/}}
-{{- define "zenith.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
-{{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/*
-Create chart name and version as used by the chart label.
-*/}}
-{{- define "zenith.chart" -}}
-{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{/*
-Common labels
-*/}}
-{{- define "zenith.labels" -}}
-helm.sh/chart: {{ include "zenith.chart" . }}
-{{ include "zenith.selectorLabels" . }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: zenith
-{{- end }}
-
-{{/*
-Selector labels
-*/}}
-{{- define "zenith.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "zenith.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-
-{{/*
-Service Account name
-*/}}
-{{- define "zenith.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "zenith.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
-{{- end }}
-{{- end }}
-
-{{/*
-Namespace
+Platform namespace
 */}}
 {{- define "zenith.namespace" -}}
-{{- default .Release.Namespace .Values.namespace.name }}
+{{- .Values.platform.namespace | default "zenith-platform" }}
+{{- end }}
+
+{{/*
+Common labels for all resources
+*/}}
+{{- define "zenith.labels" -}}
+app.kubernetes.io/part-of: zenith
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+{{- end }}
+
+{{/*
+Component labels — call with dict "name" "zenith-api" "component" "api"
+*/}}
+{{- define "zenith.componentLabels" -}}
+app: {{ .name }}
+app.kubernetes.io/name: {{ .name }}
+app.kubernetes.io/part-of: zenith
+app.kubernetes.io/component: {{ .component }}
+{{- end }}
+
+{{/*
+IngressRoute host match — call with a list of hosts
+Returns: Host(`h1`) || Host(`h2`)
+*/}}
+{{- define "zenith.hostMatch" -}}
+{{- $result := list -}}
+{{- range . -}}
+{{- $result = append $result (printf "Host(`%s`)" .) -}}
+{{- end -}}
+{{- join " || " $result -}}
 {{- end }}
