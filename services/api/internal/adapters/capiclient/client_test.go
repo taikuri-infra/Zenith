@@ -1,4 +1,4 @@
-package capi
+package capiclient
 
 import (
 	"context"

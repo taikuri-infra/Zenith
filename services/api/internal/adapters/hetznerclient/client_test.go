@@ -1,4 +1,4 @@
-package hetzner_test
+package hetznerclient_test
 
 import (
 	"context"
