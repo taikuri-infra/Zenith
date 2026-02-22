@@ -13,6 +13,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -21,7 +22,8 @@ func setupCustomerApp() (*fiber.App, *handlers.CustomerHandler) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	customerStore := store.NewMemoryCustomerRepository()
 	adminStore := store.NewMemoryAdminRepository()
-	handler := handlers.NewCustomerHandler(customerStore, adminStore, nil)
+	svc := services.NewCustomerService(customerStore, adminStore, nil)
+	handler := handlers.NewCustomerHandler(svc)
 	return app, handler
 }
 
@@ -679,7 +681,8 @@ func setupCustomerAppWithProvisioner() (*fiber.App, *handlers.CustomerHandler) {
 	k8sClient := k8s.NewMemoryClient()
 	capiClient := capi.NewClient(k8sClient)
 	provisioner := cluster.NewProvisioner(capiClient, customerStore, adminStore)
-	handler := handlers.NewCustomerHandler(customerStore, adminStore, provisioner)
+	svc := services.NewCustomerService(customerStore, adminStore, provisioner)
+	handler := handlers.NewCustomerHandler(svc)
 	return app, handler
 }
 

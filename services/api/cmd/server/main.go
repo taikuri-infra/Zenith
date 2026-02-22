@@ -20,6 +20,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/hetzner"
 	"github.com/dotechhq/zenith/services/api/internal/k8s"
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	stripeClient "github.com/dotechhq/zenith/services/api/internal/stripe"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres/migrations"
@@ -216,19 +217,28 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 		provisioner = cluster.NewProvisioner(capiClient, customerRepo, adminRepo)
 	}
 
+	// Services
+	adminSvc := services.NewAdminService(k8sClient, capiClient, adminRepo)
+	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret)
+
+	var customerSvc *services.CustomerService
+	if cfg.Mode == "saas" {
+		customerSvc = services.NewCustomerService(customerRepo, adminRepo, provisioner)
+	}
+
 	// Handlers
 	projectHandler := handlers.NewProjectHandler(k8sClient)
 	appHandler := handlers.NewAppHandler(k8sClient)
 	dbHandler := handlers.NewDatabaseHandler(k8sClient)
 	storageHandler := handlers.NewStorageHandler(k8sClient)
-	adminHandler := handlers.NewAdminHandler(k8sClient, capiClient, adminRepo)
+	adminHandler := handlers.NewAdminHandler(adminSvc)
 	var customerHandler *handlers.CustomerHandler
 	var meteringHandler *handlers.MeteringHandler
 	if cfg.Mode == "saas" {
-		customerHandler = handlers.NewCustomerHandler(customerRepo, adminRepo, provisioner)
+		customerHandler = handlers.NewCustomerHandler(customerSvc)
 		meteringHandler = handlers.NewMeteringHandler(meteringRepo, customerRepo)
 	}
-	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
+	authHandler := handlers.NewAuthHandler(authSvc)
 
 	// Plan management (Phase 4 — user plan + limits)
 	planRepo := store.NewMemoryUserPlanRepository()
@@ -369,7 +379,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	publicAppAuth.Post("/signup", appAuthHandler.Signup)
 	publicAppAuth.Post("/login", appAuthHandler.Login)
 
-	planHandler := handlers.NewPlanHandler(planRepo, appRepo, dbRepo, storageRepo, appAuthRepo)
+	planSvc := services.NewPlanService(planRepo, appRepo, dbRepo, storageRepo, appAuthRepo)
+	planHandler := handlers.NewPlanHandler(planSvc)
 	protected.Get("/plan", planHandler.GetMyPlan)
 	protected.Post("/plan/upgrade", planHandler.UpgradePlan)
 
@@ -378,16 +389,17 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 	var stripeAPI stripeClient.StripeAPI
 	if cfg.StripeBillingEnabled && cfg.StripeSecretKey != "" {
 		stripeAPI = stripeClient.NewClient(cfg.StripeSecretKey, cfg.StripeWebhookSecret)
-		planHandler.SetStripeEnabled(true)
+		planSvc.SetStripeEnabled(true)
 		log.Println("[billing] Stripe billing enabled")
 	} else {
 		log.Println("[billing] Stripe billing disabled (direct plan changes allowed)")
 	}
 
-	billingHandler := handlers.NewBillingHandler(
+	billingSvc := services.NewBillingService(
 		stripeAPI, billingRepo, planRepo, appRepo, dbRepo, storageRepo, appAuthRepo,
 		cfg.StripeProPriceID, cfg.StripeTeamPriceID, cfg.BaseDomain,
 	)
+	billingHandler := handlers.NewBillingHandler(billingSvc)
 	protected.Get("/billing", billingHandler.GetBillingStatus)
 	protected.Post("/billing/checkout", billingHandler.CreateCheckoutSession)
 	protected.Post("/billing/portal", billingHandler.CreatePortalSession)
@@ -396,10 +408,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo store.UserReposito
 
 	// Stripe webhook (unauthenticated — uses Stripe signature verification)
 	if stripeAPI != nil {
-		webhookHandlerStripe := handlers.NewStripeWebhookHandler(
-			stripeAPI, billingRepo, planRepo,
-			cfg.StripeProPriceID, cfg.StripeTeamPriceID,
-		)
+		webhookHandlerStripe := handlers.NewStripeWebhookHandler(billingSvc)
 		api.Post("/webhooks/stripe", webhookHandlerStripe.HandleEvent)
 	}
 

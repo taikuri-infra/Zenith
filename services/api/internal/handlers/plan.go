@@ -1,43 +1,20 @@
 package handlers
 
 import (
-	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
 // PlanHandler manages user plan operations.
 type PlanHandler struct {
-	planRepo       store.UserPlanRepository
-	appRepo        store.AppRepository
-	dbRepo         store.DatabaseRepository
-	storageRepo    store.StorageRepository
-	authRepo       store.AppAuthRepository
-	stripeEnabled  bool
+	svc *services.PlanService
 }
 
 // NewPlanHandler creates a new PlanHandler.
-func NewPlanHandler(
-	planRepo store.UserPlanRepository,
-	appRepo store.AppRepository,
-	dbRepo store.DatabaseRepository,
-	storageRepo store.StorageRepository,
-	authRepo store.AppAuthRepository,
-) *PlanHandler {
-	return &PlanHandler{
-		planRepo:    planRepo,
-		appRepo:     appRepo,
-		dbRepo:      dbRepo,
-		storageRepo: storageRepo,
-		authRepo:    authRepo,
-	}
-}
-
-// SetStripeEnabled marks whether Stripe billing is active.
-// When enabled, paid tier upgrades are rejected here and must go through /billing/checkout.
-func (h *PlanHandler) SetStripeEnabled(enabled bool) {
-	h.stripeEnabled = enabled
+func NewPlanHandler(svc *services.PlanService) *PlanHandler {
+	return &PlanHandler{svc: svc}
 }
 
 // GetMyPlan returns the current user's plan and usage.
@@ -45,28 +22,16 @@ func (h *PlanHandler) SetStripeEnabled(enabled bool) {
 func (h *PlanHandler) GetMyPlan(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
-	plan, err := h.planRepo.GetUserPlan(c.Context(), userID)
+	resp, err := h.svc.GetUserPlan(c.Context(), userID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	usage, err := h.calculateUsage(c, userID)
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
-	}
-
-	return c.JSON(dto.UserPlanResponse{
-		Tier:   plan.Tier,
-		Limits: plan.Limits,
-		Usage:  *usage,
-	})
+	return c.JSON(resp)
 }
 
 // UpgradePlan changes the user's plan tier.
 // POST /api/v1/plan/upgrade
-//
-// When Stripe billing is enabled, paid tiers (pro, team, enterprise) are rejected
-// with a message to use /billing/checkout instead. Free downgrades still work.
 func (h *PlanHandler) UpgradePlan(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
@@ -77,39 +42,12 @@ func (h *PlanHandler) UpgradePlan(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
-	// When Stripe is enabled, paid tiers must go through /billing/checkout
-	if h.stripeEnabled && input.Tier != entities.PlanFree {
-		return fiber.NewError(fiber.StatusBadRequest,
-			"paid plan upgrades require payment; use POST /api/v1/billing/checkout instead")
-	}
-
-	plan, err := h.planRepo.SetUserPlan(c.Context(), userID, input.Tier)
+	resp, err := h.svc.UpgradePlan(c.Context(), userID, input.Tier)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
-	usage, err := h.calculateUsage(c, userID)
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
-	}
-
-	return c.JSON(dto.UserPlanResponse{
-		Tier:   plan.Tier,
-		Limits: plan.Limits,
-		Usage:  *usage,
-	})
-}
-
-func (h *PlanHandler) calculateUsage(c *fiber.Ctx, userID string) (*dto.PlanUsage, error) {
-	appCount, _ := h.appRepo.CountAppsByUser(c.Context(), userID)
-	dbCount, _ := h.dbRepo.CountDatabasesByUser(c.Context(), userID)
-	bucketCount, _ := h.storageRepo.CountBucketsByUser(c.Context(), userID)
-
-	return &dto.PlanUsage{
-		Apps:      appCount,
-		Databases: dbCount,
-		Buckets:   bucketCount,
-	}, nil
+	return c.JSON(resp)
 }
 
 // CheckLimit is a middleware factory that checks plan limits before resource creation.
@@ -122,7 +60,7 @@ func CheckLimit(planRepo store.UserPlanRepository, resource string, countFn func
 
 		plan, err := planRepo.GetUserPlan(c.Context(), userID)
 		if err != nil {
-			return c.Next() // don't block on plan lookup failure
+			return c.Next()
 		}
 
 		count, err := countFn(c, userID)
