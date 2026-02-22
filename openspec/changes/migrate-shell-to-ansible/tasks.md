@@ -1,5 +1,5 @@
 ## 1. Ansible Foundation
-- [x] 1.1 Create `ansible/` directory structure (ansible.cfg, requirements.yml, inventory/, group_vars/, vault/, playbooks/, roles/)
+- [x] 1.1 Create `infra/ansible/` directory structure (ansible.cfg, requirements.yml, inventory/, group_vars/, vault/, playbooks/, roles/)
 - [x] 1.2 Write `ansible.cfg` (inventory path, roles path, vault settings, SSH pipelining, retry files disabled)
 - [x] 1.3 Write `requirements.yml` (kubernetes.core, community.general, community.crypto collections)
 - [x] 1.4 Write `inventory/production.yml` (ghasi server, current domains, current namespaces)
@@ -19,16 +19,16 @@
 - [x] 3.1 `roles/zenith-build/` — Docker build 6 images (landing, mc, web, api, mc-demo, web-demo) with parameterized tags
 - [x] 3.2 `roles/zenith-import/` — docker save | k3s ctr images import for each image
 - [x] 3.3 `roles/zenith-namespaces/` — create namespaces (zenith-platform, zenith-embermind, customer namespaces), create K8s secrets from vault vars
-- [x] 3.4 `roles/zenith-api/` — templated API deployment + service (from k8s/api.yaml), wait for rollout
+- [x] 3.4 `roles/zenith-api/` — templated API deployment + service (from infra/k8s/api.yaml), wait for rollout
 - [x] 3.5 `roles/zenith-landing/` — templated landing deployment + service
 - [x] 3.6 `roles/zenith-mc/` — templated MC deployment + service (real mode for customers, demo mode for platform)
 - [x] 3.7 `roles/zenith-web/` — templated Web deployment + service (real mode + demo mode)
-- [x] 3.8 `roles/zenith-ingress/` — templated IngressRoutes + Certificates (from k8s/ingress.yaml, k8s/certificates.yaml), supports dynamic customer domains
+- [x] 3.8 `roles/zenith-ingress/` — templated IngressRoutes + Certificates (from infra/k8s/ingress.yaml, infra/k8s/certificates.yaml), supports dynamic customer domains
 
 ## 4. Infrastructure Roles
-- [x] 4.1 `roles/postgres/` — PostgreSQL StatefulSet + Service (from k8s/postgres.yaml), wait for ready, verify DB connectivity
-- [x] 4.2 `roles/keda/` — Helm install KEDA + HTTP Add-on (from k8s/keda/), apply cold-start service + error middleware
-- [x] 4.3 `roles/monitoring/` — Helm install kube-prometheus-stack + Loki + Promtail (from helm/monitoring/ values)
+- [x] 4.1 `roles/postgres/` — PostgreSQL StatefulSet + Service (from infra/k8s/postgres.yaml), wait for ready, verify DB connectivity
+- [x] 4.2 `roles/keda/` — Helm install KEDA + HTTP Add-on (from infra/k8s/keda/), apply cold-start service + error middleware
+- [x] 4.3 `roles/monitoring/` — Helm install kube-prometheus-stack + Loki + Promtail (from infra/helm/monitoring/ values)
 - [x] 4.4 `roles/dns/` — Run Terraform apply for Cloudflare DNS (or direct Cloudflare API via community.general.cloudflare_dns)
 
 ## 5. Playbooks
@@ -43,10 +43,10 @@
 - [ ] 6.2 Run `apps.yml` on staging — verify incremental deploy works (no infra changes)
 - [ ] 6.3 Run full `site.yml` on production — verify existing services unaffected, same endpoints work
 - [ ] 6.4 Run idempotency test — execute `site.yml` twice, verify no changes on second run
-- [x] 6.5 Document usage in project README or `ansible/README.md`
+- [x] 6.5 Document usage in project README or `infra/ansible/README.md`
 
 ## 7. Cleanup
-- [ ] 7.1 Mark `scripts/deploy.sh` as deprecated (add comment header pointing to Ansible)
-- [ ] 7.2 Mark `scripts/cloudflare-dns.sh` as deprecated
-- [ ] 7.3 Mark `k8s/keda/install.sh` as deprecated
+- [ ] 7.1 Mark `infra/scripts/deploy.sh` as deprecated (add comment header pointing to Ansible)
+- [ ] 7.2 Mark `infra/scripts/cloudflare-dns.sh` as deprecated
+- [ ] 7.3 Mark `infra/k8s/keda/install.sh` as deprecated
 - [ ] 7.4 Update `MEMORY.md` redeploy command to use Ansible

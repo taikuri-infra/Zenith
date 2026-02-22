@@ -3,7 +3,7 @@
 # Zenith Platform End-to-End Test Script
 # Tests all endpoints, SSL certificates, DNS resolution, and content.
 #
-# Usage: ./scripts/e2e-test.sh [--verbose]
+# Usage: ./infra/scripts/e2e-test.sh [--verbose]
 #
 # Can be run from anywhere (local machine, CI, etc.)
 # Returns exit 0 if all tests pass, exit 1 if any fail.

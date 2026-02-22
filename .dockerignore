@@ -60,7 +60,7 @@ LICENSE
 .gitlab-ci.yml
 
 # Helm charts (not needed for app builds)
-helm/
+infra/
 
 # CLI source (not needed for app builds)
 cli/

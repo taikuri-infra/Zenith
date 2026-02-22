@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Zenith — One-liner install script
-# Usage: curl -fsSL https://raw.githubusercontent.com/dotechhq/zenith/main/scripts/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/dotechhq/zenith/main/infra/scripts/install.sh | bash
 
 REPO_URL="https://github.com/dotechhq/zenith.git"
 INSTALL_DIR="zenith"

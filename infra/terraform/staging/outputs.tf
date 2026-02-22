@@ -14,6 +14,6 @@ output "s3_bucket" {
 }
 
 output "ansible_inventory_hint" {
-  description = "Use this IP in ansible/inventory/staging.yml"
+  description = "Use this IP in infra/ansible/inventory/staging.yml"
   value       = "ansible_host: ${var.create_server ? module.staging_server[0].server_ip : var.existing_server_ip}"
 }

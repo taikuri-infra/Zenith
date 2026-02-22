@@ -83,7 +83,7 @@ vault_cloudflare_token: "<cloudflare-api-token>"
 ## Directory Structure
 
 ```
-ansible/
+infra/ansible/
 ├── ansible.cfg              # Ansible configuration
 ├── requirements.yml         # Galaxy collections
 ├── inventory/

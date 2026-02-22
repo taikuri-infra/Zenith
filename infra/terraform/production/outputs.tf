@@ -34,7 +34,7 @@ output "s3_bucket" {
 }
 
 output "ansible_hint" {
-  description = "Use these IPs in ansible/inventory/production.yml"
+  description = "Use these IPs in infra/ansible/inventory/production.yml"
   value       = <<-EOT
     Management: ${module.management.server_ip}
     Cluster:    ${module.cluster.server_ip}

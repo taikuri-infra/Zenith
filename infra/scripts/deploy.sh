@@ -3,7 +3,7 @@
 # Zenith Platform Deployment Script
 # Runs on the server (ghasi) at /opt/zenith
 #
-# Usage: ./scripts/deploy.sh [--skip-build] [--skip-pull]
+# Usage: ./infra/scripts/deploy.sh [--skip-build] [--skip-pull]
 #
 # Options:
 #   --skip-build    Skip Docker image builds (use existing images)
@@ -110,7 +110,7 @@ done
 # -------------------------------------------------------
 log_step "Ensuring secrets exist..."
 
-kubectl apply -f k8s/namespace.yaml
+kubectl apply -f infra/k8s/namespace.yaml
 log_ok "Namespaces created/updated"
 
 if ! kubectl get secret zenith-secrets -n zenith-platform > /dev/null 2>&1; then
@@ -144,32 +144,32 @@ fi
 # -------------------------------------------------------
 log_step "Applying Kubernetes manifests..."
 
-kubectl apply -f k8s/postgres.yaml
+kubectl apply -f infra/k8s/postgres.yaml
 log_ok "PostgreSQL StatefulSet applied"
 
 echo "  Waiting for PostgreSQL to be ready..."
 kubectl rollout status statefulset/zenith-postgres -n zenith-platform --timeout=120s
 log_ok "PostgreSQL is ready"
 
-kubectl apply -f k8s/landing.yaml
+kubectl apply -f infra/k8s/landing.yaml
 log_ok "Landing deployment applied"
 
-kubectl apply -f k8s/mission-control.yaml
+kubectl apply -f infra/k8s/mission-control.yaml
 log_ok "Mission Control deployment applied"
 
-kubectl apply -f k8s/api.yaml
+kubectl apply -f infra/k8s/api.yaml
 log_ok "API deployment applied"
 
-kubectl apply -f k8s/web.yaml
+kubectl apply -f infra/k8s/web.yaml
 log_ok "Web (embermind) deployment applied"
 
-kubectl apply -f k8s/demo.yaml
+kubectl apply -f infra/k8s/demo.yaml
 log_ok "Demo deployments applied"
 
-kubectl apply -f k8s/certificates.yaml
+kubectl apply -f infra/k8s/certificates.yaml
 log_ok "TLS certificates applied"
 
-kubectl apply -f k8s/ingress.yaml
+kubectl apply -f infra/k8s/ingress.yaml
 log_ok "Ingress routes applied"
 
 # -------------------------------------------------------

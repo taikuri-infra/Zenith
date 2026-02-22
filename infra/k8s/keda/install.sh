@@ -2,7 +2,7 @@
 # install.sh — Installs KEDA + HTTP Add-on for scale-to-zero support.
 # Idempotent: safe to re-run.
 #
-# Usage: bash k8s/keda/install.sh
+# Usage: bash infra/k8s/keda/install.sh
 
 set -euo pipefail
 

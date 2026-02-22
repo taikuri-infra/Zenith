@@ -22,7 +22,7 @@ GITHUB_WEBHOOK_SECRET="your-secret" BASE_DOMAIN="freezenith.com" go run ./cmd/se
 Deploy engine is part of the main API server (`zenith-api`):
 
 ```bash
-ssh ghasi "cd /opt/zenith && bash scripts/deploy.sh"
+ssh ghasi "cd /opt/zenith && bash infra/scripts/deploy.sh"
 ```
 
 Required env vars in `zenith-secrets` K8s Secret:
