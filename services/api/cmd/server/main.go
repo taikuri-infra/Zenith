@@ -22,7 +22,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
 	"github.com/dotechhq/zenith/services/api/internal/store"
 	stripeClient "github.com/dotechhq/zenith/services/api/internal/stripe"
-	"github.com/dotechhq/zenith/services/api/internal/store/migrations"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres/migrations"
 	"github.com/dotechhq/zenith/services/api/internal/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gofiber/fiber/v2"
