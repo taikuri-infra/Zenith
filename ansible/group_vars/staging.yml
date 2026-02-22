@@ -1,0 +1,26 @@
+# Zenith Ansible — Staging overrides
+
+vault_jwt_secret: "CHANGE_ME_USE_VAULT"
+vault_admin_email: "admin@staging.freezenith.com"
+vault_admin_password: "CHANGE_ME_USE_VAULT"
+vault_db_password: "CHANGE_ME_USE_VAULT"
+
+cors_origins: "https://demo-ms-staging.freezenith.com,https://demo-cloud-staging.freezenith.com"
+
+# Lower resources for staging
+resources:
+  api:
+    requests: { cpu: "25m", memory: "32Mi" }
+    limits: { cpu: "150m", memory: "128Mi" }
+  landing:
+    requests: { cpu: "25m", memory: "32Mi" }
+    limits: { cpu: "50m", memory: "64Mi" }
+  mc:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits: { cpu: "150m", memory: "128Mi" }
+  web:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits: { cpu: "150m", memory: "128Mi" }
+  postgres:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits: { cpu: "250m", memory: "256Mi" }

@@ -1,0 +1,32 @@
+---
+# infra.yml — Infrastructure only (no app builds or deployments)
+#
+# Usage:
+#   ansible-playbook playbooks/infra.yml -i inventory/production.yml
+#   ansible-playbook playbooks/infra.yml -i inventory/staging.yml --tags keda
+
+- name: Provision Zenith Infrastructure
+  hosts: all
+  gather_facts: true
+
+  roles:
+    - role: common
+      tags: [common]
+
+    - role: k3s
+      tags: [k3s]
+
+    - role: cert-manager
+      tags: [cert-manager]
+
+    - role: postgres
+      tags: [postgres]
+
+    - role: keda
+      tags: [keda]
+
+    - role: monitoring
+      tags: [monitoring]
+
+    - role: dns
+      tags: [dns]

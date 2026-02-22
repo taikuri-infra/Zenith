@@ -1,0 +1,136 @@
+---
+# roles/monitoring — kube-prometheus-stack + Loki + Promtail
+
+- name: Add Prometheus community Helm repo
+  kubernetes.core.helm_repository:
+    name: prometheus-community
+    repo_url: https://prometheus-community.github.io/helm-charts
+    kubeconfig: "{{ kubeconfig_path }}"
+  when: enable_monitoring
+  tags: [infra, monitoring]
+
+- name: Add Grafana Helm repo
+  kubernetes.core.helm_repository:
+    name: grafana
+    repo_url: https://grafana.github.io/helm-charts
+    kubeconfig: "{{ kubeconfig_path }}"
+  when: enable_monitoring
+  tags: [infra, monitoring]
+
+- name: Install kube-prometheus-stack
+  kubernetes.core.helm:
+    name: kube-prometheus-stack
+    chart_ref: prometheus-community/kube-prometheus-stack
+    chart_version: "{{ kube_prometheus_version }}"
+    release_namespace: monitoring
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      grafana:
+        enabled: true
+        adminPassword: "{{ vault_admin_password }}"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      prometheus:
+        prometheusSpec:
+          retention: 15d
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 10Gi
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+      alertmanager:
+        enabled: true
+        alertmanagerSpec:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      nodeExporter:
+        enabled: true
+      kubeStateMetrics:
+        enabled: true
+    wait: true
+    wait_timeout: 600s
+  when: enable_monitoring
+  tags: [infra, monitoring]
+
+- name: Install Loki
+  kubernetes.core.helm:
+    name: loki
+    chart_ref: grafana/loki
+    chart_version: "{{ loki_version }}"
+    release_namespace: monitoring
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      deploymentMode: SingleBinary
+      loki:
+        auth_enabled: false
+        commonConfig:
+          replication_factor: 1
+        storage:
+          type: filesystem
+      singleBinary:
+        replicas: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        persistence:
+          enabled: true
+          size: 10Gi
+      gateway:
+        enabled: false
+      read:
+        replicas: 0
+      write:
+        replicas: 0
+      backend:
+        replicas: 0
+    wait: true
+    wait_timeout: 300s
+  when: enable_monitoring
+  tags: [infra, monitoring]
+
+- name: Install Promtail
+  kubernetes.core.helm:
+    name: promtail
+    chart_ref: grafana/promtail
+    chart_version: "{{ promtail_version }}"
+    release_namespace: monitoring
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      config:
+        clients:
+          - url: http://loki:3100/loki/api/v1/push
+      resources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+    wait: true
+    wait_timeout: 300s
+  when: enable_monitoring
+  tags: [infra, monitoring]

@@ -1,0 +1,16 @@
+---
+# build.yml — Build Docker images only (no deployment)
+#
+# Usage:
+#   ansible-playbook playbooks/build.yml -i inventory/production.yml
+
+- name: Build Zenith Docker Images
+  hosts: all
+  gather_facts: false
+
+  roles:
+    - role: zenith-build
+      tags: [build]
+
+    - role: zenith-import
+      tags: [build, import]

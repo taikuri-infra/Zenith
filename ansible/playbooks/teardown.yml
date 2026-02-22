@@ -1,0 +1,69 @@
+---
+# teardown.yml — Remove all Zenith resources (DANGEROUS)
+#
+# Usage:
+#   ansible-playbook playbooks/teardown.yml -i inventory/staging.yml
+#
+# This will NOT remove k3s, cert-manager, or KEDA — only Zenith app resources.
+
+- name: Teardown Zenith Platform
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Confirm teardown
+      ansible.builtin.pause:
+        prompt: "This will delete all Zenith resources in {{ env_name }}. Type 'yes' to continue"
+      register: confirm
+      tags: [always]
+
+    - name: Abort if not confirmed
+      ansible.builtin.fail:
+        msg: "Teardown aborted."
+      when: confirm.user_input != "yes"
+      tags: [always]
+
+    - name: Delete customer namespaces
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: absent
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ item.namespace }}"
+      loop: "{{ customer_tenants }}"
+      tags: [teardown]
+
+    - name: Delete platform deployments
+      ansible.builtin.command: >
+        k3s kubectl delete deployment --all -n {{ platform_namespace }}
+      changed_when: true
+      ignore_errors: true
+      tags: [teardown]
+
+    - name: Delete platform services
+      ansible.builtin.command: >
+        k3s kubectl delete service --all -n {{ platform_namespace }}
+      changed_when: true
+      ignore_errors: true
+      tags: [teardown]
+
+    - name: Delete platform IngressRoutes
+      ansible.builtin.command: >
+        k3s kubectl delete ingressroute --all -n {{ platform_namespace }}
+      changed_when: true
+      ignore_errors: true
+      tags: [teardown]
+
+    - name: Delete platform certificates
+      ansible.builtin.command: >
+        k3s kubectl delete certificate --all -n {{ platform_namespace }}
+      changed_when: true
+      ignore_errors: true
+      tags: [teardown]
+
+    - name: Show teardown result
+      ansible.builtin.debug:
+        msg: "Zenith {{ env_name }} resources removed. Namespace {{ platform_namespace }} still exists (delete manually if needed)."
+      tags: [always]

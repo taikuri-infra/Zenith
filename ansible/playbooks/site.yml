@@ -1,0 +1,97 @@
+---
+# site.yml — Full Zenith deployment (infrastructure + applications)
+#
+# Usage:
+#   ansible-playbook playbooks/site.yml -i inventory/production.yml
+#   ansible-playbook playbooks/site.yml -i inventory/staging.yml
+#   ansible-playbook playbooks/site.yml -i inventory/production.yml --tags build,deploy
+#
+# Tags:
+#   common, k3s, cert-manager, traefik, infra, postgres, keda, monitoring, dns
+#   build, import, deploy, namespaces, secrets, api, landing, mc, web, ingress, tls
+#   demo, customers, restart
+
+- name: Deploy Zenith Platform
+  hosts: all
+  gather_facts: true
+
+  pre_tasks:
+    - name: Display deployment info
+      ansible.builtin.debug:
+        msg: |
+          Deploying Zenith to {{ env_name }}
+          Host: {{ ansible_host }}
+          Domain: {{ base_domain }}
+          Namespace: {{ platform_namespace }}
+          Tenants: {{ customer_tenants | map(attribute='name') | list }}
+      tags: [always]
+
+  roles:
+    # --- Infrastructure ---
+    - role: common
+      tags: [common, infra]
+
+    - role: k3s
+      tags: [k3s, infra]
+
+    - role: cert-manager
+      tags: [cert-manager, infra]
+
+    - role: postgres
+      tags: [postgres, infra]
+
+    # --- Build images ---
+    - role: zenith-build
+      tags: [build]
+
+    - role: zenith-import
+      tags: [build, import]
+
+    # --- Deploy applications ---
+    - role: zenith-namespaces
+      tags: [deploy, namespaces]
+
+    - role: traefik-config
+      tags: [traefik, deploy]
+
+    - role: zenith-api
+      tags: [deploy, api]
+
+    - role: zenith-landing
+      tags: [deploy, landing]
+
+    - role: zenith-mc
+      tags: [deploy, mc]
+
+    - role: zenith-web
+      tags: [deploy, web]
+
+    - role: zenith-ingress
+      tags: [deploy, ingress]
+
+    # --- Optional infrastructure ---
+    - role: keda
+      tags: [keda, infra]
+
+    - role: monitoring
+      tags: [monitoring, infra]
+
+    - role: dns
+      tags: [dns]
+
+  post_tasks:
+    - name: Show deployment summary
+      ansible.builtin.debug:
+        msg: |
+          =============================================
+            Zenith {{ env_name }} deployment complete!
+          =============================================
+          Landing:    https://{{ base_domain }}
+          API:        https://{{ api_domain }}/health
+          Demo MC:    https://{{ demo_mc_domain }}
+          Demo Web:   https://{{ demo_web_domain }}
+          {% for t in customer_tenants %}
+          {{ t.name }} MC:  https://{{ t.mc_domain }}
+          {{ t.name }} Web: https://{{ t.web_domain }}
+          {% endfor %}
+      tags: [always]

@@ -1,0 +1,198 @@
+---
+# roles/zenith-web — Web Platform deployments (demo + customer)
+
+# --- Demo Web (platform namespace) ---
+- name: Deploy zenith-web-demo
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: zenith-web-demo
+        namespace: "{{ platform_namespace }}"
+        labels:
+          app: zenith-web-demo
+          app.kubernetes.io/name: zenith-web-demo
+          app.kubernetes.io/part-of: zenith
+          app.kubernetes.io/component: web-demo
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: zenith-web-demo
+        template:
+          metadata:
+            labels:
+              app: zenith-web-demo
+              app.kubernetes.io/name: zenith-web-demo
+          spec:
+            containers:
+              - name: web
+                image: "zenith-web-demo:{{ image_tag }}"
+                imagePullPolicy: "{{ image_pull_policy }}"
+                ports:
+                  - containerPort: "{{ web_port }}"
+                    name: http
+                    protocol: TCP
+                resources:
+                  requests:
+                    cpu: "{{ resources.web.requests.cpu }}"
+                    memory: "{{ resources.web.requests.memory }}"
+                  limits:
+                    cpu: "{{ resources.web.limits.cpu }}"
+                    memory: "{{ resources.web.limits.memory }}"
+                livenessProbe:
+                  httpGet:
+                    path: /
+                    port: "{{ web_port }}"
+                  initialDelaySeconds: 15
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                readinessProbe:
+                  httpGet:
+                    path: /
+                    port: "{{ web_port }}"
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+  when: enable_demo
+  tags: [deploy, web, demo]
+
+- name: Create zenith-web-demo service
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: zenith-web-demo
+        namespace: "{{ platform_namespace }}"
+        labels:
+          app: zenith-web-demo
+          app.kubernetes.io/name: zenith-web-demo
+          app.kubernetes.io/part-of: zenith
+      spec:
+        selector:
+          app: zenith-web-demo
+        ports:
+          - port: "{{ web_port }}"
+            targetPort: "{{ web_port }}"
+            protocol: TCP
+            name: http
+  when: enable_demo
+  tags: [deploy, web, demo]
+
+# --- Customer Web (one per tenant) ---
+- name: Deploy customer Web Platform
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: zenith-web
+        namespace: "{{ item.namespace }}"
+        labels:
+          app: zenith-web
+          app.kubernetes.io/name: zenith-web
+          app.kubernetes.io/part-of: zenith
+          app.kubernetes.io/component: web
+          zenith.dev/tenant: "{{ item.name }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: zenith-web
+        template:
+          metadata:
+            labels:
+              app: zenith-web
+              app.kubernetes.io/name: zenith-web
+              zenith.dev/tenant: "{{ item.name }}"
+          spec:
+            containers:
+              - name: web
+                image: "zenith-web:{{ image_tag }}"
+                imagePullPolicy: "{{ image_pull_policy }}"
+                ports:
+                  - containerPort: "{{ web_port }}"
+                    name: http
+                    protocol: TCP
+                resources:
+                  requests:
+                    cpu: "{{ resources.web.requests.cpu }}"
+                    memory: "{{ resources.web.requests.memory }}"
+                  limits:
+                    cpu: "{{ resources.web.limits.cpu }}"
+                    memory: "{{ resources.web.limits.memory }}"
+                livenessProbe:
+                  httpGet:
+                    path: /
+                    port: "{{ web_port }}"
+                  initialDelaySeconds: 15
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                readinessProbe:
+                  httpGet:
+                    path: /
+                    port: "{{ web_port }}"
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+  loop: "{{ customer_tenants }}"
+  tags: [deploy, web, customers]
+
+- name: Create customer Web services
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: zenith-web
+        namespace: "{{ item.namespace }}"
+        labels:
+          app: zenith-web
+          app.kubernetes.io/name: zenith-web
+          app.kubernetes.io/part-of: zenith
+          zenith.dev/tenant: "{{ item.name }}"
+      spec:
+        selector:
+          app: zenith-web
+        ports:
+          - port: "{{ web_port }}"
+            targetPort: "{{ web_port }}"
+            protocol: TCP
+            name: http
+  loop: "{{ customer_tenants }}"
+  tags: [deploy, web, customers]
+
+# --- Restart ---
+- name: Restart zenith-web-demo
+  ansible.builtin.command: >
+    k3s kubectl rollout restart deployment/zenith-web-demo
+    -n {{ platform_namespace }}
+  when: enable_demo
+  changed_when: true
+  tags: [deploy, web, restart]
+
+- name: Restart customer Web deployments
+  ansible.builtin.command: >
+    k3s kubectl rollout restart deployment/zenith-web
+    -n {{ item.namespace }}
+  loop: "{{ customer_tenants }}"
+  changed_when: true
+  tags: [deploy, web, restart]
+
+- name: Wait for Web rollouts
+  ansible.builtin.command: >
+    k3s kubectl rollout status deployment/zenith-web
+    -n {{ item.namespace }} --timeout=120s
+  loop: "{{ customer_tenants }}"
+  changed_when: false
+  tags: [deploy, web]

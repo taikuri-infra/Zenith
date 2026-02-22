@@ -1,0 +1,28 @@
+all:
+  hosts:
+    ghasi:
+      ansible_host: 161.35.82.211
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+  vars:
+    env_name: staging
+    base_domain: staging.freezenith.com
+    api_domain: api-staging.freezenith.com
+    demo_mc_domain: demo-ms-staging.freezenith.com
+    demo_web_domain: demo-cloud-staging.freezenith.com
+    landing_domains:
+      - staging.freezenith.com
+
+    platform_namespace: zenith-staging
+    enable_demo: true
+    enable_keda: false
+    enable_monitoring: false
+
+    customer_tenants: []
+
+    platform_tls_secret: staging-tls
+    platform_tls_domains:
+      - staging.freezenith.com
+      - api-staging.freezenith.com
+      - demo-ms-staging.freezenith.com
+      - demo-cloud-staging.freezenith.com

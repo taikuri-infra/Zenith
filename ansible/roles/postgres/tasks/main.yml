@@ -1,0 +1,112 @@
+---
+# roles/postgres — PostgreSQL StatefulSet
+
+- name: Deploy PostgreSQL StatefulSet
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: zenith-postgres
+        namespace: "{{ platform_namespace }}"
+        labels:
+          app: zenith-postgres
+          app.kubernetes.io/name: zenith-postgres
+          app.kubernetes.io/part-of: zenith
+          app.kubernetes.io/component: database
+      spec:
+        serviceName: zenith-postgres
+        replicas: 1
+        selector:
+          matchLabels:
+            app: zenith-postgres
+        template:
+          metadata:
+            labels:
+              app: zenith-postgres
+              app.kubernetes.io/name: zenith-postgres
+          spec:
+            containers:
+              - name: postgres
+                image: "{{ postgres_image }}"
+                ports:
+                  - containerPort: 5432
+                    name: postgres
+                env:
+                  - name: POSTGRES_DB
+                    value: "{{ postgres_db }}"
+                  - name: POSTGRES_USER
+                    value: "{{ postgres_user }}"
+                  - name: POSTGRES_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: zenith-db-credentials
+                        key: db-password
+                  - name: PGDATA
+                    value: /var/lib/postgresql/data/pgdata
+                volumeMounts:
+                  - name: data
+                    mountPath: /var/lib/postgresql/data
+                resources:
+                  requests:
+                    cpu: "{{ resources.postgres.requests.cpu }}"
+                    memory: "{{ resources.postgres.requests.memory }}"
+                  limits:
+                    cpu: "{{ resources.postgres.limits.cpu }}"
+                    memory: "{{ resources.postgres.limits.memory }}"
+                livenessProbe:
+                  exec:
+                    command: ["pg_isready", "-U", "{{ postgres_user }}"]
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                  timeoutSeconds: 5
+                readinessProbe:
+                  exec:
+                    command: ["pg_isready", "-U", "{{ postgres_user }}"]
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+        volumeClaimTemplates:
+          - metadata:
+              name: data
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: "{{ postgres_storage_size }}"
+  tags: [infra, postgres]
+
+- name: Create PostgreSQL headless service
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: zenith-postgres
+        namespace: "{{ platform_namespace }}"
+        labels:
+          app: zenith-postgres
+          app.kubernetes.io/name: zenith-postgres
+          app.kubernetes.io/part-of: zenith
+          app.kubernetes.io/component: database
+      spec:
+        clusterIP: None
+        selector:
+          app: zenith-postgres
+        ports:
+          - port: 5432
+            targetPort: 5432
+            protocol: TCP
+            name: postgres
+  tags: [infra, postgres]
+
+- name: Wait for PostgreSQL to be ready
+  ansible.builtin.command: >
+    k3s kubectl rollout status statefulset/zenith-postgres
+    -n {{ platform_namespace }} --timeout=120s
+  changed_when: false
+  tags: [infra, postgres]
