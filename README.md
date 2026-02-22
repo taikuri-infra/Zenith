@@ -7,7 +7,7 @@ Zenith is a self-hosted platform-as-a-service that gives you Heroku-like simplic
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dotechhq/zenith/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dotechhq/zenith/main/infra/scripts/install.sh | bash
 ```
 
 Or manually:

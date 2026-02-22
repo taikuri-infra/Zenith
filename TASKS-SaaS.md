@@ -345,13 +345,13 @@ Pro:  always-on, custom domain
 - [x] **PRE-15** Full page set: Dashboard, Clusters, Tenants, Modules, Updates, Infrastructure, State, Audit, Settings
 
 #### Infrastructure & IaC
-- [x] **PRE-16** K8s manifests (`k8s/*.yaml`): namespaces, deployments, services, certificates, IngressRoutes
-- [x] **PRE-17** `scripts/deploy.sh`: Full pipeline — git pull, build 6 images, import to k3s, apply manifests, rollout
-- [x] **PRE-18** Terraform DNS (`terraform/`): Cloudflare provider, 7 A records (freezenith.com + embermind.app)
-- [x] **PRE-19** `scripts/cloudflare-dns.sh`: Quick DNS CRUD via Cloudflare API (create/delete/status)
-- [x] **PRE-20** `scripts/e2e-test.sh`: Post-deploy validation (DNS, HTTPS, redirects, SSL, content, API health)
-- [x] **PRE-21** Helm chart `helm/zenith/`: API + Operator + Auth + Kong + OTEL + RBAC + service mesh templates
-- [x] **PRE-22** Helm chart `helm/monitoring/`: kube-prometheus-stack + Loki + Promtail + alerting rules
+- [x] **PRE-16** K8s manifests (`infra/k8s/*.yaml`): namespaces, deployments, services, certificates, IngressRoutes
+- [x] **PRE-17** `infra/scripts/deploy.sh`: Full pipeline — git pull, build 6 images, import to k3s, apply manifests, rollout
+- [x] **PRE-18** Terraform DNS (`infra/terraform/`): Cloudflare provider, 7 A records (freezenith.com + embermind.app)
+- [x] **PRE-19** `infra/scripts/cloudflare-dns.sh`: Quick DNS CRUD via Cloudflare API (create/delete/status)
+- [x] **PRE-20** `infra/scripts/e2e-test.sh`: Post-deploy validation (DNS, HTTPS, redirects, SSL, content, API health)
+- [x] **PRE-21** Helm chart `infra/helm/zenith/`: API + Operator + Auth + Kong + OTEL + RBAC + service mesh templates
+- [x] **PRE-22** Helm chart `infra/helm/monitoring/`: kube-prometheus-stack + Loki + Promtail + alerting rules
 - [x] **PRE-23** cert-manager with letsencrypt-prod ClusterIssuer, HTTP-01 solver
 - [x] **PRE-24** Traefik 3.5.1 IngressRoutes with HTTP→HTTPS redirect middleware
 
@@ -2184,7 +2184,7 @@ Every phase follows this process before moving to the next:
    → Docker build — images build successfully
 
 4. DEPLOY TO SERVER
-   → ssh ghasi "cd /opt/zenith && bash scripts/deploy.sh"
+   → ssh ghasi "cd /opt/zenith && bash infra/scripts/deploy.sh"
    → All pods running, no CrashLoopBackoff
    → Health endpoints respond 200
 
@@ -2230,7 +2230,7 @@ Every phase follows this process before moving to the next:
 
 ```bash
 #!/bin/bash
-# scripts/e2e-test-full.sh — runs ALL scenarios against live API
+# infra/scripts/e2e-test-full.sh — runs ALL scenarios against live API
 
 API=https://api.freezenith.com/api/v1
 PASS=0

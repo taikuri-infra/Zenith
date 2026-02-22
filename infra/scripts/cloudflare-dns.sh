@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # Cloudflare DNS Record Management for Zenith Platform
-# Usage: ./scripts/cloudflare-dns.sh [create|delete|status]
+# Usage: ./infra/scripts/cloudflare-dns.sh [create|delete|status]
 #
 # Creates/deletes DNS A records for all Zenith domains.
 # Idempotent: checks if records exist before creating.

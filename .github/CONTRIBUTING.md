@@ -61,8 +61,7 @@ zenith/
   services/api/     # Go API server
   apps/web/         # Next.js web dashboard
   packages/ui/      # Shared UI components
-  k8s/              # Kubernetes manifests (SaaS deployment)
-  scripts/          # Utility scripts
+  infra/            # Infrastructure (Terraform, Ansible, Helm, K8s manifests, scripts)
 ```
 
 ## Reporting Issues

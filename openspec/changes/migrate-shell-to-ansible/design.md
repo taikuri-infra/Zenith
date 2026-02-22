@@ -2,7 +2,7 @@
 
 ## Context
 
-Zenith currently deploys via `scripts/deploy.sh` — a 260-line bash script that builds Docker images, imports them into k3s, applies raw K8s manifests, and restarts deployments. Infrastructure components (KEDA, cert-manager) have separate shell installers. Secrets are created manually with `kubectl create secret`. There is no staging environment, no environment separation, and no way to deploy consistently across multiple servers.
+Zenith currently deploys via `infra/scripts/deploy.sh` — a 260-line bash script that builds Docker images, imports them into k3s, applies raw K8s manifests, and restarts deployments. Infrastructure components (KEDA, cert-manager) have separate shell installers. Secrets are created manually with `kubectl create secret`. There is no staging environment, no environment separation, and no way to deploy consistently across multiple servers.
 
 The project needs staging/production parity, automated infra provisioning, and a path to install all the missing SaaS components (KEDA, Harbor, CloudNativePG, Keycloak, monitoring stack).
 
@@ -23,7 +23,7 @@ The project needs staging/production parity, automated infra provisioning, and a
 ## Directory Structure
 
 ```
-ansible/
+infra/ansible/
 ├── ansible.cfg                    # Ansible configuration
 ├── requirements.yml               # Galaxy collections
 ├── inventory/
@@ -71,11 +71,11 @@ ansible/
 **Rationale:** Terraform is great for cloud infrastructure (DNS, servers) but awkward for K8s resources that change frequently (deployments, services). Ansible handles both server provisioning and K8s resource management in one tool. The existing raw K8s YAML files can be used directly as Jinja2 templates.
 
 ### 2. Ansible Vault for secrets
-**Decision:** Store encrypted secrets in `ansible/vault/{env}.yml`, decrypt at runtime with `--ask-vault-pass` or vault password file.
+**Decision:** Store encrypted secrets in `infra/ansible/vault/{env}.yml`, decrypt at runtime with `--ask-vault-pass` or vault password file.
 **Rationale:** Secrets currently created manually via `kubectl create secret` with random values. Vault keeps secrets version-controlled but encrypted. Each environment has its own vault file.
 
 ### 3. Reuse existing K8s manifests as templates
-**Decision:** Copy `k8s/*.yaml` into Ansible role templates with Jinja2 variables for environment-specific values (image tags, replica counts, resource limits, domains).
+**Decision:** Copy `infra/k8s/*.yaml` into Ansible role templates with Jinja2 variables for environment-specific values (image tags, replica counts, resource limits, domains).
 **Rationale:** The existing manifests work. No need to rewrite them — just parameterize the values that differ between environments.
 
 ### 4. Helm for infrastructure components, raw YAML for Zenith apps
@@ -140,11 +140,11 @@ all:
 2. **Phase 2:** Migrate Zenith app deployment (build, import, deploy, ingress). Test on staging.
 3. **Phase 3:** Add infra roles (KEDA, PostgreSQL, monitoring). Test on staging.
 4. **Phase 4:** Add vault secrets. Deploy to production via Ansible.
-5. **Phase 5:** Deprecate `scripts/deploy.sh`. Add future infra roles (Harbor, CloudNativePG, Keycloak).
+5. **Phase 5:** Deprecate `infra/scripts/deploy.sh`. Add future infra roles (Harbor, CloudNativePG, Keycloak).
 
 After Phase 4, `deploy.sh` is no longer used. Deployment becomes:
 ```bash
-ansible-playbook ansible/playbooks/site.yml -i ansible/inventory/production.yml --ask-vault-pass
+ansible-playbook infra/ansible/playbooks/site.yml -i infra/ansible/inventory/production.yml --ask-vault-pass
 ```
 
 ## Risks / Trade-offs

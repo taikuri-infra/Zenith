@@ -190,20 +190,20 @@
 - [x] Helm chart values for kube-prometheus-stack
 - [x] ServiceMonitor CRDs for all services
 - [x] Pre-built alerting rules
-- **Files:** helm/monitoring/
+- **Files:** infra/helm/monitoring/
 
 ### 6.2 Grafana Dashboards
 - [x] Platform Overview dashboard (JSON)
 - [x] Service Health dashboard
 - [x] Node Metrics dashboard
 - [x] Tenant-specific dashboards (auto-generated)
-- **Files:** helm/monitoring/dashboards/
+- **Files:** infra/helm/monitoring/dashboards/
 
 ### 6.3 Loki Setup
 - [x] Loki + Promtail Helm chart values
 - [x] Log retention policies
 - [x] Multi-tenant log separation
-- **Files:** helm/monitoring/
+- **Files:** infra/helm/monitoring/
 
 ---
 
@@ -231,7 +231,7 @@
 - [x] Chart for: API, Operator, Auth, Kong, Monitoring stack
 - [x] Values.yaml with sensible defaults
 - [x] NOTES.txt with post-install instructions
-- **Files:** helm/zenith/
+- **Files:** infra/helm/zenith/
 
 ### 8.2 zen install Integration
 - [x] CLI installs platform via Helm chart

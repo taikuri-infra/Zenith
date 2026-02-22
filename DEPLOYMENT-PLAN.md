@@ -278,7 +278,7 @@ Through Mission Control or API:
 
 ## Phase 6: End-to-End Smoke Tests
 
-### Automated test script: `scripts/e2e-test.sh`
+### Automated test script: `infra/scripts/e2e-test.sh`
 ```bash
 #!/bin/bash
 set -e
@@ -325,7 +325,7 @@ echo "=== Done ==="
 ```
 
 ### Test Case 6:
-- [ ] `scripts/e2e-test.sh` passes all 8 tests
+- [ ] `infra/scripts/e2e-test.sh` passes all 8 tests
 - [ ] All changes committed to git
 - [ ] Server state matches code (no manual changes)
 
@@ -346,17 +346,18 @@ echo "=== Done ==="
 ├── services/
 │   └── api/
 │       └── Dockerfile          # NEW
-├── k8s/                        # NEW - all K8s manifests
-│   ├── namespace.yaml
-│   ├── landing.yaml
-│   ├── mission-control.yaml
-│   ├── api.yaml
-│   ├── certificates.yaml
-│   └── tenant-embermind.yaml
-├── scripts/                    # NEW
-│   ├── deploy.sh              # Full deployment script
-│   ├── e2e-test.sh            # E2E test runner
-│   └── cloudflare-dns.sh      # DNS record management
+├── infra/
+│   ├── k8s/                    # K8s manifests
+│   │   ├── namespace.yaml
+│   │   ├── landing.yaml
+│   │   ├── mission-control.yaml
+│   │   ├── api.yaml
+│   │   ├── certificates.yaml
+│   │   └── tenant-embermind.yaml
+│   └── scripts/                # Utility scripts
+│       ├── deploy.sh           # Full deployment script
+│       ├── e2e-test.sh         # E2E test runner
+│       └── cloudflare-dns.sh   # DNS record management
 └── DEPLOYMENT-PLAN.md          # THIS FILE
 ```
 
@@ -374,7 +375,7 @@ kubectl rollout undo deployment/mission-control -n zenith-platform
 kubectl delete namespace zenith-embermind
 
 # Remove DNS records (via Cloudflare API)
-./scripts/cloudflare-dns.sh delete freezenith.com
+./infra/scripts/cloudflare-dns.sh delete freezenith.com
 ```
 
 ---

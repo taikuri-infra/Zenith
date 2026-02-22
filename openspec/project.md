@@ -48,10 +48,12 @@ services/
   auth/                 # Go OIDC/SAML auth service (port 8090)
   operator/             # Go K8s operator (controller-runtime)
 cli/                    # zen CLI (Go + Cobra + Charm TUI)
-helm/                   # Helm charts (zenith, monitoring)
-k8s/                    # Raw K8s manifests (currently used in prod)
-terraform/              # Cloudflare DNS as code
-scripts/                # deploy.sh, cloudflare-dns.sh
+infra/
+  terraform/            # Cloudflare DNS as code
+  ansible/              # Ansible deployment (playbooks, roles, inventory)
+  helm/                 # Helm charts (zenith, monitoring)
+  k8s/                  # Raw K8s manifests (currently used in prod)
+  scripts/              # deploy.sh, cloudflare-dns.sh
 ```
 
 ## Project Conventions
@@ -80,7 +82,7 @@ scripts/                # deploy.sh, cloudflare-dns.sh
 - Main branch: `main`
 - Feature branches: `feature/description` or `setup/description`
 - Commit style: conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`)
-- Deploy: `ssh ghasi "cd /opt/zenith && bash scripts/deploy.sh"` (git pull + docker build + k3s import)
+- Deploy: `ssh ghasi "cd /opt/zenith && bash infra/scripts/deploy.sh"` (git pull + docker build + k3s import)
 
 ## Domain Context
 

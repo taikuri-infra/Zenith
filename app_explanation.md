@@ -98,12 +98,14 @@ Zenith/
 │   ├── auth/                 # Go OIDC/SAML auth service (port 8090)
 │   └── operator/             # Go Kubernetes operator (controller-runtime)
 ├── cli/                      # zen CLI (Go + Cobra + Charm TUI)
-├── helm/
-│   ├── zenith/               # Main Helm chart
-│   └── monitoring/           # Prometheus + Grafana chart
-├── k8s/                      # Raw Kubernetes manifests (currently used in prod)
-├── terraform/                # Cloudflare DNS as code
-├── scripts/                  # deploy.sh, cloudflare-dns.sh, e2e-test.sh
+├── infra/
+│   ├── terraform/            # Cloudflare DNS as code
+│   ├── ansible/              # Ansible deployment (playbooks, roles, inventory)
+│   ├── helm/
+│   │   ├── zenith/           # Main Helm chart
+│   │   └── monitoring/       # Prometheus + Grafana chart
+│   ├── k8s/                  # Raw Kubernetes manifests (currently used in prod)
+│   └── scripts/              # deploy.sh, cloudflare-dns.sh, e2e-test.sh
 └── docs/                     # Architecture, frontend design, phases
 ```
 
@@ -535,7 +537,7 @@ Dependencies: `clsx`, `tailwind-merge`, `class-variance-authority`, `lucide-reac
 
 ---
 
-## 9. Kubernetes Manifests (`k8s/`)
+## 9. Kubernetes Manifests (`infra/k8s/`)
 
 ### Namespaces
 
@@ -583,9 +585,9 @@ cert-manager `Certificate` resources using `letsencrypt-prod` ClusterIssuer with
 - **K8s:** k3s v1.34.3 with Traefik 3.5.1
 - **Repo:** `/opt/zenith` (git clone from GitHub)
 
-### `scripts/deploy.sh`
+### `infra/scripts/deploy.sh`
 
-The main deployment script. Run from local: `ssh ghasi "cd /opt/zenith && bash scripts/deploy.sh"`
+The main deployment script. Run from local: `ssh ghasi "cd /opt/zenith && bash infra/scripts/deploy.sh"`
 
 **Steps:**
 1. `git pull origin main`
@@ -604,21 +606,21 @@ The main deployment script. Run from local: `ssh ghasi "cd /opt/zenith && bash s
 
 ### DNS (Cloudflare)
 
-Managed via Terraform (`terraform/`) or quick script (`scripts/cloudflare-dns.sh`). All A records point to 161.35.82.211 with proxy OFF.
+Managed via Terraform (`infra/terraform/`) or quick script (`infra/scripts/cloudflare-dns.sh`). All A records point to 161.35.82.211 with proxy OFF.
 
 ---
 
-## 11. Helm Charts (`helm/`)
+## 11. Helm Charts (`infra/helm/`)
 
-### Main Chart (`helm/zenith/`)
+### Main Chart (`infra/helm/zenith/`)
 
 Templates for: namespaces, API deployment, auth service deployment, operator deployment, OTel collector, RBAC, service accounts, secrets, Linkerd service mesh config, network policies, pod security policies, resource quotas.
 
-### Monitoring Chart (`helm/monitoring/`)
+### Monitoring Chart (`infra/helm/monitoring/`)
 
 Deploys Prometheus + Grafana with pre-built dashboards (node metrics, platform overview, service health), alerting rules, and ServiceMonitor CRDs.
 
-**Note:** Currently the raw K8s manifests in `k8s/` are used for production deployment, not the Helm charts.
+**Note:** Currently the raw K8s manifests in `infra/k8s/` are used for production deployment, not the Helm charts.
 
 ---
 
@@ -799,7 +801,7 @@ services/api/internal/
 ├── middleware/  ← ✅ OK
 ├── deploy/      ← ❌ mixes domain logic with K8s infrastructure
 ├── telemetry/   ← ✅ OK
-├── k8s/         ← ✅ OK (infra adapter)
+├── k8s/         ← ✅ OK (infra adapter, internal Go package)
 ├── capi/        ← ✅ OK (infra adapter)
 ├── cluster/     ← ✅ OK (infra adapter)
 ```
