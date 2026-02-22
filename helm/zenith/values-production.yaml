@@ -1,0 +1,68 @@
+# Production values for Zenith platform
+# Usage: helm upgrade --install zenith . -f values.yaml -f values-production.yaml
+
+global:
+  domain: freezenith.com
+  imagePullPolicy: Never
+
+api:
+  replicas: 1
+  env:
+    CORS_ORIGINS: "https://ms.embermind.app,https://cloud.embermind.app,https://demo-ms.freezenith.com,https://demo-cloud.freezenith.com"
+    DB_HOST: zenith-postgres.zenith-platform.svc.cluster.local
+    DB_PORT: "5432"
+    DB_USER: zenith
+    DB_NAME: zenith
+
+# Override secrets via --set or external secret management
+# secrets:
+#   jwtSecret: ""
+#   adminEmail: ""
+#   adminPassword: ""
+#   dbPassword: ""
+
+platformCertificate:
+  secretName: freezenith-tls
+  domains:
+    - freezenith.com
+    - www.freezenith.com
+    - api.freezenith.com
+    - demo-ms.freezenith.com
+    - demo-cloud.freezenith.com
+
+ingress:
+  landing:
+    hosts:
+      - freezenith.com
+      - www.freezenith.com
+    tlsSecret: freezenith-tls
+  api:
+    host: api.freezenith.com
+    tlsSecret: freezenith-tls
+  demoMc:
+    host: demo-ms.freezenith.com
+    tlsSecret: freezenith-tls
+  demoWeb:
+    host: demo-cloud.freezenith.com
+    tlsSecret: freezenith-tls
+
+tenants:
+  embermind:
+    domain: embermind.app
+    namespace: zenith-embermind
+    labels:
+      zenith.dev/tenant: embermind
+      zenith.dev/domain: embermind.app
+    mc:
+      image: zenith-mc:latest
+      host: ms.embermind.app
+      replicas: 1
+    web:
+      image: zenith-web:latest
+      host: cloud.embermind.app
+      replicas: 1
+    certificate:
+      secretName: embermind-tls
+      domains:
+        - ms.embermind.app
+        - cloud.embermind.app

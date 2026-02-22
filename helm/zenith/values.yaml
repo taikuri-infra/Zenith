@@ -1,61 +1,22 @@
-# Zenith Platform Helm Chart Values
-# Default values for the complete Zenith platform installation
+# Zenith Platform Helm Chart — Default Values
+# Override with values-staging.yaml or values-production.yaml
 
-# -- Global configuration
 global:
-  # Platform domain (e.g., zenith.example.com)
-  domain: ""
-  # Hetzner Cloud API token
-  hetznerToken: ""
-  # Image pull policy
-  imagePullPolicy: IfNotPresent
-  # Image registry
-  imageRegistry: ghcr.io/dotechhq/zenith
+  domain: freezenith.com
+  imagePullPolicy: Never
 
-# -- Zenith API
-api:
-  enabled: true
-  replicaCount: 2
-  image:
-    repository: "{{ .Values.global.imageRegistry }}/api"
-    tag: "{{ .Chart.AppVersion }}"
-  port: 8080
-  resources:
-    requests:
-      memory: 128Mi
-      cpu: 100m
-    limits:
-      memory: 256Mi
-      cpu: 500m
-  env:
-    ENVIRONMENT: production
-    JWT_SECRET: ""  # Auto-generated if empty
-    CORS_ORIGINS: "*"
-  service:
-    type: ClusterIP
-    port: 80
-  ingress:
-    enabled: true
-    className: kong
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
-    hosts:
-      - host: "api.{{ .Values.global.domain }}"
-        paths:
-          - path: /
-            pathType: Prefix
-    tls:
-      - secretName: zenith-api-tls
-        hosts:
-          - "api.{{ .Values.global.domain }}"
+# -- Platform namespace
+platform:
+  namespace: zenith-platform
 
-# -- Zenith Operator
-operator:
+# -- PostgreSQL
+postgres:
   enabled: true
-  replicaCount: 1
-  image:
-    repository: "{{ .Values.global.imageRegistry }}/operator"
-    tag: "{{ .Chart.AppVersion }}"
+  image: postgres:16-alpine
+  port: 5432
+  storage: 5Gi
+  database: zenith
+  user: zenith
   resources:
     requests:
       memory: 128Mi
@@ -63,110 +24,129 @@ operator:
     limits:
       memory: 512Mi
       cpu: 500m
-  leaderElection: true
-  env:
-    HETZNER_TOKEN: "{{ .Values.global.hetznerToken }}"
 
-# -- Zenith Auth Service
-auth:
+# -- Zenith API
+api:
   enabled: true
-  replicaCount: 2
-  image:
-    repository: "{{ .Values.global.imageRegistry }}/auth"
-    tag: "{{ .Chart.AppVersion }}"
-  port: 8081
+  replicas: 1
+  image: zenith-api:latest
+  port: 8080
+  metricsPort: 9090
+  env:
+    CORS_ORIGINS: ""
+    DB_HOST: zenith-postgres.zenith-platform.svc.cluster.local
+    DB_PORT: "5432"
+    DB_USER: zenith
+    DB_NAME: zenith
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+# -- Landing Page
+landing:
+  enabled: true
+  replicas: 1
+  image: zenith-landing:latest
+  port: 3000
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 100m
+
+# -- Mission Control Demo
+mcDemo:
+  enabled: true
+  replicas: 1
+  image: zenith-mc-demo:latest
+  port: 3100
   resources:
     requests:
       memory: 128Mi
       cpu: 100m
     limits:
       memory: 256Mi
-      cpu: 500m
-  env:
-    JWT_SECRET: ""  # Auto-generated if empty
-    ISSUER_URL: "https://auth.{{ .Values.global.domain }}"
-  service:
-    type: ClusterIP
-    port: 80
-  ingress:
-    enabled: true
-    className: kong
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
-    hosts:
-      - host: "auth.{{ .Values.global.domain }}"
-        paths:
-          - path: /
-            pathType: Prefix
-    tls:
-      - secretName: zenith-auth-tls
-        hosts:
-          - "auth.{{ .Values.global.domain }}"
+      cpu: 250m
 
-# -- Kong API Gateway
-kong:
+# -- Web Platform Demo
+webDemo:
   enabled: true
-  proxy:
-    type: LoadBalancer
-    annotations:
-      load-balancer.hetzner.cloud/location: fsn1
-  ingressController:
-    enabled: true
-    installCRDs: false
-  admin:
-    enabled: true
-    type: ClusterIP
+  replicas: 1
+  image: zenith-web-demo:latest
+  port: 3000
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 250m
 
-# -- Monitoring (sub-chart)
-monitoring:
-  enabled: true
+# -- Secrets (set via --set or values file, never commit real values)
+secrets:
+  jwtSecret: ""
+  adminEmail: ""
+  adminPassword: ""
+  dbPassword: changeme
 
-# -- cert-manager
+# -- TLS Certificates (cert-manager)
 certManager:
-  enabled: true
-  installCRDs: true
-  email: ""  # Required for Let's Encrypt
+  issuer: letsencrypt-prod
+  issuerKind: ClusterIssuer
 
-# -- Container Registry
-registry:
-  enabled: false
-  storage:
-    type: s3
-    s3:
-      region: fsn1
-      bucket: zenith-registry
+# -- Platform TLS certificate
+platformCertificate:
+  secretName: freezenith-tls
+  domains:
+    - freezenith.com
+    - www.freezenith.com
+    - api.freezenith.com
+    - demo-ms.freezenith.com
+    - demo-cloud.freezenith.com
 
-# -- OpenTelemetry Collector
-otel:
-  enabled: true
-  collector:
-    image: otel/opentelemetry-collector-contrib:0.95.0
-    replicas: 1
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 256Mi
+# -- Ingress (Traefik IngressRoutes)
+ingress:
+  landing:
+    hosts:
+      - freezenith.com
+      - www.freezenith.com
+    tlsSecret: freezenith-tls
+  api:
+    host: api.freezenith.com
+    tlsSecret: freezenith-tls
+  demoMc:
+    host: demo-ms.freezenith.com
+    tlsSecret: freezenith-tls
+  demoWeb:
+    host: demo-cloud.freezenith.com
+    tlsSecret: freezenith-tls
 
-# -- Service Mesh Integration
-serviceMesh:
-  enabled: false
-  provider: istio  # or linkerd
-
-# -- Namespace configuration
-namespace:
-  name: zenith-system
-  labels:
-    app.kubernetes.io/part-of: zenith
-
-# -- RBAC
-rbac:
-  create: true
-
-# -- Service Account
-serviceAccount:
-  create: true
-  name: zenith
-  annotations: {}
+# -- Customer Tenants
+# Each tenant gets its own namespace, MC deployment, Web deployment,
+# certificate, and ingress routes.
+tenants: {}
+#  embermind:
+#    domain: embermind.app
+#    namespace: zenith-embermind
+#    labels:
+#      zenith.dev/tenant: embermind
+#      zenith.dev/domain: embermind.app
+#    mc:
+#      image: zenith-mc:latest
+#      host: ms.embermind.app
+#      replicas: 1
+#    web:
+#      image: zenith-web:latest
+#      host: cloud.embermind.app
+#      replicas: 1
+#    certificate:
+#      secretName: embermind-tls
+#      domains:
+#        - ms.embermind.app
+#        - cloud.embermind.app

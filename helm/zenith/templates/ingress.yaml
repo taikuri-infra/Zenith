@@ -1,0 +1,249 @@
+---
+# Redirect middleware (platform namespace)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-to-https
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+
+# =============================================
+# Landing page IngressRoutes
+# =============================================
+{{- if .Values.landing.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-landing
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: {{ include "zenith.hostMatch" .Values.ingress.landing.hosts }}
+      kind: Rule
+      services:
+        - name: zenith-landing
+          port: {{ .Values.landing.port }}
+  tls:
+    secretName: {{ .Values.ingress.landing.tlsSecret }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-landing-redirect
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: {{ include "zenith.hostMatch" .Values.ingress.landing.hosts }}
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-landing
+          port: {{ .Values.landing.port }}
+{{- end }}
+
+# =============================================
+# API IngressRoutes
+# =============================================
+{{- if .Values.api.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-api
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.api.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-api
+          port: {{ .Values.api.port }}
+  tls:
+    secretName: {{ .Values.ingress.api.tlsSecret }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-api-redirect
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.api.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-api
+          port: {{ .Values.api.port }}
+{{- end }}
+
+# =============================================
+# Demo MC IngressRoutes
+# =============================================
+{{- if .Values.mcDemo.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-demo-mc
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.demoMc.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-mc-demo
+          port: {{ .Values.mcDemo.port }}
+  tls:
+    secretName: {{ .Values.ingress.demoMc.tlsSecret }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-demo-mc-redirect
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.demoMc.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-mc-demo
+          port: {{ .Values.mcDemo.port }}
+{{- end }}
+
+# =============================================
+# Demo Web IngressRoutes
+# =============================================
+{{- if .Values.webDemo.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-demo-web
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.demoWeb.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-web-demo
+          port: {{ .Values.webDemo.port }}
+  tls:
+    secretName: {{ .Values.ingress.demoWeb.tlsSecret }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-demo-web-redirect
+  namespace: {{ include "zenith.namespace" . }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.demoWeb.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-web-demo
+          port: {{ .Values.webDemo.port }}
+{{- end }}
+
+# =============================================
+# Tenant IngressRoutes
+# =============================================
+{{- range $name, $tenant := .Values.tenants }}
+---
+# {{ $name }} — Mission Control HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}-mc
+  namespace: {{ $tenant.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ $tenant.mc.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-mc
+          port: 3100
+  tls:
+    secretName: {{ $tenant.certificate.secretName }}
+---
+# {{ $name }} — Mission Control HTTP redirect
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}-mc-redirect
+  namespace: {{ $tenant.namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ $tenant.mc.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-mc
+          port: 3100
+---
+# {{ $name }} — Web Platform HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}-web
+  namespace: {{ $tenant.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ $tenant.web.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-web
+          port: 3000
+  tls:
+    secretName: {{ $tenant.certificate.secretName }}
+---
+# {{ $name }} — Web Platform HTTP redirect
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}-web-redirect
+  namespace: {{ $tenant.namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ $tenant.web.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-web
+          port: 3000
+{{- end }}

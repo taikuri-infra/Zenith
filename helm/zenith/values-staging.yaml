@@ -1,0 +1,90 @@
+# Staging values for Zenith platform
+# Usage: helm upgrade --install zenith . -f values.yaml -f values-staging.yaml
+
+global:
+  domain: freezenith.com
+  imagePullPolicy: Never
+
+platform:
+  namespace: zenith-staging
+
+api:
+  replicas: 1
+  env:
+    CORS_ORIGINS: "https://staging.freezenith.com,https://staging-ms.freezenith.com,https://staging-cloud.freezenith.com"
+    DB_HOST: zenith-postgres.zenith-staging.svc.cluster.local
+    DB_PORT: "5432"
+    DB_USER: zenith
+    DB_NAME: zenith
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 200m
+
+landing:
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 100m
+
+mcDemo:
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 200m
+
+webDemo:
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 200m
+
+postgres:
+  storage: 2Gi
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+secrets:
+  dbPassword: changeme-staging
+
+platformCertificate:
+  secretName: staging-tls
+  domains:
+    - staging.freezenith.com
+    - staging-ms.freezenith.com
+    - staging-cloud.freezenith.com
+
+ingress:
+  landing:
+    hosts:
+      - staging.freezenith.com
+    tlsSecret: staging-tls
+  api:
+    host: staging-api.freezenith.com
+    tlsSecret: staging-tls
+  demoMc:
+    host: staging-ms.freezenith.com
+    tlsSecret: staging-tls
+  demoWeb:
+    host: staging-cloud.freezenith.com
+    tlsSecret: staging-tls
+
+# No customer tenants in staging by default
+tenants: {}
