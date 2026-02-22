@@ -1,0 +1,33 @@
+# Copy to terraform.tfvars and fill in values
+
+# Providers
+cloudflare_api_token = ""
+hcloud_token         = ""
+
+# Server types
+management_server_type = "cx32"  # 4 vCPU, 8GB RAM (~10/mo)
+cluster_server_type    = "cx32"  # 4 vCPU, 8GB RAM (~10/mo)
+hetzner_location       = "nbg1"
+
+# SSH
+ssh_public_key = "ssh-ed25519 AAAA..."
+# ssh_allowed_ips = ["YOUR_IP/32"]  # restrict SSH access
+
+# DNS
+freezenith_zone_id = "37ac5735b1cf9099ccedd4e038d99465"
+
+# Customer domains
+# customer_domains = {
+#   embermind_ms = {
+#     zone_id = "3a9f6cca73ea2653b2bdef6cc6a203b8"
+#     name    = "ms"
+#   }
+#   embermind_cloud = {
+#     zone_id = "3a9f6cca73ea2653b2bdef6cc6a203b8"
+#     name    = "cloud"
+#   }
+# }
+
+# S3 (Hetzner Object Storage)
+# hetzner_s3_access_key = ""
+# hetzner_s3_secret_key = ""

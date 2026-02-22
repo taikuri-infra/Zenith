@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and fill in values
+
+cloudflare_api_token = ""
+freezenith_zone_id   = "37ac5735b1cf9099ccedd4e038d99465"
+
+# Option A: Use existing ghasi server (no Hetzner token needed)
+create_server     = false
+existing_server_ip = "161.35.82.211"
+
+# Option B: Create new Hetzner server
+# create_server  = true
+# hcloud_token   = ""
+# server_type    = "cx22"
+# hetzner_location = "nbg1"
+# ssh_public_key = "ssh-ed25519 AAAA..."
+
+# S3 (Hetzner Object Storage)
+# hetzner_s3_access_key = ""
+# hetzner_s3_secret_key = ""
