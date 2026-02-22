@@ -1,4 +1,4 @@
-package stripe
+package stripeclient
 
 import (
 	"context"
