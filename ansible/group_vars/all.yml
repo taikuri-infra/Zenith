@@ -1,0 +1,79 @@
+# Zenith Ansible — Shared defaults (all environments)
+
+# --- k3s ---
+k3s_version: v1.34.3+k3s1
+kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+
+# --- Docker images ---
+zenith_images:
+  - name: zenith-landing
+    dockerfile: apps/landing/Dockerfile
+    build_args: {}
+  - name: zenith-mc
+    dockerfile: apps/mission-control/Dockerfile
+    build_args: {}
+  - name: zenith-web
+    dockerfile: apps/web/Dockerfile
+    build_args: {}
+  - name: zenith-api
+    dockerfile: services/api/Dockerfile
+    build_args: {}
+  - name: zenith-mc-demo
+    dockerfile: apps/mission-control/Dockerfile
+    build_args:
+      NEXT_PUBLIC_DEMO_MODE: "true"
+  - name: zenith-web-demo
+    dockerfile: apps/web/Dockerfile
+    build_args:
+      NEXT_PUBLIC_DEMO_MODE: "true"
+
+image_tag: latest
+image_pull_policy: Never
+
+# --- Repo ---
+zenith_repo: https://github.com/dotechhq/zenith.git
+zenith_repo_branch: main
+zenith_install_dir: /opt/zenith
+
+# --- PostgreSQL ---
+postgres_image: postgres:16-alpine
+postgres_db: zenith
+postgres_user: zenith
+postgres_storage_size: 5Gi
+
+# --- Resource defaults ---
+resources:
+  api:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits: { cpu: "250m", memory: "256Mi" }
+  landing:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits: { cpu: "100m", memory: "128Mi" }
+  mc:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "250m", memory: "256Mi" }
+  web:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "250m", memory: "256Mi" }
+  postgres:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "500m", memory: "512Mi" }
+
+# --- cert-manager ---
+cert_manager_version: v1.17.2
+cert_issuer_email: admin@freezenith.com
+
+# --- KEDA ---
+keda_version: "2.16"
+keda_http_addon_version: "0.9"
+
+# --- Monitoring ---
+kube_prometheus_version: "65.8.1"
+loki_version: "6.24.0"
+promtail_version: "6.16.6"
+
+# --- Ports ---
+api_port: 8080
+mc_port: 3100
+web_port: 3000
+landing_port: 3000

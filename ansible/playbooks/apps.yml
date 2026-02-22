@@ -1,0 +1,39 @@
+---
+# apps.yml — Build and deploy Zenith applications only (no infra changes)
+#
+# Usage:
+#   ansible-playbook playbooks/apps.yml -i inventory/production.yml
+#   ansible-playbook playbooks/apps.yml -i inventory/production.yml --tags api
+#   ansible-playbook playbooks/apps.yml -i inventory/staging.yml --skip-tags build
+
+- name: Deploy Zenith Applications
+  hosts: all
+  gather_facts: false
+
+  roles:
+    - role: zenith-build
+      tags: [build]
+
+    - role: zenith-import
+      tags: [build, import]
+
+    - role: zenith-namespaces
+      tags: [deploy, namespaces]
+
+    - role: traefik-config
+      tags: [traefik, deploy]
+
+    - role: zenith-api
+      tags: [deploy, api]
+
+    - role: zenith-landing
+      tags: [deploy, landing]
+
+    - role: zenith-mc
+      tags: [deploy, mc]
+
+    - role: zenith-web
+      tags: [deploy, web]
+
+    - role: zenith-ingress
+      tags: [deploy, ingress]

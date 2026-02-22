@@ -1,0 +1,35 @@
+all:
+  hosts:
+    ghasi:
+      ansible_host: 161.35.82.211
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+  vars:
+    env_name: production
+    base_domain: freezenith.com
+    api_domain: api.freezenith.com
+    demo_mc_domain: demo-ms.freezenith.com
+    demo_web_domain: demo-cloud.freezenith.com
+    landing_domains:
+      - freezenith.com
+      - www.freezenith.com
+
+    platform_namespace: zenith-platform
+    enable_demo: true
+    enable_keda: true
+    enable_monitoring: true
+
+    customer_tenants:
+      - name: embermind
+        namespace: zenith-embermind
+        mc_domain: ms.embermind.app
+        web_domain: cloud.embermind.app
+        tls_secret: embermind-tls
+
+    platform_tls_secret: freezenith-tls
+    platform_tls_domains:
+      - freezenith.com
+      - www.freezenith.com
+      - api.freezenith.com
+      - demo-ms.freezenith.com
+      - demo-cloud.freezenith.com

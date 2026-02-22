@@ -1,0 +1,24 @@
+---
+# roles/zenith-build — Build Docker images on the server
+
+- name: Pull latest code from Git
+  ansible.builtin.git:
+    repo: "{{ zenith_repo }}"
+    dest: "{{ zenith_install_dir }}"
+    version: "{{ zenith_repo_branch }}"
+    force: true
+  tags: [build]
+
+- name: Build Zenith Docker images
+  community.general.docker_image:
+    name: "{{ item.name }}"
+    tag: "{{ image_tag }}"
+    source: build
+    build:
+      path: "{{ zenith_install_dir }}"
+      dockerfile: "{{ item.dockerfile }}"
+      args: "{{ item.build_args | default({}) }}"
+      pull: false
+    force_source: true
+  loop: "{{ zenith_images }}"
+  tags: [build]

@@ -1,0 +1,12 @@
+# Zenith Ansible — Production overrides
+
+# Secrets (override with vault in real usage)
+# Use: ansible-playbook ... --extra-vars @vault/production.yml --ask-vault-pass
+vault_jwt_secret: "CHANGE_ME_USE_VAULT"
+vault_admin_email: "admin@embermind.app"
+vault_admin_password: "CHANGE_ME_USE_VAULT"
+vault_db_password: "CHANGE_ME_USE_VAULT"
+vault_cloudflare_token: "CHANGE_ME_USE_VAULT"
+
+# CORS — all production origins
+cors_origins: "https://ms.embermind.app,https://cloud.embermind.app,https://demo-ms.freezenith.com,https://demo-cloud.freezenith.com"

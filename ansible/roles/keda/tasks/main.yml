@@ -1,0 +1,172 @@
+---
+# roles/keda — KEDA + HTTP Add-on for scale-to-zero
+
+- name: Add KEDA Helm repo
+  kubernetes.core.helm_repository:
+    name: kedacore
+    repo_url: https://kedacore.github.io/charts
+    kubeconfig: "{{ kubeconfig_path }}"
+  when: enable_keda
+  tags: [infra, keda]
+
+- name: Install KEDA via Helm
+  kubernetes.core.helm:
+    name: keda
+    chart_ref: kedacore/keda
+    chart_version: "{{ keda_version }}"
+    release_namespace: keda
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      operator:
+        replicaCount: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+      metricsServer:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+    wait: true
+    wait_timeout: 300s
+  when: enable_keda
+  tags: [infra, keda]
+
+- name: Add KEDA HTTP Add-on Helm repo
+  kubernetes.core.helm_repository:
+    name: kedacore-http
+    repo_url: https://kedacore.github.io/http-add-on
+    kubeconfig: "{{ kubeconfig_path }}"
+  when: enable_keda
+  tags: [infra, keda]
+
+- name: Install KEDA HTTP Add-on
+  kubernetes.core.helm:
+    name: keda-http-add-on
+    chart_ref: kedacore-http/keda-add-ons-http
+    chart_version: "{{ keda_http_addon_version }}"
+    release_namespace: keda
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      interceptor:
+        replicas:
+          min: 1
+          max: 2
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+      scaler:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+      operator:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+    wait: true
+    wait_timeout: 300s
+  when: enable_keda
+  tags: [infra, keda]
+
+- name: Deploy cold-start splash page
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: cold-start-page
+        namespace: "{{ platform_namespace }}"
+      data:
+        index.html: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Starting up...</title>
+            <meta http-equiv="refresh" content="3">
+            <style>
+              body { background: #0f172a; color: #e2e8f0; font-family: system-ui; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+              .box { text-align: center; }
+              .spinner { width: 40px; height: 40px; border: 4px solid #334155; border-top-color: #10b981; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+              @keyframes spin { to { transform: rotate(360deg); } }
+              h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+              p { color: #94a3b8; font-size: 0.875rem; }
+            </style>
+          </head>
+          <body>
+            <div class="box">
+              <div class="spinner"></div>
+              <h1>Waking up your app...</h1>
+              <p>This app was sleeping to save resources. It will be ready in a few seconds.</p>
+            </div>
+          </body>
+          </html>
+  when: enable_keda
+  tags: [infra, keda]
+
+- name: Deploy cold-start nginx pod
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cold-start-page
+        namespace: "{{ platform_namespace }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: cold-start-page
+        template:
+          metadata:
+            labels:
+              app: cold-start-page
+          spec:
+            containers:
+              - name: nginx
+                image: nginx:1-alpine
+                ports:
+                  - containerPort: 80
+                volumeMounts:
+                  - name: html
+                    mountPath: /usr/share/nginx/html
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 16Mi
+                  limits:
+                    cpu: 50m
+                    memory: 32Mi
+            volumes:
+              - name: html
+                configMap:
+                  name: cold-start-page
+  when: enable_keda
+  tags: [infra, keda]
+
+- name: Create cold-start-page service
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: cold-start-page
+        namespace: "{{ platform_namespace }}"
+      spec:
+        selector:
+          app: cold-start-page
+        ports:
+          - port: 80
+            targetPort: 80
+  when: enable_keda
+  tags: [infra, keda]

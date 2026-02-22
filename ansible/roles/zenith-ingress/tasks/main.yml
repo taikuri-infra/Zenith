@@ -1,0 +1,329 @@
+---
+# roles/zenith-ingress — TLS certificates + IngressRoutes
+
+# =============================================
+# TLS Certificates
+# =============================================
+
+- name: Create platform TLS certificate
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: "{{ platform_tls_secret }}"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        secretName: "{{ platform_tls_secret }}"
+        issuerRef:
+          name: letsencrypt-prod
+          kind: ClusterIssuer
+        dnsNames: "{{ platform_tls_domains }}"
+  tags: [deploy, ingress, tls]
+
+- name: Create customer TLS certificates
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: "{{ item.tls_secret }}"
+        namespace: "{{ item.namespace }}"
+      spec:
+        secretName: "{{ item.tls_secret }}"
+        issuerRef:
+          name: letsencrypt-prod
+          kind: ClusterIssuer
+        dnsNames:
+          - "{{ item.mc_domain }}"
+          - "{{ item.web_domain }}"
+  loop: "{{ customer_tenants }}"
+  tags: [deploy, ingress, tls]
+
+# =============================================
+# Platform IngressRoutes
+# =============================================
+
+# --- Landing ---
+- name: IngressRoute — landing (HTTPS)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ env_name }}-landing"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        entryPoints: [websecure]
+        routes:
+          - match: "Host({% for d in landing_domains %}`{{ d }}`{{ ' || Host(' if not loop.last else '' }}{% endfor %})"
+            kind: Rule
+            services:
+              - name: zenith-landing
+                port: "{{ landing_port }}"
+        tls:
+          secretName: "{{ platform_tls_secret }}"
+  tags: [deploy, ingress]
+
+- name: IngressRoute — landing (HTTP redirect)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ env_name }}-landing-redirect"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        entryPoints: [web]
+        routes:
+          - match: "Host({% for d in landing_domains %}`{{ d }}`{{ ' || Host(' if not loop.last else '' }}{% endfor %})"
+            kind: Rule
+            services:
+              - name: zenith-landing
+                port: "{{ landing_port }}"
+            middlewares:
+              - name: redirect-to-https
+  tags: [deploy, ingress]
+
+# --- API ---
+- name: IngressRoute — API (HTTPS)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ env_name }}-api"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        entryPoints: [websecure]
+        routes:
+          - match: "Host(`{{ api_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-api
+                port: "{{ api_port }}"
+        tls:
+          secretName: "{{ platform_tls_secret }}"
+  tags: [deploy, ingress]
+
+- name: IngressRoute — API (HTTP redirect)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ env_name }}-api-redirect"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        entryPoints: [web]
+        routes:
+          - match: "Host(`{{ api_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-api
+                port: "{{ api_port }}"
+            middlewares:
+              - name: redirect-to-https
+  tags: [deploy, ingress]
+
+# --- Demo MC ---
+- name: IngressRoute — demo MC (HTTPS)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ env_name }}-demo-ms"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        entryPoints: [websecure]
+        routes:
+          - match: "Host(`{{ demo_mc_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-mc-demo
+                port: "{{ mc_port }}"
+        tls:
+          secretName: "{{ platform_tls_secret }}"
+  when: enable_demo
+  tags: [deploy, ingress, demo]
+
+- name: IngressRoute — demo MC (HTTP redirect)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ env_name }}-demo-ms-redirect"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        entryPoints: [web]
+        routes:
+          - match: "Host(`{{ demo_mc_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-mc-demo
+                port: "{{ mc_port }}"
+            middlewares:
+              - name: redirect-to-https
+  when: enable_demo
+  tags: [deploy, ingress, demo]
+
+# --- Demo Web ---
+- name: IngressRoute — demo Web (HTTPS)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ env_name }}-demo-cloud"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        entryPoints: [websecure]
+        routes:
+          - match: "Host(`{{ demo_web_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-web-demo
+                port: "{{ web_port }}"
+        tls:
+          secretName: "{{ platform_tls_secret }}"
+  when: enable_demo
+  tags: [deploy, ingress, demo]
+
+- name: IngressRoute — demo Web (HTTP redirect)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ env_name }}-demo-cloud-redirect"
+        namespace: "{{ platform_namespace }}"
+      spec:
+        entryPoints: [web]
+        routes:
+          - match: "Host(`{{ demo_web_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-web-demo
+                port: "{{ web_port }}"
+            middlewares:
+              - name: redirect-to-https
+  when: enable_demo
+  tags: [deploy, ingress, demo]
+
+# =============================================
+# Customer IngressRoutes (per tenant)
+# =============================================
+
+- name: IngressRoute — customer MC (HTTPS)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ item.name }}-mission"
+        namespace: "{{ item.namespace }}"
+      spec:
+        entryPoints: [websecure]
+        routes:
+          - match: "Host(`{{ item.mc_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-mc
+                port: "{{ mc_port }}"
+        tls:
+          secretName: "{{ item.tls_secret }}"
+  loop: "{{ customer_tenants }}"
+  tags: [deploy, ingress, customers]
+
+- name: IngressRoute — customer MC (HTTP redirect)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ item.name }}-mission-redirect"
+        namespace: "{{ item.namespace }}"
+      spec:
+        entryPoints: [web]
+        routes:
+          - match: "Host(`{{ item.mc_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-mc
+                port: "{{ mc_port }}"
+            middlewares:
+              - name: redirect-to-https
+  loop: "{{ customer_tenants }}"
+  tags: [deploy, ingress, customers]
+
+- name: IngressRoute — customer Web (HTTPS)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ item.name }}-cloud"
+        namespace: "{{ item.namespace }}"
+      spec:
+        entryPoints: [websecure]
+        routes:
+          - match: "Host(`{{ item.web_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-web
+                port: "{{ web_port }}"
+        tls:
+          secretName: "{{ item.tls_secret }}"
+  loop: "{{ customer_tenants }}"
+  tags: [deploy, ingress, customers]
+
+- name: IngressRoute — customer Web (HTTP redirect)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: "{{ item.name }}-cloud-redirect"
+        namespace: "{{ item.namespace }}"
+      spec:
+        entryPoints: [web]
+        routes:
+          - match: "Host(`{{ item.web_domain }}`)"
+            kind: Rule
+            services:
+              - name: zenith-web
+                port: "{{ web_port }}"
+            middlewares:
+              - name: redirect-to-https
+  loop: "{{ customer_tenants }}"
+  tags: [deploy, ingress, customers]

@@ -1,0 +1,23 @@
+---
+# roles/dns — Cloudflare DNS via Terraform
+
+- name: Check if Terraform is installed
+  ansible.builtin.command: terraform version
+  register: tf_check
+  changed_when: false
+  failed_when: false
+  delegate_to: localhost
+  become: false
+  tags: [dns]
+
+- name: Run Terraform apply for DNS
+  ansible.builtin.command: >
+    terraform apply -auto-approve
+    -var="cloudflare_api_token={{ vault_cloudflare_token }}"
+    -var="server_ip={{ ansible_host }}"
+  args:
+    chdir: "{{ zenith_install_dir }}/terraform"
+  delegate_to: localhost
+  become: false
+  when: tf_check.rc == 0 and vault_cloudflare_token != "CHANGE_ME_USE_VAULT"
+  tags: [dns]
