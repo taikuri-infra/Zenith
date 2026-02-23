@@ -10,11 +10,21 @@ terraform {
       source  = "hetznercloud/hcloud"
       version = "~> 1.49"
     }
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
   }
+
+  # TODO: Switch to Hetzner S3 backend when project limits are resolved
+  # backend "s3" {
+  #   bucket = "zenithstage"
+  #   key    = "staging/terraform.tfstate"
+  #   endpoints = { s3 = "https://hel1.your-objectstorage.com" }
+  #   region                      = "main"
+  #   skip_credentials_validation = true
+  #   skip_metadata_api_check     = true
+  #   skip_region_validation      = true
+  #   skip_requesting_account_id  = true
+  #   skip_s3_checksum            = true
+  #   use_path_style              = true
+  # }
 }
 
 # --- Providers ---
@@ -27,39 +37,22 @@ provider "hcloud" {
   token = var.hcloud_token
 }
 
-# Hetzner S3-compatible Object Storage
-provider "aws" {
-  region     = "eu-central-1"
-  access_key = var.hetzner_s3_access_key
-  secret_key = var.hetzner_s3_secret_key
-
-  endpoints {
-    s3 = "https://fsn1.your-objectstorage.com"
-  }
-
-  # Required for S3-compatible providers
-  skip_credentials_validation = true
-  skip_metadata_api_check     = true
-  skip_requesting_account_id  = true
-  s3_use_path_style           = true
-}
-
-# --- Staging Server (optional — can use existing ghasi or create new) ---
+# --- Staging Server ---
 
 module "staging_server" {
   source = "../modules/k3s-server"
   count  = var.create_server ? 1 : 0
 
-  name           = "zenith-staging"
-  server_type    = var.server_type
-  location       = var.hetzner_location
-  environment    = "staging"
-  role           = "all-in-one"
-  ssh_public_key = var.ssh_public_key
+  name            = "zenith-staging"
+  server_type     = var.server_type
+  location        = var.hetzner_location
+  environment     = "staging"
+  role            = "all-in-one"
+  ssh_public_key  = var.ssh_public_key
   ssh_allowed_ips = var.ssh_allowed_ips
 }
 
-# --- DNS ---
+# --- DNS (stage.freezenith.com) ---
 
 module "dns" {
   source = "../modules/dns"
@@ -67,21 +60,17 @@ module "dns" {
   zone_id   = var.freezenith_zone_id
   server_ip = var.create_server ? module.staging_server[0].server_ip : var.existing_server_ip
 
+  # Platform services
   platform_records = {
-    root      = { name = "staging" }
-    api       = { name = "api-staging" }
-    demo_ms   = { name = "demo-ms-staging" }
-    demo_cloud = { name = "demo-cloud-staging" }
+    root  = { name = "stage" }
+    api   = { name = "api.stage" }
+    ms    = { name = "ms.stage" }
+    cloud = { name = "cloud.stage" }
   }
 
-  customer_records = {}
-}
-
-# --- S3 Storage ---
-
-module "storage" {
-  source = "../modules/storage"
-
-  bucket_name = "zenith-staging"
-  environment = "staging"
+  # Customer: embermind on staging
+  customer_records = {
+    embermind_ms  = { zone_id = var.freezenith_zone_id, name = "embermind-ms.stage" }
+    embermind_web = { zone_id = var.freezenith_zone_id, name = "embermind.stage" }
+  }
 }

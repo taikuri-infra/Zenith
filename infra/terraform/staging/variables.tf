@@ -10,53 +10,37 @@ variable "hcloud_token" {
   description = "Hetzner Cloud API token"
   type        = string
   sensitive   = true
-  default     = ""
-}
-
-variable "hetzner_s3_access_key" {
-  description = "Hetzner Object Storage access key"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "hetzner_s3_secret_key" {
-  description = "Hetzner Object Storage secret key"
-  type        = string
-  sensitive   = true
-  default     = ""
 }
 
 # --- Server Config ---
 
 variable "create_server" {
-  description = "Create a new Hetzner server for staging, or use existing (e.g. ghasi)"
+  description = "Create a new Hetzner server for staging"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "existing_server_ip" {
   description = "IP of existing server (used when create_server = false)"
   type        = string
-  default     = "161.35.82.211" # ghasi
+  default     = ""
 }
 
 variable "server_type" {
-  description = "Hetzner server type"
+  description = "Hetzner server type (cx23 = 2 vCPU / 4GB)"
   type        = string
-  default     = "cx22"
+  default     = "cx23"
 }
 
 variable "hetzner_location" {
   description = "Hetzner datacenter location"
   type        = string
-  default     = "nbg1"
+  default     = "hel1"
 }
 
 variable "ssh_public_key" {
   description = "SSH public key content"
   type        = string
-  default     = ""
 }
 
 variable "ssh_allowed_ips" {

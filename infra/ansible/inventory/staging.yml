@@ -1,28 +1,35 @@
 all:
   hosts:
-    ghasi:
-      ansible_host: 161.35.82.211
+    zenith-staging:
+      ansible_host: 77.42.88.149
       ansible_user: root
       ansible_ssh_private_key_file: ~/.ssh/id_ed25519
   vars:
     env_name: staging
-    base_domain: staging.freezenith.com
-    api_domain: api-staging.freezenith.com
-    demo_mc_domain: demo-ms-staging.freezenith.com
-    demo_web_domain: demo-cloud-staging.freezenith.com
+    base_domain: stage.freezenith.com
+    api_domain: api.stage.freezenith.com
+    mc_domain: ms.stage.freezenith.com
+    web_domain: cloud.stage.freezenith.com
     landing_domains:
-      - staging.freezenith.com
+      - stage.freezenith.com
 
     platform_namespace: zenith-staging
-    enable_demo: true
+    enable_demo: false
     enable_keda: false
     enable_monitoring: false
 
-    customer_tenants: []
+    customer_tenants:
+      - name: embermind
+        namespace: zenith-embermind-staging
+        mc_domain: embermind-ms.stage.freezenith.com
+        web_domain: embermind.stage.freezenith.com
+        tls_secret: embermind-staging-tls
 
     platform_tls_secret: staging-tls
     platform_tls_domains:
-      - staging.freezenith.com
-      - api-staging.freezenith.com
-      - demo-ms-staging.freezenith.com
-      - demo-cloud-staging.freezenith.com
+      - stage.freezenith.com
+      - api.stage.freezenith.com
+      - ms.stage.freezenith.com
+      - cloud.stage.freezenith.com
+      - embermind-ms.stage.freezenith.com
+      - embermind.stage.freezenith.com

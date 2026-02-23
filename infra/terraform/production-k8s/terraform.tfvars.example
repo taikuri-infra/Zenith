@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in values
+
+kubeconfig_path = "~/.kube/zenith-production.yaml"
+
+jwt_secret     = ""
+admin_email    = "admin@freezenith.com"
+admin_password = ""
+db_password    = ""
+
+enable_keda       = true
+enable_monitoring = true

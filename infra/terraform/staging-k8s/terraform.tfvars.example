@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and fill in values
+
+kubeconfig_path = "~/.kube/zenith-staging.yaml"
+
+jwt_secret     = ""
+admin_email    = "admin@staging.freezenith.com"
+admin_password = ""
+db_password    = ""

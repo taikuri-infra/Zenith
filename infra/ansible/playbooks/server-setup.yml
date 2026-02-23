@@ -1,0 +1,63 @@
+---
+# server-setup.yml — Server provisioning only (Phase 2)
+#
+# Installs base packages, Docker, k3s, and Helm on a fresh server.
+# K8s resources (apps, ingress, certs) are managed by Terraform (Phase 3).
+#
+# Usage:
+#   ansible-playbook playbooks/server-setup.yml -i inventory/staging.yml
+#   ansible-playbook playbooks/server-setup.yml -i inventory/production.yml
+
+- name: Setup Zenith Server
+  hosts: all
+  gather_facts: true
+
+  pre_tasks:
+    - name: Display setup info
+      ansible.builtin.debug:
+        msg: |
+          Setting up {{ env_name }} server
+          Host: {{ ansible_host }}
+      tags: [always]
+
+  roles:
+    - role: common
+      tags: [common]
+
+    - role: k3s
+      tags: [k3s]
+
+  post_tasks:
+    - name: Fetch kubeconfig to local machine
+      ansible.builtin.fetch:
+        src: "{{ kubeconfig_path }}"
+        dest: "~/.kube/zenith-{{ env_name }}.yaml"
+        flat: true
+      tags: [always]
+
+    - name: Patch kubeconfig server URL
+      ansible.builtin.replace:
+        path: "~/.kube/zenith-{{ env_name }}.yaml"
+        regexp: 'https://127\.0\.0\.1:6443'
+        replace: "https://{{ ansible_host }}:6443"
+      delegate_to: localhost
+      become: false
+      tags: [always]
+
+    - name: Show next steps
+      ansible.builtin.debug:
+        msg: |
+          =============================================
+            Server {{ env_name }} is ready!
+          =============================================
+          kubeconfig: ~/.kube/zenith-{{ env_name }}.yaml
+
+          Next steps:
+            1. Build & deploy images (if not using a registry):
+               ansible-playbook playbooks/build.yml -i inventory/{{ env_name }}.yml
+
+            2. Deploy k8s resources:
+               cd ../terraform/{{ env_name }}-k8s
+               terraform init
+               terraform apply
+      tags: [always]
