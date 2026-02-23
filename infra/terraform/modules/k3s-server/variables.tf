@@ -4,9 +4,9 @@ variable "name" {
 }
 
 variable "server_type" {
-  description = "Hetzner server type (cx22, cx32, cx42, etc.)"
+  description = "Hetzner server type (cx23, cx33, cx43, etc.)"
   type        = string
-  default     = "cx22"
+  default     = "cx23"
 }
 
 variable "image" {

@@ -1,4 +1,6 @@
-*.tfstate
+# TODO: re-enable when switching to S3 backend
+# *.tfstate
+# *.tfstate.backup
 *.tfstate.backup
 *.tfvars
 !terraform.tfvars.example

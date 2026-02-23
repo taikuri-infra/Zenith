@@ -8,7 +8,18 @@
 
 Zenith is a **Kubernetes-native Platform-as-a-Service (PaaS)** built on Hetzner Cloud, operated by DoTech as a **managed multi-tenant enterprise cloud service**.
 
-**Business Model:** DoTech runs the management plane. Customers buy "Zenith Enterprise" plans with guaranteed resource ceilings (CPU, RAM, S3, DB storage). Resources are provisioned on-demand — we guarantee the ceiling but only create what the customer actually uses. CAPI provisions a **dedicated Kubernetes cluster per customer** on Hetzner, and Hetzner cluster autoscaler scales the underlying infrastructure as demand grows.
+**Business Model:** DoTech runs the management plane. Customers choose from 4 tiers:
+
+| Tier | Price | Infra | Isolation |
+|---|---|---|---|
+| **Free** | €0 | 1 pod, 1 DB, 1 S3 (limited resources) | Namespace + Cilium policies |
+| **Pro** | €29/mo | 5 apps, 10 DBs, S3, custom domains | Namespace + Cilium L7 + bandwidth |
+| **Team** | Custom | Dedicated space, special support | CAPI cluster on shared machines |
+| **Enterprise** | Contact us | Fully dedicated infrastructure | CAPI cluster on dedicated machines |
+
+Free/Pro share a k8s cluster (namespace isolation with Cilium). Team gets a separate CAPI-provisioned cluster on shared machines (own control plane + etcd). Enterprise gets fully dedicated Hetzner servers (kernel-level isolation).
+
+Resources are provisioned on-demand — we guarantee the ceiling but only create what the customer actually uses.
 
 **Future — Open-Core:** The plan is to extract a free, self-hostable open-core version of Zenith where customers install their own Mission Control and manage their own clusters. This becomes the marketing engine. The SaaS is the premium managed offering. The codebase is designed to support both modes via a `ZENITH_MODE` flag (`saas` vs `standalone`).
 
@@ -576,37 +587,109 @@ cert-manager `Certificate` resources using `letsencrypt-prod` ClusterIssuer with
 
 ---
 
-## 10. Deployment Pipeline
+## 10. Infrastructure Pipeline (3-Phase Architecture)
 
-### Server
+Zenith uses a **3-phase infrastructure pipeline**. Everything is Infrastructure as Code — reproducible, versioned, and state-tracked.
 
-- **Host:** ghasi (SSH config alias), IP 161.35.82.211
-- **OS:** Ubuntu 25.04, 4 vCPU, 8GB RAM, 155GB disk
-- **K8s:** k3s v1.34.3 with Traefik 3.5.1
-- **Repo:** `/opt/zenith` (git clone from GitHub)
+```
+Phase 1: Terraform     → Create server + DNS
+Phase 2: Ansible       → Configure server (packages, Docker, k3s, Helm)
+Phase 3: Terraform     → Deploy Helm charts into k8s (state-tracked)
+```
 
-### `infra/scripts/deploy.sh`
+### Servers
 
-The main deployment script. Run from local: `ssh ghasi "cd /opt/zenith && bash infra/scripts/deploy.sh"`
+| Server | IP | Provider | Purpose | Provisioned By |
+|---|---|---|---|---|
+| zenith-staging | 77.42.88.149 | Hetzner (cx23, hel1) | Staging k3s cluster | Terraform Phase 1 |
+| ghasi | 161.35.82.211 | DigitalOcean | Production (legacy manual deploy) | Manual |
+| harbor-staging | 65.108.210.253 | Hetzner (cx23, hel1) | Harbor container/chart registry | Terraform (separate repo) |
 
-**Steps:**
-1. `git pull origin main`
-2. Build 6 Docker images (landing, mc, web, api, mc-demo, web-demo)
-3. Import into k3s: `docker save <img> | sudo k3s ctr images import -`
-4. Create namespaces + `zenith-secrets` Secret (generated JWT secret + admin password, only if missing)
-5. Apply all K8s manifests in order
-6. Restart all deployments: `kubectl rollout restart`
-7. Wait for rollouts: `kubectl rollout status --timeout=120s`
-8. Print status and live endpoints
+### Phase 1: Terraform — Server + DNS (`infra/terraform/staging/`)
 
-**Key constraints:**
-- `NEXT_PUBLIC_DEMO_MODE` is a **build-time** variable (baked into the JS bundle). Demo images require separate Docker builds with `--build-arg NEXT_PUBLIC_DEMO_MODE=true`.
-- HTTP redirect IngressRoutes must be applied AFTER cert-manager issues certs (HTTP-01 conflict).
-- Cloudflare proxy must be OFF for cert-manager HTTP-01 challenges.
+Creates Hetzner server with firewall + Cloudflare DNS records.
+
+```bash
+cd infra/terraform/staging
+terraform apply
+# Creates: server, SSH key, firewall, DNS (stage.freezenith.com, api.stage, ms.stage, cloud.stage)
+```
+
+**State:** Local file committed to git (technical debt — future: Hetzner S3 backend).
+
+### Phase 2: Ansible — Server Configuration (`infra/ansible/`)
+
+Installs base packages, Docker, k3s, and Helm on a fresh server.
+
+```bash
+cd infra/ansible
+ansible-playbook playbooks/server-setup.yml -i inventory/staging.yml
+# Installs: common packages, Docker, k3s, Helm
+# Fetches kubeconfig to ~/.kube/zenith-staging.yaml
+```
+
+**Roles:** `common` (packages, Docker, Helm, sysctl) → `k3s` (k3s install + config).
+
+### Phase 3: Terraform — K8s Resources (`infra/terraform/staging-k8s/`)
+
+Deploys all Helm charts into k3s using `helm_release` resources. **State-tracked** — Terraform knows exactly what's installed and at what version.
+
+```bash
+cd infra/terraform/staging-k8s
+terraform apply
+# Installs: cert-manager, ClusterIssuer, Zenith Helm chart (all components)
+```
+
+**Module:** `infra/terraform/modules/k8s-platform/` — reusable for staging and production.
+
+### Harbor Container & Helm Registry
+
+**Separate repo:** `taikuri-infra/harbor-registry` (Terraform + Ansible, per-environment).
+
+**URL:** https://registry.stage.freezenith.com
+
+| Project | Purpose |
+|---|---|
+| `zenith-stage` | All CI builds go here — push, test, iterate |
+| `zenith` | Verified versions only — promoted from zenith-stage |
+| `fairbroker-stage` | Fairbroker staging builds |
+| `fairbroker` | Fairbroker verified versions |
+| `library` | Public/shared images |
+
+**Usage:**
+```bash
+# Docker images
+docker push registry.stage.freezenith.com/zenith-stage/zenith-api:v0.2.0
+
+# Helm charts (OCI — no ChartMuseum needed)
+helm push zenith-0.2.0.tgz oci://registry.stage.freezenith.com/zenith-stage
+
+# Terraform pulls from Harbor OCI
+resource "helm_release" "zenith" {
+  repository = "oci://registry.stage.freezenith.com/zenith-stage"
+  chart      = "zenith"
+  version    = "0.2.0"
+}
+```
 
 ### DNS (Cloudflare)
 
-Managed via Terraform (`infra/terraform/`) or quick script (`infra/scripts/cloudflare-dns.sh`). All A records point to 161.35.82.211 with proxy OFF.
+Managed via Terraform. All A records with Cloudflare proxy OFF (required for cert-manager HTTP-01).
+
+### Deployment Key Constraints
+
+- `NEXT_PUBLIC_DEMO_MODE` is a **build-time** variable (baked into JS bundle). Demo images require separate Docker builds with `--build-arg NEXT_PUBLIC_DEMO_MODE=true`.
+- HTTP redirect IngressRoutes must be applied AFTER cert-manager issues certs.
+- Cloudflare proxy must be OFF for cert-manager HTTP-01 challenges.
+
+### Legacy Deployment (`infra/scripts/deploy.sh`)
+
+The old manual pipeline (still used on ghasi/production):
+1. SSH in, `git pull`, build Docker images locally
+2. Import into k3s via `docker save | k3s ctr images import -`
+3. Apply raw K8s manifests from `infra/k8s/`
+
+**Being replaced by:** Harbor + Terraform Phase 3 pipeline (see `openspec/changes/infra-pipeline-v1/`).
 
 ---
 
@@ -614,13 +697,32 @@ Managed via Terraform (`infra/terraform/`) or quick script (`infra/scripts/cloud
 
 ### Main Chart (`infra/helm/zenith/`)
 
-Templates for: namespaces, API deployment, auth service deployment, operator deployment, OTel collector, RBAC, service accounts, secrets, Linkerd service mesh config, network policies, pod security policies, resource quotas.
+**Version:** 0.2.0 (in `Chart.yaml`)
+
+Templates: namespace, API deployment, landing deployment, demo apps, PostgreSQL, secrets, certificates, ingress (Traefik IngressRoute), tenant deployments.
+
+**Values files:**
+- `values.yaml` — defaults (production-like)
+- `values-staging.yaml` — staging overrides (fewer resources, staging domains)
+
+**Image naming convention:**
+```
+registry.stage.freezenith.com/zenith-stage/<app>:<version>
+```
+
+| Image | Source | Port |
+|---|---|---|
+| `zenith-api` | `services/api/Dockerfile` | 8080 |
+| `zenith-landing` | `apps/landing/Dockerfile` | 3000 |
+| `zenith-mc` | `apps/mission-control/Dockerfile` | 3100 |
+| `zenith-web` | `apps/web/Dockerfile` | 3000 |
+| `zenith-operator` | `services/operator/Dockerfile` | — |
+| `zenith-mc-demo` | MC Dockerfile + `NEXT_PUBLIC_DEMO_MODE=true` | 3100 |
+| `zenith-web-demo` | Web Dockerfile + `NEXT_PUBLIC_DEMO_MODE=true` | 3000 |
 
 ### Monitoring Chart (`infra/helm/monitoring/`)
 
-Deploys Prometheus + Grafana with pre-built dashboards (node metrics, platform overview, service health), alerting rules, and ServiceMonitor CRDs.
-
-**Note:** Currently the raw K8s manifests in `infra/k8s/` are used for production deployment, not the Helm charts.
+Deploys Prometheus + Grafana with pre-built dashboards, alerting rules, and ServiceMonitor CRDs. Optional — enabled via Terraform variable.
 
 ---
 
@@ -663,6 +765,8 @@ Each CRD follows the same lifecycle: User action -> API creates CRD -> Operator 
 
 ## 14. Live Endpoints
 
+### Production (ghasi — legacy manual deploy)
+
 | URL | Service | Description |
 |-----|---------|-------------|
 | https://freezenith.com | zenith-landing | Public marketing site |
@@ -671,6 +775,21 @@ Each CRD follows the same lifecycle: User action -> API creates CRD -> Operator 
 | https://api.freezenith.com | zenith-api | Go REST API |
 | https://ms.embermind.app | zenith-mc | Customer Mission Control |
 | https://cloud.embermind.app | zenith-web | Customer Web Platform |
+
+### Staging (77.42.88.149 — Terraform + Ansible pipeline)
+
+| URL | Service | Status |
+|-----|---------|--------|
+| https://stage.freezenith.com | zenith-landing | DNS ready, app not yet deployed |
+| https://api.stage.freezenith.com | zenith-api | DNS ready, app not yet deployed |
+| https://ms.stage.freezenith.com | zenith-mc | DNS ready, app not yet deployed |
+| https://cloud.stage.freezenith.com | zenith-web | DNS ready, app not yet deployed |
+
+### Infrastructure
+
+| URL | Service | Status |
+|-----|---------|--------|
+| https://registry.stage.freezenith.com | Harbor registry | Running |
 
 ---
 
@@ -725,18 +844,28 @@ Each CRD follows the same lifecycle: User action -> API creates CRD -> Operator 
 
 ### Remaining Major Work
 
-#### Infrastructure Tooling (decided, not built)
-| Component | Tool | Notes |
-|-----------|------|-------|
-| GitOps engine | **FluxCD** | `ClusterResourceSet` auto-bootstraps new CAPI clusters |
-| CNI + Security | **Cilium** | eBPF, ClusterMesh (cross-cluster mTLS), Hubble observability |
-| API Gateway | **Kong** (DB-less KIC) | No Postgres dependency |
-| PostgreSQL operator | **CloudNativePG** | Per-tenant `Cluster` CRDs |
-| IAM / OIDC | **Keycloak** | One realm per tenant |
-| Monitoring | **kube-prometheus-stack** | Prometheus + Grafana + Alertmanager |
-| Container & Helm registry | **Harbor** | OCI — Zenith infra charts only; customer images stay on their own registry |
-| Secrets | **Postgres + AES-256-GCM** | `app_secrets` table — no Sealed Secrets controller needed; customer manages via panel UI |
-| Cluster provisioning | **CAPI + CAPH** | Dedicated k3s cluster per customer on Hetzner |
+#### Infrastructure Pipeline (in progress — see `openspec/changes/infra-pipeline-v1/`)
+| Step | Status | Description |
+|------|--------|-------------|
+| Docker images → Harbor | TODO | GitHub Action to build + push 7 images to Harbor |
+| imagePullSecret in k8s | TODO | Terraform creates secret so k3s can pull from Harbor |
+| Helm chart → Harbor | TODO | GitHub Action to package + push chart as OCI artifact |
+| Terraform Phase 3 from Harbor | TODO | `helm_release` pulls from Harbor OCI instead of local |
+| Terraform CI | TODO | Plan on PR, apply on merge |
+| Version tagging strategy | TODO | Semver for chart + images, git tags |
+| Local CI with `act` | TODO | Makefile + `.secrets` for running Actions locally |
+
+#### Infrastructure Tooling (decided, partially built)
+| Component | Tool | Status |
+|-----------|------|--------|
+| Container & Helm registry | **Harbor** | ✅ Running at `registry.stage.freezenith.com` |
+| CNI + Security | **Cilium** | Decided, not installed |
+| API Gateway | **Kong** (DB-less KIC) | Decided, not installed |
+| PostgreSQL operator | **CloudNativePG** | Decided, not installed |
+| IAM / OIDC | **Keycloak** | Decided, not installed |
+| Monitoring | **kube-prometheus-stack** | Decided, Helm chart exists |
+| Secrets | **Postgres + AES-256-GCM** | Decided, not built |
+| Cluster provisioning | **CAPI + CAPH** | Decided, not installed (Team/Enterprise tier) |
 
 #### Customer App Deploy Flow (designed, not built)
 - `zenith-actions` GitHub Action — builds image, tags with git SHA, pushes to customer's own registry (GHCR/ECR/DockerHub), POSTs release to Zenith API
@@ -764,9 +893,10 @@ Each CRD follows the same lifecycle: User action -> API creates CRD -> Operator 
 | Auth Service | Go, Fiber v2, OIDC, bcrypt |
 | Kubernetes Operator | Go, controller-runtime, kubebuilder CRDs |
 | CLI | Go, Cobra, Charm TUI (Bubbletea, Lipgloss, Huh) |
-| Infrastructure | Hetzner Cloud (k3s, CX22 server) |
-| Cluster Provisioning | CAPI + CAPH (Cluster API Provider Hetzner) |
-| GitOps Engine | **FluxCD** + `ClusterResourceSet` |
+| Infrastructure | Hetzner Cloud (k3s, CX23 server) |
+| Infra as Code | Terraform (state-tracked) + Ansible (server config) |
+| Cluster Provisioning | CAPI + CAPH (Team/Enterprise tiers) |
+| CI/CD | GitHub Actions (runnable locally via `act`) |
 | CNI / Network Security | **Cilium** (eBPF, ClusterMesh, mTLS via WireGuard) |
 | Ingress | Traefik 3.5.1 (IngressRoute CRD) |
 | API Gateway | **Kong** DB-less KIC |

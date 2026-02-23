@@ -1,5 +1,5 @@
 # Staging values for Zenith platform
-# Usage: helm upgrade --install zenith . -f values.yaml -f values-staging.yaml
+# Deployed via: cd infra/terraform/staging-k8s && terraform apply
 
 global:
   domain: freezenith.com
@@ -11,7 +11,7 @@ platform:
 api:
   replicas: 1
   env:
-    CORS_ORIGINS: "https://staging.freezenith.com,https://staging-ms.freezenith.com,https://staging-cloud.freezenith.com"
+    CORS_ORIGINS: "https://stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com"
     DB_HOST: zenith-postgres.zenith-staging.svc.cluster.local
     DB_PORT: "5432"
     DB_USER: zenith
@@ -34,22 +34,10 @@ landing:
       cpu: 100m
 
 mcDemo:
-  resources:
-    requests:
-      memory: 64Mi
-      cpu: 50m
-    limits:
-      memory: 128Mi
-      cpu: 200m
+  enabled: false
 
 webDemo:
-  resources:
-    requests:
-      memory: 64Mi
-      cpu: 50m
-    limits:
-      memory: 128Mi
-      cpu: 200m
+  enabled: false
 
 postgres:
   storage: 2Gi
@@ -61,30 +49,48 @@ postgres:
       memory: 256Mi
       cpu: 250m
 
-secrets:
-  dbPassword: changeme-staging
-
 platformCertificate:
   secretName: staging-tls
   domains:
-    - staging.freezenith.com
-    - staging-ms.freezenith.com
-    - staging-cloud.freezenith.com
+    - stage.freezenith.com
+    - api.stage.freezenith.com
+    - ms.stage.freezenith.com
+    - cloud.stage.freezenith.com
+    - embermind-ms.stage.freezenith.com
+    - embermind.stage.freezenith.com
 
 ingress:
   landing:
     hosts:
-      - staging.freezenith.com
+      - stage.freezenith.com
     tlsSecret: staging-tls
   api:
-    host: staging-api.freezenith.com
+    host: api.stage.freezenith.com
     tlsSecret: staging-tls
   demoMc:
-    host: staging-ms.freezenith.com
+    host: ms.stage.freezenith.com
     tlsSecret: staging-tls
   demoWeb:
-    host: staging-cloud.freezenith.com
+    host: cloud.stage.freezenith.com
     tlsSecret: staging-tls
 
-# No customer tenants in staging by default
-tenants: {}
+tenants:
+  embermind:
+    domain: freezenith.com
+    namespace: zenith-embermind-staging
+    labels:
+      zenith.dev/tenant: embermind
+      zenith.dev/domain: embermind.app
+    mc:
+      image: zenith-mc:latest
+      host: embermind-ms.stage.freezenith.com
+      replicas: 1
+    web:
+      image: zenith-web:latest
+      host: embermind.stage.freezenith.com
+      replicas: 1
+    certificate:
+      secretName: embermind-staging-tls
+      domains:
+        - embermind-ms.stage.freezenith.com
+        - embermind.stage.freezenith.com

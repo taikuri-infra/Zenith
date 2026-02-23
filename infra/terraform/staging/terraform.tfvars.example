@@ -10,10 +10,10 @@ existing_server_ip = "161.35.82.211"
 # Option B: Create new Hetzner server
 # create_server  = true
 # hcloud_token   = ""
-# server_type    = "cx22"
-# hetzner_location = "nbg1"
+# server_type    = "cx23"
+# hetzner_location = "hel1"
 # ssh_public_key = "ssh-ed25519 AAAA..."
 
-# S3 (Hetzner Object Storage)
-# hetzner_s3_access_key = ""
-# hetzner_s3_secret_key = ""
+# S3 backend credentials are passed via env vars:
+# export AWS_ACCESS_KEY_ID="..."
+# export AWS_SECRET_ACCESS_KEY="..."
