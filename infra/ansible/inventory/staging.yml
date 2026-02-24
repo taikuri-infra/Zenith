@@ -17,6 +17,7 @@ all:
     enable_demo: false
     enable_keda: false
     enable_monitoring: false
+    enable_cilium: true
 
     customer_tenants:
       - name: embermind
@@ -33,3 +34,5 @@ all:
       - cloud.stage.freezenith.com
       - embermind-ms.stage.freezenith.com
       - embermind.stage.freezenith.com
+      - grafana.stage.freezenith.com
+      - prometheus.stage.freezenith.com

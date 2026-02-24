@@ -1,6 +1,11 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ include "zenith.namespace" . }}
-  labels:
-    {{- include "zenith.labels" . | nindent 4 }}
+{{/*
+This file is intentionally empty to avoid "already exists" conflicts on re-apply.
+
+Namespace creation is handled by:
+
+  Platform namespace (zenith-staging):
+    infra/terraform/modules/k8s-platform/main.tf → helm_release.zenith (create_namespace = true, line ~125)
+
+  Tenant namespaces (e.g. zenith-embermind-staging):
+    infra/helm/zenith/templates/tenants.yaml → Namespace resource (line ~7)
+*/}}

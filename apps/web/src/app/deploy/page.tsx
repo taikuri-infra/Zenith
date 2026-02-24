@@ -199,7 +199,7 @@ export default function DeployPage() {
                 </div>
 
                 {/* App info */}
-                <Link href={`/apps/${app.id}`} className="block">
+                <Link href={`/deploy/${app.id}`} className="block">
                   <h3 className="text-base font-semibold text-white group-hover:text-accent-400 transition-colors">
                     {app.name}
                   </h3>

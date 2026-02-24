@@ -1,0 +1,124 @@
+# KEDA HTTPScaledObjects — scale-to-zero for stateless services
+# Requires: KEDA + keda-add-ons-http installed in the cluster
+
+{{- if .Values.keda.enabled }}
+
+{{- if .Values.api.enabled }}
+---
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: zenith-api
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-api" "component" "api") | nindent 4 }}
+spec:
+  hosts:
+    - {{ .Values.ingress.api.host }}
+  pathPrefixes:
+    - /
+  scaleTargetRef:
+    name: zenith-api
+    kind: Deployment
+    service: zenith-api
+    port: {{ .Values.api.port }}
+  replicas:
+    min: {{ .Values.keda.api.minReplicas | default 0 }}
+    max: {{ .Values.keda.api.maxReplicas | default 5 }}
+  scalingMetric:
+    requestRate:
+      targetValue: {{ .Values.keda.api.targetRequestRate | default 10 }}
+      granularity: 1s
+      window: 1m
+{{- end }}
+
+{{- if .Values.landing.enabled }}
+---
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: zenith-landing
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-landing" "component" "landing") | nindent 4 }}
+spec:
+  hosts:
+    {{- range .Values.ingress.landing.hosts }}
+    - {{ . }}
+    {{- end }}
+  pathPrefixes:
+    - /
+  scaleTargetRef:
+    name: zenith-landing
+    kind: Deployment
+    service: zenith-landing
+    port: {{ .Values.landing.port }}
+  replicas:
+    min: {{ .Values.keda.landing.minReplicas | default 0 }}
+    max: {{ .Values.keda.landing.maxReplicas | default 3 }}
+  scalingMetric:
+    requestRate:
+      targetValue: {{ .Values.keda.landing.targetRequestRate | default 20 }}
+      granularity: 1s
+      window: 1m
+{{- end }}
+
+{{- if .Values.mcDemo.enabled }}
+---
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: zenith-mc-demo
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-mc-demo" "component" "mission-control-demo") | nindent 4 }}
+spec:
+  hosts:
+    - {{ .Values.ingress.demoMc.host }}
+  pathPrefixes:
+    - /
+  scaleTargetRef:
+    name: zenith-mc-demo
+    kind: Deployment
+    service: zenith-mc-demo
+    port: {{ .Values.mcDemo.port }}
+  replicas:
+    min: {{ .Values.keda.mcDemo.minReplicas | default 0 }}
+    max: {{ .Values.keda.mcDemo.maxReplicas | default 3 }}
+  scalingMetric:
+    requestRate:
+      targetValue: {{ .Values.keda.mcDemo.targetRequestRate | default 10 }}
+      granularity: 1s
+      window: 1m
+{{- end }}
+
+{{- if .Values.webDemo.enabled }}
+---
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: zenith-web-demo
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-web-demo" "component" "web-demo") | nindent 4 }}
+spec:
+  hosts:
+    - {{ .Values.ingress.demoWeb.host }}
+  pathPrefixes:
+    - /
+  scaleTargetRef:
+    name: zenith-web-demo
+    kind: Deployment
+    service: zenith-web-demo
+    port: {{ .Values.webDemo.port }}
+  replicas:
+    min: {{ .Values.keda.webDemo.minReplicas | default 0 }}
+    max: {{ .Values.keda.webDemo.maxReplicas | default 3 }}
+  scalingMetric:
+    requestRate:
+      targetValue: {{ .Values.keda.webDemo.targetRequestRate | default 10 }}
+      granularity: 1s
+      window: 1m
+{{- end }}
+
+{{- end }}

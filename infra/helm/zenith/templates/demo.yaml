@@ -20,9 +20,10 @@ spec:
         app.kubernetes.io/part-of: zenith
         app.kubernetes.io/component: mission-control-demo
     spec:
+      {{- include "zenith.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: mission-control
-          image: {{ .Values.mcDemo.image }}
+          image: {{ include "zenith.image" (dict "global" .Values.global "image" .Values.mcDemo.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
             - name: http
@@ -84,9 +85,10 @@ spec:
         app.kubernetes.io/part-of: zenith
         app.kubernetes.io/component: web-demo
     spec:
+      {{- include "zenith.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: web
-          image: {{ .Values.webDemo.image }}
+          image: {{ include "zenith.image" (dict "global" .Values.global "image" .Values.webDemo.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
             - name: http

@@ -1,0 +1,218 @@
+name: Build & Push Docker Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'services/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., 0.2.0). Defaults to Chart.yaml appVersion.'
+        required: false
+
+env:
+  REGISTRY: ${{ secrets.HARBOR_HOST }}
+  PROJECT: zenith-stage
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha_short: ${{ steps.version.outputs.sha_short }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(grep 'appVersion' infra/helm/zenith/Chart.yaml | awk '{print $2}' | tr -d '"')
+          fi
+          SHA_SHORT=$(git rev-parse --short HEAD)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "Building version: ${VERSION} (sha: ${SHA_SHORT})"
+
+  build-api:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_ROBOT_USER }}
+          password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+
+      - name: Build & push zenith-api
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/api/Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            GIT_COMMIT=${{ needs.prepare.outputs.sha_short }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:sha-${{ needs.prepare.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:latest
+
+  build-landing:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_ROBOT_USER }}
+          password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+
+      - name: Build & push zenith-landing
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/landing/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing:sha-${{ needs.prepare.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing:latest
+
+  build-mc:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_ROBOT_USER }}
+          password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+
+      - name: Build & push zenith-mc
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/mission-control/Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc:sha-${{ needs.prepare.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc:latest
+
+      - name: Build & push zenith-mc-demo
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/mission-control/Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            NEXT_PUBLIC_DEMO_MODE=true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc-demo:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc-demo:sha-${{ needs.prepare.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc-demo:latest
+
+  build-web:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_ROBOT_USER }}
+          password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+
+      - name: Build & push zenith-web
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:sha-${{ needs.prepare.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:latest
+
+      - name: Build & push zenith-web-demo
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            NEXT_PUBLIC_DEMO_MODE=true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:sha-${{ needs.prepare.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:latest
+
+  build-operator:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_ROBOT_USER }}
+          password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+
+      - name: Build & push zenith-operator
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/operator
+          file: services/operator/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-operator:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-operator:sha-${{ needs.prepare.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-operator:latest

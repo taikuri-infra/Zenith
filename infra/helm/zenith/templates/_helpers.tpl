@@ -35,3 +35,33 @@ Returns: Host(`h1`) || Host(`h2`)
 {{- end -}}
 {{- join " || " $result -}}
 {{- end }}
+
+{{/*
+Full image reference — prepends registry prefix if set.
+Usage: {{ include "zenith.image" (dict "global" .Values.global "image" .Values.api.image) }}
+*/}}
+{{- define "zenith.image" -}}
+{{- if .global.imageRegistry -}}
+{{ .global.imageRegistry }}/{{ .image }}
+{{- else -}}
+{{ .image }}
+{{- end -}}
+{{- end }}
+
+{{/*
+imagePullSecrets block — included in pod spec when registry is enabled
+*/}}
+{{- define "zenith.imagePullSecrets" -}}
+{{- if .Values.registry.enabled }}
+imagePullSecrets:
+  - name: {{ .Values.registry.secretName }}
+{{- end }}
+{{- end }}
+
+{{/*
+Docker config JSON for registry authentication (base64 encoded)
+*/}}
+{{- define "zenith.dockerconfigjson" -}}
+{{- $auth := printf "%s:%s" .Values.registry.username .Values.registry.password | b64enc -}}
+{{- printf "{\"auths\":{\"%s\":{\"auth\":\"%s\"}}}" .Values.registry.host $auth | b64enc -}}
+{{- end }}

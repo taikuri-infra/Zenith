@@ -20,9 +20,10 @@ spec:
         app.kubernetes.io/part-of: zenith
         app.kubernetes.io/component: landing
     spec:
+      {{- include "zenith.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: landing
-          image: {{ .Values.landing.image }}
+          image: {{ include "zenith.image" (dict "global" .Values.global "image" .Values.landing.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
             - name: http

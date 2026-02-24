@@ -62,10 +62,12 @@ module "dns" {
 
   # Platform services
   platform_records = {
-    root  = { name = "stage" }
-    api   = { name = "api.stage" }
-    ms    = { name = "ms.stage" }
-    cloud = { name = "cloud.stage" }
+    root       = { name = "stage" }
+    api        = { name = "api.stage" }
+    ms         = { name = "ms.stage" }
+    cloud      = { name = "cloud.stage" }
+    grafana    = { name = "grafana.stage" }
+    prometheus = { name = "prometheus.stage" }
   }
 
   # Customer: embermind on staging

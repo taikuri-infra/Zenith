@@ -1,0 +1,95 @@
+name: Terraform
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/terraform/**'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to run'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+
+env:
+  TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+  TF_VAR_registry_host: ${{ secrets.HARBOR_HOST }}
+  TF_VAR_registry_username: ${{ secrets.HARBOR_ROBOT_USER }}
+  TF_VAR_registry_password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+  TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+  TF_VAR_admin_email: ${{ secrets.ADMIN_EMAIL }}
+  TF_VAR_admin_password: ${{ secrets.ADMIN_PASSWORD }}
+  TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+jobs:
+  terraform-staging:
+    name: "Staging (Phase 1 — Server + DNS)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform/staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        if: github.event_name == 'pull_request' || github.event.inputs.action == 'plan'
+        run: terraform plan -no-color
+        continue-on-error: true
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' || github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve -no-color
+
+  terraform-staging-k8s:
+    name: "Staging K8s (Phase 3 — Helm Releases)"
+    runs-on: ubuntu-latest
+    needs: terraform-staging
+    if: always()
+    defaults:
+      run:
+        working-directory: infra/terraform/staging-k8s
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > ~/.kube/zenith-staging.yaml
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        if: github.event_name == 'pull_request' || github.event.inputs.action == 'plan'
+        run: terraform plan -no-color
+        continue-on-error: true
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' || github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve -no-color

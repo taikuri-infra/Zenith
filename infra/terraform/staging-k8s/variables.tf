@@ -4,6 +4,34 @@ variable "kubeconfig_path" {
   default     = "~/.kube/zenith-staging.yaml"
 }
 
+# --- Registry ---
+
+variable "registry_host" {
+  description = "Harbor registry host"
+  type        = string
+  default     = "registry.stage.freezenith.com"
+}
+
+variable "registry_username" {
+  description = "Harbor robot account username"
+  type        = string
+  sensitive   = true
+}
+
+variable "registry_password" {
+  description = "Harbor robot account password"
+  type        = string
+  sensitive   = true
+}
+
+variable "zenith_chart_version" {
+  description = "Zenith Helm chart version to deploy"
+  type        = string
+  default     = "0.2.0"
+}
+
+# --- App Secrets ---
+
 variable "jwt_secret" {
   description = "JWT signing secret"
   type        = string
@@ -22,8 +50,3 @@ variable "admin_password" {
   sensitive   = true
 }
 
-variable "db_password" {
-  description = "PostgreSQL password"
-  type        = string
-  sensitive   = true
-}
