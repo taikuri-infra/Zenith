@@ -3,20 +3,34 @@
 
 global:
   domain: freezenith.com
+  imageRegistry: ""      # e.g. "registry.stage.freezenith.com/zenith-stage"
   imagePullPolicy: Never
+
+# -- Registry credentials (for imagePullSecret)
+registry:
+  enabled: false
+  secretName: harbor-registry
+  host: ""
+  username: ""
+  password: ""
 
 # -- Platform namespace
 platform:
   namespace: zenith-platform
 
-# -- PostgreSQL
+# -- PostgreSQL (CloudNativePG operator)
+# CNPG auto-creates secrets: zenith-postgres-app (username, password, host, port, dbname, uri)
+# CNPG auto-creates services: zenith-postgres-rw (primary), zenith-postgres-ro (replicas), zenith-postgres-r (any)
 postgres:
   enabled: true
-  image: postgres:16-alpine
-  port: 5432
+  image: ghcr.io/cloudnative-pg/postgresql:16.6
+  instances: 1          # 1 for staging, 3 for production HA
   storage: 5Gi
   database: zenith
   user: zenith
+  maxConnections: "100"
+  sharedBuffers: "128MB"
+  monitoring: false     # enable when Prometheus is available
   resources:
     requests:
       memory: 128Mi
@@ -24,6 +38,12 @@ postgres:
     limits:
       memory: 512Mi
       cpu: 500m
+  # backup:             # enable for production
+  #   enabled: false
+  #   destinationPath: "s3://zenith-backups/postgres/"
+  #   endpointURL: ""
+  #   secretName: cnpg-backup-creds
+  #   retentionPolicy: "7d"
 
 # -- Zenith API
 api:
@@ -88,12 +108,45 @@ webDemo:
       memory: 256Mi
       cpu: 250m
 
+# -- KEDA scale-to-zero (requires KEDA + HTTP add-on installed)
+keda:
+  enabled: false
+  api:
+    minReplicas: 0
+    maxReplicas: 5
+    targetRequestRate: 10
+  landing:
+    minReplicas: 0
+    maxReplicas: 3
+    targetRequestRate: 20
+  mcDemo:
+    minReplicas: 0
+    maxReplicas: 3
+    targetRequestRate: 10
+  webDemo:
+    minReplicas: 0
+    maxReplicas: 3
+    targetRequestRate: 10
+
+# -- Kong API Gateway
+kong:
+  enabled: false
+  plugins:
+    - zenith-rate-limiting
+    - zenith-cors
+  rateLimiting:
+    enabled: true
+    requestsPerMinute: 60
+  cors:
+    enabled: true
+    origins:
+      - "https://freezenith.com"
+
 # -- Secrets (set via --set or values file, never commit real values)
 secrets:
   jwtSecret: ""
   adminEmail: ""
   adminPassword: ""
-  dbPassword: changeme
 
 # -- TLS Certificates (cert-manager)
 certManager:

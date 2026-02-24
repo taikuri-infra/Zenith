@@ -1,0 +1,68 @@
+{{- if .Values.kong.enabled }}
+---
+# Kong Ingress — routes API traffic to zenith-api
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zenith-api-kong
+  namespace: {{ include "zenith.namespace" . }}
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/strip-path: "false"
+    {{- if .Values.kong.plugins }}
+    konghq.com/plugins: {{ join "," .Values.kong.plugins }}
+    {{- end }}
+spec:
+  rules:
+    - host: {{ .Values.ingress.api.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: zenith-api
+                port:
+                  number: {{ .Values.api.port }}
+{{- if .Values.kong.rateLimiting.enabled }}
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: zenith-rate-limiting
+  namespace: {{ include "zenith.namespace" . }}
+plugin: rate-limiting
+config:
+  minute: {{ .Values.kong.rateLimiting.requestsPerMinute }}
+  policy: local
+  fault_tolerant: true
+  hide_client_headers: false
+{{- end }}
+{{- if .Values.kong.cors.enabled }}
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: zenith-cors
+  namespace: {{ include "zenith.namespace" . }}
+plugin: cors
+config:
+  origins:
+    {{- range .Values.kong.cors.origins }}
+    - {{ . | quote }}
+    {{- end }}
+  methods:
+    - GET
+    - POST
+    - PUT
+    - PATCH
+    - DELETE
+    - OPTIONS
+  headers:
+    - Accept
+    - Authorization
+    - Content-Type
+  credentials: true
+  max_age: 3600
+{{- end }}
+{{- end }}

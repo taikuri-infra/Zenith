@@ -3,19 +3,23 @@
 
 global:
   domain: freezenith.com
-  imagePullPolicy: Never
+  imageRegistry: "registry.stage.freezenith.com/zenith-stage"
+  imagePullPolicy: IfNotPresent
+
+registry:
+  enabled: true
+  secretName: harbor-registry
+  # host, username, password injected via Terraform set_sensitive
 
 platform:
   namespace: zenith-staging
 
 api:
   replicas: 1
+  image: zenith-api:0.2.0
   env:
     CORS_ORIGINS: "https://stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com"
-    DB_HOST: zenith-postgres.zenith-staging.svc.cluster.local
-    DB_PORT: "5432"
-    DB_USER: zenith
-    DB_NAME: zenith
+    # DB_HOST, DB_PORT, DB_USER, DB_NAME, DB_PASSWORD all come from CNPG secret (zenith-postgres-app)
   resources:
     requests:
       memory: 64Mi
@@ -25,6 +29,7 @@ api:
       cpu: 200m
 
 landing:
+  image: zenith-landing:0.2.0
   resources:
     requests:
       memory: 64Mi
@@ -33,6 +38,21 @@ landing:
       memory: 128Mi
       cpu: 100m
 
+kong:
+  enabled: true
+  plugins:
+    - zenith-rate-limiting
+    - zenith-cors
+  rateLimiting:
+    enabled: true
+    requestsPerMinute: 120
+  cors:
+    enabled: true
+    origins:
+      - "https://stage.freezenith.com"
+      - "https://ms.stage.freezenith.com"
+      - "https://cloud.stage.freezenith.com"
+
 mcDemo:
   enabled: false
 
@@ -40,7 +60,10 @@ webDemo:
   enabled: false
 
 postgres:
+  image: ghcr.io/cloudnative-pg/postgresql:16.6
+  instances: 1
   storage: 2Gi
+  monitoring: true
   resources:
     requests:
       memory: 128Mi
@@ -82,11 +105,11 @@ tenants:
       zenith.dev/tenant: embermind
       zenith.dev/domain: embermind.app
     mc:
-      image: zenith-mc:latest
+      image: zenith-mc:0.2.0
       host: embermind-ms.stage.freezenith.com
       replicas: 1
     web:
-      image: zenith-web:latest
+      image: zenith-web:0.2.0
       host: embermind.stage.freezenith.com
       replicas: 1
     certificate:

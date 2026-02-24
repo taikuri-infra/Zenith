@@ -1,13 +1,48 @@
-# --- Helm Chart Paths ---
+# --- Helm Chart Source ---
+
+variable "zenith_chart_repository" {
+  description = "OCI repository for zenith chart (e.g. oci://registry.stage.freezenith.com/zenith-stage)"
+  type        = string
+  default     = ""
+}
+
+variable "zenith_chart_version" {
+  description = "Chart version to deploy (required when using OCI repository)"
+  type        = string
+  default     = ""
+}
 
 variable "zenith_chart_path" {
-  description = "Path to the zenith Helm chart"
+  description = "Local path to the zenith Helm chart (used when chart_repository is empty)"
   type        = string
+  default     = ""
 }
 
 variable "zenith_values_file" {
   description = "Path to the zenith values file (e.g. values-staging.yaml)"
   type        = string
+}
+
+# --- Registry Credentials (for imagePullSecret) ---
+
+variable "registry_host" {
+  description = "Container registry host (e.g. registry.stage.freezenith.com)"
+  type        = string
+  default     = ""
+}
+
+variable "registry_username" {
+  description = "Container registry username"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "registry_password" {
+  description = "Container registry password"
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "monitoring_chart_path" {
@@ -18,6 +53,12 @@ variable "monitoring_chart_path" {
 
 variable "monitoring_values_file" {
   description = "Path to the monitoring values file"
+  type        = string
+  default     = ""
+}
+
+variable "monitoring_domain" {
+  description = "Base domain for monitoring IngressRoutes (grafana.<domain>, prometheus.<domain>)"
   type        = string
   default     = ""
 }
@@ -55,12 +96,6 @@ variable "admin_password" {
   sensitive   = true
 }
 
-variable "db_password" {
-  description = "PostgreSQL password"
-  type        = string
-  sensitive   = true
-}
-
 # --- cert-manager ---
 
 variable "cert_manager_version" {
@@ -81,6 +116,34 @@ variable "enable_monitoring" {
   description = "Install monitoring stack (Prometheus + Grafana + Loki)"
   type        = bool
   default     = false
+}
+
+# --- CloudNativePG ---
+
+variable "enable_cnpg" {
+  description = "Install CloudNativePG operator for PostgreSQL"
+  type        = bool
+  default     = false
+}
+
+variable "cnpg_version" {
+  description = "CloudNativePG Helm chart version"
+  type        = string
+  default     = "0.23.0"
+}
+
+# --- Kong ---
+
+variable "enable_kong" {
+  description = "Install Kong API Gateway"
+  type        = bool
+  default     = false
+}
+
+variable "kong_version" {
+  description = "Kong Ingress Controller Helm chart version"
+  type        = string
+  default     = "0.16.0"
 }
 
 # --- KEDA ---

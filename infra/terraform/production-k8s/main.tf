@@ -45,7 +45,6 @@ module "platform" {
   jwt_secret     = var.jwt_secret
   admin_email    = var.admin_email
   admin_password = var.admin_password
-  db_password    = var.db_password
 
   # Production: enable KEDA + monitoring
   enable_keda       = var.enable_keda

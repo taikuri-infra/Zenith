@@ -1,0 +1,58 @@
+name: Build & Push Helm Chart
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/helm/zenith/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ secrets.HARBOR_HOST }}
+  PROJECT: zenith-stage
+
+jobs:
+  build-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Get chart version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' infra/helm/zenith/Chart.yaml | awk '{print $2}')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Chart version: ${VERSION}"
+
+      - name: Helm lint
+        run: helm lint infra/helm/zenith/
+
+      - name: Helm template (validate)
+        run: |
+          helm template test infra/helm/zenith/ \
+            --set secrets.jwtSecret=test \
+            --set secrets.adminEmail=test@test.com \
+            --set secrets.adminPassword=test \
+            --set secrets.dbPassword=test \
+            > /dev/null
+
+      - name: Login to Harbor OCI
+        env:
+          HARBOR_USER: ${{ secrets.HARBOR_ROBOT_USER }}
+          HARBOR_TOKEN: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+        run: |
+          echo "$HARBOR_TOKEN" | \
+            helm registry login "$REGISTRY" \
+            --username "$HARBOR_USER" \
+            --password-stdin
+
+      - name: Package chart
+        run: helm package infra/helm/zenith/ --destination /tmp/
+
+      - name: Push chart to Harbor
+        run: |
+          helm push /tmp/zenith-${{ steps.version.outputs.version }}.tgz \
+            oci://${{ env.REGISTRY }}/${{ env.PROJECT }}

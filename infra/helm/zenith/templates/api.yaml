@@ -20,9 +20,10 @@ spec:
         app.kubernetes.io/part-of: zenith
         app.kubernetes.io/component: api
     spec:
+      {{- include "zenith.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: api
-          image: {{ .Values.api.image }}
+          image: {{ include "zenith.image" (dict "global" .Values.global "image" .Values.api.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           ports:
             - name: http
@@ -50,18 +51,30 @@ spec:
             - name: CORS_ORIGINS
               value: {{ .Values.api.env.CORS_ORIGINS | quote }}
             - name: DB_HOST
-              value: {{ .Values.api.env.DB_HOST | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-postgres-app
+                  key: host
             - name: DB_PORT
-              value: {{ .Values.api.env.DB_PORT | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-postgres-app
+                  key: port
             - name: DB_USER
-              value: {{ .Values.api.env.DB_USER | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-postgres-app
+                  key: username
             - name: DB_NAME
-              value: {{ .Values.api.env.DB_NAME | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-postgres-app
+                  key: dbname
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: zenith-db-credentials
-                  key: db-password
+                  name: zenith-postgres-app
+                  key: password
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
           livenessProbe:

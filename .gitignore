@@ -9,9 +9,17 @@ dist/
 .DS_Store
 package-lock.json
 
+# CI secrets (act)
+.secrets
+
 # Terraform
 *.tfvars
 *.tfstate
 *.tfstate.backup
+*.tfstate.*.backup
 .terraform/
 .terraform.lock.hcl
+.urls
+
+# Helm dependencies (downloaded via helm dep up)
+**/charts/*.tgz

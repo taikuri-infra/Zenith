@@ -54,10 +54,11 @@ spec:
         {{ $k }}: {{ $v | quote }}
         {{- end }}
     spec:
+      {{- include "zenith.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: mission-control
-          image: {{ $tenant.mc.image }}
-          imagePullPolicy: Never
+          image: {{ include "zenith.image" (dict "global" $.Values.global "image" $tenant.mc.image) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
           ports:
             - name: http
               containerPort: 3100
@@ -133,10 +134,11 @@ spec:
         {{ $k }}: {{ $v | quote }}
         {{- end }}
     spec:
+      {{- include "zenith.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: web
-          image: {{ $tenant.web.image }}
-          imagePullPolicy: Never
+          image: {{ include "zenith.image" (dict "global" $.Values.global "image" $tenant.web.image) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
           ports:
             - name: http
               containerPort: 3000

@@ -1,0 +1,102 @@
+# PodDisruptionBudgets — ensure availability during voluntary disruptions
+# Only created when replicas > 1 (PDB with minAvailable: 1 on single-replica
+# deployments would block all voluntary evictions)
+
+{{- if and .Values.api.enabled (gt (int (default 1 .Values.api.replicas)) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-api
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-api" "component" "api") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: zenith-api
+{{- end }}
+
+{{- if and .Values.landing.enabled (gt (int (default 1 .Values.landing.replicas)) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-landing
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-landing" "component" "landing") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: zenith-landing
+{{- end }}
+
+{{- if and .Values.mcDemo.enabled (gt (int (default 1 .Values.mcDemo.replicas)) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-mc-demo
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-mc-demo" "component" "mission-control-demo") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: zenith-mc-demo
+{{- end }}
+
+{{- if and .Values.webDemo.enabled (gt (int (default 1 .Values.webDemo.replicas)) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-web-demo
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.componentLabels" (dict "name" "zenith-web-demo" "component" "web-demo") | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: zenith-web-demo
+{{- end }}
+
+{{- range $name, $tenant := .Values.tenants }}
+{{- if gt (int (default 1 $tenant.mc.replicas)) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-mc
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app: zenith-mc
+    app.kubernetes.io/part-of: zenith
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: zenith-mc
+{{- end }}
+{{- if gt (int (default 1 $tenant.web.replicas)) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-web
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app: zenith-web
+    app.kubernetes.io/part-of: zenith
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: zenith-web
+{{- end }}
+{{- end }}

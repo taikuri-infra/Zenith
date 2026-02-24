@@ -236,7 +236,7 @@ export default function OverviewPage() {
             {deployList.map((app) => (
               <Link
                 key={app.id}
-                href={`/apps/${app.id}`}
+                href={`/deploy/${app.id}`}
                 className="group flex items-start gap-3 rounded-lg border border-border bg-surface-100 p-4 transition-all hover:border-accent-500/40 hover:shadow-lg hover:shadow-accent-500/5"
               >
                 <span

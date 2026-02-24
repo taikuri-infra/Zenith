@@ -13,6 +13,11 @@ output "zenith_version" {
   value       = helm_release.zenith.version
 }
 
+output "kong_status" {
+  description = "Kong API Gateway release status"
+  value       = var.enable_kong ? helm_release.kong[0].status : "disabled"
+}
+
 output "keda_status" {
   description = "KEDA release status"
   value       = var.enable_keda ? helm_release.keda[0].status : "disabled"

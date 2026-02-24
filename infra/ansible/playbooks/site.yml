@@ -34,6 +34,10 @@
     - role: k3s
       tags: [k3s, infra]
 
+    - role: cilium
+      when: enable_cilium | default(false)
+      tags: [cilium, infra]
+
     - role: cert-manager
       tags: [cert-manager, infra]
 

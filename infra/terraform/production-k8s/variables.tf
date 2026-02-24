@@ -22,12 +22,6 @@ variable "admin_password" {
   sensitive   = true
 }
 
-variable "db_password" {
-  description = "PostgreSQL password"
-  type        = string
-  sensitive   = true
-}
-
 variable "enable_keda" {
   description = "Install KEDA for scale-to-zero"
   type        = bool

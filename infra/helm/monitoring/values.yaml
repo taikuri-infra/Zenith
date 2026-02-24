@@ -4,8 +4,10 @@
 # -- Global settings
 global:
   zenith:
-    # Platform domain for ingress
+    # Platform domain for ingress (set to enable monitoring IngressRoutes)
     domain: ""
+    # Platform namespace (for cross-namespace middleware references)
+    platformNamespace: ""
     # Enable multi-tenant log separation
     multiTenant: true
 
@@ -87,6 +89,7 @@ kube-prometheus-stack:
 # -- Loki (log aggregation)
 loki:
   enabled: true
+  deploymentMode: SingleBinary
   loki:
     auth_enabled: true
     commonConfig:
@@ -116,6 +119,19 @@ loki:
       compaction_interval: 10m
       retention_enabled: true
       retention_delete_delay: 2h
+      delete_request_store: filesystem
+  # Disable scalable targets (SingleBinary mode)
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+  backend:
+    replicas: 0
+  # Disable caches (not needed for SingleBinary)
+  chunksCache:
+    enabled: false
+  resultsCache:
+    enabled: false
   singleBinary:
     replicas: 1
     resources:
@@ -167,11 +183,12 @@ promtail:
       cpu: 200m
 
 # -- ServiceMonitor definitions for Zenith services
+# All monitors use the platform namespace. Enable each when the service is deployed.
 serviceMonitors:
   # Zenith API
   api:
     enabled: true
-    namespace: zenith-system
+    namespace: zenith-staging
     selector:
       matchLabels:
         app: zenith-api
@@ -180,10 +197,10 @@ serviceMonitors:
         interval: 15s
         path: /metrics
 
-  # Zenith Operator
+  # Zenith Operator — enable when deployed (Phase 5)
   operator:
-    enabled: true
-    namespace: zenith-system
+    enabled: false
+    namespace: zenith-staging
     selector:
       matchLabels:
         app: zenith-operator
@@ -192,13 +209,25 @@ serviceMonitors:
         interval: 15s
         path: /metrics
 
-  # Zenith Auth
+  # Zenith Auth — enable when deployed (Phase 3)
   auth:
-    enabled: true
-    namespace: zenith-system
+    enabled: false
+    namespace: zenith-staging
     selector:
       matchLabels:
         app: zenith-auth
+    endpoints:
+      - port: metrics
+        interval: 15s
+        path: /metrics
+
+  # Traefik Ingress Controller
+  traefik:
+    enabled: true
+    namespace: kube-system
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: traefik
     endpoints:
       - port: metrics
         interval: 15s

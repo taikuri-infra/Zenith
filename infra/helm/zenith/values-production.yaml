@@ -19,7 +19,6 @@ api:
 #   jwtSecret: ""
 #   adminEmail: ""
 #   adminPassword: ""
-#   dbPassword: ""
 
 platformCertificate:
   secretName: freezenith-tls
