@@ -1,9 +1,10 @@
 # AI Handover Document — Zenith Platform
 
 > **Purpose:** This document enables seamless continuation of work across different AI accounts/sessions.
-> **Last Updated:** 2026-02-25
-> **How to use:** When starting a new AI session, paste this instruction:
-> "Read /Users/babak/codes/DoTech/Zenith/docs/v2-architecture/HANDOVER.md and continue from where the previous session left off."
+> **Last Updated:** 2026-02-27
+> **Git Tag:** `v2.0.0-alpha.3` on branch `openspec/infra-pipeline-v1`
+> **How to use:** When starting a new AI session, say:
+> "Read `/Users/babak/codes/DoTech/Zenith/docs/v2-architecture/HANDOVER.md` and continue from where the previous session left off."
 
 ---
 
@@ -13,16 +14,156 @@
 
 **Owner:** Babak — experienced DevOps engineer pursuing Golden Kube Astronaut certification + ArgoCD exam. Loves learning, prefers clean cloud-native solutions, Hetzner-only infrastructure.
 
-**Language:** Babak speaks Farsi and English in conversation but all code/docs are in English.and always respond in english. 
-** dont forget ** 
-1 Terraform (staging/)        → Creates the Hetzner server + DNS records
+**Language:** Babak speaks Farsi and English in conversation but all code/docs are in English. Always respond in English.
+
+**3-Phase Deployment Pipeline:**
+```
+1. Terraform (staging/)        → Creates the Hetzner server + DNS records
 2. Ansible                     → SSHes in, installs k3s + Cilium + prerequisite secrets
-3. Terraform (staging-k8s/)    → Connects to k3s cluster, deploys all Helm charts like APISIX, Keycloak, external-dns, Temporal, etc.
+3. Terraform (staging-k8s/)    → Connects to k3s cluster, deploys all Helm charts
+```
+
 ---
 
-## What Exists Right Now
+## WHERE WE ARE RIGHT NOW (2026-02-27)
 
-### Codebase Structure
+### ✅ COMPLETED — Code is Written and Committed
+
+| Phase | Status | Details |
+|-------|--------|---------|
+| **Phase 1: Terraform (Hetzner + DNS)** | ✅ Code done, applied on staging | Server cx42 running, all DNS records exist |
+| **Phase 2: Ansible roles** | ✅ Code done, **NOT run yet** | k3s, Cilium+WireGuard, cert-manager DNS-01 secret roles updated |
+| **Phase 3: Terraform (k8s-platform)** | ✅ Code done, **NOT applied yet** | All 22 V2 components written, `terraform validate` passes |
+| **Phase 4-8** | ❌ Not started | ArgoCD App-of-Apps, Temporal workflows, migration |
+
+### What "Code Done" Means
+
+All the Terraform HCL for the k8s-platform module is **written and validated** (`terraform validate` → Success). The module was recently split from one 1806-line `main.tf` into 14 focused files:
+
+```
+infra/terraform/modules/k8s-platform/
+├── main.tf            ← terraform block + PriorityClasses only (~105 lines)
+├── certmanager.tf     ← cert-manager + ClusterIssuer (DNS-01)
+├── sealed_secrets.tf  ← Sealed Secrets
+├── storage.tf         ← CNPG operator + Keycloak PG + Free PG clusters
+├── identity.tf        ← Keycloak
+├── gateway.tf         ← APISIX + etcd + external-dns
+├── gitops.tf          ← ArgoCD + Image Updater
+├── registry.tf        ← Harbor
+├── temporal.tf        ← Temporal workflow engine
+├── security.tf        ← Kyverno + Falco + Velero
+├── observability.tf   ← Prometheus + Loki + Tempo + OTel + Hubble UI
+├── autoscaling.tf     ← KEDA
+├── apps.tf            ← zenith-platform, api, landing, demo
+├── tenant.tf          ← zenith-tenant (per-customer)
+├── variables.tf       ← All input variables (480+ lines)
+└── outputs.tf         ← All outputs (90 lines)
+```
+
+### What Has NOT Been Run Yet
+
+1. **Ansible playbook** (Phase 2 task 4.5) — the roles are updated but the playbook hasn't been executed on the server
+2. **`terraform apply`** for `staging-k8s/` — the Terraform code validates but has never been applied to the cluster
+3. **Manual steps** — creating Temporal databases in CNPG, generating secrets for `terraform.tfvars`
+
+---
+
+## WHAT TO DO NEXT (Step-by-Step)
+
+### Step 1: Generate Secrets (BEFORE anything else)
+
+```bash
+# Generate these and add to infra/terraform/staging-k8s/terraform.tfvars
+openssl rand -hex 32  # → keycloak_db_password
+openssl rand -hex 32  # → keycloak_admin_password
+openssl rand -hex 32  # → temporal_db_password
+
+# You also need these from provider dashboards:
+# cloudflare_api_token  → Cloudflare Dashboard → API Tokens
+# s3_access_key         → Hetzner Console → Object Storage
+# s3_secret_key         → Same
+# temporal_db_user      → set to "temporal"
+```
+
+### Step 2: Run Ansible (Phase 2)
+
+```bash
+cd infra/ansible
+ansible-playbook -i inventory/staging.yml playbooks/site.yml
+```
+
+**Verify:**
+```bash
+kubectl get nodes                    # k3s running
+cilium status                        # Cilium OK, WireGuard ON
+ssh root@77.42.88.149 "k3s secrets-encrypt status"  # Enabled
+kubectl get secret cloudflare-api-token -n cert-manager  # Exists
+```
+
+### Step 3: Run Terraform Apply (Phase 3)
+
+```bash
+cd infra/terraform/staging-k8s
+terraform plan    # Review first!
+terraform apply   # Deploy all 22 components
+```
+
+> **⚠️ IMPORTANT:** Monitor memory with `kubectl top nodes` after apply.
+> cx42 = 8 vCPU / 16 GB RAM. If memory > 80%, deploy in waves.
+
+### Step 4: Manual Post-Apply Steps
+
+```bash
+# Create Temporal databases (BEFORE Temporal pod can start)
+kubectl exec -n zenith-shared free-pg-1 -- psql -U zenith_admin -c "CREATE DATABASE temporal;"
+kubectl exec -n zenith-shared free-pg-1 -- psql -U zenith_admin -c "CREATE DATABASE temporal_visibility;"
+kubectl exec -n zenith-shared free-pg-1 -- psql -U zenith_admin -c "CREATE USER temporal WITH PASSWORD '<generated>';"
+kubectl exec -n zenith-shared free-pg-1 -- psql -U zenith_admin -c "GRANT ALL ON DATABASE temporal TO temporal;"
+kubectl exec -n zenith-shared free-pg-1 -- psql -U zenith_admin -c "GRANT ALL ON DATABASE temporal_visibility TO temporal;"
+```
+
+### Step 5: Verify Everything Works
+
+```bash
+kubectl get pods -A                      # All pods running
+kubectl get certificates -A              # TLS certs issued
+kubectl get clusterissuer               # letsencrypt-prod Ready
+```
+
+### Step 6: Continue with Phase 4+ (from IMPLEMENTATION.md)
+
+After Steps 1-5 are done, continue with `IMPLEMENTATION.md` from these unchecked tasks:
+
+| Task | IMPLEMENTATION.md Line | Description |
+|------|----------------------|-------------|
+| 5.21 | ~2726 | ResourceQuota + LimitRange for customer namespaces |
+| 5.22 | ~2796 | PodDisruptionBudgets for HA services |
+| 6.1 | ~3004 | ArgoCD root Application (App-of-Apps) |
+| 6.2 | ~3064 | Individual ArgoCD Application manifests |
+| 6.3 | ~3189 | Sync wave annotations |
+| 6.4 | ~3217 | End-to-end auto-deploy test |
+| 7.1 | ~3279 | Temporal provisioning workflow |
+| 7.2 | ~3427 | Temporal worker registration |
+| 7.3 | ~3468 | End-to-end provisioning test |
+| M1-M6 | ~3535+ | V1→V2 migration phases |
+
+---
+
+## Key Decisions (DO NOT CHANGE without discussing with Babak)
+
+1. **APISIX** (not Kong) — API gateway, etcd-backed
+2. **Keycloak** — Identity, realm per customer
+3. **ArgoCD** (not FluxCD) — GitOps
+4. **Temporal** — Provisioning workflows
+5. **Cilium + WireGuard** — CNI with encryption
+6. **Hetzner only** — S3, Volumes, VMs
+7. **DNS-01 for cert-manager** — Enables Cloudflare proxy ON
+8. **Frontends bypass APISIX** — Only backends go through gateway
+
+---
+
+## Codebase Structure
+
 ```
 Zenith/
   apps/landing/            # Next.js marketing site (LIVE)
@@ -35,69 +176,51 @@ Zenith/
   packages/ui/             # @zenith/ui shared package
   infra/terraform/         # IaC (staging server, staging-k8s, modules)
   infra/ansible/           # Server config (k3s, Docker)
-  infra/helm/              # Helm charts (zenith-platform, zenith-api, zenith-landing, zenith-demo, zenith-tenant + old monolithic zenith/)
+  infra/helm/              # Helm charts (zenith-platform, zenith-api, zenith-landing, zenith-demo, zenith-tenant)
   docs/v2-architecture/    # V2 design docs (this directory)
-  openspec/                # Spec-driven development (specs + change proposals)
+  openspec/                # Spec-driven development
   .lich/                   # Lich framework rules (AI behavior, backend, frontend, infra)
 ```
 
 ### Live Deployments
-- **Production** we dont have it yet.
-- **Staging** (77.42.88.149 — Hetzner): Terraform + Helm, cert-manager, Kong, CNPG, KEDA, monitoring
-- **Harbor** (65.108.210.253): Container + chart registry
-
-### V1 → V2 Status
-The monolithic Helm chart has been split into 5 modular charts (done). V2 architecture is fully designed but NOT yet implemented. Current infra is V1.
+- **Production:** Not yet
+- **Staging** (77.42.88.149 — Hetzner): V1 running (Terraform + Helm, cert-manager, Kong, CNPG, KEDA, monitoring)
+- **Harbor** (65.108.210.253): Container + chart registry at registry.stage.freezenith.com
 
 ---
 
-## V2 Architecture Summary
+## V2 Component List (22 Components in k8s-platform Module)
 
-### 4-Tier Model
-- **Free/Pro:** Shared k3s cluster, namespace isolation (Cilium), shared CNPG (Free: one cluster for all, Pro: sharded ~20/cluster)
-- **Team/Enterprise:** Dedicated VMs via CAPI+CAPH, full kernel isolation
-
-### Key Decisions (DO NOT CHANGE without discussing with Babak)
-1. **APISIX** (not Kong) — API gateway, etcd-backed
-2. **Keycloak** — Identity, realm per customer
-3. **ArgoCD** (not FluxCD) — GitOps
-4. **Temporal** — Provisioning workflows
-5. **Cilium + WireGuard** — CNI with encryption
-6. **Hetzner only** — S3, Volumes, VMs
-7. **DNS-01 for cert-manager** — Enables Cloudflare proxy ON
-8. **Frontends bypass APISIX** — Only backends go through gateway
-
-### 4-Phase Deployment
-```
-Phase 1: Terraform → Hetzner VM + Cloudflare DNS
-Phase 2: Ansible → k3s + Cilium + hcloud-csi
-Phase 3: Terraform → All infra (cert-manager, CNPG, APISIX, Keycloak, ArgoCD, monitoring, etc.)
-Phase 4: ArgoCD → Application charts (auto from Git)
-```
-
-### Full Component List (6 Layers)
-```
-Layer 1 Networking: Traefik, APISIX+etcd, Cilium+Hubble, external-dns
-Layer 2 Security: Keycloak, cert-manager, Kyverno, Falco, Sealed Secrets
-Layer 3 Data: CNPG Operator, Keycloak PG, Free PG, Pro PG shards, Hetzner S3
-Layer 4 Platform: zenith-api, zenith-admin, Temporal, Harbor, ArgoCD
-Layer 5 Observability: Prometheus, Grafana, Loki, Tempo, OTel Collector, Hubble, Alertmanager
-Layer 6 Resilience: Velero, CNPG WAL→S3, pg_dump CronJobs, PriorityClasses, PDBs, ResourceQuota
-```
-
----
-
-## Memory Files (Auto-loaded by Claude)
-
-These files are in `/Users/babak/.claude/projects/-Users-babak-codes-DoTech-Zenith/memory/`:
-
-| File | Content |
-|------|---------|
-| `MEMORY.md` | Quick reference (auto-loaded every session) |
-| `architecture.md` | Full V2 architecture design |
-| `decisions.md` | All key decisions with rationale (D1-D14) |
-
-**Important:** If you're a different AI (not Claude Code), read these files manually.
+| # | Component | File | Namespace | Enable Flag |
+|---|-----------|------|-----------|-------------|
+| 1 | PriorityClasses | main.tf | cluster-wide | always |
+| 2 | cert-manager + ClusterIssuer | certmanager.tf | cert-manager | always |
+| 3 | Sealed Secrets | sealed_secrets.tf | sealed-secrets | `enable_sealed_secrets` |
+| 4 | CNPG Operator | storage.tf | cnpg-system | `enable_cnpg` |
+| 5 | Keycloak CNPG Cluster | storage.tf | keycloak | `enable_keycloak` |
+| 6 | Free PG Cluster | storage.tf | zenith-shared | always |
+| 7 | Keycloak | identity.tf | keycloak | `enable_keycloak` |
+| 8 | APISIX + etcd | gateway.tf | apisix | `enable_apisix` |
+| 9 | APISIX Ingress Controller | gateway.tf | apisix | `enable_apisix` |
+| 10 | external-dns | gateway.tf | external-dns | `enable_external_dns` |
+| 11 | ArgoCD | gitops.tf | argocd | `enable_argocd` |
+| 12 | ArgoCD Image Updater | gitops.tf | argocd | `enable_argocd` |
+| 13 | Harbor | registry.tf | harbor | `enable_harbor` |
+| 14 | Temporal | temporal.tf | temporal | `enable_temporal` |
+| 15 | Kyverno | security.tf | kyverno | `enable_kyverno` |
+| 16 | Falco | security.tf | falco | `enable_falco` |
+| 17 | Velero | security.tf | velero | `enable_velero` |
+| 18 | Prometheus+Grafana | observability.tf | monitoring | `enable_monitoring` |
+| 19 | Loki | observability.tf | monitoring | `enable_monitoring` |
+| 20 | Tempo | observability.tf | monitoring | `enable_monitoring` |
+| 21 | OTel Collector | observability.tf | monitoring | `enable_monitoring` |
+| 22 | Hubble UI IngressRoute | observability.tf | kube-system | always |
+| 23 | KEDA + HTTP Addon | autoscaling.tf | keda | `enable_keda` |
+| 24 | zenith-platform | apps.tf | zenith-platform | always |
+| 25 | zenith-api | apps.tf | zenith-platform | always |
+| 26 | zenith-landing | apps.tf | zenith-platform | always |
+| 27 | zenith-demo | apps.tf | zenith-platform | `enable_demo` |
+| 28 | zenith-tenant | tenant.tf | zenith-platform | `enable_tenants` |
 
 ---
 
@@ -117,35 +240,9 @@ All V2 docs are in `docs/v2-architecture/`:
 | `07-backup-disaster-recovery.md` | Complete | Backup strategy + RPO/RTO |
 | `08-observability.md` | Complete | Monitoring, logging, tracing |
 | `09-migration-v1-to-v2.md` | Complete | V1→V2 migration plan (6 weeks) |
+| `IMPLEMENTATION.md` | **In Progress** | Step-by-step execution guide with checkboxes |
 | `HANDOVER.md` | Complete | This file |
-
----
-
-## What Needs To Be Done Next
-
-### Immediate Priority: Implement V2 Infrastructure
-
-The design is complete. Implementation should follow the 4-phase pipeline:
-
-1. **Update Terraform Phase 1** — Add new Hetzner server for V2 staging
-2. **Update Ansible Phase 2** — Add Cilium role, hcloud-csi, etcd encryption
-3. **Rewrite Terraform Phase 3** — Replace monolithic zenith helm_release with all V2 components (APISIX, Keycloak, external-dns, Temporal, etc.)
-4. **Create ArgoCD manifests** — App-of-Apps in `infra/argocd/staging/`
-
-### Secondary: Backend Updates for V2
-
-- Integrate Keycloak (replace in-house JWT with Keycloak realm-based auth)
-- Add Temporal workflows (customer provisioning)
-- Add Hetzner S3 API calls (bucket creation)
-- Add database creation logic (SQL in assigned CNPG shard)
-- Add APISIX route CRD generation (per-customer)
-
-### Tertiary: OpenSpec Updates
-
-Some openspec specs reference Kong, FluxCD, or old architecture. These need updating:
-- `openspec/project.md` — Update tech stack (APISIX, ArgoCD, Temporal)
-- Various specs may reference Kong plugins → update to APISIX
-- Add new specs for: Keycloak integration, Temporal workflows, APISIX routing
+| `developers.md` | Complete | Developer experience guide |
 
 ---
 
@@ -153,12 +250,11 @@ Some openspec specs reference Kong, FluxCD, or old architecture. These need upda
 
 | Priority | File | Why |
 |----------|------|-----|
-| 1 | `docs/v2-architecture/00-overview.md` | Full V2 design |
-| 2 | `AGENTS.md` | Master AI prompt, Lich framework rules |
-| 3 | `agentlog.md` | Complete change history |
-| 4 | `docs/v2-architecture/HANDOVER.md` | This file |
-| 5 | `openspec/project.md` | Project conventions |
-| 6 | `.lich/rules/ai-behavior.md` | Lich-first decision logic |
+| 1 | `docs/v2-architecture/HANDOVER.md` | This file — current status |
+| 2 | `docs/v2-architecture/IMPLEMENTATION.md` | Step-by-step guide with checkboxes |
+| 3 | `docs/v2-architecture/00-overview.md` | Full V2 architecture design |
+| 4 | `agentlog.md` | Complete change history |
+| 5 | `AGENTS.md` | Master AI prompt, Lich framework rules |
 
 ---
 
@@ -166,32 +262,21 @@ Some openspec specs reference Kong, FluxCD, or old architecture. These need upda
 
 1. **Always read AGENTS.md first** — It has the Lich framework rules
 2. **Always update agentlog.md** — Log WHAT, WHY, WHEN for every change
-3. **Use `lich make` commands** — Never create entities/services/APIs manually
-4. **Security first** — Every design decision considers backup, isolation, encryption
-5. **Hetzner only** — No AWS, no GCP, no Azure
-6. **APISIX not Kong** — Decision D1
-7. **ArgoCD not FluxCD** — Decision D4
-8. **Babak speaks Farsi** — Reply in English but understand Farsi requests
-
----
-
-## How to Continue a Session
-
-```
-Step 1: Read this HANDOVER.md
-Step 2: Read the memory files (architecture.md, decisions.md)
-Step 3: Check agentlog.md for latest changes
-Step 4: Ask Babak what to work on next (or check the TODO above)
-Step 5: Follow the Lich framework rules from AGENTS.md
-Step 6: Update agentlog.md when done
-```
+3. **Security first** — Every design decision considers backup, isolation, encryption
+4. **Hetzner only** — No AWS, no GCP, no Azure
+5. **APISIX not Kong** — Decision D1
+6. **ArgoCD not FluxCD** — Decision D4
+7. **Babak speaks Farsi** — Reply in English but understand Farsi requests
+8. **Check IMPLEMENTATION.md** — Use checkboxes to track progress
 
 ---
 
 ## Contact & Resources
 
-- **GitHub:** github.com/DoTech/Zenith (private)
+- **GitHub:** github.com/taikuri-infra/Zenith (private)
+- **Branch:** `openspec/infra-pipeline-v1`
+- **Latest Tag:** `v2.0.0-alpha.3`
 - **Harbor:** https://registry.stage.freezenith.com
 - **Staging:** https://stage.freezenith.com
-- **Production:** https://freezenith.com
+- **Production:** https://freezenith.com (V1 only)
 - **Server SSH:** `ssh ghasi` (configured in ~/.ssh/config)
