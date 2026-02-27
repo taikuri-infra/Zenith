@@ -1,8 +1,12 @@
 # =============================================================================
-# Zenith Staging — K8s Platform
+# Zenith Staging — K8s Platform (V2)
 # =============================================================================
 #
-# Architecture:
+# Architecture (3-layer):
+#
+#   1. Terraform (staging/)       → Hetzner server + Cloudflare DNS
+#   2. Ansible                    → k3s + Cilium CLI + prerequisite secrets
+#   3. Terraform (staging-k8s/)   → This file: all Helm releases INTO the cluster
 #
 #   Internet
 #      |
@@ -12,40 +16,42 @@
 #   +-----+-----+  Installed by k3s. Listens on :80 / :443.
 #         |
 #         +---> stage.freezenith.com           -> zenith-landing     (:3000)
-#         +---> ms.stage.freezenith.com        -> zenith-mc-demo     (:3100)
-#         +---> cloud.stage.freezenith.com     -> zenith-web-demo    (:3000)
-#         |
-#         +---> api.stage.freezenith.com       -> +---------------+
-#         |                                       | Kong Gateway  |
-#         |                                       | rate-limit    |
-#         |                                       | cors          |
-#         |                                       +-------+-------+
-#         |                                               |
-#         |                                               +---> zenith-api (:8080)
-#         |
-#         +---> embermind-ms.stage.freezenith.com  -> zenith-mc   (:3100)  [tenant]
-#         +---> embermind.stage.freezenith.com     -> zenith-web  (:3000)  [tenant]
+#         +---> api.stage.freezenith.com       -> APISIX Gateway     -> zenith-api (:8080)
+#         +---> auth.stage.freezenith.com      -> Keycloak           (:8080)
+#         +---> argocd.stage.freezenith.com    -> ArgoCD             (:443)
+#         +---> registry.stage.freezenith.com  -> Harbor             (:443)
+#         +---> temporal.stage.freezenith.com  -> Temporal Web UI    (:8080)
+#         +---> hubble.stage.freezenith.com    -> Hubble UI          (:80)
+#         +---> alerts.stage.freezenith.com    -> Alertmanager       (:9093)
+#         +---> tempo.stage.freezenith.com     -> Grafana/Tempo      (:3000)
 #
-# Helm Releases (modular — independently deployable):
+# Helm Releases (V2):
 #
-#   +-------------------+----------------+--------------------------------------+
-#   | Release           | Namespace      | Purpose                              |
-#   +-------------------+----------------+--------------------------------------+
-#   | cert-manager      | cert-manager   | TLS cert automation (Let's Encrypt)  |
-#   | cnpg              | cnpg-system    | CloudNativePG PostgreSQL operator    |
-#   | zenith-platform   | zenith-staging | Secrets, postgres CR, certs, midware |
-#   | zenith-api        | zenith-staging | Go API server                        |
-#   | zenith-landing    | zenith-staging | Next.js landing page                 |
-#   | zenith-demo       | zenith-staging | MC + Web demo (disabled)             |
-#   | zenith-tenant     | zenith-staging | Per-customer MC + Web deployments    |
-#   | kong              | kong           | API gateway (DB-less, ClusterIP)     |
-#   | keda              | keda           | Event-driven autoscaling             |
-#   | keda-http-addon   | keda           | HTTP-based scale-to-zero             |
-#   | monitoring        | monitoring     | Prometheus + Grafana + Loki          |
-#   +-------------------+----------------+--------------------------------------+
-#
-# Images pulled from: registry.stage.freezenith.com/zenith-stage/*
-# Charts pulled from: oci://registry.stage.freezenith.com/zenith-stage/<chart>
+#   +---------------------+-----------------+--------------------------------------+
+#   | Release             | Namespace       | Purpose                              |
+#   +---------------------+-----------------+--------------------------------------+
+#   | cert-manager        | cert-manager    | TLS automation (DNS-01 Cloudflare)   |
+#   | sealed-secrets      | sealed-secrets  | Encrypted secrets for GitOps         |
+#   | cnpg                | cnpg-system     | PostgreSQL operator                  |
+#   | keycloak            | keycloak        | Identity provider                    |
+#   | apisix              | apisix          | API Gateway (replaces Kong)          |
+#   | external-dns        | external-dns    | Auto DNS via Cloudflare              |
+#   | argocd              | argocd          | GitOps engine                        |
+#   | harbor              | harbor          | Container registry                   |
+#   | temporal            | temporal        | Workflow engine                      |
+#   | kyverno             | kyverno         | Admission policies                   |
+#   | falco               | falco           | Runtime security                     |
+#   | velero              | velero          | Cluster backup                       |
+#   | kube-prometheus-stack| monitoring      | Prometheus + Grafana + Alertmanager  |
+#   | loki                | monitoring      | Log aggregation                      |
+#   | tempo               | monitoring      | Distributed tracing                  |
+#   | otel-collector       | monitoring      | Trace pipeline                       |
+#   | keda                | keda            | Scale-to-zero                        |
+#   | zenith-platform     | zenith-staging  | Shared resources                     |
+#   | zenith-api          | zenith-staging  | Go API server                        |
+#   | zenith-landing      | zenith-staging  | Next.js landing page                 |
+#   | zenith-tenant       | zenith-staging  | Per-customer deployments             |
+#   +---------------------+-----------------+--------------------------------------+
 #
 # Usage:
 #   terraform init
@@ -85,8 +91,14 @@ provider "helm" {
 module "platform" {
   source = "../modules/k8s-platform"
 
+  # Environment
   platform_namespace = "zenith-staging"
+  environment        = "staging"
   cert_issuer_email  = "admin@freezenith.com"
+
+  # Domains
+  domain         = var.domain
+  cluster_domain = var.cluster_domain
 
   # Helm charts from Harbor OCI registry
   chart_repository = "oci://${var.registry_host}/zenith-stage"
@@ -100,25 +112,50 @@ module "platform" {
   tenant_values_file   = "${path.module}/../../helm/zenith-tenant/values-staging.yaml"
 
   # Registry credentials (for OCI pull + imagePullSecret)
-  registry_host     = var.registry_host
-  registry_username = var.registry_username
-  registry_password = var.registry_password
+  registry_host          = var.registry_host
+  customer_registry_host = var.customer_registry_host
+  registry_username      = var.registry_username
+  registry_password      = var.registry_password
 
   # App secrets
   jwt_secret     = var.jwt_secret
   admin_email    = var.admin_email
   admin_password = var.admin_password
 
-  # Feature flags
-  enable_cnpg       = true
-  enable_kong       = true
-  enable_keda       = true
-  enable_monitoring = true
-  enable_demo       = false
-  enable_tenants    = true
+  # S3 / Object Storage (Hetzner)
+  s3_access_key = var.s3_access_key
+  s3_secret_key = var.s3_secret_key
+  s3_endpoint   = var.s3_endpoint
 
-  # Monitoring chart
-  monitoring_chart_path  = "${path.module}/../../helm/monitoring"
-  monitoring_values_file = "${path.module}/../../helm/monitoring/values.yaml"
-  monitoring_domain      = "stage.freezenith.com"
+  # Database Storage Sizes
+  keycloak_db_storage_size = var.keycloak_db_storage_size
+  free_db_storage_size     = var.free_db_storage_size
+
+  # Cloudflare
+  cloudflare_api_token = var.cloudflare_api_token
+
+  # Keycloak secrets
+  keycloak_db_password    = var.keycloak_db_password
+  keycloak_admin_password = var.keycloak_admin_password
+
+  # Temporal secrets
+  temporal_db_user     = var.temporal_db_user
+  temporal_db_password = var.temporal_db_password
+
+  # --- V2 Feature flags ---
+  enable_cnpg           = true
+  enable_apisix         = true    # V2: replaces Kong
+  enable_keycloak       = true
+  enable_external_dns   = true
+  enable_argocd         = true
+  enable_harbor         = true
+  enable_temporal       = true
+  enable_kyverno        = true
+  enable_falco          = true
+  enable_velero         = true
+  enable_sealed_secrets = true
+  enable_monitoring     = true
+  enable_keda           = true
+  enable_demo           = true
+  enable_tenants        = true
 }

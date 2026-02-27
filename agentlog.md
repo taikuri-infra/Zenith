@@ -531,5 +531,124 @@ All pre-existing issues preventing clean `go test ./...`. Now build = 0 errors, 
 
 Phase A of Lich Architecture refactoring: separate domain entities from API DTOs. Non-breaking — existing `models/` package untouched. New code can import `entities` and `dto` directly.
 
+---
 
+## 2026-02-27T12:00 — V2 Phase 1: Terraform Hetzner + Cloudflare
 
+### What Changed
+- **Modified** `infra/terraform/staging/main.tf` — Added 7 V2 DNS records: argocd.stage, auth.stage, temporal.stage, registry.stage, hubble.stage, tempo.stage, alerts.stage
+- **Verified** server already cx43 (16GB RAM) — task 3.1 already satisfied
+
+### Why
+V2 architecture requires subdomains for ArgoCD, Keycloak, Temporal, Harbor, Hubble, Tempo, and Alertmanager. Terraform plan confirmed `7 to add, 0 to change, 0 to destroy`. Applied by Babak.
+
+---
+
+## 2026-02-27T12:10 — V2 Phase 2: Ansible k3s + Cilium (code changes)
+
+### What Changed
+- **Modified** `infra/ansible/roles/cilium/tasks/main.yml` — Added WireGuard encryption + Hubble relay/UI flags
+- **Modified** `infra/ansible/roles/k3s/tasks/main.yml` — Added `--secrets-encryption` + `--write-kubeconfig-mode 644`
+- **Modified** `infra/ansible/roles/cert-manager/tasks/main.yml` — Added Cloudflare API token Secret task for DNS-01
+- **Modified** `infra/ansible/group_vars/all.yml` — Added V2 flags (enable_wireguard, enable_hubble, enable_hubble_ui, enable_secrets_encryption, enable_dns01_solver)
+
+### Why
+V2 requires WireGuard pod-to-pod encryption, Hubble network observability, etcd secrets encryption at rest, and DNS-01 challenge support for wildcard TLS with Cloudflare proxy ON.
+
+---
+
+## 2026-02-27T14:30 — V2 Phase 3: Terraform Cluster Bootstrap
+
+### What Changed
+
+- **Rewrote** `infra/terraform/modules/k8s-platform/main.tf` — Complete V2 overhaul:
+  - Added 4 PriorityClasses (system-critical, infra-critical, platform, customer)
+  - Upgraded cert-manager ClusterIssuer from HTTP-01 to DNS-01 (Cloudflare)
+  - Added Sealed Secrets controller
+  - Upgraded CNPG operator with annotation inheritance
+  - Added CNPG Keycloak dedicated cluster (2 replicas, WAL to S3)
+  - Added CNPG Free shared cluster (2 replicas, 50Gi, WAL to S3)
+  - Added Keycloak identity provider (Bitnami chart, using CNPG database)
+  - **Replaced Kong with APISIX** + etcd + Ingress Controller
+  - Added external-dns for automatic Cloudflare record management
+  - Added ArgoCD + Image Updater (App-of-Apps pattern)
+  - Added Harbor container registry (S3 backend, Trivy scanning)
+  - Added Temporal workflow engine (using CNPG free-pg database)
+  - Added Kyverno admission policy engine
+  - Added Falco runtime security (eBPF driver)
+  - Added Velero cluster backup (daily 03:00 UTC, 30-day retention)
+  - Upgraded monitoring to kube-prometheus-stack (from local chart)
+  - Added Loki (SingleBinary, 10Gi persistent)
+  - Added Tempo distributed tracing (10Gi persistent)
+  - Added OpenTelemetry Collector (DaemonSet → Tempo)
+  - Added Hubble UI IngressRoute
+- **Rewrote** `infra/terraform/modules/k8s-platform/variables.tf` — Added ~40 new variables
+- **Rewrote** `infra/terraform/modules/k8s-platform/outputs.tf` — Replaced kong_status with apisix_status, added 10+ V2 outputs
+- **Rewrote** `infra/terraform/staging-k8s/main.tf` — V2 module call with all feature flags + credentials
+- **Updated** `infra/terraform/staging-k8s/variables.tf` — Added S3, Cloudflare, Keycloak, Temporal variables
+- **Updated** `infra/terraform/staging-k8s/outputs.tf` — Replaced Kong with APISIX, added all V2 outputs
+
+### Why
+
+Phase 3 installs ALL infrastructure Helm charts into the k3s cluster via Terraform. This follows the 3-layer architecture: Terraform(server) → Ansible(binaries) → Terraform(Helm charts). Kong replaced by APISIX for jwt-auth, per-route rate limiting, and OpenTelemetry integration.
+
+---
+
+## 2026-02-27T17:35 — V2 Developer Tools Documentation
+
+### What Changed
+- **Created** `docs/v2-architecture/developers.md` — Documented all required local CLI tools for interacting with the V2 infrastructure.
+
+### Why
+Developers need to install `terraform`, `ansible`, `kubectl`, `helm`, `kubeseal`, `cilium-cli`, `hubble`, and `argocd` via Homebrew on their local Macs to fully manage, encrypt, and debug the V2 stack.
+
+---
+
+## 2026-02-27T18:32 — CNPG Storage Size Refactoring
+
+### What Changed
+- **Modified** `infra/terraform/modules/k8s-platform/variables.tf` — Added `keycloak_db_storage_size` and `free_db_storage_size` variables.
+- **Modified** `infra/terraform/modules/k8s-platform/main.tf` — Replaced hard-coded "10Gi" and "50Gi" strings with dynamic sizing variables. Also updated Keycloak Helm block to dynamically reference the CNPG cluster name (`${kubernetes_manifest.cnpg_keycloak[0].manifest.metadata.name}-rw...`) rather than hardcoding the endpoint string.
+- **Modified** `infra/terraform/staging-k8s/variables.tf` — Added staging defaults of "10Gi" for both.
+- **Modified** `infra/terraform/staging-k8s/main.tf` — Injected variables into module.
+
+---
+
+## 2026-02-27T19:07 — Dynamic Domains & Customer Registry Refactoring
+
+### What Changed
+- **Modified** `infra/terraform/modules/k8s-platform/variables.tf` — Added `domain`, `cluster_domain`, and `customer_registry_host` variables.
+- **Modified** `infra/terraform/modules/k8s-platform/main.tf` — Stripped all hardcoded references to "freezenith.com", "stage.freezenith.com", and changed the Harbor external URL to use the new `customer_registry_host`.
+- **Modified** `infra/terraform/staging-k8s/variables.tf` and `main.tf` — Injected the staging defaults for these domain variables.
+
+### Why
+Using hardcoded domains violates Terraform module best practices. We decoupled the parent domain, cluster domain, and explicitly separated the registry used internally by Zenith from the one provisioned for end-users, ensuring no routing conflicts.
+
+---
+
+## 2026-02-27T19:27 — Split k8s-platform main.tf into logical files
+
+### What Changed
+- **Split** `infra/terraform/modules/k8s-platform/main.tf` (1806 lines) into 14 focused files:
+  - `main.tf` (105 lines) — header + terraform block + PriorityClasses
+  - `certmanager.tf` — cert-manager + ClusterIssuer
+  - `sealed_secrets.tf` — Sealed Secrets
+  - `storage.tf` — CNPG operator + Keycloak PG + Free PG clusters
+  - `identity.tf` — Keycloak
+  - `gateway.tf` — APISIX + external-dns
+  - `gitops.tf` — ArgoCD + Image Updater
+  - `registry.tf` — Harbor
+  - `temporal.tf` — Temporal workflow engine
+  - `security.tf` — Kyverno + Falco + Velero
+  - `observability.tf` — Prometheus + Loki + Tempo + OTel + Hubble UI
+  - `autoscaling.tf` — KEDA
+  - `apps.tf` — zenith-platform, api, landing, demo
+  - `tenant.tf` — zenith-tenant (per-customer)
+- **Fixed** `variables.tf` — added 30+ missing V2 variable declarations
+- **Fixed** `outputs.tf` — replaced Kong/monitoring references, added 9 new V2 outputs
+
+### Why
+1806 lines in a single file was unreadable. Terraform merges all `.tf` files in a directory automatically, so this split is purely organizational with zero functional change.
+
+### Verification
+- `terraform validate` passes on both `modules/k8s-platform` and `staging-k8s`

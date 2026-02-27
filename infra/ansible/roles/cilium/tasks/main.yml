@@ -32,7 +32,7 @@
   changed_when: false
   tags: [cilium, infra]
 
-- name: Install Cilium via CLI
+- name: Install Cilium with WireGuard encryption and Hubble
   when: cilium_ds.rc != 0
   ansible.builtin.command: >
     cilium install
@@ -40,6 +40,11 @@
     --set kubeProxyReplacement=true
     --set k8sServiceHost=127.0.0.1
     --set k8sServicePort=6443
+    --set hubble.enabled={{ enable_hubble | default(true) }}
+    --set hubble.relay.enabled={{ enable_hubble | default(true) }}
+    --set hubble.ui.enabled={{ enable_hubble_ui | default(true) }}
+    --set encryption.enabled={{ enable_wireguard | default(true) }}
+    --set encryption.type=wireguard
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
   tags: [cilium, infra]

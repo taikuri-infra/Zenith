@@ -270,7 +270,7 @@ File `infra/terraform/staging/main.tf` already exists with:
 
 #### 3.1: Upgrade Server Type
 
-- [ ] Update `terraform.tfvars` to use `cx42` (8 vCPU, 16 GB RAM) for V2 workloads
+- [x] Update `terraform.tfvars` to use `cx42` (8 vCPU, 16 GB RAM) for V2 workloads — already cx43/16GB
 
 **File:** `infra/terraform/staging/terraform.tfvars`
 ```hcl
@@ -286,7 +286,7 @@ terraform plan | grep server_type
 
 #### 3.2: Add V2 DNS Records
 
-- [ ] Add new subdomains for V2 infrastructure services
+- [x] Add new subdomains for V2 infrastructure services
 
 **File:** `infra/terraform/staging/main.tf` — modify the `platform_records` map:
 ```hcl
@@ -331,7 +331,7 @@ terraform plan
 
 #### 3.3: Apply Phase 1
 
-- [ ] Apply Terraform to create/update server and DNS
+- [x] Apply Terraform to create/update server and DNS
 
 ```bash
 cd infra/terraform/staging
@@ -350,7 +350,7 @@ done
 
 #### 3.4: Verify SSH Access
 
-- [ ] Verify SSH connectivity to the new/updated server
+- [x] Verify SSH connectivity to the new/updated server
 
 ```bash
 ssh root@$(terraform output -raw server_ip) "hostname && uname -a"
@@ -377,7 +377,7 @@ Ansible roles exist for: common, k3s, cilium, cert-manager, postgres, traefik-co
 
 #### 4.1: Enable WireGuard Encryption on Cilium
 
-- [ ] Add WireGuard encryption flag to Cilium role
+- [x] Add WireGuard encryption flag to Cilium role
 
 **File:** `infra/ansible/roles/cilium/tasks/main.yml` — add to the `cilium install` command:
 ```yaml
@@ -411,7 +411,7 @@ cilium status
 
 #### 4.2: Enable Hubble Observability
 
-- [ ] Verify Hubble is enabled (configured in 4.1 via `hubble.enabled=true`)
+- [x] Verify Hubble is enabled (configured in 4.1 via `hubble.enabled=true`)
 
 **Validation:**
 ```bash
@@ -423,7 +423,7 @@ hubble observe --last 10
 
 #### 4.3: Enable k3s Secrets Encryption
 
-- [ ] Add `--secrets-encryption` flag to k3s installation
+- [x] Add `--secrets-encryption` flag to k3s installation
 
 **File:** `infra/ansible/roles/k3s/tasks/main.yml` — update the k3s install command:
 ```yaml
@@ -452,7 +452,7 @@ k3s secrets-encrypt status
 
 #### 4.4: Configure cert-manager for DNS-01 (Prepare)
 
-- [ ] Prepare Cloudflare API token secret for DNS-01 solver (applied in Phase 3)
+- [x] Prepare Cloudflare API token secret for DNS-01 solver (applied in Phase 3)
 
 This is a preparation step. The actual ClusterIssuer is created by Terraform in Phase 3. Here we ensure the Ansible playbook creates the Cloudflare API token as a K8s Secret that cert-manager will reference.
 
@@ -595,7 +595,7 @@ ResourceQuotas + LimitRanges + PodDisruptionBudgets
 
 #### 5.1: PriorityClasses
 
-- [ ] Create 4 PriorityClasses for pod eviction ordering
+- [x] Create 4 PriorityClasses for pod eviction ordering
 
 **Files:** `infra/terraform/modules/k8s-platform/main.tf` — add at the top (no dependencies):
 ```hcl
@@ -651,7 +651,7 @@ kubectl get priorityclasses
 
 #### 5.2: cert-manager DNS-01 Upgrade
 
-- [ ] Modify existing cert-manager ClusterIssuer from HTTP-01 to DNS-01
+- [x] Modify existing cert-manager ClusterIssuer from HTTP-01 to DNS-01
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — replace the `cluster_issuer` resource:
 ```hcl
@@ -711,7 +711,7 @@ kubectl get clusterissuer letsencrypt-prod -o yaml | grep -A5 solvers
 
 #### 5.3: Sealed Secrets
 
-- [ ] Add Sealed Secrets controller for GitOps-safe encrypted secrets
+- [x] Add Sealed Secrets controller for GitOps-safe encrypted secrets
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add new resource:
 ```hcl
@@ -783,7 +783,7 @@ kubeseal --fetch-cert --controller-name=sealed-secrets --controller-namespace=se
 
 #### 5.4: CNPG Operator Upgrade
 
-- [ ] Verify existing CNPG operator (already installed, version 0.23.0)
+- [x] Verify existing CNPG operator (already installed, version 0.23.0)
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — existing `helm_release.cnpg` is fine. Ensure cluster-wide watching:
 ```hcl
@@ -811,8 +811,8 @@ kubectl get crds | grep cnpg
 
 #### 5.5: CNPG Keycloak Cluster (Dedicated)
 
-- [ ] Create a dedicated CNPG PostgreSQL cluster for Keycloak
-- [ ] Create S3 credentials secret in keycloak namespace (see PF-5)
+- [x] Create a dedicated CNPG PostgreSQL cluster for Keycloak
+- [x] Create S3 credentials secret in keycloak namespace (see PF-5)
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -954,7 +954,7 @@ kubectl get pods -n keycloak -l cnpg.io/cluster=keycloak-pg
 
 #### 5.6: CNPG Free Cluster (Shared)
 
-- [ ] Create shared CNPG cluster for all free-tier customers
+- [x] Create shared CNPG cluster for all free-tier customers
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -1118,7 +1118,7 @@ kubectl exec -n zenith-shared free-pg-1 -- psql -U zenith_admin -l | grep tempor
 
 #### 5.7: Keycloak
 
-- [ ] Deploy Keycloak identity provider with dedicated CNPG database
+- [x] Deploy Keycloak identity provider with dedicated CNPG database
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -1260,9 +1260,9 @@ kubectl logs -n keycloak -l app.kubernetes.io/name=keycloak --tail=20
 
 #### 5.8: APISIX + etcd (Replaces Kong)
 
-- [ ] Add APISIX API gateway with etcd backend
-- [ ] Remove Kong (see PF-1: deploy APISIX first, migrate routes, then remove Kong)
-- [ ] Update `outputs.tf`: replace `kong_status` with `apisix_status` (see PF-6)
+- [x] Add APISIX API gateway with etcd backend
+- [x] Remove Kong (see PF-1: deploy APISIX first, migrate routes, then remove Kong)
+- [x] Update `outputs.tf`: replace `kong_status` with `apisix_status` (see PF-6)
 
 **WARNING:** Do NOT remove Kong and add APISIX in the same apply. See PF-1 for the safe migration order.
 
@@ -1458,7 +1458,7 @@ kubectl get apisixroutes --all-namespaces
 
 #### 5.9: external-dns
 
-- [ ] Add external-dns for automatic Cloudflare DNS record creation from Ingress resources
+- [x] Add external-dns for automatic Cloudflare DNS record creation from Ingress resources
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -1562,7 +1562,7 @@ kubectl logs -n external-dns -l app.kubernetes.io/name=external-dns --tail=20
 
 #### 5.10: ArgoCD
 
-- [ ] Add ArgoCD for GitOps application deployment (App-of-Apps pattern)
+- [x] Add ArgoCD for GitOps application deployment (App-of-Apps pattern)
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -1710,7 +1710,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 #### 5.11: Harbor
 
-- [ ] Add Harbor container and Helm chart registry with S3 backend
+- [x] Add Harbor container and Helm chart registry with S3 backend
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -1838,7 +1838,7 @@ curl -sk https://registry.stage.freezenith.com/api/v2.0/health
 
 #### 5.12: Temporal
 
-- [ ] Add Temporal workflow engine for customer provisioning
+- [x] Add Temporal workflow engine for customer provisioning
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -2012,7 +2012,7 @@ kubectl get svc -n temporal temporal-web
 
 #### 5.13: Kyverno
 
-- [ ] Add Kyverno policy engine with 11 admission policies
+- [x] Add Kyverno policy engine with 11 admission policies
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -2098,7 +2098,7 @@ kubectl get clusterpolicies
 
 #### 5.14: Falco
 
-- [ ] Add Falco runtime security detection with eBPF driver
+- [x] Add Falco runtime security detection with eBPF driver
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -2178,7 +2178,7 @@ kubectl logs -n falco -l app.kubernetes.io/name=falco --tail=10
 
 #### 5.15: Velero
 
-- [ ] Add Velero for cluster backup to Hetzner S3
+- [x] Add Velero for cluster backup to Hetzner S3
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -2322,7 +2322,7 @@ velero schedule get
 
 #### 5.16: Prometheus + Grafana + Alertmanager
 
-- [ ] Upgrade existing monitoring stack with V2 enhancements
+- [x] Upgrade existing monitoring stack with V2 enhancements
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — the existing `helm_release.monitoring` resource already installs kube-prometheus-stack. For V2, we need to upgrade the Helm chart to `kube-prometheus-stack` 68.4.0 from the official repo instead of the local chart.
 
@@ -2439,7 +2439,7 @@ kubectl get svc -n monitoring | grep grafana
 
 #### 5.17: Loki
 
-- [ ] Upgrade Loki for centralized log aggregation
+- [x] Upgrade Loki for centralized log aggregation
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -2528,7 +2528,7 @@ kubectl get pods -n monitoring -l app.kubernetes.io/name=loki
 
 #### 5.18: Tempo
 
-- [ ] Add Tempo for distributed trace storage
+- [x] Add Tempo for distributed trace storage
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -2597,7 +2597,7 @@ kubectl get pods -n monitoring -l app.kubernetes.io/name=tempo
 
 #### 5.19: OpenTelemetry Collector
 
-- [ ] Add OTel Collector as DaemonSet for trace and metric collection
+- [x] Add OTel Collector as DaemonSet for trace and metric collection
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -2676,7 +2676,7 @@ kubectl get pods -n monitoring -l app.kubernetes.io/name=opentelemetry-collector
 
 #### 5.20: Hubble UI
 
-- [ ] Verify Hubble UI is accessible (enabled via Cilium in Phase 2)
+- [x] Verify Hubble UI is accessible (enabled via Cilium in Phase 2)
 
 Hubble was enabled in Phase 2 via Cilium flags (`hubble.enabled=true`, `hubble.ui.enabled=true`). This step verifies it and creates an IngressRoute for external access.
 

@@ -223,3 +223,257 @@ variable "keda_http_addon_version" {
   type        = string
   default     = "0.9.0"
 }
+
+# --- V2 Variables ---
+
+variable "environment" {
+  description = "Environment name (staging or production)"
+  type        = string
+  default     = "staging"
+}
+
+variable "domain" {
+  description = "The root domain used for DNS routing and certificates (e.g. freezenith.com)"
+  type        = string
+}
+
+variable "cluster_domain" {
+  description = "The specific environment domain used for ingress (e.g. stage.freezenith.com)"
+  type        = string
+}
+
+variable "enable_sealed_secrets" {
+  description = "Enable Bitnami Sealed Secrets"
+  type        = bool
+  default     = true
+}
+
+variable "sealed_secrets_version" {
+  description = "Sealed Secrets chart version"
+  type        = string
+  default     = "2.16.1"
+}
+
+variable "enable_keycloak" {
+  description = "Enable Keycloak identity provider"
+  type        = bool
+  default     = true
+}
+
+variable "enable_kyverno" {
+  description = "Enable Kyverno admission controller"
+  type        = bool
+  default     = true
+}
+
+variable "kyverno_version" {
+  description = "Kyverno chart version"
+  type        = string
+  default     = "3.2.6"
+}
+
+variable "enable_falco" {
+  description = "Enable Falco runtime security"
+  type        = bool
+  default     = true
+}
+
+variable "falco_version" {
+  description = "Falco chart version"
+  type        = string
+  default     = "4.5.1"
+}
+
+variable "enable_velero" {
+  description = "Enable Velero cluster backups"
+  type        = bool
+  default     = true
+}
+
+variable "velero_version" {
+  description = "Velero chart version"
+  type        = string
+  default     = "6.1.1"
+}
+
+variable "prometheus_stack_version" {
+  description = "Kube Prometheus Stack version"
+  type        = string
+  default     = "61.3.1"
+}
+
+variable "s3_access_key" {
+  description = "Hetzner Object Storage Access Key"
+  type        = string
+  sensitive   = true
+}
+
+variable "s3_secret_key" {
+  description = "Hetzner Object Storage Secret Key"
+  type        = string
+  sensitive   = true
+}
+
+variable "s3_endpoint" {
+  description = "Hetzner Object Storage Endpoint"
+  type        = string
+  default     = "https://fsn1.your-objectstorage.com"
+}
+
+# --- Keycloak ---
+
+variable "keycloak_version" {
+  description = "Keycloak Helm chart version"
+  type        = string
+  default     = "21.4.4"
+}
+
+variable "keycloak_db_password" {
+  description = "Password for Keycloak CNPG database"
+  type        = string
+  sensitive   = true
+}
+
+variable "keycloak_admin_password" {
+  description = "Keycloak admin console password"
+  type        = string
+  sensitive   = true
+}
+
+variable "keycloak_db_storage_size" {
+  description = "Storage size for Keycloak dedicated CNPG cluster"
+  type        = string
+  default     = "10Gi"
+}
+
+variable "free_db_storage_size" {
+  description = "Storage size for the shared free-tier CNPG cluster"
+  type        = string
+  default     = "20Gi"
+}
+
+# --- APISIX ---
+
+variable "enable_apisix" {
+  description = "Enable APISIX API Gateway (replaces Kong)"
+  type        = bool
+  default     = true
+}
+
+variable "apisix_version" {
+  description = "APISIX Helm chart version"
+  type        = string
+  default     = "2.9.0"
+}
+
+variable "apisix_ingress_version" {
+  description = "APISIX Ingress Controller chart version"
+  type        = string
+  default     = "0.14.0"
+}
+
+# --- external-dns ---
+
+variable "enable_external_dns" {
+  description = "Enable external-dns for automatic Cloudflare DNS"
+  type        = bool
+  default     = true
+}
+
+variable "external_dns_version" {
+  description = "external-dns Helm chart version"
+  type        = string
+  default     = "8.3.3"
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token for DNS-01 and external-dns"
+  type        = string
+  sensitive   = true
+}
+
+# --- ArgoCD ---
+
+variable "enable_argocd" {
+  description = "Enable ArgoCD GitOps engine"
+  type        = bool
+  default     = true
+}
+
+variable "argocd_version" {
+  description = "ArgoCD Helm chart version"
+  type        = string
+  default     = "7.3.11"
+}
+
+variable "argocd_image_updater_version" {
+  description = "ArgoCD Image Updater chart version"
+  type        = string
+  default     = "0.11.0"
+}
+
+# --- Harbor ---
+
+variable "enable_harbor" {
+  description = "Enable Harbor container registry"
+  type        = bool
+  default     = true
+}
+
+variable "harbor_version" {
+  description = "Harbor Helm chart version"
+  type        = string
+  default     = "1.15.1"
+}
+
+variable "customer_registry_host" {
+  description = "Public-facing registry host for pro-tier customers (e.g. hub.stage.freezenith.com)"
+  type        = string
+  default     = "hub.stage.freezenith.com"
+}
+
+# --- Temporal ---
+
+variable "enable_temporal" {
+  description = "Enable Temporal workflow engine"
+  type        = bool
+  default     = true
+}
+
+variable "temporal_version" {
+  description = "Temporal Helm chart version"
+  type        = string
+  default     = "0.45.0"
+}
+
+variable "temporal_db_user" {
+  description = "Temporal database user"
+  type        = string
+  sensitive   = true
+}
+
+variable "temporal_db_password" {
+  description = "Temporal database password"
+  type        = string
+  sensitive   = true
+}
+
+# --- Observability (Loki / Tempo / OTel) ---
+
+variable "loki_version" {
+  description = "Loki Helm chart version"
+  type        = string
+  default     = "6.6.4"
+}
+
+variable "tempo_version" {
+  description = "Tempo Helm chart version"
+  type        = string
+  default     = "1.10.1"
+}
+
+variable "otel_collector_version" {
+  description = "OpenTelemetry Collector Helm chart version"
+  type        = string
+  default     = "0.96.0"
+}
