@@ -1,97 +1,339 @@
-# Zenith — Developer Handover
-*Last Updated: 2026-02-22T17:00*
+# Zenith Infrastructure Handover
 
-## Current Status & Completed Work
-Phase 6.5 (Pro/Team/Enterprise Features) is **100% complete** (17/17 tasks). All backend API stubs, memory stores, handlers, routes, frontend types, demo mocks, and web build verified.
-
-In the immediate previous sessions, we completed the backend for **Phases 5, 6, and 7**.
-1. **Phase 5 (App Secrets)**: 
-   - Created `app_secrets` table. 
-   - Implemented AES-256-GCM encryption/decryption in `pkg/crypto/aes.go` (requires `SECRETS_ENCRYPTION_KEY` env var).
-   - Created `SecretHandler` for `GET /apps/:appId/secrets` (lists keys only), `GET /apps/:appId/secrets/:key/value` (decrypts), `POST /apps/:appId/secrets` (encrypts and stores), and `DELETE`.
-   - Backend is fully tested and functional. **The Frontend UI tab for Secrets is NOT yet built.**
-2. **Phase 6 (Releases & Deploy Flow)**:
-   - Created `app_releases` table to track images pushed by CI/CD.
-   - Created `ReleaseHandler` to register releases (`POST /apps/:appId/releases`), list them, and trigger deploys (`POST /apps/:appId/releases/:rid/deploy`).
-   - Added `TriggerImageDeploy` to `deploy/pipeline.go` allowing direct deployment of a pre-built image, bypassing the build phase.
-   - **The Frontend UI Deployments tab with the version list and one-click Deploy button is NOT yet built.**
-3. **Phase 7 (GitHub Actions)**:
-   - Created a composite GitHub Action at `.github-actions/zenith-deploy/action.yml` that customers can use in their repos to build, push to their own registry, and register the release with Zenith.
-
-**Tests:** `GO111MODULE=on go test ./internal/... -count=1` is completely clean except for two pre-existing flaky cluster tests (`TestScaleClusterEndpoint`, `TestUpgradeClusterEndpoint`) in `handlers_test.go` which pass when run individually.
+> Last updated: 2026-02-24
+> Branch: `openspec/infra-pipeline-v1` (not yet merged to `main`)
 
 ---
 
-## Architectural Decisions (Confirmed)
-We have made significant structural decisions for the Zenith infrastructure (fully documented in `app_explanation.md`):
-- **Privacy Model:** Customer image building and hosting happen entirely within the customer's own cluster (via Kaniko) and registry (e.g. GHCR, ECR). Zenith orchestrates, but never pulls or hosts customer images in its own infra.
-- **GitOps Engine:** **FluxCD** (chosen over ArgoCD specifically for its native integration with CAPI via `ClusterResourceSet` to auto-bootstrap new customer clusters).
-- **Networking/Security:** **Cilium** (eBPF, ClusterMesh for multi-cluster routing, mTLS between control plane and data planes).
-- **API Gateway:** **Kong** (DB-less Ingress Controller).
-- **Database Provisioning:** **CloudNativePG** for spinning up Postgres clusters per tenant.
-- **IAM:** **Keycloak** (one realm per tenant).
-- **Internal Chart Storage:** **Harbor** (only used internally to store Zenith's own infrastructure Helm charts, NOT customer app images).
-- **Secret Management (Infra):** **Sealed Secrets** for GitOps state.
+## Servers
+
+| Name | IP | Purpose | Specs |
+|------|----|---------|-------|
+| zen-stage | 77.42.88.149 | Staging k3s cluster | Hetzner cx33, 4 vCPU, 8GB RAM |
+| harbor | 65.108.210.253 | Harbor container registry | Hetzner |
+| ghasi (prod) | 161.35.82.211 | Production k3s cluster | DigitalOcean, 4 vCPU, 8GB RAM, 155GB |
+
+SSH: `ssh root@77.42.88.149` (staging), `ssh ghasi` (prod via SSH config)
 
 ---
 
-## Immediate Next Steps
-The new account/session should pick up from here. The priorities are:
+## What's Running on Staging (zen-stage)
 
-### 1. ✅ Frontend UI for Phases 5 & 6 (COMPLETED)
-- **Secrets Tab:** Added to App Dashboard (`apps/[id]/page.tsx`) with List, Add, Reveal (decrypt), Copy, Delete. Demo mode has 3 mock secrets.
-- **Releases Tab:** Added to App Dashboard with image version table, git SHA, branch, commit message, one-click Deploy button. Demo mode has 4 mock releases.
+k3s v1.34.3 with Traefik 3.5.1. All 8 Helm releases deployed:
 
-### 2. Finish the Remaining "Not Yet Wired" Backend Phases (COMPLETED)
-- **Phase 8 (Real-Time Events):** ✅ COMPLETED — Created `EventHub` (in-memory pub/sub broadcaster), SSE endpoints at `/api/v1/events`, Pipeline emits 6 event types. Frontend `useDeployEvents` hook auto-refreshes Deploy page cards and App Detail deployment rows.
-- **Phase 9 (OpenTelemetry):** ✅ COMPLETED — Wired `telemetry.Init()` + `telemetry.Middleware()` into main.go. Opt-in via `OTEL_EXPORTER_OTLP_ENDPOINT`. Traces + metrics exported via OTLP gRPC. Skips `/health` and `/ready`.
-- **Phase 10 (Backstage Catalog):** ✅ COMPLETED — Wired `BackstageHandler` into `main.go` protecting `/api/v1/backstage/catalog` routes. 
+| Release | Namespace | Chart | Status |
+|---------|-----------|-------|--------|
+| cert-manager | cert-manager | cert-manager-v1.17.2 | deployed |
+| cnpg | cnpg-system | cloudnative-pg-0.23.0 | deployed |
+| zenith | zenith-staging | zenith-0.3.0 | deployed |
+| kong | kong | ingress-0.16.0 | deployed |
+| keda | keda | keda-2.16.0 | deployed |
+| keda-http-add-on | keda | keda-add-ons-http-0.9.0 | deployed |
+| zenith-monitoring | monitoring | zenith-monitoring-0.1.0 | deployed |
+| traefik | kube-system | traefik-37.1.1 (k3s built-in) | deployed |
 
-### 3. Move to Infrastructure (Phase 11+)
-- **Kubernetes Client:** ✅ COMPLETED — Replaced `MemoryClient` with `RealClient` using `client-go` v0.35.1. Supports auto-detection (in-cluster vs kubeconfig). Switchable via `K8S_MODE` environment variable.
-- **Next:** Begin building the CAPI provisioning package (`internal/cluster`).
+### Live URLs
 
-### 4. Backend Refactoring (Lich Architecture)
-- **Phase A (Entities & DTOs):** ✅ COMPLETED — Created `internal/entities/` (pure domain types without json tags where possible) and `internal/dto/` (API input/output shapes). Separated God-structs from `models/` into these new directories.
-- **Next Refactoring Phases (B, C, D):** Move logic into `services/`, abstract storage to `ports/` and `adapters/`, and refactor handlers to only handle HTTP mapping.
+| URL | Service | Status |
+|-----|---------|--------|
+| https://stage.freezenith.com | zenith-landing:3000 | Running |
+| https://api.stage.freezenith.com | Traefik -> Kong -> zenith-api:8080 | Running |
+| https://embermind-ms.stage.freezenith.com | zenith-mc:3100 (tenant) | Running |
+| https://embermind.stage.freezenith.com | zenith-web:3000 (tenant) | **Bug (HTTP 500)** |
 
-### 5. ✅ Phase 6.5: Pro/Team/Enterprise Features (17/17 COMPLETED)
-All features built with backend (entities, memory stores, handlers, routes) + frontend (types, API clients, demo mocks). Web build passes.
+### Internal Services (port-forward only)
 
-**Pro Features:**
-- **S65-01** MFA/2FA (TOTP) — `handlers/mfa.go`, `store/memory_mfa.go`, `entities/mfa.go`
-- **S65-02** GitLab/Bitbucket webhooks — `HandleGitLabPush`, `HandleBitbucketPush` in `handlers/webhook.go`
-- **S65-03** User-defined webhooks — `handlers/user_webhook.go`, `store/memory_webhook.go`, `entities/webhook.go`
-- **S65-04** API keys — `handlers/api_keys.go`, `store/memory_apikey.go`, `entities/api_key.go`
-
-**Team Features:**
-- **S65-05/06** SSO (SAML + OIDC) — `handlers/sso.go`, `store/memory_sso.go`, `entities/sso.go`
-- **S65-07** Session management — `handlers/session.go`, `store/memory_session.go`, `entities/session.go`
-- **S65-08** Audit log export (CSV/JSON) — `handlers/audit_export.go`
-- **S65-09** DPA (Data Processing Agreement) — `handlers/branding.go`, `store/memory_branding.go`, `entities/branding.go`
-- **S65-10** Preview deployments — `handlers/preview.go`, `store/memory_preview.go`, `entities/preview.go`
-
-**Enterprise Features:**
-- **S65-11** SCIM 2.0 provisioning — `handlers/scim.go`
-- **S65-12** Custom roles (RBAC) — `handlers/role.go`, `store/memory_role.go`, `entities/role.go`
-- **S65-13** IP whitelisting — `handlers/ip_whitelist.go`, `store/memory_ipwhitelist.go`, `entities/ip_whitelist.go`
-- **S65-14** Compliance dashboard — `handlers/compliance.go`
-- **S65-15/16/17** White-label (branding, custom domain, hide badge) — in `handlers/branding.go`
-
-**Frontend:** Settings page has 6 tabs (API Keys, MFA, Webhooks, Sessions, Security, General). All demo mocks in `demo-api.ts`.
+- PostgreSQL: `zenith-postgres-rw.zenith-staging:5432` (CNPG managed)
+- Kong Manager: `kubectl port-forward svc/kong-gateway-manager -n kong 8002:8002`
+- Grafana: `kubectl port-forward svc/zenith-monitoring-grafana -n monitoring 3000:80`
+- Prometheus: `kubectl port-forward svc/zenith-monitoring-kube-prom-prometheus -n monitoring 9090:9090`
 
 ---
 
-## Immediate Next Steps
-1. **OpenAPI Spec** — Generate/write OpenAPI spec for all API endpoints
-2. **Phase 4** (KEDA autoscaling) — requires real K8s
-3. **Phase 5** (Hetzner Autoscaler) — requires real infra
-4. **Phase 6** (Stripe Billing) — requires Stripe setup
+## Credentials
+
+| Service | Username | Password |
+|---------|----------|----------|
+| Zenith API admin | admin@freezenith.com | 8i3wIotgaZEgxVnXMEpA |
+| Grafana | admin | 8i3wIotgaZEgxVnXMEpA |
+| Harbor robot | robot$zenith-stage+ci-push | flzHu8gJwQJL3eKgpNh8girixpnEBktR |
+| JWT Secret | — | 6AHcdLGHXqpJ6SOiWktf+Wzs6ZreaESdXpkJ7W+V4eKnaHbOIJ1cU+oSE3rv22c+ |
+| PostgreSQL | zenith | auto-generated by CNPG (in secret `zenith-postgres-app` in `zenith-staging` ns) |
+
+Terraform tfvars (staging): `infra/terraform/staging-k8s/terraform.tfvars` (gitignored)
 
 ---
 
-## Rules to Follow
-- Always append to `agentlog.md` with WHAT, WHY, and WHEN for every single architectural or code adjustment.
-- **Documentation is Mandatory:** No feature is complete without a corresponding doc in `docs/` and an entry in `agentlog.md`. (See `docs/features/backend/*.md`)
-- Read `app_explanation.md` and `agentlog.md` if you ever need deep context on the system.
-- **Tests:** `GO111MODULE=on go test ./...` passes. Only known failure is `TestScaleClusterEndpoint` (pre-existing, needs CAPI CRD object).
+## What Was Done (this session)
+
+### Completed
+
+1. **CloudNativePG operator** — Replaced raw PostgreSQL StatefulSet with CNPG `Cluster` CR
+   - Files: `infra/helm/zenith/templates/postgres.yaml`, `infra/terraform/modules/k8s-platform/main.tf`
+   - CNPG auto-manages secrets (`zenith-postgres-app`), services (`-rw`, `-ro`, `-r`), failover
+   - `api.yaml` updated to read DB creds from CNPG secret
+
+2. **Kong Manager OSS** — Enabled admin UI on port 8002
+   - File: `infra/terraform/modules/k8s-platform/main.tf` (helm_release.kong)
+
+3. **Removed db_password** — CNPG manages passwords now. Cleaned from all Terraform + Helm files
+   - All `staging-k8s/`, `production-k8s/`, `modules/k8s-platform/` files
+
+4. **Fixed zenith-web slug conflict** — Next.js crash: `apps/[id]` and `apps/[name]` can't coexist
+   - Moved `apps/web/src/app/apps/[id]/page.tsx` -> `apps/web/src/app/deploy/[id]/page.tsx`
+   - Updated 3 link references in `apps/page.tsx`, `deploy/page.tsx`, `page.tsx`
+   - **NOTE: Images not yet rebuilt/pushed. zenith-web still has the bug on the server.**
+
+5. **Makefile** — Root Makefile with test/lint/security/build/push/chart/deploy/ci targets
+   - File: `Makefile`
+
+6. **Monitoring IngressRoutes** — Grafana + Prometheus exposed via Traefik
+   - File: `infra/helm/monitoring/templates/ingress.yaml`
+   - DNS records added: `grafana.stage.freezenith.com`, `prometheus.stage.freezenith.com`
+   - Terraform module updated with `monitoring_domain` variable
+   - **NOTE: Not yet applied. Need `terraform apply` on both staging and staging-k8s.**
+
+7. **Cilium CNI** — Ansible role for NetworkPolicy support
+   - File: `infra/ansible/roles/cilium/tasks/main.yml`
+   - Updated k3s role with `--flannel-backend=none --disable-network-policy` when `enable_cilium=true`
+   - Added to `site.yml` after k3s, before cert-manager
+   - **NOTE: Not yet applied. Requires k3s reinstall (destructive! cluster resets).**
+
+8. **PDB templates** — PodDisruptionBudgets auto-created when replicas > 1
+   - File: `infra/helm/zenith/templates/pdb.yaml`
+
+9. **KEDA HTTPScaledObject templates** — Scale-to-zero for stateless services
+   - File: `infra/helm/zenith/templates/keda.yaml`
+   - Config section added to `values.yaml` (disabled by default)
+
+10. **Semgrep security scanning** — CI workflow + custom rules
+    - Files: `.github/workflows/security.yml`, `.semgrep.yml`
+    - `make security` target added to Makefile
+    - **NOT YET COMMITTED**
+
+11. **Git commit** — `83134be` on branch `openspec/infra-pipeline-v1`
+    - Contains items 1-9. Item 10 (semgrep) is uncommitted.
+
+---
+
+## Uncommitted Changes
+
+```
+ M Makefile                          # Added `make security` target
+?? .github/workflows/security.yml    # Semgrep CI workflow
+?? .semgrep.yml                      # Custom Semgrep rules
+```
+
+---
+
+## What Still Needs To Be Done
+
+### Immediate (to finish current work)
+
+1. **Commit semgrep files** — stage + commit the 3 files above
+
+2. **Rebuild + push zenith-web images** — The slug fix is only in code, not deployed
+   ```bash
+   make build-web
+   make push-web
+   ```
+
+3. **Bump chart to 0.4.0** — Monitoring IngressRoutes + PDB + KEDA templates need new chart version
+   ```bash
+   # Edit infra/helm/zenith/Chart.yaml -> version: 0.4.0, appVersion: "0.4.0"
+   make chart-push
+   ```
+
+4. **Apply Terraform** — Monitoring DNS + Helm releases not yet live
+   ```bash
+   cd infra/terraform/staging && terraform apply       # DNS records (grafana.stage, prometheus.stage)
+   cd infra/terraform/staging-k8s && terraform apply   # Helm releases update
+   ```
+
+5. **Verify** — Check all URLs work after deploy:
+   - https://stage.freezenith.com
+   - https://api.stage.freezenith.com/health
+   - https://embermind.stage.freezenith.com (should work after web image rebuild)
+   - https://grafana.stage.freezenith.com (new)
+   - https://prometheus.stage.freezenith.com (new)
+
+### Medium Priority
+
+6. **Cilium CNI** — Requires k3s reinstall (destructive):
+   - This resets the entire cluster. All Helm releases must be re-applied.
+   - Set `enable_cilium: true` in `infra/ansible/inventory/staging.yml` (already done)
+   - Run full Ansible playbook to reinstall k3s with Cilium
+   - Then re-apply all Terraform
+
+7. **NetworkPolicy manifests** — After Cilium, add to Helm templates:
+   - Tenant isolation (pods only reach own namespace + platform API)
+   - Platform namespace: only Traefik can ingress
+   - Monitoring: can scrape all namespaces
+
+8. **Enable KEDA ScaledObjects** — Set `keda.enabled: true` in `values-staging.yaml`
+
+9. **External Secrets Operator** — Replace plain K8s secrets with ESO + Vault
+
+### Low Priority / Future
+
+10. **GitOps (FluxCD/ArgoCD)** — Automated deployment from git
+11. **RBAC for service accounts** — Dedicated SA with minimal permissions
+12. **CNPG backup configuration** — S3/Hetzner object storage for WAL archiving
+13. **Production parity** — Apply same stack to ghasi server
+14. **Merge branch to main** — `openspec/infra-pipeline-v1` -> `main`
+
+---
+
+## Key File Map
+
+### Infrastructure as Code
+
+| Path | Purpose |
+|------|---------|
+| `infra/terraform/staging/` | Phase 1: Hetzner server + Cloudflare DNS |
+| `infra/terraform/staging-k8s/` | Phase 3: K8s Helm releases |
+| `infra/terraform/modules/k8s-platform/` | Reusable module for all k8s components |
+| `infra/terraform/modules/dns/` | Cloudflare DNS records |
+| `infra/terraform/modules/k3s-server/` | Hetzner server provisioning |
+| `infra/terraform/production-k8s/` | Production k8s config (same module, different vars) |
+| `infra/ansible/` | Server provisioning (k3s, Cilium, cert-manager, etc.) |
+
+### Helm Charts
+
+| Path | Purpose |
+|------|---------|
+| `infra/helm/zenith/` | Main platform chart v0.3.0 |
+| `infra/helm/zenith/values.yaml` | Default values |
+| `infra/helm/zenith/values-staging.yaml` | Staging overrides |
+| `infra/helm/zenith/values-production.yaml` | Production overrides |
+| `infra/helm/monitoring/` | Prometheus + Grafana + Loki + Promtail |
+
+### Application Code
+
+| Path | Purpose |
+|------|---------|
+| `services/api/` | Go API server (hexagonal architecture) |
+| `services/operator/` | Go Kubernetes operator |
+| `apps/landing/` | Next.js landing page |
+| `apps/mission-control/` | Next.js Mission Control (management plane) |
+| `apps/web/` | Next.js Web Platform (customer dashboard) |
+| `packages/ui/` | Shared UI components |
+
+### CI/CD
+
+| Path | Purpose |
+|------|---------|
+| `.github/workflows/build-images.yml` | Build + push Docker images to Harbor |
+| `.github/workflows/build-chart.yml` | Lint + push Helm chart to Harbor OCI |
+| `.github/workflows/terraform.yml` | Terraform plan/apply |
+| `.github/workflows/security.yml` | Semgrep SAST scan (**uncommitted**) |
+| `.semgrep.yml` | Custom security rules (**uncommitted**) |
+| `Makefile` | Local build/test/push/deploy targets |
+
+---
+
+## How to Deploy
+
+### Full staging deployment from scratch
+```bash
+# 1. Terraform Phase 1 (server + DNS)
+cd infra/terraform/staging && terraform init && terraform apply
+
+# 2. Ansible (k3s + server setup)
+cd infra/ansible && ansible-playbook playbooks/site.yml -i inventory/staging.yml
+
+# 3. Build + push images to Harbor
+make build push-all
+
+# 4. Package + push Helm chart
+make chart-push
+
+# 5. Terraform Phase 3 (K8s releases)
+cd infra/terraform/staging-k8s && terraform init && terraform apply
+```
+
+### Quick redeploy (single service)
+```bash
+make build-api push-api
+cd infra/terraform/staging-k8s && terraform apply
+```
+
+### SSH to staging
+```bash
+ssh root@77.42.88.149
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl get pods -A
+```
+
+---
+
+## Architecture Diagram
+
+```
+Internet
+   |
+   v
++-----------+
+| Traefik   |  k3s built-in ingress (TLS termination, L7 routing)
++-----------+
+   |
+   +---> stage.freezenith.com           --> zenith-landing (:3000)
+   +---> embermind-ms.stage.*           --> zenith-mc (:3100) [tenant]
+   +---> embermind.stage.*              --> zenith-web (:3000) [tenant]
+   +---> grafana.stage.*                --> grafana (:80) [monitoring ns]
+   +---> prometheus.stage.*             --> prometheus (:9090) [monitoring ns]
+   |
+   +---> api.stage.freezenith.com       --> +---------------+
+                                            | Kong Gateway  |  (rate-limit, CORS)
+                                            +-------+-------+
+                                                    |
+                                                    v
+                                              zenith-api (:8080)
+                                                    |
+                                                    v
+                                            zenith-postgres-rw (:5432)
+                                              (CNPG operator)
+```
+
+---
+
+## Known Issues
+
+1. **zenith-web HTTP 500** — Slug conflict fixed in code but image not rebuilt. `embermind.stage.freezenith.com` returns 500.
+
+2. **Monitoring chart lint error** — `helm lint infra/helm/monitoring/` fails from kube-prometheus-stack subchart bug. Does NOT affect deployment.
+
+3. **Kubeconfig context typo** — Context named `zentih-stage` (typo). Harmless.
+
+4. **Terraform `wait = false` on zenith** — Set because zenith-web fails readiness probe. After fixing web images, set back to `wait = true` in `infra/terraform/modules/k8s-platform/main.tf` line 165.
+
+---
+
+## Docker Images
+
+All built with `--platform linux/amd64`. Registry: `registry.stage.freezenith.com/zenith-stage/`
+
+| Image | Current Tag | Dockerfile |
+|-------|-------------|------------|
+| zenith-api | 0.2.0 | services/api/Dockerfile |
+| zenith-landing | 0.2.0 | apps/landing/Dockerfile |
+| zenith-mc | 0.2.0 | apps/mission-control/Dockerfile |
+| zenith-mc-demo | 0.2.0 | apps/mission-control/Dockerfile (DEMO_MODE=true) |
+| zenith-web | 0.2.0 | apps/web/Dockerfile |
+| zenith-web-demo | 0.2.0 | apps/web/Dockerfile (DEMO_MODE=true) |
+| zenith-operator | 0.2.0 | services/operator/Dockerfile |
+
+Helm chart: `oci://registry.stage.freezenith.com/zenith-stage/zenith:0.3.0`
+
+---
+
+## Tech Debt
+
+Full list: `infra/tech-debt.md`
+
+Key items:
+- Secrets management (plain K8s secrets -> External Secrets Operator)
+- No NetworkPolicy (needs Cilium first)
+- No RBAC for service accounts
+- No CNPG backups configured
+- Traefik middleware duplication across namespaces

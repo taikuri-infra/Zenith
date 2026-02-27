@@ -1,0 +1,72 @@
+rules:
+  # --- Go: SQL Injection ---
+  - id: go-sql-injection
+    patterns:
+      - pattern: |
+          fmt.Sprintf("... %s ...", $VAR, ...)
+      - pattern-inside: |
+          $DB.Query(...)
+    message: Possible SQL injection via string formatting. Use parameterized queries.
+    languages: [go]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-89"
+
+  # --- Go: Hardcoded credentials (non-empty values only) ---
+  - id: go-hardcoded-password
+    patterns:
+      - pattern: $VAR = "$VALUE"
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(password|secret|token|api_key|apikey).*
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: .{8,}
+    message: Possible hardcoded credential. Use environment variables or secrets manager.
+    languages: [go]
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-798"
+
+  # --- Terraform: Public S3/storage ---
+  - id: tf-public-bucket
+    pattern: |
+      acl = "public-read"
+    message: Storage bucket is publicly readable. Ensure this is intentional.
+    languages: [hcl]
+    severity: WARNING
+    metadata:
+      category: security
+
+  # --- Kubernetes: Container running as root ---
+  - id: k8s-run-as-root
+    pattern: |
+      runAsUser: 0
+    message: Container running as root. Use a non-root user.
+    languages: [yaml]
+    severity: WARNING
+    metadata:
+      category: security
+      cwe: "CWE-250"
+
+  # --- Generic: Private key in code ---
+  - id: private-key-detected
+    pattern-regex: '-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----'
+    message: Private key detected in source code. Remove immediately.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-321"
+
+  # --- Generic: High-entropy secrets ---
+  - id: jwt-secret-in-code
+    pattern-regex: '(jwt[_-]?secret|JWT[_-]?SECRET)\s*[:=]\s*["\x27][A-Za-z0-9+/=]{20,}["\x27]'
+    message: JWT secret appears to be hardcoded. Use environment variables.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-798"

@@ -25,9 +25,9 @@ variable "registry_password" {
 }
 
 variable "zenith_chart_version" {
-  description = "Zenith Helm chart version to deploy"
+  description = "Zenith Helm chart version to deploy (shared across all charts)"
   type        = string
-  default     = "0.2.0"
+  default     = "0.4.0"
 }
 
 # --- App Secrets ---

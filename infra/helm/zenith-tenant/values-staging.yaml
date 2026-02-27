@@ -1,0 +1,49 @@
+# Staging values for zenith-tenant
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+
+registry:
+  enabled: true
+  secretName: harbor-registry
+  # host, username, password injected via Terraform set_sensitive
+
+certManager:
+  issuer: letsencrypt-prod
+  issuerKind: ClusterIssuer
+
+tenants:
+  embermind:
+    domain: freezenith.com
+    namespace: zenith-embermind-staging
+    labels:
+      zenith.dev/tenant: embermind
+      zenith.dev/domain: embermind.app
+    mc:
+      image: zenith-mc:0.2.0
+      host: embermind-ms.stage.freezenith.com
+      replicas: 1
+      port: 3100
+      resources:
+        requests:
+          memory: 128Mi
+          cpu: 100m
+        limits:
+          memory: 256Mi
+          cpu: 250m
+    web:
+      image: zenith-web:0.2.0
+      host: embermind.stage.freezenith.com
+      replicas: 1
+      port: 3000
+      resources:
+        requests:
+          memory: 128Mi
+          cpu: 100m
+        limits:
+          memory: 256Mi
+          cpu: 250m
+    certificate:
+      secretName: embermind-staging-tls
+      domains:
+        - embermind-ms.stage.freezenith.com
+        - embermind.stage.freezenith.com

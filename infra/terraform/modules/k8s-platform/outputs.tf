@@ -3,14 +3,29 @@ output "cert_manager_status" {
   value       = helm_release.cert_manager.status
 }
 
-output "zenith_status" {
-  description = "Zenith platform release status"
-  value       = helm_release.zenith.status
+output "platform_status" {
+  description = "Zenith platform (shared resources) release status"
+  value       = helm_release.zenith_platform.status
 }
 
-output "zenith_version" {
-  description = "Zenith chart version deployed"
-  value       = helm_release.zenith.version
+output "api_status" {
+  description = "Zenith API release status"
+  value       = helm_release.zenith_api.status
+}
+
+output "landing_status" {
+  description = "Zenith Landing release status"
+  value       = helm_release.zenith_landing.status
+}
+
+output "demo_status" {
+  description = "Zenith Demo release status"
+  value       = var.enable_demo ? helm_release.zenith_demo[0].status : "disabled"
+}
+
+output "tenant_status" {
+  description = "Zenith Tenant release status"
+  value       = var.enable_tenants ? helm_release.zenith_tenant[0].status : "disabled"
 }
 
 output "kong_status" {

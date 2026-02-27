@@ -13,6 +13,7 @@ IMAGES := zenith-api zenith-landing zenith-mc zenith-mc-demo zenith-web zenith-w
 
 .PHONY: help version \
 	test test-api test-web lint lint-api lint-web \
+	security \
 	build build-api build-landing build-mc build-web build-operator \
 	push push-api push-landing push-mc push-web push-operator push-all \
 	chart-lint chart-package chart-push \
@@ -45,6 +46,13 @@ lint-api: ## Lint Go API
 
 lint-web: ## Lint web apps
 	pnpm turbo lint
+
+# =============================================================================
+# Security (Semgrep SAST)
+# =============================================================================
+
+security: ## Run Semgrep security scan
+	semgrep scan --config auto --config .semgrep.yml --error .
 
 # =============================================================================
 # Docker Build (local, cross-compiled to linux/amd64)

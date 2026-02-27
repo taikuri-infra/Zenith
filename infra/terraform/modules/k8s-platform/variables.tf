@@ -1,26 +1,76 @@
-# --- Helm Chart Source ---
+# --- Helm Chart Source (shared across all zenith charts) ---
 
-variable "zenith_chart_repository" {
-  description = "OCI repository for zenith chart (e.g. oci://registry.stage.freezenith.com/zenith-stage)"
+variable "chart_repository" {
+  description = "OCI repository for zenith charts (e.g. oci://registry.stage.freezenith.com/zenith-stage)"
   type        = string
   default     = ""
 }
 
-variable "zenith_chart_version" {
+variable "chart_version" {
   description = "Chart version to deploy (required when using OCI repository)"
   type        = string
   default     = ""
 }
 
-variable "zenith_chart_path" {
-  description = "Local path to the zenith Helm chart (used when chart_repository is empty)"
+# --- Per-chart local paths (used when chart_repository is empty) ---
+
+variable "platform_chart_path" {
+  description = "Local path to the zenith-platform Helm chart"
   type        = string
   default     = ""
 }
 
-variable "zenith_values_file" {
-  description = "Path to the zenith values file (e.g. values-staging.yaml)"
+variable "api_chart_path" {
+  description = "Local path to the zenith-api Helm chart"
   type        = string
+  default     = ""
+}
+
+variable "landing_chart_path" {
+  description = "Local path to the zenith-landing Helm chart"
+  type        = string
+  default     = ""
+}
+
+variable "demo_chart_path" {
+  description = "Local path to the zenith-demo Helm chart"
+  type        = string
+  default     = ""
+}
+
+variable "tenant_chart_path" {
+  description = "Local path to the zenith-tenant Helm chart"
+  type        = string
+  default     = ""
+}
+
+# --- Per-chart values files ---
+
+variable "platform_values_file" {
+  description = "Path to the zenith-platform values file"
+  type        = string
+}
+
+variable "api_values_file" {
+  description = "Path to the zenith-api values file"
+  type        = string
+}
+
+variable "landing_values_file" {
+  description = "Path to the zenith-landing values file"
+  type        = string
+}
+
+variable "demo_values_file" {
+  description = "Path to the zenith-demo values file"
+  type        = string
+  default     = ""
+}
+
+variable "tenant_values_file" {
+  description = "Path to the zenith-tenant values file"
+  type        = string
+  default     = ""
 }
 
 # --- Registry Credentials (for imagePullSecret) ---
@@ -44,6 +94,8 @@ variable "registry_password" {
   sensitive   = true
   default     = ""
 }
+
+# --- Monitoring ---
 
 variable "monitoring_chart_path" {
   description = "Path to the monitoring Helm chart"
@@ -114,6 +166,18 @@ variable "enable_keda" {
 
 variable "enable_monitoring" {
   description = "Install monitoring stack (Prometheus + Grafana + Loki)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_demo" {
+  description = "Deploy demo MC + Web instances"
+  type        = bool
+  default     = false
+}
+
+variable "enable_tenants" {
+  description = "Deploy tenant MC + Web instances"
   type        = bool
   default     = false
 }

@@ -1,0 +1,38 @@
+namespace: zenith-platform
+imageRegistry: ""
+imagePullPolicy: Never
+imagePullSecret: ""
+
+mc:
+  enabled: true
+  replicas: 1
+  image: zenith-mc-demo:latest
+  port: 3100
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+web:
+  enabled: true
+  replicas: 1
+  image: zenith-web-demo:latest
+  port: 3000
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+ingress:
+  mc:
+    host: demo-ms.freezenith.com
+    tlsSecret: freezenith-tls
+  web:
+    host: demo-cloud.freezenith.com
+    tlsSecret: freezenith-tls

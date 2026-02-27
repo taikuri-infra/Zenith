@@ -1,0 +1,24 @@
+namespace: zenith-platform
+replicas: 1
+image: zenith-api:latest
+imageRegistry: ""
+imagePullPolicy: Never
+imagePullSecret: ""
+port: 8080
+metricsPort: 9090
+
+env:
+  CORS_ORIGINS: ""
+
+ingress:
+  host: api.freezenith.com
+  tlsSecret: freezenith-tls
+  kongEnabled: false
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    memory: 256Mi
+    cpu: 250m

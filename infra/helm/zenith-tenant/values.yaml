@@ -1,0 +1,53 @@
+imageRegistry: ""
+imagePullPolicy: Never
+
+registry:
+  enabled: false
+  secretName: harbor-registry
+  host: ""
+  username: ""
+  password: ""
+
+# TLS certificates (cert-manager)
+certManager:
+  issuer: letsencrypt-prod
+  issuerKind: ClusterIssuer
+
+# Per-tenant configuration
+# Each tenant gets its own namespace, MC, Web, certificate, and ingress routes.
+tenants: {}
+#  embermind:
+#    domain: embermind.app
+#    namespace: zenith-embermind
+#    labels:
+#      zenith.dev/tenant: embermind
+#      zenith.dev/domain: embermind.app
+#    mc:
+#      image: zenith-mc:latest
+#      host: ms.embermind.app
+#      replicas: 1
+#      port: 3100
+#      resources:
+#        requests:
+#          memory: 128Mi
+#          cpu: 100m
+#        limits:
+#          memory: 256Mi
+#          cpu: 250m
+#    web:
+#      image: zenith-web:latest
+#      host: cloud.embermind.app
+#      replicas: 1
+#      port: 3000
+#      resources:
+#        requests:
+#          memory: 128Mi
+#          cpu: 100m
+#        limits:
+#          memory: 256Mi
+#          cpu: 250m
+#    certificate:
+#      secretName: embermind-tls
+#      domains:
+#        - ms.embermind.app
+#        - cloud.embermind.app

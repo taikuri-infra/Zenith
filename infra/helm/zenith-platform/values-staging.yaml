@@ -1,0 +1,56 @@
+# Staging values for zenith-platform (shared infrastructure)
+namespace: zenith-staging
+
+registry:
+  enabled: true
+  secretName: harbor-registry
+  # host, username, password injected via Terraform set_sensitive
+
+postgres:
+  enabled: true
+  image: ghcr.io/cloudnative-pg/postgresql:16.6
+  instances: 1
+  storage: 2Gi
+  database: zenith
+  user: zenith
+  maxConnections: "100"
+  sharedBuffers: "128MB"
+  monitoring: true
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+certManager:
+  issuer: letsencrypt-prod
+  issuerKind: ClusterIssuer
+
+certificate:
+  secretName: staging-tls
+  domains:
+    - stage.freezenith.com
+    - api.stage.freezenith.com
+    - ms.stage.freezenith.com
+    - cloud.stage.freezenith.com
+    - embermind-ms.stage.freezenith.com
+    - embermind.stage.freezenith.com
+
+kong:
+  enabled: true
+  plugins:
+    - zenith-rate-limiting
+    - zenith-cors
+  apiHost: api.stage.freezenith.com
+  apiPort: 8080
+  rateLimiting:
+    enabled: true
+    requestsPerMinute: 120
+  cors:
+    enabled: true
+    origins:
+      - "https://stage.freezenith.com"
+      - "https://ms.stage.freezenith.com"
+      - "https://cloud.stage.freezenith.com"

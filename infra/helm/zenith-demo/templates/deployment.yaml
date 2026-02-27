@@ -1,0 +1,147 @@
+{{- if .Values.mc.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-mc-demo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-mc-demo
+    app.kubernetes.io/name: zenith-mc-demo
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mission-control-demo
+spec:
+  replicas: {{ .Values.mc.replicas }}
+  selector:
+    matchLabels:
+      app: zenith-mc-demo
+  template:
+    metadata:
+      labels:
+        app: zenith-mc-demo
+        app.kubernetes.io/name: zenith-mc-demo
+        app.kubernetes.io/part-of: zenith
+        app.kubernetes.io/component: mission-control-demo
+    spec:
+      {{- if .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecret }}
+      {{- end }}
+      containers:
+        - name: mission-control
+          image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.mc.image) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.mc.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.mc.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-mc-demo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-mc-demo
+    app.kubernetes.io/name: zenith-mc-demo
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mission-control-demo
+spec:
+  ports:
+    - name: http
+      port: {{ .Values.mc.port }}
+      targetPort: {{ .Values.mc.port }}
+      protocol: TCP
+  selector:
+    app: zenith-mc-demo
+{{- end }}
+---
+{{- if .Values.web.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-web-demo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-web-demo
+    app.kubernetes.io/name: zenith-web-demo
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: web-demo
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      app: zenith-web-demo
+  template:
+    metadata:
+      labels:
+        app: zenith-web-demo
+        app.kubernetes.io/name: zenith-web-demo
+        app.kubernetes.io/part-of: zenith
+        app.kubernetes.io/component: web-demo
+    spec:
+      {{- if .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecret }}
+      {{- end }}
+      containers:
+        - name: web
+          image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.web.image) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-web-demo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-web-demo
+    app.kubernetes.io/name: zenith-web-demo
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: web-demo
+spec:
+  ports:
+    - name: http
+      port: {{ .Values.web.port }}
+      targetPort: {{ .Values.web.port }}
+      protocol: TCP
+  selector:
+    app: zenith-web-demo
+{{- end }}
