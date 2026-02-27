@@ -31,8 +31,8 @@ image_tag: latest
 image_pull_policy: Never
 
 # --- Repo ---
-zenith_repo: https://github.com/dotechhq/zenith.git
-zenith_repo_branch: main
+zenith_repo: "https://{{ github_token | default('') }}@github.com/taikuri-infra/Zenith.git"
+zenith_repo_branch: openspec/infra-pipeline-v1
 zenith_install_dir: /opt/zenith
 
 # --- PostgreSQL ---
