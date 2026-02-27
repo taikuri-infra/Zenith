@@ -652,3 +652,22 @@ Using hardcoded domains violates Terraform module best practices. We decoupled t
 
 ### Verification
 - `terraform validate` passes on both `modules/k8s-platform` and `staging-k8s`
+
+---
+
+## 2026-02-27T19:39 — Generated Local Secrets for V2 Infrastructure
+
+### What Changed
+- Generated secure 32-byte hex passwords for V2 components:
+  - `keycloak_db_password`
+  - `keycloak_admin_password`
+  - `temporal_db_password`
+- Added these to `infra/terraform/staging-k8s/terraform.tfvars`
+- Added placeholders to `terraform.tfvars` for explicit manual fill-in:
+  - `cloudflare_api_token`
+  - `s3_access_key`
+  - `s3_secret_key`
+  - `s3_endpoint`
+
+### Why
+Phase 3 requires these secrets to provision the V2 infrastructure components like Keycloak, Temporal, and Velero. The `terraform.tfvars` file is correctly excluded from version control via `.gitignore`, ensuring secrets are safely kept local.

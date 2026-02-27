@@ -1,9 +1,0 @@
----
-# roles/zenith-import — Import Docker images into k3s containerd
-
-- name: Import images into k3s
-  ansible.builtin.shell: |
-    docker save {{ item.name }}:{{ image_tag }} | k3s ctr images import -
-  loop: "{{ zenith_images }}"
-  changed_when: true
-  tags: [build, import]

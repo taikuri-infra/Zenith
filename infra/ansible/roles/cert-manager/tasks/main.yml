@@ -43,6 +43,8 @@
   retries: 30
   delay: 10
   until: >-
+    webhook_pods is defined and
+    webhook_pods.resources is defined and
     webhook_pods.resources | length > 0 and
     webhook_pods.resources[0].status.phase == 'Running'
   tags: [cert-manager, infra]
