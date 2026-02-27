@@ -1,0 +1,90 @@
+{{- range $name, $tenant := .Values.tenants }}
+---
+# {{ $name }} — TLS Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $name }}-tls
+  namespace: {{ $tenant.namespace }}
+spec:
+  secretName: {{ $tenant.certificate.secretName }}
+  issuerRef:
+    name: {{ $.Values.certManager.issuer }}
+    kind: {{ $.Values.certManager.issuerKind }}
+  dnsNames:
+    {{- range $tenant.certificate.domains }}
+    - {{ . }}
+    {{- end }}
+---
+# {{ $name }} — Mission Control HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}-mc
+  namespace: {{ $tenant.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ $tenant.mc.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-mc
+          port: {{ $tenant.mc.port | default 3100 }}
+  tls:
+    secretName: {{ $tenant.certificate.secretName }}
+---
+# {{ $name }} — Mission Control HTTP redirect
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}-mc-redirect
+  namespace: {{ $tenant.namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ $tenant.mc.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-mc
+          port: {{ $tenant.mc.port | default 3100 }}
+---
+# {{ $name }} — Web Platform HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}-web
+  namespace: {{ $tenant.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ $tenant.web.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-web
+          port: {{ $tenant.web.port | default 3000 }}
+  tls:
+    secretName: {{ $tenant.certificate.secretName }}
+---
+# {{ $name }} — Web Platform HTTP redirect
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}-web-redirect
+  namespace: {{ $tenant.namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ $tenant.web.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-web
+          port: {{ $tenant.web.port | default 3000 }}
+{{- end }}

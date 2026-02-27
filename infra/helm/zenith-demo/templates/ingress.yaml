@@ -1,0 +1,72 @@
+{{- if .Values.mc.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-demo-mc
+  namespace: {{ .Values.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.mc.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-mc-demo
+          port: {{ .Values.mc.port }}
+  tls:
+    secretName: {{ .Values.ingress.mc.tlsSecret }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-demo-mc-redirect
+  namespace: {{ .Values.namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.mc.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-mc-demo
+          port: {{ .Values.mc.port }}
+{{- end }}
+{{- if .Values.web.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-demo-web
+  namespace: {{ .Values.namespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.web.host }}`)
+      kind: Rule
+      services:
+        - name: zenith-web-demo
+          port: {{ .Values.web.port }}
+  tls:
+    secretName: {{ .Values.ingress.web.tlsSecret }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: zenith-demo-web-redirect
+  namespace: {{ .Values.namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.web.host }}`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: zenith-web-demo
+          port: {{ .Values.web.port }}
+{{- end }}

@@ -1,0 +1,25 @@
+# Staging values for zenith-api
+namespace: zenith-staging
+replicas: 1
+image: zenith-api:0.2.0
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+imagePullSecret: ""  # set via Terraform
+port: 8080
+metricsPort: 9090
+
+env:
+  CORS_ORIGINS: "https://stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com"
+
+ingress:
+  host: api.stage.freezenith.com
+  tlsSecret: staging-tls
+  kongEnabled: true
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    memory: 128Mi
+    cpu: 200m

@@ -1,0 +1,21 @@
+# Staging values for zenith-landing
+namespace: zenith-staging
+replicas: 1
+image: zenith-landing:0.2.0
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+imagePullSecret: ""  # set via Terraform
+port: 3000
+
+ingress:
+  hosts:
+    - stage.freezenith.com
+  tlsSecret: staging-tls
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    memory: 128Mi
+    cpu: 100m

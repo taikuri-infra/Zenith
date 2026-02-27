@@ -3,12 +3,27 @@ output "cert_manager" {
   value       = module.platform.cert_manager_status
 }
 
-output "zenith" {
-  description = "Zenith platform status"
-  value       = module.platform.zenith_status
+output "platform" {
+  description = "Zenith platform (shared resources) status"
+  value       = module.platform.platform_status
 }
 
-output "zenith_version" {
-  description = "Deployed Zenith chart version"
-  value       = module.platform.zenith_version
+output "api" {
+  description = "Zenith API status"
+  value       = module.platform.api_status
+}
+
+output "landing" {
+  description = "Zenith Landing status"
+  value       = module.platform.landing_status
+}
+
+output "demo" {
+  description = "Zenith Demo status"
+  value       = module.platform.demo_status
+}
+
+output "tenant" {
+  description = "Zenith Tenant status"
+  value       = module.platform.tenant_status
 }

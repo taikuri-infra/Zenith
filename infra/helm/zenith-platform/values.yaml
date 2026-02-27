@@ -1,0 +1,59 @@
+namespace: zenith-platform
+
+# Registry credentials
+registry:
+  enabled: false
+  secretName: harbor-registry
+  host: ""
+  username: ""
+  password: ""
+
+# Secrets
+secrets:
+  jwtSecret: ""
+  adminEmail: ""
+  adminPassword: ""
+
+# PostgreSQL (CloudNativePG)
+postgres:
+  enabled: true
+  image: ghcr.io/cloudnative-pg/postgresql:16.6
+  instances: 1
+  storage: 5Gi
+  database: zenith
+  user: zenith
+  maxConnections: "100"
+  sharedBuffers: "128MB"
+  monitoring: false
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+# TLS Certificate
+certManager:
+  issuer: letsencrypt-prod
+  issuerKind: ClusterIssuer
+
+certificate:
+  secretName: freezenith-tls
+  domains:
+    - freezenith.com
+    - www.freezenith.com
+    - api.freezenith.com
+
+# Kong routes (optional)
+kong:
+  enabled: false
+  plugins: []
+  apiHost: api.freezenith.com
+  apiPort: 8080
+  rateLimiting:
+    enabled: false
+    requestsPerMinute: 60
+  cors:
+    enabled: false
+    origins: []

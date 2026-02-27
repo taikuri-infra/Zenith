@@ -1,7 +1,10 @@
 # Project Context
 
 ## Purpose
-Zenith is a **Kubernetes-native Platform-as-a-Service (PaaS)** built on Hetzner Cloud, operated by DoTech as a managed multi-tenant enterprise cloud service. Customers buy "Zenith Enterprise" plans with guaranteed resource ceilings (CPU, RAM, S3, DB storage). CAPI provisions a **dedicated Kubernetes cluster per customer** on Hetzner.
+Zenith is a **Kubernetes-native Platform-as-a-Service (PaaS)** built on Hetzner Cloud, operated by DoTech as a managed multi-tenant cloud service. It offers 4 tiers:
+
+- **Free/Pro:** Shared k3s cluster with namespace isolation (Cilium), shared CNPG databases, shared Hetzner S3 buckets. Pro customers are sharded (~20 per CNPG Cluster) for better performance.
+- **Team/Enterprise:** Dedicated VMs provisioned via CAPI+CAPH. Full kernel-level isolation. Own Keycloak, APISIX, CNPG, everything.
 
 **Future open-core model:** Extract a free, self-hostable version where customers install their own Mission Control. SaaS is the premium managed offering. Codebase supports both modes via `ZENITH_MODE` flag (`saas` vs `standalone`).
 
@@ -20,18 +23,26 @@ Zenith is a **Kubernetes-native Platform-as-a-Service (PaaS)** built on Hetzner 
 - controller-runtime / kubebuilder (K8s operator)
 - Cobra + Charm TUI (CLI)
 
-### Infrastructure
-- Hetzner Cloud (k3s v1.34.3, CX22 server)
-- CAPI + CAPH (Cluster API Provider Hetzner)
-- Traefik 3.5.1 (IngressRoute CRD, NOT standard Ingress)
-- cert-manager (letsencrypt-prod, HTTP-01)
-- Cloudflare DNS (Terraform + bash script)
+### Infrastructure (V2 Architecture)
+- **Compute:** Hetzner Cloud VMs, k3s v1.34.3
+- **Orchestration:** CAPI + CAPH (Cluster API Provider Hetzner) for Team/Enterprise
+- **Ingress:** Traefik 3.5.1 (IngressRoute CRD for frontends)
+- **API Gateway:** Apache APISIX (etcd-backed, JWT verification, CORS, rate-limiting)
+- **Identity:** Keycloak (realm per customer, OIDC/SAML)
+- **Database:** CloudNativePG (CNPG) operator with sharded clusters
+- **Storage:** Hetzner S3 (Object Storage), Hetzner Volumes (block storage)
+- **TLS:** cert-manager with DNS-01 challenge (Cloudflare API), enables Cloudflare proxy ON
+- **DNS:** external-dns (Cloudflare provider, auto-creates records from Ingress)
+- **CNI:** Cilium with WireGuard encryption + Hubble observability
+- **GitOps:** ArgoCD (App-of-Apps pattern)
+- **Provisioning:** Temporal (multi-step workflows with retry/recovery)
+- **Registry:** Harbor (container images + Helm charts OCI)
+- **Security:** Kyverno (policy), Falco (runtime), Sealed Secrets, cosign (image signing)
+- **Monitoring:** Prometheus + Grafana + Loki + Tempo + OpenTelemetry + Hubble + Alertmanager
+- **Backup:** Velero + CNPG WAL archiving + pg_dump CronJobs
 
-### Decided but Not Yet Built
-- FluxCD (GitOps), Cilium (CNI/eBPF), Kong (API Gateway DB-less)
-- CloudNativePG (per-tenant Postgres), Keycloak (per-tenant IAM)
-- Harbor (internal Helm charts only), kube-prometheus-stack
-- Kaniko (in-cluster image builds on customer cluster)
+### Decision Log
+See `docs/v2-architecture/decisions.md` or Claude memory `decisions.md` for all key decisions (D1-D14).
 
 ## Monorepo Structure
 
@@ -49,12 +60,32 @@ services/
   operator/             # Go K8s operator (controller-runtime)
 cli/                    # zen CLI (Go + Cobra + Charm TUI)
 infra/
-  terraform/            # Cloudflare DNS as code
-  ansible/              # Ansible deployment (playbooks, roles, inventory)
-  helm/                 # Helm charts (zenith, monitoring)
-  k8s/                  # Raw K8s manifests (currently used in prod)
-  scripts/              # deploy.sh, cloudflare-dns.sh
+  terraform/            # IaC (Hetzner, Cloudflare, K8s resources)
+  ansible/              # Server configuration (k3s, Cilium, hcloud-csi)
+  helm/                 # Modular Helm charts:
+    zenith-platform/    #   Shared resources (secrets, postgres, certs, middleware)
+    zenith-api/         #   Go API server
+    zenith-landing/     #   Landing page
+    zenith-demo/        #   Demo MC + Web
+    zenith-tenant/      #   Per-customer deployments
+    monitoring/         #   Prometheus + Grafana + Loki
+  argocd/               # ArgoCD Application manifests (App-of-Apps)
+  k8s/                  # Raw K8s manifests (legacy, production only)
+  scripts/              # deploy.sh (legacy), cloudflare-dns.sh
+docs/
+  v2-architecture/      # V2 design docs (phases, security, backup, flows)
 ```
+
+## Deployment Pipeline (V2 — 4 Phases)
+
+```
+Phase 1: Terraform → Hetzner VM + Cloudflare DNS
+Phase 2: Ansible → k3s + Cilium + hcloud-csi
+Phase 3: Terraform → All infra (cert-manager, CNPG, APISIX, Keycloak, ArgoCD, monitoring, ...)
+Phase 4: ArgoCD → Application charts (automatic from Git push)
+```
+
+See `docs/v2-architecture/` for detailed documentation per phase.
 
 ## Project Conventions
 
@@ -65,94 +96,61 @@ infra/
 - **Naming:** kebab-case files, PascalCase components/types, camelCase functions/variables
 
 ### Architecture Patterns
-- **Two planes:** Management plane (single k3s) + Workload clusters (CAPI-managed per customer)
-- **CRD-driven:** User action -> API creates CRD -> Operator watches -> provisions infrastructure
+- **4-tier model:** Free (shared), Pro (shared sharded), Team (dedicated), Enterprise (dedicated)
+- **CRD-driven:** User action → API creates CRD → Operator watches → provisions infrastructure
 - **API switching:** `getApi()` returns real or demo API based on build-time `NEXT_PUBLIC_DEMO_MODE`
 - **Repository pattern:** Store interfaces with memory + PostgreSQL implementations
-- **Backend target:** Clean/Hexagonal architecture (entities, services, ports, adapters, dto). Phase A (entities/dto) done, phases B-D pending.
-- **Demo mode:** Build-time env var `NEXT_PUBLIC_DEMO_MODE=true` bakes mock data into JS bundle. Separate Docker images for demo vs production.
+- **Backend target:** Clean/Hexagonal architecture (entities, services, ports, adapters, dto)
+- **Demo mode:** Build-time env var `NEXT_PUBLIC_DEMO_MODE=true` bakes mock data into JS bundle
+- **Routing split:** Frontends go through Traefik directly, backends go through APISIX
+- **Provisioning:** Temporal workflows for customer creation, tier changes, CAPI clusters
+- **GitOps:** ArgoCD for apps, Terraform for infrastructure
 
 ### Testing Strategy
 - **Go:** `go test ./internal/... -count=1` — unit tests for handlers, stores, deploy pipeline
 - **Frontend:** No test framework configured yet
-- **Known flaky:** `TestScaleClusterEndpoint`, `TestUpgradeClusterEndpoint` (need CAPI CRDs)
 - **Coverage:** 89+ unit tests across deploy engine components
 
 ### Git Workflow
 - Main branch: `main`
 - Feature branches: `feature/description` or `setup/description`
 - Commit style: conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`)
-- Deploy: `ssh ghasi "cd /opt/zenith && bash infra/scripts/deploy.sh"` (git pull + docker build + k3s import)
 
 ## Domain Context
 
 ### Business Model
-- DoTech runs the management plane. Customers buy Enterprise plans (EUR 2,000-4,000/mo)
-- Infrastructure cost ~EUR 553/mo per pool (70-85% margin)
-- Resource ceilings guaranteed but provisioned on-demand
-- Hetzner cluster autoscaler scales underlying infra
+- 4 tiers: Free, Pro, Team, Enterprise
+- Free/Pro share infrastructure (namespace isolation)
+- Team/Enterprise get dedicated infrastructure (CAPI)
+- Resources provisioned on-demand
 - Billing: Stripe (international) + Toman/IRR (via Fairbroker)
 
 ### Key Terminology
-- **Mission Control (MC):** The operator admin panel / management plane (NOT "back-zenith")
+- **Mission Control (MC):** The operator admin panel / management plane
 - **Web Platform:** The user-facing dashboard where developers manage apps/databases
-- **Workload Cluster:** CAPI-managed K8s cluster per customer on Hetzner
-- **Deploy Engine:** Phase 2 system for deploying apps from Git repos (clone -> detect framework -> Dockerfile -> Kaniko -> K8s)
+- **Workload Cluster:** CAPI-managed K8s cluster per Team/Enterprise customer
+- **Deploy Engine:** System for deploying apps from Git repos (clone → detect → Dockerfile → Kaniko → K8s)
 - **CRD:** Custom Resource Definition — everything in Zenith is modeled as a K8s CRD
+- **CNPG Shard:** A CloudNativePG Cluster serving ~20 Pro customers
 
 ### Domain Convention
 - `ms.{domain}` = Mission Control, `cloud.{domain}` = Web Platform
 - Root domain stays for the customer
-
-## Live Endpoints
-| URL | Service | Description |
-|-----|---------|-------------|
-| https://freezenith.com | zenith-landing | Marketing site |
-| https://demo-ms.freezenith.com | zenith-mc-demo | Demo Mission Control |
-| https://demo-cloud.freezenith.com | zenith-web-demo | Demo Web Platform |
-| https://api.freezenith.com | zenith-api | Go REST API |
-| https://ms.embermind.app | zenith-mc | Customer MC |
-| https://cloud.embermind.app | zenith-web | Customer Web Platform |
+- Free users: `<customer>.freezenith.com` (auto via external-dns)
+- Pro+: can bring custom domain
 
 ## Important Constraints
 - **Traefik IngressRoute CRD:** Must use IngressRoute, NOT standard Ingress
-- **Demo mode is build-time:** `NEXT_PUBLIC_DEMO_MODE` is baked into JS bundle, not runtime switchable
-- **Image pull policy:** All images use `imagePullPolicy: Never` (local builds imported into k3s containerd)
-- **Deploy order:** namespaces -> deployments/services -> certificates -> wait -> ingress routes
-- **HTTP redirects after certs:** IngressRoutes for HTTP redirect must be applied AFTER cert-manager issues certs (HTTP-01 conflict)
-- **Cloudflare proxy OFF:** Required for cert-manager HTTP-01 challenges
+- **Demo mode is build-time:** `NEXT_PUBLIC_DEMO_MODE` is baked into JS bundle
+- **Deploy order:** namespaces → deployments/services → certificates → wait → ingress routes
 - **Dockerfiles build from repo root:** `docker build -f apps/X/Dockerfile .`
-- **Privacy model:** Customer images never touch Zenith infrastructure. Build via Kaniko on customer cluster, push to customer's own registry.
-
-## Current Development Status (Feb 2026)
-
-### Completed
-- All 3 frontend apps (landing, MC, web) — live and deployed
-- Go API server — all CRUD + admin + deploy engine endpoints, JWT auth
-- Go Auth service — OIDC endpoints, realm management
-- K8s Operator — 8 CRD types, 8 controllers
-- CLI `zen install` — interactive wizard
-- Deploy Engine (Phases 2-4) — end-to-end: Git clone -> framework detection -> Dockerfile -> Kaniko -> K8s deploy
-- Build log streaming (SSE)
-- GitHub webhook integration (HMAC-SHA256)
-- Phase 6.5 — 17 Pro/Team/Enterprise features (MFA, SSO, SCIM, RBAC, IP whitelist, preview deploys, etc.)
-- Backend refactoring Phase A (entities/dto separation)
-- Real K8s client (`RealClient` using client-go)
-- OpenTelemetry + Backstage catalog wiring
-
-### Not Yet Built
-- Backend refactoring Phases B-D (services, ports/adapters)
-- Auth service integration with login flows
-- Several Web pages use hardcoded mock data (monitoring, gateway, auth, IAM, registry)
-- KEDA autoscaling, Hetzner autoscaler, Stripe billing
-- OpenAPI spec generation
-- Custom domain management with automatic TLS
-- Full CLI commands (deploy, logs, status, db)
-- Production Helm chart deployment (currently raw manifests)
+- **Hetzner only:** No AWS, GCP, or Azure
+- **APISIX not Kong:** Decision D1 (see decisions.md)
+- **ArgoCD not FluxCD:** Decision D4
 
 ## External Dependencies
-- **Hetzner Cloud:** Server hosting, volumes, object storage, load balancers, DNS
-- **Cloudflare:** DNS management (Terraform provider)
-- **GitHub:** Webhook integration, `zenith-actions` GitHub Action
-- **Stripe:** Payment processing (planned, not yet integrated)
-- **Let's Encrypt:** TLS certificates via cert-manager
+- **Hetzner Cloud:** VMs, volumes, object storage, load balancers
+- **Cloudflare:** DNS management, CDN, DDoS protection, WAF
+- **GitHub:** Code hosting, webhook integration, CI/CD via Actions
+- **Stripe:** Payment processing (planned)
+- **Let's Encrypt:** TLS certificates via cert-manager (DNS-01)

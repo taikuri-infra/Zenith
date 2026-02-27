@@ -6,24 +6,22 @@
 # Designed for parity between staging and production (same components,
 # different resource limits).
 #
-# Components:
+# Components (modular Helm charts — independently deployable):
 #
-#   1. cert-manager        — TLS certificate automation via Let's Encrypt
-#   2. ClusterIssuer       — ACME HTTP-01 solver (uses Traefik)
-#   3. zenith (Helm chart) — Platform apps pulled from Harbor OCI:
-#      ├── PostgreSQL      — Database (CloudNativePG Cluster CR)
-#      ├── zenith-api      — Go API server
-#      ├── zenith-landing  — Next.js landing page
-#      ├── zenith-mc-demo  — Mission Control demo (optional)
-#      ├── zenith-web-demo — Web Platform demo (optional)
-#      ├── Tenant apps     — Per-customer MC + Web deployments
-#      ├── Kong routes     — KongPlugin + Ingress for API gateway
-#      ├── Certificates    — cert-manager Certificate CRs
-#      └── IngressRoutes   — Traefik routing (API goes through Kong)
-#   4. Kong                — API Gateway (DB-less mode, ClusterIP)
-#      └── Traefik → Kong proxy → zenith-api
-#   5. KEDA                — Event-driven autoscaling + HTTP add-on
-#   6. Monitoring          — Prometheus + Grafana + Loki + Promtail
+#   Infrastructure (Terraform-managed):
+#     1. cert-manager        — TLS certificate automation via Let's Encrypt
+#     2. ClusterIssuer       — ACME HTTP-01 solver (uses Traefik)
+#     3. CloudNativePG       — PostgreSQL operator (optional)
+#     4. Kong                — API Gateway (DB-less, ClusterIP) (optional)
+#     5. KEDA                — Event-driven autoscaling (optional)
+#     6. Monitoring          — Prometheus + Grafana + Loki (optional)
+#
+#   Application Charts:
+#     7. zenith-platform     — Shared resources (secrets, postgres CR, certs, middleware, kong routes)
+#     8. zenith-api          — Go API server
+#     9. zenith-landing      — Next.js landing page
+#    10. zenith-demo         — MC + Web demo instances (optional)
+#    11. zenith-tenant       — Per-customer MC + Web deployments (optional)
 #
 # =============================================================================
 
@@ -153,27 +151,25 @@ resource "helm_release" "cnpg" {
 }
 
 # =============================================================================
-# Zenith Platform — all app resources via Helm chart
+# Zenith Platform — shared infrastructure (secrets, postgres, certs, middleware)
 # =============================================================================
 
-resource "helm_release" "zenith" {
-  name             = "zenith"
-  chart            = var.zenith_chart_repository != "" ? "zenith" : var.zenith_chart_path
-  version          = var.zenith_chart_repository != "" ? var.zenith_chart_version : null
+resource "helm_release" "zenith_platform" {
+  name             = "zenith-platform"
+  chart            = var.chart_repository != "" ? "zenith-platform" : var.platform_chart_path
+  version          = var.chart_repository != "" ? var.chart_version : null
   namespace        = var.platform_namespace
   create_namespace = true
-  wait             = false
+  wait             = true
   timeout          = 300
 
-  # OCI registry authentication (when pulling chart from Harbor)
-  repository          = var.zenith_chart_repository != "" ? var.zenith_chart_repository : null
-  repository_username = var.zenith_chart_repository != "" ? var.registry_username : null
-  repository_password = var.zenith_chart_repository != "" ? var.registry_password : null
+  repository          = var.chart_repository != "" ? var.chart_repository : null
+  repository_username = var.chart_repository != "" ? var.registry_username : null
+  repository_password = var.chart_repository != "" ? var.registry_password : null
 
-  # Base values file
-  values = [file(var.zenith_values_file)]
+  values = [file(var.platform_values_file)]
 
-  # App secrets (passed via Terraform, never in values files)
+  # App secrets
   set_sensitive {
     name  = "secrets.jwtSecret"
     value = var.jwt_secret
@@ -189,7 +185,7 @@ resource "helm_release" "zenith" {
     value = var.admin_password
   }
 
-  # Registry credentials (for imagePullSecret in k8s)
+  # Registry credentials
   set_sensitive {
     name  = "registry.host"
     value = var.registry_host
@@ -206,6 +202,146 @@ resource "helm_release" "zenith" {
   }
 
   depends_on = [kubernetes_manifest.cluster_issuer, helm_release.cnpg]
+}
+
+# =============================================================================
+# Zenith API — Go API server
+# =============================================================================
+
+resource "helm_release" "zenith_api" {
+  name      = "zenith-api"
+  chart     = var.chart_repository != "" ? "zenith-api" : var.api_chart_path
+  version   = var.chart_repository != "" ? var.chart_version : null
+  namespace = var.platform_namespace
+  wait      = false
+  timeout   = 300
+
+  repository          = var.chart_repository != "" ? var.chart_repository : null
+  repository_username = var.chart_repository != "" ? var.registry_username : null
+  repository_password = var.chart_repository != "" ? var.registry_password : null
+
+  values = [file(var.api_values_file)]
+
+  # Registry image pull secret
+  set {
+    name  = "imagePullSecret"
+    value = var.registry_host != "" ? "harbor-registry" : ""
+  }
+
+  set {
+    name  = "imageRegistry"
+    value = var.registry_host != "" ? "${var.registry_host}/zenith-stage" : ""
+  }
+
+  depends_on = [helm_release.zenith_platform]
+}
+
+# =============================================================================
+# Zenith Landing — Next.js landing page
+# =============================================================================
+
+resource "helm_release" "zenith_landing" {
+  name      = "zenith-landing"
+  chart     = var.chart_repository != "" ? "zenith-landing" : var.landing_chart_path
+  version   = var.chart_repository != "" ? var.chart_version : null
+  namespace = var.platform_namespace
+  wait      = false
+  timeout   = 300
+
+  repository          = var.chart_repository != "" ? var.chart_repository : null
+  repository_username = var.chart_repository != "" ? var.registry_username : null
+  repository_password = var.chart_repository != "" ? var.registry_password : null
+
+  values = [file(var.landing_values_file)]
+
+  set {
+    name  = "imagePullSecret"
+    value = var.registry_host != "" ? "harbor-registry" : ""
+  }
+
+  set {
+    name  = "imageRegistry"
+    value = var.registry_host != "" ? "${var.registry_host}/zenith-stage" : ""
+  }
+
+  depends_on = [helm_release.zenith_platform]
+}
+
+# =============================================================================
+# Zenith Demo — MC + Web demo instances (optional)
+# =============================================================================
+
+resource "helm_release" "zenith_demo" {
+  count = var.enable_demo ? 1 : 0
+
+  name      = "zenith-demo"
+  chart     = var.chart_repository != "" ? "zenith-demo" : var.demo_chart_path
+  version   = var.chart_repository != "" ? var.chart_version : null
+  namespace = var.platform_namespace
+  wait      = false
+  timeout   = 300
+
+  repository          = var.chart_repository != "" ? var.chart_repository : null
+  repository_username = var.chart_repository != "" ? var.registry_username : null
+  repository_password = var.chart_repository != "" ? var.registry_password : null
+
+  values = [file(var.demo_values_file)]
+
+  set {
+    name  = "imagePullSecret"
+    value = var.registry_host != "" ? "harbor-registry" : ""
+  }
+
+  set {
+    name  = "imageRegistry"
+    value = var.registry_host != "" ? "${var.registry_host}/zenith-stage" : ""
+  }
+
+  depends_on = [helm_release.zenith_platform]
+}
+
+# =============================================================================
+# Zenith Tenant — per-customer MC + Web deployments (optional)
+# =============================================================================
+
+resource "helm_release" "zenith_tenant" {
+  count = var.enable_tenants ? 1 : 0
+
+  name      = "zenith-tenant"
+  chart     = var.chart_repository != "" ? "zenith-tenant" : var.tenant_chart_path
+  version   = var.chart_repository != "" ? var.chart_version : null
+  namespace = var.platform_namespace
+  wait      = false
+  timeout   = 300
+
+  repository          = var.chart_repository != "" ? var.chart_repository : null
+  repository_username = var.chart_repository != "" ? var.registry_username : null
+  repository_password = var.chart_repository != "" ? var.registry_password : null
+
+  values = [file(var.tenant_values_file)]
+
+  # Registry credentials for tenant namespaces
+  set_sensitive {
+    name  = "registry.host"
+    value = var.registry_host
+  }
+
+  set_sensitive {
+    name  = "registry.username"
+    value = var.registry_username
+  }
+
+  set_sensitive {
+    name  = "registry.password"
+    value = var.registry_password
+  }
+
+  set {
+    name  = "imageRegistry"
+    value = var.registry_host != "" ? "${var.registry_host}/zenith-stage" : ""
+  }
+
+  depends_on = [helm_release.zenith_platform]
 }
 
 # =============================================================================
