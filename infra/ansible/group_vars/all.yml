@@ -63,6 +63,18 @@ resources:
 enable_cilium: false
 cilium_version: "1.16.5"
 
+# --- V2: Cilium enhancements ---
+enable_wireguard: true
+enable_hubble: true
+enable_hubble_ui: true
+
+# --- V2: k3s secrets encryption ---
+enable_secrets_encryption: true
+
+# --- V2: cert-manager DNS-01 ---
+enable_dns01_solver: true
+# cloudflare_api_token: set in vault or inventory
+
 # --- cert-manager ---
 cert_manager_version: v1.17.2
 cert_issuer_email: admin@freezenith.com

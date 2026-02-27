@@ -4,12 +4,32 @@ variable "kubeconfig_path" {
   default     = "~/.kube/zenith-staging.yaml"
 }
 
+# --- Domains ---
+
+variable "domain" {
+  description = "The parent domain"
+  type        = string
+  default     = "freezenith.com"
+}
+
+variable "cluster_domain" {
+  description = "The staging cluster domain"
+  type        = string
+  default     = "stage.freezenith.com"
+}
+
 # --- Registry ---
 
 variable "registry_host" {
-  description = "Harbor registry host"
+  description = "Harbor registry host for deploying internal Zenith apps"
   type        = string
   default     = "registry.stage.freezenith.com"
+}
+
+variable "customer_registry_host" {
+  description = "Harbor registry host for pro customers"
+  type        = string
+  default     = "hub.stage.freezenith.com"
 }
 
 variable "registry_username" {
@@ -45,8 +65,82 @@ variable "admin_email" {
 }
 
 variable "admin_password" {
-  description = "Admin user password"
+  description = "Admin user password (also used for Grafana, Harbor)"
   type        = string
   sensitive   = true
 }
 
+# --- V2: S3 / Object Storage (Hetzner) ---
+
+variable "keycloak_db_storage_size" {
+  description = "Storage size for dedicated Keycloak CNPG cluster"
+  type        = string
+  default     = "10Gi"
+}
+
+variable "free_db_storage_size" {
+  description = "Storage size for shared free-tier CNPG cluster"
+  type        = string
+  default     = "10Gi"
+}
+
+variable "s3_access_key" {
+  description = "Hetzner S3 access key for CNPG WAL archiving, Harbor, Velero"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "s3_secret_key" {
+  description = "Hetzner S3 secret key"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "s3_endpoint" {
+  description = "Hetzner S3 endpoint URL"
+  type        = string
+  default     = "https://fsn1.your-objectstorage.com"
+}
+
+# --- V2: Cloudflare ---
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token for external-dns and cert-manager DNS-01"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+# --- V2: Keycloak ---
+
+variable "keycloak_db_password" {
+  description = "Keycloak database password"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "keycloak_admin_password" {
+  description = "Keycloak admin console password"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+# --- V2: Temporal ---
+
+variable "temporal_db_user" {
+  description = "Temporal database user"
+  type        = string
+  sensitive   = true
+  default     = "temporal"
+}
+
+variable "temporal_db_password" {
+  description = "Temporal database password"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

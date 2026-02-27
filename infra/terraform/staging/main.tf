@@ -60,7 +60,7 @@ module "dns" {
   zone_id   = var.freezenith_zone_id
   server_ip = var.create_server ? module.staging_server[0].server_ip : var.existing_server_ip
 
-  # Platform services
+  # Platform services (V1 + V2 additions)
   platform_records = {
     root       = { name = "stage" }
     api        = { name = "api.stage" }
@@ -68,6 +68,14 @@ module "dns" {
     cloud      = { name = "cloud.stage" }
     grafana    = { name = "grafana.stage" }
     prometheus = { name = "prometheus.stage" }
+    # --- V2 additions ---
+    argocd       = { name = "argocd.stage" }
+    keycloak     = { name = "auth.stage" }
+    temporal     = { name = "temporal.stage" }
+    harbor       = { name = "registry.stage" }
+    hubble       = { name = "hubble.stage" }
+    tempo        = { name = "tempo.stage" }
+    alertmanager = { name = "alerts.stage" }
   }
 
   # Customer: embermind on staging

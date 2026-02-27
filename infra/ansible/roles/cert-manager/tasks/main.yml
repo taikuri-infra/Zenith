@@ -67,3 +67,23 @@
                 ingress:
                   ingressClassName: traefik
   tags: [cert-manager, infra]
+
+# --- V2: DNS-01 Solver Preparation ---
+# Creates the Cloudflare API token Secret that cert-manager needs for DNS-01 challenge.
+# The actual DNS-01 ClusterIssuer is created by Terraform in Phase 3.
+
+- name: Create Cloudflare API token secret for DNS-01
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: cloudflare-api-token
+        namespace: cert-manager
+      type: Opaque
+      stringData:
+        api-token: "{{ cloudflare_api_token }}"
+  when: enable_dns01_solver | default(false)
+  tags: [cert-manager, infra, v2]

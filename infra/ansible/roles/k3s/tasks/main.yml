@@ -7,10 +7,10 @@
   register: k3s_binary
   tags: [k3s, infra]
 
-- name: Install k3s (with Cilium CNI)
+- name: Install k3s (with Cilium CNI + secrets encryption)
   when: not k3s_binary.stat.exists and (enable_cilium | default(false))
   ansible.builtin.shell: |
-    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" INSTALL_K3S_EXEC="--flannel-backend=none --disable-network-policy --disable=servicelb" sh -
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" INSTALL_K3S_EXEC="--flannel-backend=none --disable-network-policy --disable=servicelb --secrets-encryption --write-kubeconfig-mode 644" sh -
   args:
     creates: /usr/local/bin/k3s
   tags: [k3s, infra]

@@ -13,8 +13,11 @@
 
 **Owner:** Babak — experienced DevOps engineer pursuing Golden Kube Astronaut certification + ArgoCD exam. Loves learning, prefers clean cloud-native solutions, Hetzner-only infrastructure.
 
-**Language:** Babak speaks Farsi in conversation but all code/docs are in English.
-
+**Language:** Babak speaks Farsi and English in conversation but all code/docs are in English.and always respond in english. 
+** dont forget ** 
+1 Terraform (staging/)        → Creates the Hetzner server + DNS records
+2. Ansible                     → SSHes in, installs k3s + Cilium + prerequisite secrets
+3. Terraform (staging-k8s/)    → Connects to k3s cluster, deploys all Helm charts like APISIX, Keycloak, external-dns, Temporal, etc.
 ---
 
 ## What Exists Right Now
