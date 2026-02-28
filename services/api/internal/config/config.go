@@ -51,6 +51,25 @@ type Config struct {
 	StripeProPriceID     string
 	StripeTeamPriceID    string
 
+	// Temporal (customer provisioning workflows)
+	TemporalEnabled   bool
+	TemporalHost      string
+	TemporalNamespace string
+
+	// Keycloak Admin (realm provisioning)
+	KeycloakURL           string
+	KeycloakAdminUser     string
+	KeycloakAdminPassword string
+
+	// S3 / Hetzner Object Storage (tenant bucket provisioning)
+	S3Endpoint  string
+	S3AccessKey string
+	S3SecretKey string
+	S3Region    string
+
+	// CNPG Admin DSN (for CREATE DATABASE in shared cluster)
+	CNPGAdminDSN string
+
 	// Hetzner Autoscaler (Phase 5)
 	HetznerToken        string
 	AutoscalerEnabled   bool
@@ -97,7 +116,18 @@ func Load() *Config {
 		StripeWebhookSecret:  getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		StripeProPriceID:     getEnv("STRIPE_PRO_PRICE_ID", ""),
 		StripeTeamPriceID:    getEnv("STRIPE_TEAM_PRICE_ID", ""),
-		HetznerToken:        getEnv("HCLOUD_TOKEN", ""),
+		TemporalEnabled:       getEnvBool("TEMPORAL_ENABLED", false),
+		TemporalHost:          getEnv("TEMPORAL_HOST", "temporal.temporal.svc.cluster.local:7233"),
+		TemporalNamespace:     getEnv("TEMPORAL_NAMESPACE", "default"),
+		KeycloakURL:           getEnv("KEYCLOAK_URL", ""),
+		KeycloakAdminUser:     getEnv("KEYCLOAK_ADMIN_USER", "admin"),
+		KeycloakAdminPassword: getEnv("KEYCLOAK_ADMIN_PASSWORD", ""),
+		S3Endpoint:            getEnv("S3_ENDPOINT", ""),
+		S3AccessKey:           getEnv("S3_ACCESS_KEY", ""),
+		S3SecretKey:           getEnv("S3_SECRET_KEY", ""),
+		S3Region:              getEnv("S3_REGION", "fsn1"),
+		CNPGAdminDSN:          getEnv("CNPG_ADMIN_DSN", ""),
+		HetznerToken:          getEnv("HCLOUD_TOKEN", ""),
 		AutoscalerEnabled:   getEnvBool("AUTOSCALER_ENABLED", false),
 		AutoscalerMinNodes:  getEnvInt("AUTOSCALER_MIN_NODES", 2),
 		AutoscalerMaxNodes:  getEnvInt("AUTOSCALER_MAX_NODES", 10),

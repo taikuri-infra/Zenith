@@ -12,9 +12,11 @@ import (
 	"github.com/dotechhq/zenith/services/api/docs"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/keycloakclient"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres/migrations"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/s3client"
 	stripeClient "github.com/dotechhq/zenith/services/api/internal/adapters/stripeclient"
 	"github.com/dotechhq/zenith/services/api/internal/autoscale"
 	"github.com/dotechhq/zenith/services/api/internal/cluster"
@@ -27,6 +29,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/dotechhq/zenith/services/api/internal/telemetry"
+	zenithTemporal "github.com/dotechhq/zenith/services/api/internal/temporal"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -34,6 +37,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	temporalWorker "go.temporal.io/sdk/worker"
 )
 
 var (
@@ -147,12 +151,20 @@ func main() {
 	}
 
 	docs.RegisterRoutes(app)
-	provisioner, autoscaler := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, appRepo, pool)
+	provisioner, autoscaler, temporalW := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, appRepo, pool)
 
 	// Start cluster sync if provisioner is available
 	if provisioner != nil {
 		provisioner.StartSync(30 * time.Second)
 		log.Println("Cluster provisioner sync started (30s interval)")
+	}
+
+	// Start Temporal worker if configured
+	if temporalW != nil {
+		if err := temporalW.Start(); err != nil {
+			log.Fatalf("Failed to start Temporal worker: %v", err)
+		}
+		log.Println("[temporal] Worker started on queue: " + zenithTemporal.TaskQueue)
 	}
 
 	// Start autoscaler if enabled
@@ -175,6 +187,10 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+	if temporalW != nil {
+		temporalW.Stop()
+		log.Println("Temporal worker stopped")
+	}
 	if autoscaler != nil {
 		autoscaler.Stop()
 		log.Println("Hetzner autoscaler stopped")
@@ -193,7 +209,7 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserRepository, adminRepo ports.AdminRepository, customerRepo ports.CustomerRepository, meteringRepo ports.MeteringRepository, appRepo ports.AppRepository, pool *pgxpool.Pool) (*cluster.Provisioner, *autoscale.Autoscaler) {
+func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserRepository, adminRepo ports.AdminRepository, customerRepo ports.CustomerRepository, meteringRepo ports.MeteringRepository, appRepo ports.AppRepository, pool *pgxpool.Pool) (*cluster.Provisioner, *autoscale.Autoscaler, temporalWorker.Worker) {
 	app.Get("/health", handlers.HealthCheck(Version, BuildTime, GitCommit))
 	app.Get("/ready", handlers.ReadinessCheck(pool))
 
@@ -224,8 +240,48 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret)
 
 	var customerSvc *services.CustomerService
+	var tw temporalWorker.Worker
 	if cfg.Mode == "saas" {
 		customerSvc = services.NewCustomerService(customerRepo, adminRepo, provisioner)
+
+		// Temporal provisioning (opt-in: only when TEMPORAL_ENABLED=true)
+		if cfg.TemporalEnabled {
+			tc, err := zenithTemporal.NewClient(cfg.TemporalHost, cfg.TemporalNamespace)
+			if err != nil {
+				log.Printf("[temporal] WARN: failed to connect: %v (provisioning falls back to goroutine)", err)
+			} else {
+				// Build adapters for activities
+				var keycloakAPI keycloakclient.KeycloakAPI
+				if cfg.KeycloakURL != "" {
+					keycloakAPI = keycloakclient.NewClient(cfg.KeycloakURL, cfg.KeycloakAdminUser, cfg.KeycloakAdminPassword)
+				} else {
+					keycloakAPI = keycloakclient.NewMemoryClient()
+				}
+
+				var s3API s3client.S3API
+				if cfg.S3Endpoint != "" {
+					s3API = s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+				} else {
+					s3API = s3client.NewMemoryClient()
+				}
+
+				activities := &zenithTemporal.Activities{
+					K8s:        k8sClient,
+					Keycloak:   keycloakAPI,
+					S3:         s3API,
+					AdminDSN:   cfg.CNPGAdminDSN,
+					Customers:  customerRepo,
+					Admin:      adminRepo,
+					BaseDomain: cfg.BaseDomain,
+				}
+
+				tw = zenithTemporal.NewWorker(tc, activities)
+				customerSvc.SetTemporalClient(tc)
+				log.Printf("[temporal] Connected to %s (namespace: %s)", cfg.TemporalHost, cfg.TemporalNamespace)
+			}
+		} else {
+			log.Println("[temporal] Disabled (TEMPORAL_ENABLED=false)")
+		}
 	}
 
 	// Handlers
@@ -663,5 +719,5 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		}
 	}
 
-	return provisioner, as
+	return provisioner, as, tw
 }
