@@ -22,6 +22,7 @@ spec:
         app.kubernetes.io/part-of: zenith
         app.kubernetes.io/component: api
     spec:
+      serviceAccountName: zenith-api
       {{- if .Values.imagePullSecret }}
       imagePullSecrets:
         - name: {{ .Values.imagePullSecret }}
@@ -55,6 +56,14 @@ spec:
                   key: admin-password
             - name: CORS_ORIGINS
               value: {{ .Values.env.CORS_ORIGINS | quote }}
+            {{- if .Values.env.K8S_MODE }}
+            - name: K8S_MODE
+              value: {{ .Values.env.K8S_MODE | quote }}
+            {{- end }}
+            {{- if .Values.env.ZENITH_MODE }}
+            - name: ZENITH_MODE
+              value: {{ .Values.env.ZENITH_MODE | quote }}
+            {{- end }}
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:

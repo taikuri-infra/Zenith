@@ -1,0 +1,20 @@
+# Staging values for zenith-operator
+namespace: zenith-staging
+replicas: 1
+image: zenith-operator:0.2.0
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+imagePullSecret: ""  # set via Terraform
+
+healthPort: 8081
+metricsPort: 8080
+
+leaderElection: false
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 256Mi
+    cpu: 500m

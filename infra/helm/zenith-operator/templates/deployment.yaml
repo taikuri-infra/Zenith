@@ -1,0 +1,72 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zenith-operator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-operator
+    app.kubernetes.io/name: zenith-operator
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: operator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-operator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-operator
+    app.kubernetes.io/name: zenith-operator
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: operator
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: zenith-operator
+  template:
+    metadata:
+      labels:
+        app: zenith-operator
+        app.kubernetes.io/name: zenith-operator
+        app.kubernetes.io/part-of: zenith
+        app.kubernetes.io/component: operator
+    spec:
+      serviceAccountName: zenith-operator
+      priorityClassName: platform
+      {{- if .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecret }}
+      {{- end }}
+      containers:
+        - name: operator
+          image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.image) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          args:
+            - --health-probe-bind-address=:{{ .Values.healthPort }}
+            - --metrics-bind-address=:{{ .Values.metricsPort }}
+            {{- if .Values.leaderElection }}
+            - --leader-elect
+            {{- end }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.healthPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.metricsPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10

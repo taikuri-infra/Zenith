@@ -1,0 +1,151 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: projects.zenith.dev
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: zenith.dev
+  names:
+    kind: Project
+    listKind: ProjectList
+    plural: projects
+    singular: project
+    shortNames:
+      - proj
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Display Name
+          type: string
+          jsonPath: .spec.displayName
+        - name: Owner
+          type: string
+          jsonPath: .spec.owner
+        - name: Plan
+          type: string
+          jsonPath: .spec.plan
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          description: Project is the Schema for the projects API. Represents a tenant boundary.
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: ProjectSpec defines the desired state of a Project (tenant boundary)
+              type: object
+              required:
+                - displayName
+                - owner
+              properties:
+                displayName:
+                  description: DisplayName is the human-readable project name
+                  type: string
+                owner:
+                  description: Owner is the email of the project owner
+                  type: string
+                plan:
+                  description: Plan is the subscription plan (free, pro, enterprise)
+                  type: string
+                  default: free
+                  enum:
+                    - free
+                    - pro
+                    - enterprise
+                region:
+                  description: Region is the Hetzner datacenter region
+                  type: string
+                  default: fsn1
+                  enum:
+                    - fsn1
+                    - nbg1
+                    - hel1
+                    - ash
+                    - hil
+                resourceQuota:
+                  description: ResourceQuota defines resource limits for the project
+                  type: object
+                  properties:
+                    maxApps:
+                      description: MaxApps is the maximum number of apps
+                      type: integer
+                    maxDatabases:
+                      description: MaxDatabases is the maximum number of databases
+                      type: integer
+                    maxStorageGB:
+                      description: MaxStorageGB is the maximum storage in GB
+                      type: integer
+            status:
+              description: ProjectStatus defines the observed state of Project
+              type: object
+              properties:
+                phase:
+                  description: Phase represents the current lifecycle phase
+                  type: string
+                  enum:
+                    - Pending
+                    - Active
+                    - Suspended
+                    - Deleting
+                namespace:
+                  description: Namespace is the Kubernetes namespace for this project
+                  type: string
+                conditions:
+                  description: Conditions represent the latest available observations
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      message:
+                        type: string
+                        maxLength: 32768
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                      reason:
+                        type: string
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      type:
+                        type: string
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                appCount:
+                  description: AppCount is the current number of deployed apps
+                  type: integer
+                databaseCount:
+                  description: DatabaseCount is the current number of databases
+                  type: integer
