@@ -20,12 +20,37 @@ metadata:
     app.kubernetes.io/part-of: zenith
     app.kubernetes.io/component: api
 rules:
+  # Zenith CRDs (Project operator)
   - apiGroups: ["zenith.dev"]
     resources: ["projects"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
   - apiGroups: ["zenith.dev"]
     resources: ["projects/status"]
     verbs: ["get"]
+  # Build jobs (Kaniko)
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+  # ConfigMaps (generated Dockerfiles)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "delete"]
+  # Pod logs (build log streaming)
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  # App deployments
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  # App services
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  # App ingress routes (Traefik)
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

@@ -1,0 +1,31 @@
+{{- if .Values.buildInfra.enabled }}
+---
+# Namespace for Kaniko build jobs
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zenith-builds
+  labels:
+    app.kubernetes.io/managed-by: zenith
+    app.kubernetes.io/part-of: zenith
+---
+# Namespace for deployed customer apps
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zenith-apps
+  labels:
+    app.kubernetes.io/managed-by: zenith
+    app.kubernetes.io/part-of: zenith
+---
+# Registry credentials for Kaniko to push built images.
+# Reuses the same registry host/username/password from the platform registry config.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: registry-credentials
+  namespace: zenith-builds
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: {{ include "zenith.dockerconfigjson" . }}
+{{- end }}

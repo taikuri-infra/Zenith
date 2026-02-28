@@ -12,6 +12,8 @@ env:
   CORS_ORIGINS: "https://stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com,https://embermind-ms.stage.freezenith.com,https://embermind.stage.freezenith.com"
   K8S_MODE: "real"
   ZENITH_MODE: "saas"
+  REGISTRY: "registry.stage.freezenith.com/zenith-stage"
+  BASE_DOMAIN: "apps.stage.freezenith.com"
 
 ingress:
   host: api.stage.freezenith.com

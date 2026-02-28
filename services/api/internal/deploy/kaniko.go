@@ -13,8 +13,15 @@ type KanikoJobSpec struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 
+	// Git source (cloned by init container inside the Kaniko pod)
+	RepoURL string `json:"repo_url"`
+	Branch  string `json:"branch"`
+
+	// If non-empty, a ConfigMap with this content is mounted as /workspace/Dockerfile.
+	// Used when framework detection generates a Dockerfile that doesn't exist in the repo.
+	GeneratedDockerfile string `json:"generated_dockerfile,omitempty"`
+
 	// Build configuration
-	ContextDir     string `json:"context_dir"`
 	DockerfilePath string `json:"dockerfile_path"`
 	Destination    string `json:"destination"`
 
@@ -30,14 +37,18 @@ type KanikoJobSpec struct {
 // DefaultKanikoImage is the Kaniko executor image.
 const DefaultKanikoImage = "gcr.io/kaniko-project/executor:v1.23.0"
 
+// GitCloneImage is the init container image used to clone the repo into the build context.
+const GitCloneImage = "alpine/git:latest"
+
 // NewKanikoJobSpec creates a Kaniko job spec for building an app.
-func NewKanikoJobSpec(app *entities.App, deploymentID, imageTag, contextDir string) *KanikoJobSpec {
+func NewKanikoJobSpec(app *entities.App, deploymentID, imageTag string) *KanikoJobSpec {
 	jobName := fmt.Sprintf("build-%s-%s", app.Subdomain, deploymentID[:min(8, len(deploymentID))])
 
 	return &KanikoJobSpec{
 		Name:           jobName,
 		Namespace:      "zenith-builds",
-		ContextDir:     contextDir,
+		RepoURL:        app.RepoURL,
+		Branch:         app.Branch,
 		DockerfilePath: "Dockerfile",
 		Destination:    imageTag,
 		CPULimit:       "2",
@@ -47,9 +58,75 @@ func NewKanikoJobSpec(app *entities.App, deploymentID, imageTag, contextDir stri
 	}
 }
 
-// ToK8sJobManifest generates the Kubernetes Job YAML manifest for Kaniko.
-// This returns a map that can be serialized to JSON/YAML for the K8s API.
+// DockerfileConfigMapName returns the ConfigMap name for a generated Dockerfile.
+func (s *KanikoJobSpec) DockerfileConfigMapName() string {
+	return fmt.Sprintf("build-dockerfile-%s", s.Name)
+}
+
+// ToK8sJobManifest generates the Kubernetes Job manifest for Kaniko.
+// The init container clones the git repo into /workspace (shared emptyDir).
+// If a Dockerfile was auto-generated, it is injected via a ConfigMap volume.
 func (s *KanikoJobSpec) ToK8sJobManifest() map[string]interface{} {
+	// Init container: clone repo into /workspace
+	initContainers := []map[string]interface{}{
+		{
+			"name":  "git-clone",
+			"image": GitCloneImage,
+			"args": []string{
+				"clone", "--depth", "1", "-b", s.Branch, s.RepoURL, "/workspace",
+			},
+			"volumeMounts": []map[string]interface{}{
+				{
+					"name":      "build-context",
+					"mountPath": "/workspace",
+				},
+			},
+		},
+	}
+
+	// Kaniko container
+	kanikoVolumeMounts := []map[string]interface{}{
+		{
+			"name":      "build-context",
+			"mountPath": "/workspace",
+		},
+		{
+			"name":      "docker-config",
+			"mountPath": "/kaniko/.docker",
+		},
+	}
+
+	// Volumes
+	volumes := []map[string]interface{}{
+		{
+			"name": "build-context",
+			"emptyDir": map[string]interface{}{
+				"sizeLimit": "2Gi",
+			},
+		},
+		{
+			"name": "docker-config",
+			"secret": map[string]interface{}{
+				"secretName": "registry-credentials",
+			},
+		},
+	}
+
+	// If a Dockerfile was generated, mount it from a ConfigMap
+	if s.GeneratedDockerfile != "" {
+		kanikoVolumeMounts = append(kanikoVolumeMounts, map[string]interface{}{
+			"name":      "dockerfile",
+			"mountPath": "/workspace/Dockerfile",
+			"subPath":   "Dockerfile",
+		})
+		volumes = append(volumes, map[string]interface{}{
+			"name": "dockerfile",
+			"configMap": map[string]interface{}{
+				"name": s.DockerfileConfigMapName(),
+			},
+		})
+	}
+
 	return map[string]interface{}{
 		"apiVersion": "batch/v1",
 		"kind":       "Job",
@@ -73,13 +150,14 @@ func (s *KanikoJobSpec) ToK8sJobManifest() map[string]interface{} {
 					},
 				},
 				"spec": map[string]interface{}{
-					"restartPolicy": "Never",
+					"restartPolicy":  "Never",
+					"initContainers": initContainers,
 					"containers": []map[string]interface{}{
 						{
 							"name":  "kaniko",
 							"image": DefaultKanikoImage,
 							"args": []string{
-								"--context=dir://" + s.ContextDir,
+								"--context=dir:///workspace",
 								"--dockerfile=" + s.DockerfilePath,
 								"--destination=" + s.Destination,
 								"--cache=true",
@@ -97,32 +175,10 @@ func (s *KanikoJobSpec) ToK8sJobManifest() map[string]interface{} {
 									"memory": "1Gi",
 								},
 							},
-							"volumeMounts": []map[string]interface{}{
-								{
-									"name":      "build-context",
-									"mountPath": s.ContextDir,
-								},
-								{
-									"name":      "docker-config",
-									"mountPath": "/kaniko/.docker",
-								},
-							},
+							"volumeMounts": kanikoVolumeMounts,
 						},
 					},
-					"volumes": []map[string]interface{}{
-						{
-							"name": "build-context",
-							"emptyDir": map[string]interface{}{
-								"sizeLimit": "2Gi",
-							},
-						},
-						{
-							"name": "docker-config",
-							"secret": map[string]interface{}{
-								"secretName": "registry-credentials",
-							},
-						},
-					},
+					"volumes": volumes,
 				},
 			},
 		},

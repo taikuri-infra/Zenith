@@ -64,6 +64,14 @@ spec:
             - name: ZENITH_MODE
               value: {{ .Values.env.ZENITH_MODE | quote }}
             {{- end }}
+            {{- if .Values.env.REGISTRY }}
+            - name: REGISTRY
+              value: {{ .Values.env.REGISTRY | quote }}
+            {{- end }}
+            {{- if .Values.env.BASE_DOMAIN }}
+            - name: BASE_DOMAIN
+              value: {{ .Values.env.BASE_DOMAIN | quote }}
+            {{- end }}
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
