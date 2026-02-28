@@ -18,6 +18,8 @@ all:
     enable_keda: false
     enable_monitoring: false
     enable_cilium: true
+    enable_dns01_solver: true
+    cloudflare_api_token: "{{ lookup('env', 'CLOUDFLARE_API_TOKEN') }}"
 
     customer_tenants:
       - name: embermind
