@@ -73,6 +73,7 @@ module "dns" {
     keycloak     = { name = "auth.stage" }
     temporal     = { name = "temporal.stage" }
     harbor       = { name = "registry.stage" }
+    harbor_hub   = { name = "hub.stage" }
     hubble       = { name = "hubble.stage" }
     tempo        = { name = "tempo.stage" }
     alertmanager = { name = "alerts.stage" }
