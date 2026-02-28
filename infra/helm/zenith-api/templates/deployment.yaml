@@ -4,6 +4,8 @@ kind: Deployment
 metadata:
   name: zenith-api
   namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   labels:
     app: zenith-api
     app.kubernetes.io/name: zenith-api
@@ -117,6 +119,8 @@ kind: Service
 metadata:
   name: zenith-api
   namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   labels:
     app: zenith-api
     app.kubernetes.io/name: zenith-api

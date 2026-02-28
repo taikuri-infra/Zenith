@@ -4,6 +4,8 @@ kind: IngressRoute
 metadata:
   name: zenith-api
   namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   entryPoints:
     - websecure
@@ -27,6 +29,8 @@ kind: IngressRoute
 metadata:
   name: zenith-api-redirect
   namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   entryPoints:
     - web

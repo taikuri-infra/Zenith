@@ -51,6 +51,10 @@ certificate:
     - www.freezenith.com
     - api.freezenith.com
 
+# Tenant quota/limit templates (ConfigMaps for Temporal provisioning)
+tenantQuotas:
+  enabled: false
+
 # Kong routes (optional)
 kong:
   enabled: false

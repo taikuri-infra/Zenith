@@ -4,6 +4,8 @@ kind: ServiceAccount
 metadata:
   name: zenith-api
   namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     app: zenith-api
     app.kubernetes.io/name: zenith-api
@@ -14,6 +16,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: zenith-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     app: zenith-api
     app.kubernetes.io/name: zenith-api
@@ -56,6 +60,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: zenith-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     app: zenith-api
     app.kubernetes.io/name: zenith-api

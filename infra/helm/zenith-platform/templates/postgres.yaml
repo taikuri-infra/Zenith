@@ -5,6 +5,8 @@ kind: Cluster
 metadata:
   name: zenith-postgres
   namespace: {{ include "zenith.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   instances: {{ .Values.postgres.instances | default 1 }}
   imageName: {{ .Values.postgres.image }}

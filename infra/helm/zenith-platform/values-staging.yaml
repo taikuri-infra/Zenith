@@ -27,6 +27,9 @@ postgres:
       memory: 256Mi
       cpu: 250m
 
+tenantQuotas:
+  enabled: true
+
 certManager:
   issuer: letsencrypt-prod
   issuerKind: ClusterIssuer
