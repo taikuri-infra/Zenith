@@ -7,7 +7,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -179,6 +181,108 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	if lrResult != controllerutil.OperationResultNone {
 		logger.Info("LimitRange reconciled", "operation", lrResult)
+	}
+
+	// Step 4.5: CreateOrUpdate CiliumNetworkPolicy (using unstructured — Cilium types not in scheme)
+	cnp := &unstructured.Unstructured{}
+	cnp.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "cilium.io",
+		Version: "v2",
+		Kind:    "CiliumNetworkPolicy",
+	})
+	cnp.SetName(fmt.Sprintf("%s-default", project.Name))
+	cnp.SetNamespace(nsName)
+
+	cnpResult, err := controllerutil.CreateOrUpdate(ctx, r.Client, cnp, func() error {
+		cnp.Object["spec"] = map[string]interface{}{
+			"endpointSelector": map[string]interface{}{},
+			"ingress": []interface{}{
+				map[string]interface{}{
+					"fromEndpoints": []interface{}{
+						map[string]interface{}{
+							"matchLabels": map[string]interface{}{
+								"io.kubernetes.pod.namespace": "kube-system",
+							},
+						},
+					},
+				},
+				map[string]interface{}{
+					"fromEndpoints": []interface{}{
+						map[string]interface{}{
+							"matchLabels": map[string]interface{}{
+								"io.kubernetes.pod.namespace": "apisix",
+							},
+						},
+					},
+				},
+			},
+			"egress": []interface{}{
+				map[string]interface{}{
+					"toEndpoints": []interface{}{
+						map[string]interface{}{
+							"matchLabels": map[string]interface{}{
+								"io.kubernetes.pod.namespace": "zenith-shared",
+							},
+						},
+					},
+					"toPorts": []interface{}{
+						map[string]interface{}{
+							"ports": []interface{}{
+								map[string]interface{}{"port": "5432", "protocol": "TCP"},
+							},
+						},
+					},
+				},
+				map[string]interface{}{
+					"toEndpoints": []interface{}{
+						map[string]interface{}{
+							"matchLabels": map[string]interface{}{
+								"io.kubernetes.pod.namespace": "keycloak",
+							},
+						},
+					},
+					"toPorts": []interface{}{
+						map[string]interface{}{
+							"ports": []interface{}{
+								map[string]interface{}{"port": "8080", "protocol": "TCP"},
+							},
+						},
+					},
+				},
+				map[string]interface{}{
+					"toEndpoints": []interface{}{
+						map[string]interface{}{
+							"matchLabels": map[string]interface{}{
+								"io.kubernetes.pod.namespace": "kube-system",
+							},
+						},
+					},
+					"toPorts": []interface{}{
+						map[string]interface{}{
+							"ports": []interface{}{
+								map[string]interface{}{"port": "53", "protocol": "UDP"},
+								map[string]interface{}{"port": "53", "protocol": "TCP"},
+							},
+						},
+					},
+				},
+				map[string]interface{}{
+					"toFQDNs": []interface{}{
+						map[string]interface{}{
+							"matchPattern": "*.freezenith.com",
+						},
+					},
+				},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		r.Recorder.Eventf(&project, corev1.EventTypeWarning, "CiliumNetworkPolicyFailed", "Failed to ensure CiliumNetworkPolicy: %v", err)
+		return ctrl.Result{}, err
+	}
+	if cnpResult != controllerutil.OperationResultNone {
+		logger.Info("CiliumNetworkPolicy reconciled", "operation", cnpResult)
 	}
 
 	// Step 5: Count current apps and databases in namespace

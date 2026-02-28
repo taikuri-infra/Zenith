@@ -1,0 +1,56 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: zenith-operator
+  labels:
+    app: zenith-operator
+    app.kubernetes.io/name: zenith-operator
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: operator
+rules:
+  # Zenith CRDs — full CRUD + status
+  - apiGroups: ["zenith.dev"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["zenith.dev"]
+    resources: ["*/status"]
+    verbs: ["get", "update", "patch"]
+  # Core resources — namespaces, quotas, limits, secrets, services, events
+  - apiGroups: [""]
+    resources: ["namespaces", "resourcequotas", "limitranges", "secrets", "services", "events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Deployments
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Traefik IngressRoutes + Middlewares
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes", "middlewares"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Cilium network policies
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumnetworkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zenith-operator
+  labels:
+    app: zenith-operator
+    app.kubernetes.io/name: zenith-operator
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: zenith-operator
+subjects:
+  - kind: ServiceAccount
+    name: zenith-operator
+    namespace: {{ .Values.namespace }}
