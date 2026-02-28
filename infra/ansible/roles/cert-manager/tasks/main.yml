@@ -86,6 +86,6 @@
         namespace: cert-manager
       type: Opaque
       stringData:
-        api-token: "{{ cloudflare_api_token }}"
+        api-token: "{{ cloudflare_api_token | default('') }}"
   when: enable_dns01_solver | default(false)
   tags: [cert-manager, infra, v2]

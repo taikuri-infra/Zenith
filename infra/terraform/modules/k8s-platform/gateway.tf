@@ -46,31 +46,10 @@ resource "helm_release" "apisix" {
     value = var.environment == "production" ? "2" : "1"
   }
 
-  # Plugins
-  set {
-    name  = "plugins.jwt-auth"
-    value = "true"
-  }
-
-  set {
-    name  = "plugins.cors"
-    value = "true"
-  }
-
-  set {
-    name  = "plugins.limit-count"
-    value = "true"
-  }
-
-  set {
-    name  = "plugins.opentelemetry"
-    value = "true"
-  }
-
-  set {
-    name  = "plugins.prometheus"
-    value = "true"
-  }
+  # Plugins (must be a YAML array, not object)
+  values = [yamlencode({
+    plugins = ["jwt-auth", "cors", "limit-count", "opentelemetry", "prometheus"]
+  })]
 
   # Resources
   set {
@@ -146,13 +125,24 @@ resource "helm_release" "external_dns" {
   count = var.enable_external_dns ? 1 : 0
 
   name             = "external-dns"
-  repository       = "https://charts.bitnami.com/bitnami"
+  repository       = "oci://registry-1.docker.io/bitnamicharts"
   chart            = "external-dns"
   version          = var.external_dns_version
   namespace        = "external-dns"
   create_namespace = true
   wait             = true
-  timeout          = 300
+  timeout          = 600
+
+  # Bitnami purged docker.io/bitnami — use legacy registry
+  set {
+    name  = "image.registry"
+    value = "docker.io"
+  }
+
+  set {
+    name  = "image.repository"
+    value = "bitnamilegacy/external-dns"
+  }
 
   set {
     name  = "provider"

@@ -642,6 +642,12 @@ spec:
 
 #### Policy 2: Block Images Not From Harbor
 
+> **Note:** `harbor.freezenith.com` in this policy refers to the **internal platform
+> registry** (`registry.stage.freezenith.com` in staging). This is the registry that
+> stores all platform images and is managed outside the cluster. The **customer Harbor**
+> (`hub.stage.freezenith.com`) is a separate in-cluster instance for Pro-tier customers
+> only. See `03-phase3-cluster-bootstrap.md` for the two-registry architecture.
+
 ```yaml
 # Why: All images must come from our private Harbor registry.
 # This prevents pulling unvetted images from Docker Hub or other registries.
@@ -1153,33 +1159,34 @@ Developer pushes code to GitHub
 GitHub Actions CI pipeline
   |
   +-- Step 1: Build image
-  |     docker build -t harbor.freezenith.com/zenith/api:v1.2.3 .
+  |     docker build -t registry.stage.freezenith.com/zenith-stage/zenith-api:v1.2.3 .
   |
   +-- Step 2: Trivy vulnerability scan
-  |     trivy image harbor.freezenith.com/zenith/api:v1.2.3
+  |     trivy image registry.stage.freezenith.com/zenith-stage/zenith-api:v1.2.3
   |     IF Critical/High CVE found -> FAIL pipeline, do not push
   |     IF only Low/Medium -> WARN, continue
   |
   +-- Step 3: Generate SBOM with syft
-  |     syft harbor.freezenith.com/zenith/api:v1.2.3 -o spdx-json > sbom.json
+  |     syft registry.stage.freezenith.com/zenith-stage/zenith-api:v1.2.3 -o spdx-json > sbom.json
   |     (lists every package, library, and version in the image)
   |
-  +-- Step 4: Push to Harbor
-  |     docker push harbor.freezenith.com/zenith/api:v1.2.3
+  +-- Step 4: Push to Internal Harbor
+  |     docker push registry.stage.freezenith.com/zenith-stage/zenith-api:v1.2.3
+  |     (pushes to the INTERNAL registry, NOT the customer one)
   |
   +-- Step 5: Harbor server-side Trivy scan (double-check)
   |     Harbor runs Trivy again on push (in case CI was bypassed)
   |     Scan result visible in Harbor UI
   |
   +-- Step 6: Sign with cosign
-  |     cosign sign --key cosign.key harbor.freezenith.com/zenith/api:v1.2.3
+  |     cosign sign --key cosign.key registry.stage.freezenith.com/zenith-stage/zenith-api:v1.2.3
   |     Signature stored as OCI artifact alongside the image
   |
   +-- Step 7: Attach SBOM to image
-  |     cosign attach sbom --sbom sbom.json harbor.freezenith.com/zenith/api:v1.2.3
+  |     cosign attach sbom --sbom sbom.json registry.stage.freezenith.com/zenith-stage/zenith-api:v1.2.3
   |
   +-- Step 8: Deploy (ArgoCD auto-sync or image updater)
-        Kyverno validates: image is from Harbor? Signed? -> Allow
+        Kyverno validates: image is from internal Harbor? Signed? -> Allow
         Image runs in cluster
 ```
 
@@ -1196,11 +1203,19 @@ When Renovate creates a PR, CI runs Trivy. If the new dependency introduces a CV
 
 ### Harbor vulnerability policy
 
-Harbor is configured to:
+Both registries are configured for security scanning:
+
+**Internal Harbor** (`registry.stage.freezenith.com`) — platform images:
+- **Automatically scan** every image on push
+- **Block pull** of images with Critical CVEs
+- **Retain** scan results for auditing
+
+**Customer Harbor** (`hub.stage.freezenith.com`) — pro-tier customer images:
 - **Automatically scan** every image on push
 - **Block pull** of images with Critical CVEs (configured per project)
 - **Retain** scan results for auditing
-- **Quota** per customer project (Free: 5 GB, Pro: 50 GB)
+- **Quota** per customer project (storage-limited)
+- Free-tier users do NOT have access to this registry
 
 ---
 

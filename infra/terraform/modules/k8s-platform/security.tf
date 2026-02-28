@@ -58,7 +58,7 @@ resource "helm_release" "falco" {
 
   set {
     name  = "driver.kind"
-    value = "ebpf"
+    value = "auto"
   }
 
   set {
@@ -101,7 +101,7 @@ resource "helm_release" "velero" {
   namespace        = "velero"
   create_namespace = true
   wait             = true
-  timeout          = 300
+  timeout          = 600
 
   # AWS plugin for S3-compatible storage
   set {
@@ -183,6 +183,23 @@ resource "helm_release" "velero" {
   set {
     name  = "schedules.daily-backup.template.excludedNamespaces[0]"
     value = "velero"
+  }
+
+  # Skip CRD upgrade job (CRDs already installed, bitnami kubectl images are purged)
+  set {
+    name  = "upgradeCRDs"
+    value = "false"
+  }
+
+  # VolumeSnapshotLocation requires a provider
+  set {
+    name  = "configuration.volumeSnapshotLocation[0].name"
+    value = "default"
+  }
+
+  set {
+    name  = "configuration.volumeSnapshotLocation[0].provider"
+    value = "aws"
   }
 
   set {

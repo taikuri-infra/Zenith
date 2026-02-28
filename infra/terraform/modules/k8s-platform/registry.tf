@@ -1,6 +1,10 @@
 # =============================================================================
-# Harbor — Container & Helm Chart Registry (5.11)
+# Harbor — Pro-tier Customer Registry (5.11)
 # =============================================================================
+# This Harbor instance is for pro/paid customers only.
+# Free-tier users do NOT get a registry.
+# Platform images & Helm charts are stored in the separate internal Harbor
+# (registry.stage.freezenith.com), managed outside this cluster.
 
 resource "helm_release" "harbor" {
   count = var.enable_harbor ? 1 : 0
@@ -89,4 +93,62 @@ resource "helm_release" "harbor" {
     kubernetes_manifest.cluster_issuer,
     kubernetes_priority_class.platform,
   ]
+}
+
+# =============================================================================
+# Harbor TLS — Certificate + IngressRoute for customer registry (5.11b)
+# =============================================================================
+
+resource "kubernetes_manifest" "harbor_certificate" {
+  count = var.enable_harbor ? 1 : 0
+
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = "harbor-tls"
+      namespace = "harbor"
+    }
+    spec = {
+      secretName = "harbor-tls"
+      issuerRef = {
+        name = "letsencrypt-prod"
+        kind = "ClusterIssuer"
+      }
+      dnsNames = [
+        var.customer_registry_host,
+      ]
+    }
+  }
+
+  depends_on = [helm_release.harbor]
+}
+
+resource "kubernetes_manifest" "harbor_ingressroute" {
+  count = var.enable_harbor ? 1 : 0
+
+  manifest = {
+    apiVersion = "traefik.io/v1alpha1"
+    kind       = "IngressRoute"
+    metadata = {
+      name      = "harbor"
+      namespace = "harbor"
+    }
+    spec = {
+      entryPoints = ["websecure"]
+      routes = [{
+        match = "Host(`${var.customer_registry_host}`)"
+        kind  = "Rule"
+        services = [{
+          name = "harbor-core"
+          port = 80
+        }]
+      }]
+      tls = {
+        secretName = "harbor-tls"
+      }
+    }
+  }
+
+  depends_on = [helm_release.harbor]
 }

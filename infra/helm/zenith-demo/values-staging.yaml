@@ -6,9 +6,9 @@ imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via Terraform
 
 mc:
-  enabled: false
+  enabled: true
   replicas: 1
-  image: zenith-mc-demo:0.2.0
+  image: zenith-mc:0.2.0
   port: 3100
   resources:
     requests:
@@ -19,9 +19,9 @@ mc:
       cpu: 250m
 
 web:
-  enabled: false
+  enabled: true
   replicas: 1
-  image: zenith-web-demo:0.2.0
+  image: zenith-web:0.2.0
   port: 3000
   resources:
     requests:

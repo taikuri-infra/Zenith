@@ -6,13 +6,24 @@ resource "helm_release" "keycloak" {
   count = var.enable_keycloak ? 1 : 0
 
   name             = "keycloak"
-  repository       = "https://charts.bitnami.com/bitnami"
+  repository       = "oci://registry-1.docker.io/bitnamicharts"
   chart            = "keycloak"
   version          = var.keycloak_version
   namespace        = "keycloak"
   create_namespace = false
   wait             = true
   timeout          = 600
+
+  # Bitnami purged docker.io/bitnami — use legacy registry
+  set {
+    name  = "image.registry"
+    value = "docker.io"
+  }
+
+  set {
+    name  = "image.repository"
+    value = "bitnamilegacy/keycloak"
+  }
 
   # Use external CNPG database
   set {
@@ -81,8 +92,8 @@ resource "helm_release" "keycloak" {
   }
 
   set {
-    name  = "proxy"
-    value = "edge"
+    name  = "proxyHeaders"
+    value = "xforwarded"
   }
 
   set {

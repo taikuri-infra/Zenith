@@ -91,6 +91,9 @@ provider "helm" {
 module "platform" {
   source = "../modules/k8s-platform"
 
+  # Hetzner CSI
+  hcloud_token = var.hcloud_token
+
   # Environment
   platform_namespace = "zenith-staging"
   environment        = "staging"
@@ -100,9 +103,16 @@ module "platform" {
   domain         = var.domain
   cluster_domain = var.cluster_domain
 
-  # Helm charts from Harbor OCI registry
-  chart_repository = "oci://${var.registry_host}/zenith-stage"
+  # Helm charts from local filesystem (Harbor is not ready on first deploy)
+  chart_repository = ""
   chart_version    = var.zenith_chart_version
+
+  # Local chart paths (used when chart_repository is empty)
+  platform_chart_path = "${path.module}/../../helm/zenith-platform"
+  api_chart_path      = "${path.module}/../../helm/zenith-api"
+  landing_chart_path  = "${path.module}/../../helm/zenith-landing"
+  demo_chart_path     = "${path.module}/../../helm/zenith-demo"
+  tenant_chart_path   = "${path.module}/../../helm/zenith-tenant"
 
   # Per-chart values files
   platform_values_file = "${path.module}/../../helm/zenith-platform/values-staging.yaml"

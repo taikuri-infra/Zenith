@@ -78,7 +78,7 @@ terraform {
 
 resource "kubernetes_priority_class" "system_critical" {
   metadata {
-    name = "system-critical"
+    name = "core-critical"
   }
   value          = 1000000
   global_default = false

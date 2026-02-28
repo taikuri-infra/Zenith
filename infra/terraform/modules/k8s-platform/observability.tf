@@ -143,6 +143,64 @@ resource "helm_release" "loki" {
     value = "false"
   }
 
+  # Schema config required by Loki 6.x+
+  set {
+    name  = "loki.schemaConfig.configs[0].from"
+    value = "2024-04-01"
+  }
+
+  set {
+    name  = "loki.schemaConfig.configs[0].store"
+    value = "tsdb"
+  }
+
+  set {
+    name  = "loki.schemaConfig.configs[0].object_store"
+    value = "filesystem"
+  }
+
+  set {
+    name  = "loki.schemaConfig.configs[0].schema"
+    value = "v13"
+  }
+
+  set {
+    name  = "loki.schemaConfig.configs[0].index.prefix"
+    value = "loki_index_"
+  }
+
+  set {
+    name  = "loki.schemaConfig.configs[0].index.period"
+    value = "24h"
+  }
+
+  # Zero-out SimpleScalable replicas to avoid conflict with SingleBinary mode
+  set {
+    name  = "read.replicas"
+    value = "0"
+  }
+
+  set {
+    name  = "write.replicas"
+    value = "0"
+  }
+
+  set {
+    name  = "backend.replicas"
+    value = "0"
+  }
+
+  # Disable chunksCache and resultsCache for staging (saves ~2Gi memory)
+  set {
+    name  = "chunksCache.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "resultsCache.enabled"
+    value = "false"
+  }
+
   depends_on = [helm_release.prometheus_stack]
 }
 
@@ -159,7 +217,7 @@ resource "helm_release" "tempo" {
   version    = var.tempo_version
   namespace  = "monitoring"
   wait       = true
-  timeout    = 300
+  timeout    = 600
 
   set {
     name  = "tempo.resources.requests.cpu"
@@ -186,6 +244,22 @@ resource "helm_release" "tempo" {
     value = "10Gi"
   }
 
+  # Fix permission denied on hcloud-volumes (fsGroup must be pod-level, not container-level)
+  set {
+    name  = "securityContext.fsGroup"
+    value = "10001"
+  }
+
+  set {
+    name  = "securityContext.runAsUser"
+    value = "10001"
+  }
+
+  set {
+    name  = "securityContext.runAsGroup"
+    value = "10001"
+  }
+
   depends_on = [helm_release.prometheus_stack]
 }
 
@@ -203,6 +277,11 @@ resource "helm_release" "otel_collector" {
   namespace  = "monitoring"
   wait       = true
   timeout    = 300
+
+  set {
+    name  = "image.repository"
+    value = "otel/opentelemetry-collector-contrib"
+  }
 
   set {
     name  = "mode"

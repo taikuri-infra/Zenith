@@ -9,12 +9,12 @@ port: 8080
 metricsPort: 9090
 
 env:
-  CORS_ORIGINS: "https://stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com"
+  CORS_ORIGINS: "https://stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com,https://embermind-ms.stage.freezenith.com,https://embermind.stage.freezenith.com"
 
 ingress:
   host: api.stage.freezenith.com
   tlsSecret: staging-tls
-  kongEnabled: true
+  kongEnabled: false
 
 resources:
   requests:

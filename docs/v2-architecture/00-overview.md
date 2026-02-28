@@ -73,12 +73,12 @@ Zenith is a **Kubernetes-native Platform-as-a-Service (PaaS)** built on Hetzner 
 +---------------------+  +---------------------+
 ```
 
-| Tier | Infra | Isolation | Database | S3 Storage | API Gateway | Identity |
-|------|-------|-----------|----------|------------|-------------|----------|
-| **Free** | Shared cluster | Namespace + Cilium | Shared CNPG Cluster, own DB | Shared Hetzner S3, own bucket | Shared APISIX | Shared Keycloak, own realm |
-| **Pro** | Shared cluster | Namespace + Cilium | Sharded CNPG (~20 users/cluster), up to 5 DBs | Shared Hetzner S3, own bucket | Shared APISIX | Shared Keycloak, own realm |
-| **Team** | Dedicated VMs (CAPI) | Kernel-level | Own CNPG Cluster | Own S3 | Own APISIX | Own Keycloak |
-| **Enterprise** | Dedicated VMs (CAPI) | Kernel-level | Own CNPG Cluster | Own S3 | Own APISIX | Own Keycloak |
+| Tier | Infra | Isolation | Database | S3 Storage | Container Registry | API Gateway | Identity |
+|------|-------|-----------|----------|------------|-------------------|-------------|----------|
+| **Free** | Shared cluster | Namespace + Cilium | Shared CNPG Cluster, own DB | Shared Hetzner S3, own bucket | None | Shared APISIX | Shared Keycloak, own realm |
+| **Pro** | Shared cluster | Namespace + Cilium | Sharded CNPG (~20 users/cluster), up to 5 DBs | Shared Hetzner S3, own bucket | Own project in Customer Harbor (`hub.stage.freezenith.com`) with storage quota | Shared APISIX | Shared Keycloak, own realm |
+| **Team** | Dedicated VMs (CAPI) | Kernel-level | Own CNPG Cluster | Own S3 | Own Harbor project | Own APISIX | Own Keycloak |
+| **Enterprise** | Dedicated VMs (CAPI) | Kernel-level | Own CNPG Cluster | Own S3 | Own Harbor project | Own APISIX | Own Keycloak |
 
 **Key insight:** Free and Pro share the same infrastructure at the kernel level. Team and Enterprise get completely separate machines provisioned via CAPI+CAPH. This means a security breach in a Free customer's container cannot affect a Team customer because they are on different physical/virtual machines.
 
@@ -166,7 +166,8 @@ Zenith is a **Kubernetes-native Platform-as-a-Service (PaaS)** built on Hetzner 
 | **zenith-api** | Go backend | Provisioning, admin API, customer API |
 | **zenith-admin** | Admin panel UI | Tier management, infrastructure overview |
 | **Temporal** | Provisioning workflows | Customer creation, CAPI cluster creation |
-| **Harbor** | Container/chart registry | Quota per customer tier |
+| **Internal Harbor** | Platform registry (`registry.stage.freezenith.com`) | Stores platform images + Helm charts. Managed outside the cluster (separate server). CI pushes here. |
+| **Customer Harbor** | Pro-tier customer registry (`hub.stage.freezenith.com`) | Single in-cluster Harbor instance. One project per pro customer with storage quotas. Free users do NOT get a registry. Managed by Terraform (`registry.tf`). |
 | **ArgoCD** | GitOps app deployment | App-of-Apps pattern |
 
 ### Layer 5: Observability
@@ -418,7 +419,7 @@ Hetzner Object Storage Account (one per environment)
   |     |-- velero/
   |     |-- keycloak-realm-exports/
   |
-  |-- zenith-harbor/            (Harbor storage backend)
+  |-- zenith-harbor/            (Customer Harbor S3 backend — hub.stage.freezenith.com)
   |
   |-- customer-abc-data/        (Free customer bucket)
   |-- customer-def-data/        (Free customer bucket)
@@ -537,7 +538,7 @@ zenith-api starts Temporal workflow: "provision-dedicated-cluster"
 | **Runtime Security** | None | Falco anomaly detection |
 | **Tracing** | None | OpenTelemetry + Tempo |
 | **Secrets** | Plain K8s Secrets | etcd encryption + Sealed Secrets |
-| **Container Registry** | Harbor (manual push) | Harbor + ArgoCD Image Updater |
+| **Container Registry** | Harbor (manual push) | Two Harbors: Internal (platform images, separate server) + Customer (in-cluster, Pro-tier only) + ArgoCD Image Updater |
 | **cert-manager** | HTTP-01 (proxy OFF) | DNS-01 (proxy ON, Cloudflare) |
 
 ---

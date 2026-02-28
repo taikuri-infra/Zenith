@@ -137,3 +137,17 @@ kubeseal -f secret-prod.yaml -w sealed-secret-prod.yaml \
   --controller-name sealed-secrets \
   --controller-namespace sealed-secrets
 ```
+
+---
+
+## 7. Running Ansible (Phase 2)
+
+**Why:** Ansible is responsible for setting up the base Kubernetes cluster tools (k3s, Cilium, cert-manager) on the fresh Hetzner VM.
+**How:** Because the playbook requires the Cloudflare API token to prepare the DNS-01 webhook configurations, you must source the `.secrets` file to load the variables into your shell environment, and then pass them explicitly to the Ansible playbook via the `-e` flag.
+
+### Execution Command
+
+```bash
+cd infra/ansible
+source ../../.secrets && ansible-playbook -i inventory/staging.yml playbooks/site.yml -e "cloudflare_api_token=$CLOUDFLARE_API_TOKEN"
+```
