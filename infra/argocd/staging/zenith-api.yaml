@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: zenith-api
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd-image-updater.argoproj.io/image-list: api=registry.stage.freezenith.com/zenith-stage/zenith-api
+    argocd-image-updater.argoproj.io/api.update-strategy: latest
+    argocd-image-updater.argoproj.io/api.helm.image-name: image
+    argocd-image-updater.argoproj.io/api.helm.image-tag: imageTag
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/taikuri-infra/Zenith.git
+    targetRevision: staging
+    path: infra/helm/zenith-api
+    helm:
+      valueFiles:
+        - values-staging.yaml
+      parameters:
+        - name: imagePullSecret
+          value: harbor-registry
+        - name: imageRegistry
+          value: registry.stage.freezenith.com/zenith-stage
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: zenith-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

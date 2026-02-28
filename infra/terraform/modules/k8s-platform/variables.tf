@@ -426,6 +426,19 @@ variable "argocd_image_updater_version" {
   default     = "0.11.0"
 }
 
+variable "argocd_target_revision" {
+  description = "Git branch/tag ArgoCD watches for app manifests"
+  type        = string
+  default     = "staging"
+}
+
+variable "github_token" {
+  description = "GitHub personal access token for ArgoCD repo access"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # --- Harbor ---
 
 variable "enable_harbor" {

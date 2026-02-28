@@ -152,6 +152,9 @@ module "platform" {
   temporal_db_user     = var.temporal_db_user
   temporal_db_password = var.temporal_db_password
 
+  # ArgoCD / GitOps
+  github_token = var.github_token
+
   # --- V2 Feature flags ---
   enable_cnpg           = true
   enable_apisix         = true    # V2: replaces Kong
