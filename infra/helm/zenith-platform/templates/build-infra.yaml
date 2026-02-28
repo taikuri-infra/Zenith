@@ -6,7 +6,7 @@ kind: Namespace
 metadata:
   name: zenith-builds
   labels:
-    app.kubernetes.io/managed-by: zenith
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/part-of: zenith
 ---
 # Namespace for deployed customer apps
@@ -15,7 +15,7 @@ kind: Namespace
 metadata:
   name: zenith-apps
   labels:
-    app.kubernetes.io/managed-by: zenith
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/part-of: zenith
 ---
 # Registry credentials for Kaniko to push built images.
