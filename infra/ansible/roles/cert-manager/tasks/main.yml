@@ -49,10 +49,12 @@
     webhook_pods.resources[0].status.phase == 'Running'
   tags: [cert-manager, infra]
 
-- name: Create letsencrypt-prod ClusterIssuer
+- name: Create letsencrypt-prod ClusterIssuer (HTTP-01 bootstrap)
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
+    apply: true
+    force: true
     definition:
       apiVersion: cert-manager.io/v1
       kind: ClusterIssuer

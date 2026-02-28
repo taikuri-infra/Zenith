@@ -46,6 +46,10 @@ resource "helm_release" "cert_manager" {
 # V2: DNS-01 solver (replaces HTTP-01)
 # Requires: cloudflare-api-token Secret in cert-manager namespace (created by Ansible Phase 2)
 resource "kubernetes_manifest" "cluster_issuer" {
+  field_manager {
+    force_conflicts = true
+  }
+
   manifest = {
     apiVersion = "cert-manager.io/v1"
     kind       = "ClusterIssuer"
