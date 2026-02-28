@@ -74,6 +74,25 @@ spec:
             - name: BASE_DOMAIN
               value: {{ .Values.env.BASE_DOMAIN | quote }}
             {{- end }}
+            {{- if .Values.env.TEMPORAL_ENABLED }}
+            - name: TEMPORAL_ENABLED
+              value: {{ .Values.env.TEMPORAL_ENABLED | quote }}
+            {{- end }}
+            {{- if .Values.env.TEMPORAL_HOST }}
+            - name: TEMPORAL_HOST
+              value: {{ .Values.env.TEMPORAL_HOST | quote }}
+            {{- end }}
+            {{- if .Values.env.TEMPORAL_NAMESPACE }}
+            - name: TEMPORAL_NAMESPACE
+              value: {{ .Values.env.TEMPORAL_NAMESPACE | quote }}
+            {{- end }}
+            {{- if .Values.cnpgAdminSecret }}
+            - name: CNPG_ADMIN_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cnpgAdminSecret }}
+                  key: uri
+            {{- end }}
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
