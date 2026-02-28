@@ -257,6 +257,9 @@ resource "kubernetes_manifest" "argocd_root_application" {
         repoURL        = "https://github.com/taikuri-infra/Zenith.git"
         targetRevision = var.argocd_target_revision
         path           = "infra/argocd/staging"
+        directory = {
+          recurse = true
+        }
       }
       destination = {
         server    = "https://kubernetes.default.svc"
