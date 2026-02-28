@@ -45,18 +45,4 @@ certificate:
     - embermind.stage.freezenith.com
 
 kong:
-  enabled: true
-  plugins:
-    - zenith-rate-limiting
-    - zenith-cors
-  apiHost: api.stage.freezenith.com
-  apiPort: 8080
-  rateLimiting:
-    enabled: true
-    requestsPerMinute: 120
-  cors:
-    enabled: true
-    origins:
-      - "https://stage.freezenith.com"
-      - "https://ms.stage.freezenith.com"
-      - "https://cloud.stage.freezenith.com"
+  enabled: false
