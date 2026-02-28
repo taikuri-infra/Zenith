@@ -3,11 +3,10 @@
 # =============================================================================
 
 locals {
+  # NOTE: keycloak, apisix-etcd, external-dns, keda, and CNPG clusters
+  # already have PDBs created by their own Helm charts.
+  # Only add PDBs here for services that don't create their own.
   pdb_services = {
-    keycloak = {
-      namespace    = "keycloak"
-      match_labels = { "app.kubernetes.io/name" = "keycloak" }
-    }
     apisix = {
       namespace    = "apisix"
       match_labels = { "app.kubernetes.io/name" = "apisix" }
