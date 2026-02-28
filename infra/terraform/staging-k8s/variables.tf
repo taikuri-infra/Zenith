@@ -152,3 +152,12 @@ variable "temporal_db_password" {
   sensitive   = true
   default     = ""
 }
+
+# --- V2: ArgoCD / GitOps ---
+
+variable "github_token" {
+  description = "GitHub personal access token for ArgoCD repo access"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

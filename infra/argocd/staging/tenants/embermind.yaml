@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: zenith-tenant-embermind
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: tenant-apps
+  source:
+    repoURL: https://github.com/taikuri-infra/Zenith.git
+    targetRevision: staging
+    path: infra/helm/zenith-tenant
+    helm:
+      valueFiles:
+        - values-staging.yaml
+      parameters:
+        - name: imageRegistry
+          value: registry.stage.freezenith.com/zenith-stage
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: zenith-embermind-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

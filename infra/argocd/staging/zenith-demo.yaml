@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: zenith-demo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd-image-updater.argoproj.io/image-list: mc=registry.stage.freezenith.com/zenith-stage/zenith-mc,web=registry.stage.freezenith.com/zenith-stage/zenith-web
+    argocd-image-updater.argoproj.io/mc.update-strategy: latest
+    argocd-image-updater.argoproj.io/mc.helm.image-name: mc.image
+    argocd-image-updater.argoproj.io/mc.helm.image-tag: mc.imageTag
+    argocd-image-updater.argoproj.io/web.update-strategy: latest
+    argocd-image-updater.argoproj.io/web.helm.image-name: web.image
+    argocd-image-updater.argoproj.io/web.helm.image-tag: web.imageTag
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/taikuri-infra/Zenith.git
+    targetRevision: staging
+    path: infra/helm/zenith-demo
+    helm:
+      valueFiles:
+        - values-staging.yaml
+      parameters:
+        - name: imagePullSecret
+          value: harbor-registry
+        - name: imageRegistry
+          value: registry.stage.freezenith.com/zenith-stage
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: zenith-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
