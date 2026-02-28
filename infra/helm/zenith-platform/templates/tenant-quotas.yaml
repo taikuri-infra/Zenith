@@ -1,0 +1,71 @@
+{{- if .Values.tenantQuotas.enabled }}
+---
+# ConfigMap holding ResourceQuota templates per tier.
+# Applied by Temporal provisioning workflow when creating customer namespaces.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tenant-quota-templates
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+data:
+  free.yaml: |
+    apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: tier-quota
+    spec:
+      hard:
+        requests.cpu: "2"
+        requests.memory: 2Gi
+        limits.cpu: "4"
+        limits.memory: 4Gi
+        pods: "10"
+        persistentvolumeclaims: "2"
+        requests.storage: 10Gi
+  pro.yaml: |
+    apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: tier-quota
+    spec:
+      hard:
+        requests.cpu: "8"
+        requests.memory: 16Gi
+        limits.cpu: "16"
+        limits.memory: 32Gi
+        pods: "50"
+        persistentvolumeclaims: "10"
+        requests.storage: 100Gi
+---
+# ConfigMap holding LimitRange template (shared across all tiers).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tenant-limitrange-template
+  namespace: {{ include "zenith.namespace" . }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+data:
+  limitrange.yaml: |
+    apiVersion: v1
+    kind: LimitRange
+    metadata:
+      name: default-limits
+    spec:
+      limits:
+      - default:
+          cpu: 250m
+          memory: 256Mi
+        defaultRequest:
+          cpu: 50m
+          memory: 64Mi
+        max:
+          cpu: "2"
+          memory: 2Gi
+        min:
+          cpu: 50m
+          memory: 64Mi
+        type: Container
+{{- end }}
