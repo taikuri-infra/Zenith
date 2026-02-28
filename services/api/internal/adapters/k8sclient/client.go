@@ -57,19 +57,55 @@ type Client interface {
 	// ConfigMap operations (generated Dockerfiles for Kaniko builds)
 	CreateConfigMap(ctx context.Context, namespace, name string, data map[string]string) error
 	DeleteConfigMap(ctx context.Context, namespace, name string) error
+
+	// Namespace operations (tenant provisioning)
+	CreateNamespace(ctx context.Context, name string, labels map[string]string) error
+	GetNamespace(ctx context.Context, name string) error
+	DeleteNamespace(ctx context.Context, name string) error
+
+	// Secret operations (tenant credentials)
+	CreateSecret(ctx context.Context, namespace, name string, data map[string][]byte, labels map[string]string) error
+	GetSecret(ctx context.Context, namespace, name string) (map[string][]byte, error)
+	DeleteSecret(ctx context.Context, namespace, name string) error
+
+	// ResourceQuota operations (tenant limits)
+	CreateResourceQuota(ctx context.Context, namespace, name string, hard map[string]string) error
+
+	// LimitRange operations (container defaults)
+	CreateLimitRange(ctx context.Context, namespace, name string, limits LimitRangeSpec) error
+
+	// Generic CRD operations with explicit apiVersion (for non-Zenith CRDs)
+	GetCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) (*CRDObject, error)
+	DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error
+}
+
+// LimitRangeSpec holds container default/limit values for CreateLimitRange.
+type LimitRangeSpec struct {
+	DefaultCPU       string
+	DefaultMemory    string
+	DefaultReqCPU    string
+	DefaultReqMemory string
+	MaxCPU           string
+	MaxMemory        string
+	MinCPU           string
+	MinMemory        string
 }
 
 // MemoryClient is an in-memory K8s client for testing and development.
 type MemoryClient struct {
-	mu      sync.RWMutex
-	objects map[string]*CRDObject
-	jobs    map[string]*JobObject
+	mu         sync.RWMutex
+	objects    map[string]*CRDObject
+	jobs       map[string]*JobObject
+	namespaces map[string]map[string]string
+	secrets    map[string]map[string][]byte
 }
 
 func NewMemoryClient() *MemoryClient {
 	return &MemoryClient{
-		objects: make(map[string]*CRDObject),
-		jobs:    make(map[string]*JobObject),
+		objects:    make(map[string]*CRDObject),
+		jobs:       make(map[string]*JobObject),
+		namespaces: make(map[string]map[string]string),
+		secrets:    make(map[string]map[string][]byte),
 	}
 }
 
@@ -205,6 +241,82 @@ func (c *MemoryClient) CreateConfigMap(ctx context.Context, namespace, name stri
 // DeleteConfigMap is a no-op in memory mode.
 func (c *MemoryClient) DeleteConfigMap(ctx context.Context, namespace, name string) error {
 	return nil
+}
+
+// --- Namespace methods ---
+
+func (c *MemoryClient) CreateNamespace(ctx context.Context, name string, labels map[string]string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, exists := c.namespaces[name]; exists {
+		return fmt.Errorf("namespace %s already exists", name)
+	}
+	c.namespaces[name] = labels
+	return nil
+}
+
+func (c *MemoryClient) GetNamespace(ctx context.Context, name string) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if _, exists := c.namespaces[name]; !exists {
+		return fmt.Errorf("namespace %s not found", name)
+	}
+	return nil
+}
+
+func (c *MemoryClient) DeleteNamespace(ctx context.Context, name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.namespaces, name)
+	return nil
+}
+
+// --- Secret methods ---
+
+func (c *MemoryClient) CreateSecret(ctx context.Context, namespace, name string, data map[string][]byte, labels map[string]string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	key := namespace + "/" + name
+	c.secrets[key] = data
+	return nil
+}
+
+func (c *MemoryClient) GetSecret(ctx context.Context, namespace, name string) (map[string][]byte, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	key := namespace + "/" + name
+	data, exists := c.secrets[key]
+	if !exists {
+		return nil, fmt.Errorf("secret %s not found", key)
+	}
+	return data, nil
+}
+
+func (c *MemoryClient) DeleteSecret(ctx context.Context, namespace, name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.secrets, namespace+"/"+name)
+	return nil
+}
+
+// --- ResourceQuota / LimitRange (no-op in memory) ---
+
+func (c *MemoryClient) CreateResourceQuota(ctx context.Context, namespace, name string, hard map[string]string) error {
+	return nil
+}
+
+func (c *MemoryClient) CreateLimitRange(ctx context.Context, namespace, name string, limits LimitRangeSpec) error {
+	return nil
+}
+
+// --- Generic CRD with explicit apiVersion ---
+
+func (c *MemoryClient) GetCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) (*CRDObject, error) {
+	return c.GetCRD(ctx, kind, namespace, name)
+}
+
+func (c *MemoryClient) DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error {
+	return c.DeleteCRD(ctx, kind, namespace, name)
 }
 
 // GetPodLogs sends fake build output lines (dev/test mode).

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -250,6 +251,142 @@ func (c *RealClient) CreateConfigMap(ctx context.Context, namespace, name string
 
 func (c *RealClient) DeleteConfigMap(ctx context.Context, namespace, name string) error {
 	return c.clientset.CoreV1().ConfigMaps(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// --- Namespace methods ---
+
+func (c *RealClient) CreateNamespace(ctx context.Context, name string, labels map[string]string) error {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: labels,
+		},
+	}
+	_, err := c.clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+	return err
+}
+
+func (c *RealClient) GetNamespace(ctx context.Context, name string) error {
+	_, err := c.clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	return err
+}
+
+func (c *RealClient) DeleteNamespace(ctx context.Context, name string) error {
+	return c.clientset.CoreV1().Namespaces().Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// --- Secret methods ---
+
+func (c *RealClient) CreateSecret(ctx context.Context, namespace, name string, data map[string][]byte, labels map[string]string) error {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    labels,
+		},
+		Data: data,
+	}
+	_, err := c.clientset.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
+	return err
+}
+
+func (c *RealClient) GetSecret(ctx context.Context, namespace, name string) (map[string][]byte, error) {
+	secret, err := c.clientset.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return secret.Data, nil
+}
+
+func (c *RealClient) DeleteSecret(ctx context.Context, namespace, name string) error {
+	return c.clientset.CoreV1().Secrets(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// --- ResourceQuota methods ---
+
+func (c *RealClient) CreateResourceQuota(ctx context.Context, namespace, name string, hard map[string]string) error {
+	resourceList := corev1.ResourceList{}
+	for k, v := range hard {
+		resourceList[corev1.ResourceName(k)] = resource.MustParse(v)
+	}
+	quota := &corev1.ResourceQuota{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: corev1.ResourceQuotaSpec{
+			Hard: resourceList,
+		},
+	}
+	_, err := c.clientset.CoreV1().ResourceQuotas(namespace).Create(ctx, quota, metav1.CreateOptions{})
+	return err
+}
+
+// --- LimitRange methods ---
+
+func (c *RealClient) CreateLimitRange(ctx context.Context, namespace, name string, limits LimitRangeSpec) error {
+	lr := &corev1.LimitRange{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: corev1.LimitRangeSpec{
+			Limits: []corev1.LimitRangeItem{
+				{
+					Type: corev1.LimitTypeContainer,
+					Default: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse(limits.DefaultCPU),
+						corev1.ResourceMemory: resource.MustParse(limits.DefaultMemory),
+					},
+					DefaultRequest: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse(limits.DefaultReqCPU),
+						corev1.ResourceMemory: resource.MustParse(limits.DefaultReqMemory),
+					},
+					Max: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse(limits.MaxCPU),
+						corev1.ResourceMemory: resource.MustParse(limits.MaxMemory),
+					},
+					Min: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse(limits.MinCPU),
+						corev1.ResourceMemory: resource.MustParse(limits.MinMemory),
+					},
+				},
+			},
+		},
+	}
+	_, err := c.clientset.CoreV1().LimitRanges(namespace).Create(ctx, lr, metav1.CreateOptions{})
+	return err
+}
+
+// --- Generic CRD with explicit apiVersion ---
+
+func gvrFromAPIVersionKind(apiVersion, kind string) schema.GroupVersionResource {
+	parts := strings.SplitN(apiVersion, "/", 2)
+	group := ""
+	version := "v1"
+	if len(parts) == 2 {
+		group = parts[0]
+		version = parts[1]
+	}
+	return schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: strings.ToLower(kind) + "s",
+	}
+}
+
+func (c *RealClient) GetCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) (*CRDObject, error) {
+	gvr := gvrFromAPIVersionKind(apiVersion, kind)
+	uObj, err := c.dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return unstructuredToCRD(uObj)
+}
+
+func (c *RealClient) DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error {
+	gvr := gvrFromAPIVersionKind(apiVersion, kind)
+	return c.dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
 // --- Conversion helpers ---

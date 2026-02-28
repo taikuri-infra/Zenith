@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -10,18 +11,26 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	zenithTemporal "github.com/dotechhq/zenith/services/api/internal/temporal"
+	"go.temporal.io/sdk/client"
 )
 
 // CustomerService handles customer management business logic.
 type CustomerService struct {
-	store       ports.CustomerRepository
-	admin       ports.AdminRepository
-	provisioner *cluster.Provisioner
+	store          ports.CustomerRepository
+	admin          ports.AdminRepository
+	provisioner    *cluster.Provisioner
+	temporalClient client.Client // nil when Temporal is disabled
 }
 
 // NewCustomerService creates a new CustomerService.
 func NewCustomerService(store ports.CustomerRepository, admin ports.AdminRepository, provisioner *cluster.Provisioner) *CustomerService {
 	return &CustomerService{store: store, admin: admin, provisioner: provisioner}
+}
+
+// SetTemporalClient enables Temporal-based provisioning workflows.
+func (s *CustomerService) SetTemporalClient(tc client.Client) {
+	s.temporalClient = tc
 }
 
 // ListCustomers returns all customers.
@@ -52,8 +61,27 @@ func (s *CustomerService) CreateCustomer(ctx context.Context, input *dto.CreateC
 		Action: "Created customer " + input.Name + " (" + input.Domain + ")",
 	})
 
-	// Trigger cluster provisioning in background
-	if s.provisioner != nil {
+	// Trigger provisioning: prefer Temporal workflow, fallback to CAPI goroutine
+	if s.temporalClient != nil {
+		planTier := "free"
+		if customer.Plan != nil && customer.Plan.PriceCents > 10000 {
+			planTier = "pro"
+		}
+		workflowOpts := client.StartWorkflowOptions{
+			ID:        "provision-" + customer.ID,
+			TaskQueue: zenithTemporal.TaskQueue,
+		}
+		_, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOpts, zenithTemporal.WorkflowProvisionCustomer, zenithTemporal.ProvisionInput{
+			CustomerID:   customer.ID,
+			CustomerName: customer.Name,
+			Domain:       customer.Domain,
+			PlanTier:     planTier,
+			ContactEmail: customer.ContactEmail,
+		})
+		if err != nil {
+			log.Printf("[temporal] failed to start provision workflow for %s: %v", customer.Name, err)
+		}
+	} else if s.provisioner != nil {
 		go func() {
 			_ = s.provisioner.ProvisionCluster(ctx, customer)
 		}()
@@ -84,7 +112,24 @@ func (s *CustomerService) DeleteCustomer(ctx context.Context, id, actor string) 
 	customerName := id
 	if customer != nil {
 		customerName = customer.Name
-		if s.provisioner != nil {
+
+		// Trigger deprovisioning: prefer Temporal, fallback to CAPI
+		if s.temporalClient != nil {
+			ns := "zenith-" + strings.ReplaceAll(strings.ReplaceAll(customer.Domain, ".", "-"), "_", "-")
+			workflowOpts := client.StartWorkflowOptions{
+				ID:        "deprovision-" + customer.ID,
+				TaskQueue: zenithTemporal.TaskQueue,
+			}
+			_, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOpts, zenithTemporal.WorkflowDeprovisionCustomer, zenithTemporal.DeprovisionInput{
+				CustomerID:   customer.ID,
+				CustomerName: customer.Name,
+				Domain:       customer.Domain,
+				Namespace:    ns,
+			})
+			if err != nil {
+				log.Printf("[temporal] failed to start deprovision workflow for %s: %v", customer.Name, err)
+			}
+		} else if s.provisioner != nil {
 			_ = s.provisioner.TeardownCluster(ctx, customer)
 		}
 	}
