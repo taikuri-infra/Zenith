@@ -22,7 +22,7 @@ func makeTestApp() *entities.App {
 }
 
 func makeTestJobSpec(app *entities.App) *KanikoJobSpec {
-	return NewKanikoJobSpec(app, "deploy-abc12345", "registry.example.com/testapp:abc12345", "/tmp/build")
+	return NewKanikoJobSpec(app, "deploy-abc12345", "registry.example.com/testapp:abc12345")
 }
 
 // TestKanikoRunnerNilClient ensures a nil KanikoRunner is a no-op (dev mode).

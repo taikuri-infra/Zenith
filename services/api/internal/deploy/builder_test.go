@@ -41,7 +41,7 @@ func TestNewKanikoJobSpec(t *testing.T) {
 		Subdomain: "web",
 	}
 	deployID := "deploy-abc12345"
-	spec := NewKanikoJobSpec(app, deployID, "registry/web:abc12345", "/workspace")
+	spec := NewKanikoJobSpec(app, deployID, "registry/web:abc12345")
 
 	if spec.Name != "build-web-deploy-a" {
 		t.Errorf("Expected job name 'build-web-deploy-a', got '%s'", spec.Name)
@@ -63,7 +63,7 @@ func TestKanikoJobManifest(t *testing.T) {
 		Name:      "web",
 		Subdomain: "web",
 	}
-	spec := NewKanikoJobSpec(app, "deploy-abc", "reg/web:latest", "/workspace")
+	spec := NewKanikoJobSpec(app, "deploy-abc", "reg/web:latest")
 	manifest := spec.ToK8sJobManifest()
 
 	// Verify it can be serialized to JSON
@@ -91,7 +91,7 @@ func TestKanikoJobManifestLabels(t *testing.T) {
 		Name:      "web",
 		Subdomain: "web",
 	}
-	spec := NewKanikoJobSpec(app, "deploy-xyz", "reg/web:xyz", "/ws")
+	spec := NewKanikoJobSpec(app, "deploy-xyz", "reg/web:xyz")
 	manifest := spec.ToK8sJobManifest()
 
 	metadata := manifest["metadata"].(map[string]interface{})
