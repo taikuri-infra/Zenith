@@ -1,5 +1,11 @@
 namespace: zenith-platform
 
+# Build infrastructure (Kaniko build jobs + app deploy namespaces)
+# Creates zenith-builds and zenith-apps namespaces, plus registry-credentials
+# secret (reuses registry.host/username/password for the dockerconfigjson).
+buildInfra:
+  enabled: false
+
 # Registry credentials
 registry:
   enabled: false

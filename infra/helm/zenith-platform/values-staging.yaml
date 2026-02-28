@@ -1,6 +1,9 @@
 # Staging values for zenith-platform (shared infrastructure)
 namespace: zenith-staging
 
+buildInfra:
+  enabled: true
+
 registry:
   enabled: true
   secretName: harbor-registry

@@ -106,7 +106,7 @@ func (b *Builder) BuildApp(ctx context.Context, app *entities.App, deployment *e
 	})
 
 	// Step 4: Generate Dockerfile if needed
-	dockerfilePath := filepath.Join(cloneDir, "Dockerfile")
+	var generatedDockerfile string
 	if framework != entities.FrameworkDockerfile {
 		appendLog("Generating Dockerfile...")
 		content, err := GenerateDockerfile(framework, app.Name, app.Port)
@@ -116,15 +116,10 @@ func (b *Builder) BuildApp(ctx context.Context, app *entities.App, deployment *e
 			result.BuildLog = buildLog
 			return result
 		}
-		if err := os.WriteFile(dockerfilePath, []byte(content), 0o644); err != nil {
-			appendLog(fmt.Sprintf("Failed to write Dockerfile: %v", err))
-			result.Error = err
-			result.BuildLog = buildLog
-			return result
-		}
+		generatedDockerfile = content
 		appendLog("Dockerfile generated")
 	} else {
-		appendLog("Using existing Dockerfile")
+		appendLog("Using existing Dockerfile from repo")
 	}
 
 	// Step 5: Build container image via Kaniko
@@ -135,8 +130,10 @@ func (b *Builder) BuildApp(ctx context.Context, app *entities.App, deployment *e
 	b.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusBuilding, buildLog, "")
 
 	if b.kanikoRunner != nil {
-		// Production: submit Kaniko K8s Job, stream logs, wait for result
-		jobSpec := NewKanikoJobSpec(app, deployment.ID, imageTag, cloneDir)
+		// Production: submit Kaniko K8s Job with repo URL/branch.
+		// The Kaniko pod's init container clones the repo — no local path needed.
+		jobSpec := NewKanikoJobSpec(app, deployment.ID, imageTag)
+		jobSpec.GeneratedDockerfile = generatedDockerfile
 		if err := b.kanikoRunner.Build(ctx, jobSpec, deployment.ID); err != nil {
 			appendLog(fmt.Sprintf("Image build failed: %v", err))
 			result.Error = err

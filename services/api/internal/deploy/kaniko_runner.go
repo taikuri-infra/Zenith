@@ -36,11 +36,12 @@ func NewKanikoRunner(k8sClient k8sclient.Client, logHub *LogHub) *KanikoRunner {
 }
 
 // Build runs the Kaniko build Job end-to-end:
-//  1. Submit the K8s Job
-//  2. Wait for pod to start
-//  3. Stream pod logs → LogHub
-//  4. Wait for Job success/failure
-//  5. Clean up Job on success
+//  1. Create ConfigMap for generated Dockerfile (if needed)
+//  2. Submit the K8s Job
+//  3. Wait for pod to start
+//  4. Stream pod logs → LogHub
+//  5. Wait for Job success/failure
+//  6. Clean up Job + ConfigMap on completion
 func (r *KanikoRunner) Build(ctx context.Context, spec *KanikoJobSpec, deploymentID string) error {
 	if r == nil {
 		// Dev mode: no k8s client — skip actual build
@@ -50,7 +51,24 @@ func (r *KanikoRunner) Build(ctx context.Context, spec *KanikoJobSpec, deploymen
 	r.emitLog(deploymentID, "build", fmt.Sprintf("Submitting Kaniko build job: %s", spec.Name))
 	log.Printf("[kaniko] Submitting job %s in namespace %s", spec.Name, kanikoNamespace)
 
-	// 1. Create the K8s Job
+	// 1. Create ConfigMap for generated Dockerfile (if needed)
+	if spec.GeneratedDockerfile != "" {
+		cmName := spec.DockerfileConfigMapName()
+		log.Printf("[kaniko] Creating Dockerfile ConfigMap %s", cmName)
+		if err := r.k8sClient.CreateConfigMap(ctx, kanikoNamespace, cmName, map[string]string{
+			"Dockerfile": spec.GeneratedDockerfile,
+		}); err != nil {
+			return fmt.Errorf("failed to create Dockerfile ConfigMap: %w", err)
+		}
+		// Ensure cleanup on exit
+		defer func() {
+			if err := r.k8sClient.DeleteConfigMap(ctx, kanikoNamespace, cmName); err != nil {
+				log.Printf("[kaniko] Warning: failed to delete ConfigMap %s: %v", cmName, err)
+			}
+		}()
+	}
+
+	// 2. Create the K8s Job
 	job := &k8sclient.JobObject{
 		Name:      spec.Name,
 		Namespace: kanikoNamespace,
@@ -68,7 +86,7 @@ func (r *KanikoRunner) Build(ctx context.Context, spec *KanikoJobSpec, deploymen
 
 	r.emitLog(deploymentID, "build", "Build job queued — waiting for execution...")
 
-	// 2. Wait until Job has a result (Succeeded or Failed)
+	// 3. Wait until Job has a result (Succeeded or Failed)
 	buildCtx, cancel := context.WithTimeout(ctx, jobBuildTimeout)
 	defer cancel()
 
@@ -78,10 +96,10 @@ func (r *KanikoRunner) Build(ctx context.Context, spec *KanikoJobSpec, deploymen
 		return err
 	}
 
-	// 3. Stream pod logs (non-blocking after job completes)
+	// 4. Stream pod logs (non-blocking after job completes)
 	r.streamLogs(ctx, deploymentID, spec.Name)
 
-	// 4. Delete the Job after success
+	// 5. Delete the Job after success
 	if err := r.k8sClient.DeleteJob(ctx, kanikoNamespace, spec.Name); err != nil {
 		log.Printf("[kaniko] Warning: failed to delete job %s: %v", spec.Name, err)
 	}

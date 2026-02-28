@@ -53,6 +53,10 @@ type Client interface {
 	// GetPodLogs streams log lines from the first pod matching podSelector into logCh.
 	// The channel is closed when streaming is complete or the context is cancelled.
 	GetPodLogs(ctx context.Context, namespace, podSelector string, logCh chan<- string) error
+
+	// ConfigMap operations (generated Dockerfiles for Kaniko builds)
+	CreateConfigMap(ctx context.Context, namespace, name string, data map[string]string) error
+	DeleteConfigMap(ctx context.Context, namespace, name string) error
 }
 
 // MemoryClient is an in-memory K8s client for testing and development.
@@ -190,6 +194,16 @@ func (c *MemoryClient) DeleteJob(ctx context.Context, namespace, name string) er
 	}
 
 	delete(c.jobs, key)
+	return nil
+}
+
+// CreateConfigMap is a no-op in memory mode.
+func (c *MemoryClient) CreateConfigMap(ctx context.Context, namespace, name string, data map[string]string) error {
+	return nil
+}
+
+// DeleteConfigMap is a no-op in memory mode.
+func (c *MemoryClient) DeleteConfigMap(ctx context.Context, namespace, name string) error {
 	return nil
 }
 

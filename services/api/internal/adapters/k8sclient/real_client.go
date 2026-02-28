@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -151,27 +150,25 @@ func (c *RealClient) ListCRDs(ctx context.Context, kind, namespace string) ([]*C
 
 // --- Job methods ---
 
+// CreateJob submits a Kubernetes Job using the dynamic client.
+// job.Spec contains the full batch/v1 Job manifest (from ToK8sJobManifest()),
+// which is applied as an unstructured object to avoid deserialization issues.
 func (c *RealClient) CreateJob(ctx context.Context, job *JobObject) error {
-	specBytes, _ := json.Marshal(job.Spec)
-	var podSpec corev1.PodSpec
-	if err := json.Unmarshal(specBytes, &podSpec); err != nil {
-		return fmt.Errorf("invalid job spec: %w", err)
+	// Convert the full Job manifest map to an unstructured object
+	manifest := job.Spec
+	if manifest == nil {
+		return fmt.Errorf("job spec is nil")
 	}
 
-	k8sJob := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      job.Name,
-			Namespace: job.Namespace,
-			Labels:    job.Labels,
-		},
-		Spec: batchv1.JobSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: podSpec,
-			},
-		},
+	uObj := &unstructured.Unstructured{Object: manifest}
+
+	gvr := schema.GroupVersionResource{
+		Group:    "batch",
+		Version:  "v1",
+		Resource: "jobs",
 	}
 
-	_, err := c.clientset.BatchV1().Jobs(job.Namespace).Create(ctx, k8sJob, metav1.CreateOptions{})
+	_, err := c.dynamicClient.Resource(gvr).Namespace(job.Namespace).Create(ctx, uObj, metav1.CreateOptions{})
 	return err
 }
 
@@ -235,6 +232,24 @@ func (c *RealClient) GetPodLogs(ctx context.Context, namespace, podSelector stri
 	}
 
 	return scanner.Err()
+}
+
+// --- ConfigMap methods ---
+
+func (c *RealClient) CreateConfigMap(ctx context.Context, namespace, name string, data map[string]string) error {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: data,
+	}
+	_, err := c.clientset.CoreV1().ConfigMaps(namespace).Create(ctx, cm, metav1.CreateOptions{})
+	return err
+}
+
+func (c *RealClient) DeleteConfigMap(ctx context.Context, namespace, name string) error {
+	return c.clientset.CoreV1().ConfigMaps(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
 // --- Conversion helpers ---
