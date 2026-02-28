@@ -170,5 +170,5 @@ module "platform" {
   enable_monitoring     = true
   enable_keda           = true
   enable_demo           = true
-  enable_tenants        = true
+  enable_tenants        = false  # Tenants provisioned dynamically via purchase flow
 }
