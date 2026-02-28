@@ -182,6 +182,20 @@ variable "enable_tenants" {
   default     = false
 }
 
+# --- Hetzner CSI ---
+
+variable "hcloud_token" {
+  description = "Hetzner Cloud API token for CSI driver volume provisioning"
+  type        = string
+  sensitive   = true
+}
+
+variable "hcloud_csi_version" {
+  description = "Hetzner CSI driver Helm chart version"
+  type        = string
+  default     = "2.20.0"
+}
+
 # --- CloudNativePG ---
 
 variable "enable_cnpg" {
@@ -269,7 +283,7 @@ variable "enable_kyverno" {
 variable "kyverno_version" {
   description = "Kyverno chart version"
   type        = string
-  default     = "3.2.6"
+  default     = "3.7.1"
 }
 
 variable "enable_falco" {
@@ -281,7 +295,7 @@ variable "enable_falco" {
 variable "falco_version" {
   description = "Falco chart version"
   type        = string
-  default     = "4.5.1"
+  default     = "4.18.0"
 }
 
 variable "enable_velero" {
@@ -293,7 +307,7 @@ variable "enable_velero" {
 variable "velero_version" {
   description = "Velero chart version"
   type        = string
-  default     = "6.1.1"
+  default     = "11.4.0"
 }
 
 variable "prometheus_stack_version" {
@@ -325,7 +339,7 @@ variable "s3_endpoint" {
 variable "keycloak_version" {
   description = "Keycloak Helm chart version"
   type        = string
-  default     = "21.4.4"
+  default     = "25.2.0"
 }
 
 variable "keycloak_db_password" {
@@ -363,7 +377,7 @@ variable "enable_apisix" {
 variable "apisix_version" {
   description = "APISIX Helm chart version"
   type        = string
-  default     = "2.9.0"
+  default     = "2.13.0"
 }
 
 variable "apisix_ingress_version" {
@@ -383,7 +397,7 @@ variable "enable_external_dns" {
 variable "external_dns_version" {
   description = "external-dns Helm chart version"
   type        = string
-  default     = "8.3.3"
+  default     = "9.0.3"
 }
 
 variable "cloudflare_api_token" {

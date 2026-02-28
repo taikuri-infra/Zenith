@@ -1030,33 +1030,33 @@ kubectl -n temporal get pods
 
 ---
 
-### Harbor
+### Harbor (Two Registries)
 
-**What it does:**
-Harbor is an enterprise container registry with built-in vulnerability scanning (Trivy),
-image signing (cosign), replication policies, and role-based access control. In Zenith V2,
-Harbor stores:
+**IMPORTANT: Zenith has TWO separate Harbor registries. Do not confuse them.**
 
-- **Container images** built by CI, pulled by ArgoCD or kubelet
-- **Helm charts** in OCI format for application deployments
-- **Per-customer quotas** (Free: 1 GB, Pro: 10 GB, Team: 100 GB)
+#### 1. Internal Harbor — Platform Registry (`registry.stage.freezenith.com`)
 
-**Why we need it:**
-Pulling images from Docker Hub or GitHub Container Registry in production is unreliable
-(rate limits, outages) and insecure (no control over what gets deployed). Harbor gives us
-a private registry with Trivy scanning (block images with critical CVEs), combined with
-Kyverno admission policies (block unsigned images). Together they form a complete image
-supply chain security solution (see Decision D11).
+- **Purpose:** Stores all platform Docker images and Helm charts (zenith-api, zenith-web, zenith-mc, etc.)
+- **Where:** Managed **outside** the Zenith k8s cluster, on a separate server/repo (`/Users/babak/codes/DoTech/harbor-registry`)
+- **Who uses it:** CI pipeline pushes here; ArgoCD Image Updater and kubelet pull from here
+- **NOT managed by Terraform** in this project — it has its own infrastructure
 
-**Namespace:** `harbor`
+#### 2. Customer Harbor — Pro-tier Registry (`hub.stage.freezenith.com`)
+
+- **Purpose:** Provides container registries to **paid/Pro-tier customers only**. Free-tier users do NOT get a registry.
+- **Where:** Deployed **inside** the Zenith k8s cluster via Terraform (`registry.tf`)
+- **How it works:** One Harbor instance. When a customer upgrades to Pro, a **new Harbor project** is created for them with storage/quota limitations. Each pro customer gets their own project inside this single Harbor.
+- **Who uses it:** Pro customers push/pull their own application images within their project
+- **Storage backend:** Hetzner S3 Object Storage (bucket: `zenith-harbor`), making pods stateless
+
+**Why two registries:**
+The internal registry is a stable, always-available dependency that the cluster itself pulls images from. If it ran inside the cluster, a cluster failure would prevent pulling the images needed to recover. The customer registry is a platform feature offered to paying customers, running inside the cluster like any other service.
+
+**Namespace:** `harbor` (customer Harbor only — the in-cluster one)
 
 **Helm chart + version:** `harbor/harbor` 1.16.0
 
-**Storage backend:** Hetzner S3 Object Storage (not local PVCs). This means image layers
-are stored in a durable, cost-effective S3 bucket (`zenith-harbor`), and Harbor pods are
-stateless and can be restarted freely.
-
-**How to verify:**
+**How to verify (customer Harbor):**
 
 ```bash
 kubectl -n harbor get pods
@@ -1064,7 +1064,7 @@ kubectl -n harbor get pods
 # harbor-registry-<hash>   1/1     Running
 # harbor-trivy-<hash>      1/1     Running
 
-docker login registry.stage.freezenith.com
+docker login hub.stage.freezenith.com
 # Username: admin
 # Password: <harbor_admin_password>
 ```

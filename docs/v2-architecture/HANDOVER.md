@@ -185,7 +185,8 @@ Zenith/
 ### Live Deployments
 - **Production:** Not yet
 - **Staging** (77.42.88.149 — Hetzner): V1 running (Terraform + Helm, cert-manager, Kong, CNPG, KEDA, monitoring)
-- **Harbor** (65.108.210.253): Container + chart registry at registry.stage.freezenith.com
+- **Internal Harbor** (65.108.210.253): Platform images + Helm charts at `registry.stage.freezenith.com` (separate server, NOT in-cluster)
+- **Customer Harbor** (in-cluster): Pro-tier customer registry at `hub.stage.freezenith.com` (one project per pro customer, with storage quotas)
 
 ---
 
@@ -205,7 +206,7 @@ Zenith/
 | 10 | external-dns | gateway.tf | external-dns | `enable_external_dns` |
 | 11 | ArgoCD | gitops.tf | argocd | `enable_argocd` |
 | 12 | ArgoCD Image Updater | gitops.tf | argocd | `enable_argocd` |
-| 13 | Harbor | registry.tf | harbor | `enable_harbor` |
+| 13 | Customer Harbor (Pro-tier) | registry.tf | harbor | `enable_harbor` |
 | 14 | Temporal | temporal.tf | temporal | `enable_temporal` |
 | 15 | Kyverno | security.tf | kyverno | `enable_kyverno` |
 | 16 | Falco | security.tf | falco | `enable_falco` |
@@ -276,7 +277,8 @@ All V2 docs are in `docs/v2-architecture/`:
 - **GitHub:** github.com/taikuri-infra/Zenith (private)
 - **Branch:** `openspec/infra-pipeline-v1`
 - **Latest Tag:** `v2.0.0-alpha.3`
-- **Harbor:** https://registry.stage.freezenith.com
+- **Internal Harbor (platform images):** https://registry.stage.freezenith.com
+- **Customer Harbor (pro-tier):** https://hub.stage.freezenith.com
 - **Staging:** https://stage.freezenith.com
 - **Production:** https://freezenith.com (V1 only)
 - **Server SSH:** `ssh ghasi` (configured in ~/.ssh/config)

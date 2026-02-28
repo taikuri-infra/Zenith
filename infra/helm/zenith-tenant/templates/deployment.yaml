@@ -13,6 +13,47 @@ metadata:
     {{ $k }}: {{ $v | quote }}
     {{- end }}
 ---
+# ResourceQuota for tenant namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ $name }}-quota
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app.kubernetes.io/part-of: zenith
+    zenith.dev/tenant: {{ $name }}
+spec:
+  hard:
+    requests.cpu: {{ ($tenant.quota).requestsCpu | default "2" | quote }}
+    requests.memory: {{ ($tenant.quota).requestsMemory | default "2Gi" | quote }}
+    limits.cpu: {{ ($tenant.quota).limitsCpu | default "4" | quote }}
+    limits.memory: {{ ($tenant.quota).limitsMemory | default "4Gi" | quote }}
+    pods: {{ ($tenant.quota).pods | default "10" | quote }}
+    persistentvolumeclaims: {{ ($tenant.quota).pvcs | default "2" | quote }}
+    requests.storage: {{ ($tenant.quota).storage | default "10Gi" | quote }}
+---
+# LimitRange — defaults for containers without explicit resources
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ $name }}-limits
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app.kubernetes.io/part-of: zenith
+    zenith.dev/tenant: {{ $name }}
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 250m
+        memory: 256Mi
+      defaultRequest:
+        cpu: 50m
+        memory: 64Mi
+      max:
+        cpu: "2"
+        memory: 2Gi
+---
 # Redirect middleware for this tenant namespace
 apiVersion: traefik.io/v1alpha1
 kind: Middleware

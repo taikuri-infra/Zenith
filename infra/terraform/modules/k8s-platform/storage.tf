@@ -1,4 +1,38 @@
 # =============================================================================
+# Hetzner CSI Driver — Block Storage Provisioner (5.3)
+# =============================================================================
+
+resource "helm_release" "hcloud_csi" {
+  name             = "hcloud-csi"
+  repository       = "https://charts.hetzner.cloud"
+  chart            = "hcloud-csi"
+  version          = var.hcloud_csi_version
+  namespace        = "kube-system"
+  wait             = true
+  timeout          = 300
+
+  set_sensitive {
+    name  = "controller.hcloudToken.value"
+    value = var.hcloud_token
+  }
+
+  set {
+    name  = "storageClasses[0].name"
+    value = "hcloud-volumes"
+  }
+
+  set {
+    name  = "storageClasses[0].defaultStorageClass"
+    value = "false"
+  }
+
+  set {
+    name  = "storageClasses[0].reclaimPolicy"
+    value = "Retain"
+  }
+}
+
+# =============================================================================
 # CloudNativePG — PostgreSQL Operator (5.4)
 # =============================================================================
 
@@ -78,6 +112,9 @@ resource "kubernetes_secret" "cnpg_s3_credentials_keycloak" {
 resource "kubernetes_manifest" "cnpg_keycloak" {
   count = var.enable_keycloak ? 1 : 0
 
+  # CNPG operator injects default PostgreSQL parameters server-side
+  computed_fields = ["spec.postgresql.parameters"]
+
   manifest = {
     apiVersion = "postgresql.cnpg.io/v1"
     kind       = "Cluster"
@@ -143,6 +180,7 @@ resource "kubernetes_manifest" "cnpg_keycloak" {
 
   depends_on = [
     helm_release.cnpg,
+    helm_release.hcloud_csi,
     kubernetes_namespace.keycloak,
     kubernetes_priority_class.infra_critical,
   ]
@@ -173,6 +211,9 @@ resource "kubernetes_secret" "cnpg_s3_credentials_shared" {
 }
 
 resource "kubernetes_manifest" "cnpg_free" {
+  # CNPG operator injects default PostgreSQL parameters server-side
+  computed_fields = ["spec.postgresql.parameters"]
+
   manifest = {
     apiVersion = "postgresql.cnpg.io/v1"
     kind       = "Cluster"
@@ -183,6 +224,7 @@ resource "kubernetes_manifest" "cnpg_free" {
     spec = {
       instances              = var.environment == "production" ? 3 : 2
       primaryUpdateStrategy  = "unsupervised"
+      enableSuperuserAccess  = true
 
       storage = {
         storageClass = "hcloud-volumes"
@@ -204,6 +246,11 @@ resource "kubernetes_manifest" "cnpg_free" {
         initdb = {
           database = "zenith_platform"
           owner    = "zenith_admin"
+          postInitSQL = [
+            "CREATE ROLE temporal WITH LOGIN PASSWORD '${var.temporal_db_password}' CREATEDB",
+            "CREATE DATABASE temporal OWNER temporal",
+            "CREATE DATABASE temporal_visibility OWNER temporal",
+          ]
         }
       }
 
@@ -239,6 +286,7 @@ resource "kubernetes_manifest" "cnpg_free" {
 
   depends_on = [
     helm_release.cnpg,
+    helm_release.hcloud_csi,
     kubernetes_namespace.zenith_shared,
     kubernetes_priority_class.infra_critical,
     kubernetes_secret.cnpg_s3_credentials_shared,

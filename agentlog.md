@@ -671,3 +671,8 @@ Using hardcoded domains violates Terraform module best practices. We decoupled t
 
 ### Why
 Phase 3 requires these secrets to provision the V2 infrastructure components like Keycloak, Temporal, and Velero. The `terraform.tfvars` file is correctly excluded from version control via `.gitignore`, ensuring secrets are safely kept local.
+
+## V2 Phase 3 Terraform Fix (Harbor OCI Registry)
+- **WHAT:** Changed `chart_repository` in `infra/terraform/staging-k8s/main.tf` from `oci://${var.registry_host}/zenith-stage` to `""` (empty string).
+- **WHY:** During the first `terraform apply` of Phase 3, the Harbor OCI registry does not exist yet and its TLS certificate hasn't been issued by Let's Encrypt. By setting `chart_repository` to an empty string, Terraform falls back to deploying the Helm charts (`zenith-platform`, `zenith-api`, etc.) from the local `infra/helm/` directory.
+- **WHEN:** 2026-02-27T21:55:00Z

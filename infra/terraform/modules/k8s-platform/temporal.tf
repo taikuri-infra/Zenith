@@ -16,6 +16,11 @@ resource "helm_release" "temporal" {
 
   # External PostgreSQL (CNPG free cluster)
   set {
+    name  = "server.config.persistence.default.driver"
+    value = "sql"
+  }
+
+  set {
     name  = "server.config.persistence.default.sql.driver"
     value = "postgres12"
   }
@@ -46,6 +51,11 @@ resource "helm_release" "temporal" {
   }
 
   # Visibility store
+  set {
+    name  = "server.config.persistence.visibility.driver"
+    value = "sql"
+  }
+
   set {
     name  = "server.config.persistence.visibility.sql.driver"
     value = "postgres12"
@@ -97,11 +107,35 @@ resource "helm_release" "temporal" {
     value = "false"
   }
 
+  # Web UI (override image tag — 2.30.5 was deleted from Docker Hub)
   set {
     name  = "web.enabled"
     value = "true"
   }
 
+  set {
+    name  = "web.image.tag"
+    value = "2.47.2"
+  }
+
+  # Disable built-in monitoring (we use kube-prometheus-stack)
+  set {
+    name  = "prometheus.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "grafana.enabled"
+    value = "false"
+  }
+
+  # Schema jobs create the databases
+  set {
+    name  = "schema.createDatabase.enabled"
+    value = "true"
+  }
+
+  # Resources
   set {
     name  = "server.resources.requests.cpu"
     value = "100m"

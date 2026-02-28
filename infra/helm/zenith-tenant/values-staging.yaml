@@ -18,6 +18,14 @@ tenants:
     labels:
       zenith.dev/tenant: embermind
       zenith.dev/domain: embermind.app
+    quota:
+      requestsCpu: "2"
+      requestsMemory: 2Gi
+      limitsCpu: "4"
+      limitsMemory: 4Gi
+      pods: "10"
+      pvcs: "2"
+      storage: 10Gi
     mc:
       image: zenith-mc:0.2.0
       host: embermind-ms.stage.freezenith.com
