@@ -11,10 +11,10 @@ const (
 	TaskQueue = "zenith-provisioning"
 
 	// WorkflowProvisionCustomer is the workflow type name.
-	WorkflowProvisionCustomer = "ProvisionCustomer"
+	WorkflowProvisionCustomer = "ProvisionCustomerWorkflow"
 
 	// WorkflowDeprovisionCustomer is the workflow type name.
-	WorkflowDeprovisionCustomer = "DeprovisionCustomer"
+	WorkflowDeprovisionCustomer = "DeprovisionCustomerWorkflow"
 )
 
 // NewClient creates a Temporal client connected to the given host/namespace.
