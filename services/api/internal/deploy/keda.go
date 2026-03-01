@@ -40,6 +40,8 @@ func GenerateHTTPScaledObject(app *entities.App, baseDomain string, sleepAfterMi
 				"name":       app.Subdomain,
 				"kind":       "Deployment",
 				"apiVersion": "apps/v1",
+				"service":    app.Subdomain,
+				"port":       80,
 			},
 			"replicas": map[string]interface{}{
 				"min": 0,
