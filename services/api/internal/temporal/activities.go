@@ -165,6 +165,110 @@ func (a *Activities) CreateNamespace(ctx context.Context, input ProvisionInput) 
 	return &CreateNamespaceResult{Namespace: ns}, nil
 }
 
+// --- Activity: CreateNetworkPolicies ---
+
+func (a *Activities) CreateNetworkPolicies(ctx context.Context, input ProvisionInput, namespace string) error {
+	policies := []struct {
+		name string
+		spec map[string]interface{}
+	}{
+		{
+			name: "default-deny-all",
+			spec: map[string]interface{}{
+				"podSelector": map[string]interface{}{},
+				"policyTypes": []string{"Ingress", "Egress"},
+			},
+		},
+		{
+			name: "allow-dns",
+			spec: map[string]interface{}{
+				"podSelector": map[string]interface{}{},
+				"policyTypes": []string{"Egress"},
+				"egress": []map[string]interface{}{
+					{
+						"to": []map[string]interface{}{
+							{
+								"namespaceSelector": map[string]interface{}{
+									"matchLabels": map[string]interface{}{
+										"kubernetes.io/metadata.name": "kube-system",
+									},
+								},
+							},
+						},
+						"ports": []map[string]interface{}{
+							{"protocol": "UDP", "port": 53},
+							{"protocol": "TCP", "port": 53},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "allow-intra-namespace",
+			spec: map[string]interface{}{
+				"podSelector": map[string]interface{}{},
+				"policyTypes": []string{"Ingress", "Egress"},
+				"ingress": []map[string]interface{}{
+					{
+						"from": []map[string]interface{}{
+							{"podSelector": map[string]interface{}{}},
+						},
+					},
+				},
+				"egress": []map[string]interface{}{
+					{
+						"to": []map[string]interface{}{
+							{"podSelector": map[string]interface{}{}},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "allow-ingress-from-traefik",
+			spec: map[string]interface{}{
+				"podSelector": map[string]interface{}{},
+				"policyTypes": []string{"Ingress"},
+				"ingress": []map[string]interface{}{
+					{
+						"from": []map[string]interface{}{
+							{
+								"namespaceSelector": map[string]interface{}{
+									"matchLabels": map[string]interface{}{
+										"kubernetes.io/metadata.name": "kube-system",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, p := range policies {
+		specBytes, _ := json.Marshal(p.spec)
+		np := &k8sclient.CRDObject{
+			APIVersion: "networking.k8s.io/v1",
+			Kind:       "NetworkPolicy",
+			Metadata: k8sclient.ObjectMeta{
+				Name:      p.name,
+				Namespace: namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "zenith",
+					"zenith.dev/tenant":            input.Domain,
+				},
+			},
+			Spec: specBytes,
+		}
+		if err := a.K8s.CreateCRD(ctx, np); err != nil && !k8serrors.IsAlreadyExists(err) {
+			return fmt.Errorf("create network policy %s: %w", p.name, err)
+		}
+	}
+
+	return nil
+}
+
 // --- Activity: CreateSecrets ---
 
 type CreateSecretsInput struct {

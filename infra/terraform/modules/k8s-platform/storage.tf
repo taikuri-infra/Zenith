@@ -292,3 +292,55 @@ resource "kubernetes_manifest" "cnpg_free" {
     kubernetes_secret.cnpg_s3_credentials_shared,
   ]
 }
+
+# =============================================================================
+# CNPG Scheduled Backups — daily base backups to S3
+# =============================================================================
+
+resource "kubernetes_manifest" "cnpg_backup_keycloak" {
+  count = var.enable_keycloak ? 1 : 0
+
+  manifest = {
+    apiVersion = "postgresql.cnpg.io/v1"
+    kind       = "ScheduledBackup"
+    metadata = {
+      name      = "keycloak-pg-daily"
+      namespace = "keycloak"
+    }
+    spec = {
+      schedule             = "0 0 2 * * *"
+      backupOwnerReference = "self"
+      cluster = {
+        name = "keycloak-pg"
+      }
+      method = "barmanObjectStore"
+      target = "prefer-standby"
+    }
+  }
+
+  depends_on = [kubernetes_manifest.cnpg_keycloak]
+}
+
+resource "kubernetes_manifest" "cnpg_backup_free_pg" {
+  count = var.enable_cnpg ? 1 : 0
+
+  manifest = {
+    apiVersion = "postgresql.cnpg.io/v1"
+    kind       = "ScheduledBackup"
+    metadata = {
+      name      = "free-pg-daily"
+      namespace = "zenith-shared"
+    }
+    spec = {
+      schedule             = "0 0 2 * * *"
+      backupOwnerReference = "self"
+      cluster = {
+        name = "free-pg"
+      }
+      method = "barmanObjectStore"
+      target = "prefer-standby"
+    }
+  }
+
+  depends_on = [kubernetes_manifest.cnpg_free]
+}

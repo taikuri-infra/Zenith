@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// ProvisionCustomerWorkflow orchestrates all 10 steps of tenant provisioning.
+// ProvisionCustomerWorkflow orchestrates all 11 steps of tenant provisioning.
 // Each activity is idempotent; Temporal handles retries automatically.
 func ProvisionCustomerWorkflow(ctx workflow.Context, input ProvisionInput) error {
 	activityOpts := workflow.ActivityOptions{
@@ -56,7 +56,13 @@ func ProvisionCustomerWorkflow(ctx workflow.Context, input ProvisionInput) error
 		return fmt.Errorf("create namespace: %w", err)
 	}
 
-	// Step 5: Create secrets in namespace
+	// Step 5: Create network policies (tenant isolation)
+	if err := workflow.ExecuteActivity(ctx, (*Activities).CreateNetworkPolicies, input, nsResult.Namespace).Get(ctx, nil); err != nil {
+		_ = workflow.ExecuteActivity(ctx, (*Activities).UpdateStatusError, input.CustomerID).Get(ctx, nil)
+		return fmt.Errorf("create network policies: %w", err)
+	}
+
+	// Step 6: Create secrets in namespace
 	secretsInput := CreateSecretsInput{
 		ProvisionInput: input,
 		Namespace:      nsResult.Namespace,
@@ -72,31 +78,31 @@ func ProvisionCustomerWorkflow(ctx workflow.Context, input ProvisionInput) error
 		return fmt.Errorf("create secrets: %w", err)
 	}
 
-	// Step 6: Create resource quota + limit range
+	// Step 7: Create resource quota + limit range
 	if err := workflow.ExecuteActivity(ctx, (*Activities).CreateResourceQuota, input, nsResult.Namespace).Get(ctx, nil); err != nil {
 		_ = workflow.ExecuteActivity(ctx, (*Activities).UpdateStatusError, input.CustomerID).Get(ctx, nil)
 		return fmt.Errorf("create resource quota: %w", err)
 	}
 
-	// Step 7: Create APISIX routing
+	// Step 8: Create routing (Traefik IngressRoute)
 	if err := workflow.ExecuteActivity(ctx, (*Activities).CreateRouting, input, nsResult.Namespace).Get(ctx, nil); err != nil {
 		_ = workflow.ExecuteActivity(ctx, (*Activities).UpdateStatusError, input.CustomerID).Get(ctx, nil)
 		return fmt.Errorf("create routing: %w", err)
 	}
 
-	// Step 8: Create TLS certificate
+	// Step 9: Create TLS certificate
 	if err := workflow.ExecuteActivity(ctx, (*Activities).CreateTLS, input, nsResult.Namespace).Get(ctx, nil); err != nil {
 		_ = workflow.ExecuteActivity(ctx, (*Activities).UpdateStatusError, input.CustomerID).Get(ctx, nil)
 		return fmt.Errorf("create tls certificate: %w", err)
 	}
 
-	// Step 9: Create ArgoCD Application
+	// Step 10: Create ArgoCD Application
 	if err := workflow.ExecuteActivity(ctx, (*Activities).CreateArgoCD, input, nsResult.Namespace).Get(ctx, nil); err != nil {
 		_ = workflow.ExecuteActivity(ctx, (*Activities).UpdateStatusError, input.CustomerID).Get(ctx, nil)
 		return fmt.Errorf("create argocd app: %w", err)
 	}
 
-	// Step 10: Mark as ready + audit log
+	// Step 11: Mark as ready + audit log
 	if err := workflow.ExecuteActivity(ctx, (*Activities).NotifyReady, input, nsResult.Namespace).Get(ctx, nil); err != nil {
 		return fmt.Errorf("notify ready: %w", err)
 	}
