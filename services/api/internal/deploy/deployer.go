@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -141,9 +142,12 @@ func (d *Deployer) applyCRD(ctx context.Context, kind, namespace, name string, r
 		Spec: spec,
 	}
 
-	// Try update first, create if not found
-	if err := d.k8sClient.UpdateCRD(ctx, crd); err != nil {
-		return d.k8sClient.CreateCRD(ctx, crd)
+	// Try create first; if already exists, merge-patch to update
+	if err := d.k8sClient.CreateCRD(ctx, crd); err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			return d.k8sClient.PatchCRD(ctx, crd)
+		}
+		return err
 	}
 
 	return nil

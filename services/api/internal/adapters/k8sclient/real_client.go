@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -122,6 +123,19 @@ func (c *RealClient) UpdateCRD(ctx context.Context, obj *CRDObject) error {
 	}
 
 	_, err = c.dynamicClient.Resource(gvr).Namespace(obj.Metadata.Namespace).Update(ctx, uObj, metav1.UpdateOptions{})
+	return err
+}
+
+func (c *RealClient) PatchCRD(ctx context.Context, obj *CRDObject) error {
+	gvr := gvrFromCRD(obj)
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.dynamicClient.Resource(gvr).Namespace(obj.Metadata.Namespace).Patch(
+		ctx, obj.Metadata.Name, types.MergePatchType, data, metav1.PatchOptions{},
+	)
 	return err
 }
 
