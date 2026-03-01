@@ -34,4 +34,17 @@ metadata:
 type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: {{ include "zenith.dockerconfigjson" . }}
+---
+# Registry credentials for kubelet to pull built images in zenith-apps.
+# Same credentials as zenith-builds — Kaniko pushes, kubelet pulls.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: registry-credentials
+  namespace: zenith-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: {{ include "zenith.dockerconfigjson" . }}
 {{- end }}

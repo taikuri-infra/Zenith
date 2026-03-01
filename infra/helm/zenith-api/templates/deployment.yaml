@@ -109,6 +109,20 @@ spec:
                   name: {{ .Values.cnpgAdminSecret }}
                   key: uri
             {{- end }}
+            {{- if .Values.env.GITHUB_WEBHOOK_SECRET }}
+            - name: GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-secrets
+                  key: github-webhook-secret
+            {{- end }}
+            {{- if .Values.env.SECRETS_ENCRYPTION_KEY }}
+            - name: SECRETS_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-secrets
+                  key: secrets-encryption-key
+            {{- end }}
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:

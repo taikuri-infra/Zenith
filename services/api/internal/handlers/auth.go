@@ -24,6 +24,10 @@ type registerRequest struct {
 	Name     string `json:"name"`
 }
 
+type googleLoginRequest struct {
+	IDToken string `json:"id_token"`
+}
+
 type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
@@ -74,6 +78,29 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	tokens, err := h.svc.Register(c.Context(), req.Email, req.Password, req.Name)
 	if err != nil {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
+	}
+
+	return c.JSON(tokenResponse{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+		TokenType:    "bearer",
+		ExpiresIn:    tokens.ExpiresIn,
+	})
+}
+
+// GoogleLogin authenticates a user via Google ID token and returns JWT tokens.
+func (h *AuthHandler) GoogleLogin(c *fiber.Ctx) error {
+	var req googleLoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if req.IDToken == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "id_token is required")
+	}
+
+	tokens, err := h.svc.GoogleLogin(c.Context(), req.IDToken)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
 
 	return c.JSON(tokenResponse{

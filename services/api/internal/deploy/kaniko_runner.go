@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
@@ -86,20 +87,29 @@ func (r *KanikoRunner) Build(ctx context.Context, spec *KanikoJobSpec, deploymen
 
 	r.emitLog(deploymentID, "build", "Build job queued — waiting for execution...")
 
-	// 3. Wait until Job has a result (Succeeded or Failed)
+	// 3. Start log streaming concurrently so users see real-time build output
+	var logWg sync.WaitGroup
+	logWg.Add(1)
+	go func() {
+		defer logWg.Done()
+		r.streamLogs(ctx, deploymentID, spec.Name)
+	}()
+
+	// 4. Wait until Job has a result (Succeeded or Failed)
 	buildCtx, cancel := context.WithTimeout(ctx, jobBuildTimeout)
 	defer cancel()
 
 	if err := r.waitForJob(buildCtx, deploymentID, spec.Name); err != nil {
 		// Clean up on failure (best-effort)
 		_ = r.k8sClient.DeleteJob(ctx, kanikoNamespace, spec.Name)
+		logWg.Wait()
 		return err
 	}
 
-	// 4. Stream pod logs (non-blocking after job completes)
-	r.streamLogs(ctx, deploymentID, spec.Name)
+	// 5. Wait for log streaming to finish (brief grace period)
+	logWg.Wait()
 
-	// 5. Delete the Job after success
+	// 6. Delete the Job after success
 	if err := r.k8sClient.DeleteJob(ctx, kanikoNamespace, spec.Name); err != nil {
 		log.Printf("[kaniko] Warning: failed to delete job %s: %v", spec.Name, err)
 	}

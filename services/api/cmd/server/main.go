@@ -338,6 +338,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	authRoutes.Post("/login", authHandler.Login)
 	authRoutes.Post("/register", authHandler.Register)
 	authRoutes.Post("/refresh", authHandler.Refresh)
+	if cfg.GoogleClientID != "" {
+		authSvc.SetGoogleClientID(cfg.GoogleClientID)
+		authRoutes.Post("/google", authHandler.GoogleLogin)
+		log.Printf("[auth] Google OAuth enabled (client_id: %s...)", cfg.GoogleClientID[:8])
+	}
 
 	// Webhook routes (no auth — uses HMAC signature)
 	api.Post("/webhooks/github", webhookHandler.HandlePush)
@@ -460,6 +465,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		stripeAPI, billingRepo, planRepo, appRepo, dbRepo, storageRepo, appAuthRepo,
 		cfg.StripeProPriceID, cfg.StripeTeamPriceID, cfg.BaseDomain,
 	)
+	// Wire S3 for upgrade provisioning (reuse S3 config if available)
+	if cfg.S3Endpoint != "" {
+		billingSvc.SetS3(s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region))
+	}
 	billingHandler := handlers.NewBillingHandler(billingSvc)
 	protected.Get("/billing", billingHandler.GetBillingStatus)
 	protected.Post("/billing/checkout", billingHandler.CreateCheckoutSession)

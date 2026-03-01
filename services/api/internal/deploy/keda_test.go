@@ -104,7 +104,7 @@ func TestK8sResourcesWithPlan_FreeTier(t *testing.T) {
 	}
 	limits := entities.DefaultPlanLimits(entities.PlanFree)
 
-	resources := GenerateK8sResources(app, "freeapp:v1", "freezenith.com", nil, &limits)
+	resources := GenerateK8sResources(app, "freeapp:v1", "freezenith.com", nil, &limits, entities.PlanFree)
 
 	// Free tier: replicas should be 0 (KEDA manages scaling)
 	deploy := resources.Deployment
@@ -132,7 +132,7 @@ func TestK8sResourcesAlwaysOn(t *testing.T) {
 	}
 	limits := entities.DefaultPlanLimits(entities.PlanPro)
 
-	resources := GenerateK8sResources(app, "proapp:v1", "freezenith.com", nil, &limits)
+	resources := GenerateK8sResources(app, "proapp:v1", "freezenith.com", nil, &limits, entities.PlanPro)
 
 	// Paid tier: replicas should be 1
 	deploy := resources.Deployment
@@ -154,7 +154,7 @@ func TestK8sResourcesNilPlanLimits(t *testing.T) {
 		Port:      8080,
 	}
 
-	resources := GenerateK8sResources(app, "noplan:v1", "freezenith.com", nil, nil)
+	resources := GenerateK8sResources(app, "noplan:v1", "freezenith.com", nil, nil, entities.PlanFree)
 
 	// nil limits = always-on (backwards compatible)
 	deploy := resources.Deployment

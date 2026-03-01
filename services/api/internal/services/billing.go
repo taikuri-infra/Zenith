@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/s3client"
 	stripeClient "github.com/dotechhq/zenith/services/api/internal/adapters/stripeclient"
 )
 
@@ -31,6 +33,7 @@ type BillingService struct {
 	dbRepo      ports.DatabaseRepository
 	storageRepo ports.StorageRepository
 	authRepo    ports.AppAuthRepository
+	s3          s3client.S3API
 	proPriceID  string
 	teamPriceID string
 	baseDomain  string
@@ -225,6 +228,34 @@ func (s *BillingService) PlanRepo() ports.UserPlanRepository { return s.planRepo
 
 // Stripe exposes the Stripe API for webhook handler usage.
 func (s *BillingService) Stripe() stripeClient.StripeAPI { return s.stripe }
+
+// SetS3 configures the S3 client for upgrade resource provisioning.
+func (s *BillingService) SetS3(s3API s3client.S3API) { s.s3 = s3API }
+
+// ProvisionUpgradeResources creates infrastructure for a newly upgraded user.
+// For Pro/Team: creates an S3 bucket for artifact storage.
+// Harbor project creation is deferred until the Harbor API client is implemented.
+func (s *BillingService) ProvisionUpgradeResources(ctx context.Context, userID string, tier entities.PlanTier) {
+	if tier == entities.PlanFree {
+		return
+	}
+
+	// S3 bucket for user artifacts
+	if s.s3 != nil {
+		bucketName := fmt.Sprintf("zenith-user-%s", userID)
+		if err := s.s3.CreateBucket(ctx, bucketName); err != nil {
+			log.Printf("[billing] Warning: failed to create S3 bucket for user %s: %v", userID, err)
+		} else {
+			log.Printf("[billing] Created S3 bucket %s for user %s (tier=%s)", bucketName, userID, tier)
+		}
+	}
+
+	// TODO: Create Harbor project for Pro+ users once Harbor API client is built.
+	// Harbor project would be: zenith-user-<userID> with storage quota based on tier.
+	if tier == entities.PlanPro || tier == entities.PlanTeam {
+		log.Printf("[billing] Harbor project creation deferred for user %s (tier=%s) — Harbor API client not yet implemented", userID, tier)
+	}
+}
 
 func (s *BillingService) calculateUsage(ctx context.Context, userID string) dto.PlanUsage {
 	appCount, _ := s.appRepo.CountAppsByUser(ctx, userID)

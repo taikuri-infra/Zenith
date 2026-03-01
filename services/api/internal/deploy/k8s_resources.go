@@ -14,10 +14,24 @@ type K8sResources struct {
 	HTTPScaledObject map[string]interface{} // nil when always-on (paid tiers)
 }
 
+// PerAppResources returns CPU/RAM limits and requests per tier for a single app container.
+func PerAppResources(tier entities.PlanTier) (cpuLimit, memLimit, cpuReq, memReq string) {
+	switch tier {
+	case entities.PlanPro:
+		return "500m", "512Mi", "100m", "128Mi"
+	case entities.PlanTeam:
+		return "1000m", "1Gi", "200m", "256Mi"
+	case entities.PlanEnterprise:
+		return "2000m", "2Gi", "500m", "512Mi"
+	default: // Free
+		return "250m", "256Mi", "50m", "64Mi"
+	}
+}
+
 // GenerateK8sResources creates the Kubernetes manifests needed to deploy an app.
 // When planLimits is non-nil and the plan uses scale-to-zero, the deployment
 // starts at 0 replicas and an HTTPScaledObject CRD is included for KEDA.
-func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVars []entities.EnvVar, planLimits *entities.PlanLimits) *K8sResources {
+func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVars []entities.EnvVar, planLimits *entities.PlanLimits, tier entities.PlanTier) *K8sResources {
 	namespace := "zenith-apps"
 	labels := map[string]string{
 		"app":                   app.Subdomain,
@@ -28,7 +42,7 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 	scaleToZero := planLimits != nil && ShouldScaleToZero(planLimits)
 
 	res := &K8sResources{
-		Deployment: generateDeployment(app, imageTag, namespace, labels, envVars),
+		Deployment: generateDeployment(app, imageTag, namespace, labels, envVars, tier),
 		Service:    generateService(app, namespace, labels),
 	}
 
@@ -46,7 +60,7 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 	return res
 }
 
-func generateDeployment(app *entities.App, imageTag, namespace string, labels map[string]string, envVars []entities.EnvVar) map[string]interface{} {
+func generateDeployment(app *entities.App, imageTag, namespace string, labels map[string]string, envVars []entities.EnvVar, tier entities.PlanTier) map[string]interface{} {
 	replicas := int32(1)
 	port := app.Port
 	if port == 0 {
@@ -65,6 +79,8 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 			"value": ev.Value,
 		})
 	}
+
+	cpuLimit, memLimit, cpuReq, memReq := PerAppResources(tier)
 
 	return map[string]interface{}{
 		"apiVersion": "apps/v1",
@@ -86,6 +102,9 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 					"labels": labels,
 				},
 				"spec": map[string]interface{}{
+					"imagePullSecrets": []map[string]interface{}{
+						{"name": "registry-credentials"},
+					},
 					"containers": []map[string]interface{}{
 						{
 							"name":  "app",
@@ -99,12 +118,12 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 							"env": k8sEnv,
 							"resources": map[string]interface{}{
 								"limits": map[string]string{
-									"cpu":    "500m",
-									"memory": "512Mi",
+									"cpu":    cpuLimit,
+									"memory": memLimit,
 								},
 								"requests": map[string]string{
-									"cpu":    "100m",
-									"memory": "128Mi",
+									"cpu":    cpuReq,
+									"memory": memReq,
 								},
 							},
 							"readinessProbe": map[string]interface{}{

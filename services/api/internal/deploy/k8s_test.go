@@ -23,7 +23,7 @@ func TestGenerateK8sResources(t *testing.T) {
 		{Key: "API_KEY", Value: "secret"},
 	}
 
-	resources := GenerateK8sResources(app, "registry/web:latest", "freezenith.com", envVars, nil)
+	resources := GenerateK8sResources(app, "registry/web:latest", "freezenith.com", envVars, nil, entities.PlanFree)
 
 	// Verify Deployment
 	if resources.Deployment["kind"] != "Deployment" {
@@ -49,7 +49,7 @@ func TestGenerateK8sResourcesDefaultPort(t *testing.T) {
 		Port:      0,
 	}
 
-	resources := GenerateK8sResources(app, "registry/api:latest", "freezenith.com", nil, nil)
+	resources := GenerateK8sResources(app, "registry/api:latest", "freezenith.com", nil, nil, entities.PlanFree)
 
 	// Verify port defaults to 8080
 	data, _ := json.Marshal(resources.Deployment)
@@ -66,7 +66,7 @@ func TestGenerateK8sResourcesLabels(t *testing.T) {
 		Port:      8080,
 	}
 
-	resources := GenerateK8sResources(app, "registry/worker:v1", "example.com", nil, nil)
+	resources := GenerateK8sResources(app, "registry/worker:v1", "example.com", nil, nil, entities.PlanFree)
 
 	metadata := resources.Deployment["metadata"].(map[string]interface{})
 	labels := metadata["labels"].(map[string]string)
@@ -87,7 +87,7 @@ func TestGenerateIngressRouteHost(t *testing.T) {
 		Port:      3000,
 	}
 
-	resources := GenerateK8sResources(app, "reg/fe:v1", "mypaas.dev", nil, nil)
+	resources := GenerateK8sResources(app, "reg/fe:v1", "mypaas.dev", nil, nil, entities.PlanFree)
 
 	data, _ := json.Marshal(resources.IngressRoute)
 	content := string(data)
@@ -108,7 +108,7 @@ func TestResourcesSerializeToJSON(t *testing.T) {
 		Port:      3000,
 	}
 
-	resources := GenerateK8sResources(app, "reg/web:v1", "test.com", nil, nil)
+	resources := GenerateK8sResources(app, "reg/web:v1", "test.com", nil, nil, entities.PlanFree)
 
 	for _, r := range []map[string]interface{}{resources.Deployment, resources.Service, resources.IngressRoute} {
 		data, err := json.Marshal(r)

@@ -11,6 +11,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // Deployer handles deploying built images to Kubernetes.
@@ -43,19 +44,21 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 		return fmt.Errorf("failed to get env vars: %w", err)
 	}
 
-	// Look up user plan to decide scale-to-zero
+	// Look up user plan to decide scale-to-zero and resource limits
 	var planLimits *entities.PlanLimits
+	tier := entities.PlanFree
 	if d.planRepo != nil {
 		plan, err := d.planRepo.GetUserPlan(ctx, app.UserID)
 		if err == nil {
 			planLimits = &plan.Limits
+			tier = plan.Tier
 		} else {
-			log.Printf("[deployer] Warning: failed to get user plan for %s: %v (defaulting to always-on)", app.UserID, err)
+			log.Printf("[deployer] Warning: failed to get user plan for %s: %v (defaulting to free tier)", app.UserID, err)
 		}
 	}
 
 	// Generate K8s resources
-	resources := GenerateK8sResources(app, imageTag, d.baseDomain, envVars, planLimits)
+	resources := GenerateK8sResources(app, imageTag, d.baseDomain, envVars, planLimits, tier)
 
 	// Apply Deployment
 	if err := d.applyCRD(ctx, "Deployment", "zenith-apps", app.Subdomain, resources.Deployment); err != nil {
@@ -149,7 +152,7 @@ func (d *Deployer) applyCRD(ctx context.Context, kind, namespace, name string, r
 
 	// Try create first; if already exists, merge-patch to update
 	if err := d.k8sClient.CreateCRD(ctx, crd); err != nil {
-		if strings.Contains(err.Error(), "already exists") {
+		if k8serrors.IsAlreadyExists(err) || strings.Contains(err.Error(), "already exists") {
 			return d.k8sClient.PatchCRD(ctx, crd)
 		}
 		return err
