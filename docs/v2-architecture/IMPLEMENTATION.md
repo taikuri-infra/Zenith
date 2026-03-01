@@ -487,7 +487,7 @@ kubectl get secret cloudflare-api-token -n cert-manager
 
 #### 4.5: Run Ansible Playbook
 
-- [ ] Execute the full Ansible playbook
+- [x] Execute the full Ansible playbook
 
 ```bash
 cd infra/ansible
@@ -1087,7 +1087,7 @@ kubectl get pods -n zenith-shared -l cnpg.io/cluster=free-pg
 
 #### 5.6.1: Create Temporal Databases in free-pg (Pre-requisite for 5.12)
 
-- [ ] Create `temporal` and `temporal_visibility` databases inside the free-pg cluster
+- [x] Create `temporal` and `temporal_visibility` databases inside the free-pg cluster
 
 **IMPORTANT:** This must be done **after** free-pg is healthy (5.6) and **before** Temporal is deployed (5.12). See PF-3.
 
@@ -2723,7 +2723,7 @@ cilium hubble ui
 
 #### 5.21: ResourceQuotas + LimitRanges (Templates)
 
-- [ ] Create template ResourceQuota and LimitRange for customer namespaces
+- [x] Create template ResourceQuota and LimitRange for customer namespaces
 
 These are templates applied by the Temporal provisioning workflow when creating customer namespaces. Store them as ConfigMaps or apply via the zenith-tenant Helm chart.
 
@@ -2793,7 +2793,7 @@ spec:
 
 #### 5.22: PodDisruptionBudgets
 
-- [ ] Create PDBs for all HA infrastructure services
+- [x] Create PDBs for all HA infrastructure services
 
 **File:** `infra/terraform/modules/k8s-platform/main.tf` — add:
 ```hcl
@@ -3001,7 +3001,7 @@ infra/argocd/
 
 #### 6.1: Create Root Application (App-of-Apps)
 
-- [ ] Create the root ArgoCD Application that watches `infra/argocd/staging/`
+- [x] Create the root ArgoCD Application that watches `infra/argocd/staging/`
 
 This is created by Terraform in Phase 3 as part of the ArgoCD setup. Add to `k8s-platform/main.tf`:
 
@@ -3061,7 +3061,7 @@ argocd app get zenith-apps
 
 #### 6.2: Create Application Manifests
 
-- [ ] Create the individual Application manifests for each service
+- [x] Create the individual Application manifests for each service
 
 **File:** `infra/argocd/staging/zenith-api.yaml`
 ```yaml
@@ -3186,7 +3186,7 @@ spec:
 
 #### 6.3: Sync Waves (Ordering)
 
-- [ ] Add sync wave annotations to Helm chart templates
+- [x] Add sync wave annotations to Helm chart templates
 
 In each Helm chart's templates, add sync wave annotations to control ordering:
 
@@ -3214,7 +3214,7 @@ metadata:
 
 #### 6.4: Verify ArgoCD Deployment Pipeline
 
-- [ ] Push a change and verify automatic deployment
+- [x] Push a change and verify automatic deployment
 
 ```bash
 # Commit the argocd manifests
@@ -3276,7 +3276,7 @@ services/api/internal/temporal/
 
 #### 7.1: Implement Provisioning Workflow
 
-- [ ] Create the main provisioning workflow that orchestrates all 10 activities
+- [x] Create the main provisioning workflow that orchestrates all 10 activities
 
 **File:** `services/api/internal/temporal/workflows/provision_customer.go`
 ```go
@@ -3424,7 +3424,7 @@ func ProvisionCustomer(ctx workflow.Context, input ProvisionCustomerInput) (*Pro
 
 #### 7.2: Register Temporal Worker
 
-- [ ] Create worker that registers all activities
+- [x] Create worker that registers all activities
 
 **File:** `services/api/internal/temporal/worker/main.go`
 ```go
@@ -3465,7 +3465,7 @@ func StartWorker(c client.Client) error {
 
 #### 7.3: Test Provisioning
 
-- [ ] Trigger a test provisioning workflow and verify all resources
+- [x] Trigger a test provisioning workflow and verify all resources
 
 ```bash
 # Via Temporal CLI
@@ -3532,59 +3532,59 @@ dig +short test-customer.stage.freezenith.com
 
 ### Phase M1: New Staging Server (Week 1-2)
 
-- [ ] Create new Hetzner server (cx42) for V2
-- [ ] Run Phase 1 Terraform (server + DNS for v2.stage.freezenith.com)
-- [ ] Run Phase 2 Ansible (k3s + Cilium + hcloud-csi + WireGuard)
-- [ ] Run Phase 3 Terraform (all V2 infra components)
+- [x] Create new Hetzner server (cx42) for V2
+- [x] Run Phase 1 Terraform (server + DNS for v2.stage.freezenith.com)
+- [x] Run Phase 2 Ansible (k3s + Cilium + hcloud-csi + WireGuard)
+- [x] Run Phase 3 Terraform (all V2 infra components)
 
 **Validation checklist:**
-- [ ] k3s running with Cilium CNI + WireGuard
-- [ ] cert-manager issuing test certificate (DNS-01)
-- [ ] CNPG operator watching namespaces
-- [ ] Keycloak accessible, admin realm working
-- [ ] APISIX routing test requests
-- [ ] external-dns creating DNS records
-- [ ] ArgoCD UI accessible at argocd.stage.freezenith.com
-- [ ] Temporal UI accessible at temporal.stage.freezenith.com
-- [ ] Harbor accessible at registry.stage.freezenith.com
-- [ ] Monitoring dashboards loading (Grafana, Prometheus)
-- [ ] Hubble UI showing network flows
+- [x] k3s running with Cilium CNI + WireGuard
+- [x] cert-manager issuing test certificate (DNS-01)
+- [x] CNPG operator watching namespaces
+- [x] Keycloak accessible, admin realm working
+- [x] APISIX routing test requests
+- [x] external-dns creating DNS records
+- [x] ArgoCD UI accessible at argocd.stage.freezenith.com
+- [x] Temporal UI accessible at temporal.stage.freezenith.com
+- [x] Harbor accessible at registry.stage.freezenith.com
+- [x] Monitoring dashboards loading (Grafana, Prometheus)
+- [x] Hubble UI showing network flows
 
 ### Phase M2: Deploy Zenith Apps (Week 2-3)
 
-- [ ] Push Helm charts to Harbor
-- [ ] ArgoCD syncs application charts automatically
-- [ ] Test: landing page accessible
-- [ ] Test: API health endpoint responding
+- [x] Push Helm charts to Harbor
+- [x] ArgoCD syncs application charts automatically
+- [x] Test: landing page accessible
+- [x] Test: API health endpoint responding
 - [ ] Test: Keycloak login flow working
 - [ ] Test: APISIX JWT verification working
 
 **Validation checklist:**
-- [ ] Landing page loads at v2.stage.freezenith.com
-- [ ] API responds at api.v2.stage.freezenith.com
+- [x] Landing page loads at v2.stage.freezenith.com
+- [x] API responds at api.v2.stage.freezenith.com
 - [ ] Keycloak login/register works
 - [ ] APISIX correctly routes protected/public routes
-- [ ] ArgoCD shows all apps synced and healthy
+- [x] ArgoCD shows all apps synced and healthy
 
 ### Phase M3: Customer Provisioning (Week 3-4)
 
-- [ ] Trigger provision-customer workflow via API
+- [x] Trigger provision-customer workflow via API
 - [ ] Verify: Keycloak realm created
-- [ ] Verify: Database created in shared CNPG cluster
+- [x] Verify: Database created in shared CNPG cluster
 - [ ] Verify: S3 bucket created
-- [ ] Verify: K8s namespace with all resources
-- [ ] Verify: DNS record created
-- [ ] Verify: TLS certificate issued
+- [x] Verify: K8s namespace with all resources
+- [x] Verify: DNS record created
+- [x] Verify: TLS certificate issued
 - [ ] Verify: Customer frontend accessible
 - [ ] Verify: Customer backend API through APISIX with JWT
 
 **Validation checklist:**
-- [ ] Full provisioning workflow completes without errors
+- [x] Full provisioning workflow completes without errors
 - [ ] Customer can log in via Keycloak
 - [ ] Customer frontend loads
 - [ ] Customer API calls work through APISIX
 - [ ] Network isolation: customer A cannot reach customer B namespace
-- [ ] ResourceQuota enforced
+- [x] ResourceQuota enforced
 - [ ] Backup CronJobs running
 
 ### Phase M4: Data Migration (Week 4-5)
