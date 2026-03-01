@@ -43,6 +43,7 @@ type Client interface {
 	CreateCRD(ctx context.Context, obj *CRDObject) error
 	GetCRD(ctx context.Context, kind, namespace, name string) (*CRDObject, error)
 	UpdateCRD(ctx context.Context, obj *CRDObject) error
+	PatchCRD(ctx context.Context, obj *CRDObject) error
 	DeleteCRD(ctx context.Context, kind, namespace, name string) error
 	ListCRDs(ctx context.Context, kind, namespace string) ([]*CRDObject, error)
 
@@ -154,6 +155,15 @@ func (c *MemoryClient) UpdateCRD(ctx context.Context, obj *CRDObject) error {
 		return fmt.Errorf("object %s not found", key)
 	}
 
+	c.objects[key] = obj
+	return nil
+}
+
+func (c *MemoryClient) PatchCRD(ctx context.Context, obj *CRDObject) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	key := objectKey(obj.Kind, obj.Metadata.Namespace, obj.Metadata.Name)
 	c.objects[key] = obj
 	return nil
 }
