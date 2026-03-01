@@ -204,9 +204,7 @@ func generateIngressRoute(app *entities.App, namespace string, labels map[string
 					},
 				},
 			},
-			"tls": map[string]interface{}{
-				"certResolver": "letsencrypt",
-			},
+			"tls": map[string]interface{}{},
 		},
 	}
 }
