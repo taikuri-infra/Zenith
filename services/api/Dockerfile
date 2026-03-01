@@ -31,7 +31,7 @@ LABEL org.opencontainers.image.source="https://github.com/dotechhq/zenith"
 LABEL org.opencontainers.image.vendor="DoTech"
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata git
 
 # Create non-root user
 RUN addgroup -S zenith && adduser -S zenith -G zenith
