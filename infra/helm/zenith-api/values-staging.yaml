@@ -18,6 +18,8 @@ env:
   TEMPORAL_ENABLED: "true"
   TEMPORAL_HOST: "temporal-frontend.temporal.svc.cluster.local:7233"
   TEMPORAL_NAMESPACE: "default"
+  GITHUB_WEBHOOK_SECRET: "true"  # actual value stored in zenith-secrets Secret
+  SECRETS_ENCRYPTION_KEY: "true"  # actual value stored in zenith-secrets Secret
 
 cnpgAdminSecret: "cnpg-admin-dsn"
 keycloakAdminSecret: "keycloak-admin"

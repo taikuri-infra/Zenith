@@ -99,6 +99,9 @@ func (h *StripeWebhookHandler) handleCheckoutCompleted(c *fiber.Ctx, event *gost
 		log.Printf("[stripe-webhook] failed to set user plan: %v", err)
 	}
 
+	// Provision infrastructure for the new tier (S3 bucket, etc.)
+	h.billingSvc.ProvisionUpgradeResources(c.Context(), userID, tier)
+
 	log.Printf("[stripe-webhook] user %s upgraded to %s (sub=%s)", userID, tier, subscriptionID)
 	return c.JSON(fiber.Map{"received": true})
 }
