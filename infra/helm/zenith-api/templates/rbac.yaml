@@ -71,6 +71,10 @@ rules:
   - apiGroups: [""]
     resources: ["resourcequotas", "limitranges"]
     verbs: ["get", "create", "delete"]
+  # Tenant provisioning: network policies (tenant isolation)
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "create", "delete"]
   # Tenant provisioning: APISIX routes
   - apiGroups: ["apisix.apache.org"]
     resources: ["apisixroutes"]
