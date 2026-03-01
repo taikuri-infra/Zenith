@@ -126,8 +126,13 @@ func (d *Deployer) applyCRD(ctx context.Context, kind, namespace, name string, r
 	// Carry over labels from the manifest metadata if present
 	var labels map[string]string
 	if meta, ok := resource["metadata"].(map[string]interface{}); ok {
-		if l, ok := meta["labels"].(map[string]string); ok {
-			labels = l
+		if rawLabels, ok := meta["labels"].(map[string]interface{}); ok {
+			labels = make(map[string]string, len(rawLabels))
+			for k, v := range rawLabels {
+				if s, ok := v.(string); ok {
+					labels[k] = s
+				}
+			}
 		}
 	}
 

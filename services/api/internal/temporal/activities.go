@@ -2,6 +2,8 @@ package temporal
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -101,7 +103,11 @@ func (a *Activities) CreateDatabase(ctx context.Context, input ProvisionInput) (
 
 	dbName := tenantDBName(input.Domain)
 	dbUser := dbName
-	dbPass := fmt.Sprintf("zp_%s_%s", input.CustomerID[:8], input.Domain[:4])
+	passBytes := make([]byte, 16)
+	if _, err := rand.Read(passBytes); err != nil {
+		return nil, fmt.Errorf("generate password: %w", err)
+	}
+	dbPass := hex.EncodeToString(passBytes)
 
 	conn, err := pgx.Connect(ctx, a.AdminDSN)
 	if err != nil {
@@ -519,6 +525,27 @@ func (a *Activities) UpdateStatusProvisioning(ctx context.Context, customerID st
 
 func (a *Activities) UpdateStatusError(ctx context.Context, customerID string) error {
 	return a.Customers.UpdateClusterStatus(ctx, customerID, "error")
+}
+
+// --- Activity: UpdateStatusDeleting ---
+
+func (a *Activities) UpdateStatusDeleting(ctx context.Context, customerID string) error {
+	return a.Customers.UpdateClusterStatus(ctx, customerID, "deleting")
+}
+
+// --- Activity: NotifyDeleted ---
+
+func (a *Activities) NotifyDeleted(ctx context.Context, input ProvisionInput, namespace string) error {
+	if err := a.Customers.UpdateClusterStatus(ctx, input.CustomerID, "deleted"); err != nil {
+		return fmt.Errorf("update customer status: %w", err)
+	}
+
+	_ = a.Admin.AddAuditEntry(ctx, auditEntry(
+		"system",
+		fmt.Sprintf("Tenant %s (%s) deprovisioned from namespace %s", input.CustomerName, input.Domain, namespace),
+	))
+
+	return nil
 }
 
 // --- Deprovision Activities ---

@@ -125,7 +125,7 @@ func DeprovisionCustomerWorkflow(ctx workflow.Context, input DeprovisionInput) e
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
 	// Update status to deleting
-	_ = workflow.ExecuteActivity(ctx, (*Activities).UpdateStatusProvisioning, input.CustomerID).Get(ctx, nil)
+	_ = workflow.ExecuteActivity(ctx, (*Activities).UpdateStatusDeleting, input.CustomerID).Get(ctx, nil)
 
 	// Delete ArgoCD app first (stops syncing)
 	_ = workflow.ExecuteActivity(ctx, (*Activities).DeleteArgoCD, input.Domain).Get(ctx, nil)
@@ -138,8 +138,8 @@ func DeprovisionCustomerWorkflow(ctx workflow.Context, input DeprovisionInput) e
 	_ = workflow.ExecuteActivity(ctx, (*Activities).DeleteDatabase, input.Domain).Get(ctx, nil)
 	_ = workflow.ExecuteActivity(ctx, (*Activities).DeleteKeycloakRealm, input.Domain).Get(ctx, nil)
 
-	// Audit
-	_ = workflow.ExecuteActivity(ctx, (*Activities).NotifyReady, ProvisionInput{
+	// Audit + mark as deleted
+	_ = workflow.ExecuteActivity(ctx, (*Activities).NotifyDeleted, ProvisionInput{
 		CustomerID:   input.CustomerID,
 		CustomerName: input.CustomerName,
 		Domain:       input.Domain,

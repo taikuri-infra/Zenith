@@ -308,9 +308,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
 	pipeline := deploy.NewPipeline(builder, deployer, appRepo, logHub, eventHub)
 
-	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain)
+	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, deployer)
 	webhookHandler := handlers.NewWebhookHandler(appRepo, pipeline, cfg.GitHubWebhookSecret)
-	deployHandler := handlers.NewDeployHandler(appRepo)
+	deployHandler := handlers.NewDeployHandler(appRepo, pipeline)
 	logHandler := handlers.NewLogHandler(appRepo, logHub)
 
 	secretHandler, err := handlers.NewSecretHandler(appRepo, cfg.SecretsKey)

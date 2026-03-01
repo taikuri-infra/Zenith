@@ -9,12 +9,17 @@ import (
 
 // DeployHandler handles deployment and env var operations.
 type DeployHandler struct {
-	appRepo ports.AppRepository
+	appRepo  ports.AppRepository
+	pipeline interface {
+		TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string)
+	}
 }
 
 // NewDeployHandler creates a new DeployHandler.
-func NewDeployHandler(appRepo ports.AppRepository) *DeployHandler {
-	return &DeployHandler{appRepo: appRepo}
+func NewDeployHandler(appRepo ports.AppRepository, pipeline interface {
+	TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string)
+}) *DeployHandler {
+	return &DeployHandler{appRepo: appRepo, pipeline: pipeline}
 }
 
 // --- Deployment endpoints ---
@@ -95,6 +100,14 @@ func (h *DeployHandler) Rollback(c *fiber.Ctx) error {
 	h.appRepo.UpdateApp(c.Context(), appID, &dto.UpdateAppInput{
 		Status: &status,
 	})
+
+	// Trigger actual K8s redeployment with the old image
+	if h.pipeline != nil {
+		app, _ := h.appRepo.GetApp(c.Context(), appID)
+		if app != nil {
+			h.pipeline.TriggerImageDeploy(app, target, target.ImageTag)
+		}
+	}
 
 	return c.JSON(fiber.Map{
 		"message":       "rollback initiated",

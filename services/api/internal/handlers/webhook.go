@@ -76,7 +76,7 @@ func (h *WebhookHandler) HandlePush(c *fiber.Ctx) error {
 	gitSHA := payload.After
 
 	log.Printf("[webhook] Push received: repo=%s branch=%s sha=%s",
-		payload.Repository.FullName, branch, gitSHA[:8])
+		payload.Repository.FullName, branch, gitSHA[:min(8, len(gitSHA))])
 
 	// Find apps that match this repo URL and branch
 	apps, err := h.findAppsByRepo(c, repoURL, branch)
@@ -105,7 +105,7 @@ func (h *WebhookHandler) HandlePush(c *fiber.Ctx) error {
 		})
 
 		log.Printf("[webhook] Deployment created: app=%s deploy_id=%s sha=%s",
-			app.Name, deployment.ID, gitSHA[:8])
+			app.Name, deployment.ID, gitSHA[:min(8, len(gitSHA))])
 		triggered = append(triggered, app.Name)
 
 		// Trigger async build pipeline
