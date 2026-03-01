@@ -1,24 +1,32 @@
 package handlers
 
 import (
+	"context"
+	"log"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
+
+// AppDeleter is the subset of deploy.Deployer needed for cleanup.
+type AppDeleter interface {
+	DeleteApp(ctx context.Context, app *entities.App) error
+}
 
 // AppHandlerV2 handles app CRUD operations using the AppRepository.
 // This replaces the original CRD-based AppHandler for Phase 2.
 type AppHandlerV2 struct {
 	appRepo    ports.AppRepository
 	baseDomain string
+	deployer   AppDeleter
 }
 
 // NewAppHandlerV2 creates a new AppHandlerV2.
-func NewAppHandlerV2(appRepo ports.AppRepository, baseDomain string) *AppHandlerV2 {
-	return &AppHandlerV2{appRepo: appRepo, baseDomain: baseDomain}
+func NewAppHandlerV2(appRepo ports.AppRepository, baseDomain string, deployer AppDeleter) *AppHandlerV2 {
+	return &AppHandlerV2{appRepo: appRepo, baseDomain: baseDomain, deployer: deployer}
 }
 
 // --- Request/Response types ---
@@ -143,6 +151,19 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 	appID := c.Params("appId")
 	if appID == "" {
 		return NewBadRequest("app ID is required")
+	}
+
+	// Fetch app first so we can clean up K8s resources
+	app, err := h.appRepo.GetApp(c.Context(), appID)
+	if err != nil {
+		return NewNotFound("app not found")
+	}
+
+	// Clean up K8s resources (Deployment, Service, IngressRoute, HTTPScaledObject)
+	if h.deployer != nil && app.Status != entities.AppStatusPending {
+		if err := h.deployer.DeleteApp(context.Background(), app); err != nil {
+			log.Printf("[apps_v2] Warning: failed to delete K8s resources for app %s: %v", app.Name, err)
+		}
 	}
 
 	if err := h.appRepo.DeleteApp(c.Context(), appID); err != nil {

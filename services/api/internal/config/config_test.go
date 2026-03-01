@@ -14,8 +14,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Environment != "development" {
 		t.Errorf("Expected default environment 'development', got '%s'", cfg.Environment)
 	}
-	if cfg.CORSOrigins != "*" {
-		t.Errorf("Expected default CORS origins '*', got '%s'", cfg.CORSOrigins)
+	// standalone mode (default) uses localhost CORS
+	if cfg.CORSOrigins != "http://localhost:3000" {
+		t.Errorf("Expected default CORS origins 'http://localhost:3000', got '%s'", cfg.CORSOrigins)
 	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("Expected default log level 'info', got '%s'", cfg.LogLevel)

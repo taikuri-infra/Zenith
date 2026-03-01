@@ -31,7 +31,7 @@ func TestGetLogsHistoryEmpty(t *testing.T) {
 	})
 	dep, _ := repo.CreateDeployment(ctx, userApp.ID, "abc123")
 
-	fiberApp.Get("/api/v1/apps/:id/deployments/:did/logs/history", logHandler.GetLogs)
+	fiberApp.Get("/api/v1/apps/:appId/deployments/:did/logs/history", logHandler.GetLogs)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+userApp.ID+"/deployments/"+dep.ID+"/logs/history", nil)
 	resp, err := fiberApp.Test(req)
@@ -68,7 +68,7 @@ func TestGetLogsHistoryWithEntries(t *testing.T) {
 	hub.PublishBuild(dep.ID, "building docker image...")
 	hub.PublishDeploy(dep.ID, "applying kubernetes manifests...")
 
-	fiberApp.Get("/api/v1/apps/:id/deployments/:did/logs/history", logHandler.GetLogs)
+	fiberApp.Get("/api/v1/apps/:appId/deployments/:did/logs/history", logHandler.GetLogs)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+userApp.ID+"/deployments/"+dep.ID+"/logs/history", nil)
 	resp, err := fiberApp.Test(req)
@@ -106,7 +106,7 @@ func TestGetLogsHistoryWithEntries(t *testing.T) {
 func TestGetLogsHistoryAppNotFound(t *testing.T) {
 	fiberApp, logHandler, _, _ := setupLogTest()
 
-	fiberApp.Get("/api/v1/apps/:id/deployments/:did/logs/history", logHandler.GetLogs)
+	fiberApp.Get("/api/v1/apps/:appId/deployments/:did/logs/history", logHandler.GetLogs)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/nonexistent/deployments/deploy-1/logs/history", nil)
 	resp, err := fiberApp.Test(req)

@@ -33,7 +33,7 @@ func (h *BillingHandler) GetBillingStatus(c *fiber.Ctx) error {
 // POST /api/v1/billing/checkout
 func (h *BillingHandler) CreateCheckoutSession(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
-	userEmail, _ := c.Locals("user_email").(string)
+	userEmail, _ := c.Locals("email").(string)
 
 	var input dto.CreateCheckoutInput
 	if err := c.BodyParser(&input); err != nil {

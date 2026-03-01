@@ -72,7 +72,7 @@ func (h *LogHub) Publish(deploymentID string, entry LogEntry) {
 	for _, sub := range subs {
 		select {
 		case <-sub.done:
-			close(sub.Ch)
+			// Subscriber closed — remove from list (Ch closed by Cleanup)
 			continue
 		default:
 			select {
@@ -150,7 +150,6 @@ func (h *LogHub) Cleanup(deploymentID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Close all subscribers
 	for _, sub := range h.subscribers[deploymentID] {
 		sub.Close()
 		close(sub.Ch)

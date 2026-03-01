@@ -35,7 +35,7 @@ type logEntryJSON struct {
 // StreamLogs streams deployment logs via Server-Sent Events (SSE).
 // GET /api/v1/apps/:id/deployments/:did/logs
 func (h *LogHandler) StreamLogs(c *fiber.Ctx) error {
-	appID := c.Params("id")
+	appID := c.Params("appId")
 	deploymentID := c.Params("did")
 
 	// Verify app exists
@@ -90,7 +90,7 @@ func (h *LogHandler) StreamLogs(c *fiber.Ctx) error {
 // GetLogs returns stored log history for a deployment (non-streaming).
 // GET /api/v1/apps/:id/deployments/:did/logs/history
 func (h *LogHandler) GetLogs(c *fiber.Ctx) error {
-	appID := c.Params("id")
+	appID := c.Params("appId")
 	deploymentID := c.Params("did")
 
 	// Verify app exists

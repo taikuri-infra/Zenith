@@ -19,8 +19,8 @@ import (
 func setupV2Test() (*fiber.App, *handlers.AppHandlerV2, *handlers.DeployHandler, *handlers.WebhookHandler, ports.AppRepository) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	repo := memory.NewMemoryAppRepository()
-	appHandler := handlers.NewAppHandlerV2(repo, "freezenith.com")
-	deployHandler := handlers.NewDeployHandler(repo)
+	appHandler := handlers.NewAppHandlerV2(repo, "freezenith.com", nil)
+	deployHandler := handlers.NewDeployHandler(repo, nil)
 	webhookHandler := handlers.NewWebhookHandler(repo, nil, "test-secret")
 	return app, appHandler, deployHandler, webhookHandler, repo
 }
