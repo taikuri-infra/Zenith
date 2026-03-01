@@ -148,6 +148,20 @@ variable "admin_password" {
   sensitive   = true
 }
 
+variable "github_webhook_secret" {
+  description = "HMAC secret for verifying GitHub webhook signatures"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "secrets_encryption_key" {
+  description = "64-char hex (32 bytes) AES-256-GCM key for encrypting app secrets"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # --- cert-manager ---
 
 variable "cert_manager_version" {

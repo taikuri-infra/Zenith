@@ -128,9 +128,11 @@ module "platform" {
   registry_password      = var.registry_password
 
   # App secrets
-  jwt_secret     = var.jwt_secret
-  admin_email    = var.admin_email
-  admin_password = var.admin_password
+  jwt_secret             = var.jwt_secret
+  admin_email            = var.admin_email
+  admin_password         = var.admin_password
+  github_webhook_secret  = var.github_webhook_secret
+  secrets_encryption_key = var.secrets_encryption_key
 
   # S3 / Object Storage (Hetzner)
   s3_access_key = var.s3_access_key

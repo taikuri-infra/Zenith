@@ -33,6 +33,16 @@ resource "helm_release" "zenith_platform" {
   }
 
   set_sensitive {
+    name  = "secrets.githubWebhookSecret"
+    value = var.github_webhook_secret
+  }
+
+  set_sensitive {
+    name  = "secrets.secretsEncryptionKey"
+    value = var.secrets_encryption_key
+  }
+
+  set_sensitive {
     name  = "registry.host"
     value = var.registry_host
   }
