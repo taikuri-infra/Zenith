@@ -110,9 +110,24 @@ func (d *Deployer) DeleteApp(ctx context.Context, app *entities.App) error {
 
 // applyCRD creates or updates a K8s resource via the CRD client.
 func (d *Deployer) applyCRD(ctx context.Context, kind, namespace, name string, resource map[string]interface{}) error {
-	spec, err := json.Marshal(resource)
+	// Extract just the "spec" field from the full manifest — the CRDObject
+	// already carries apiVersion/kind/metadata separately.
+	specData := resource["spec"]
+	if specData == nil {
+		specData = resource
+	}
+
+	spec, err := json.Marshal(specData)
 	if err != nil {
-		return fmt.Errorf("failed to marshal resource: %w", err)
+		return fmt.Errorf("failed to marshal resource spec: %w", err)
+	}
+
+	// Carry over labels from the manifest metadata if present
+	var labels map[string]string
+	if meta, ok := resource["metadata"].(map[string]interface{}); ok {
+		if l, ok := meta["labels"].(map[string]string); ok {
+			labels = l
+		}
 	}
 
 	crd := &k8sclient.CRDObject{
@@ -121,6 +136,7 @@ func (d *Deployer) applyCRD(ctx context.Context, kind, namespace, name string, r
 		Metadata: k8sclient.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			Labels:    labels,
 		},
 		Spec: spec,
 	}
