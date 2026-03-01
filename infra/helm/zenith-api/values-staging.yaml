@@ -14,11 +14,13 @@ env:
   ZENITH_MODE: "saas"
   REGISTRY: "registry.stage.freezenith.com/zenith-stage"
   BASE_DOMAIN: "apps.stage.freezenith.com"
+  KEYCLOAK_URL: "http://keycloak.keycloak.svc.cluster.local"
   TEMPORAL_ENABLED: "true"
   TEMPORAL_HOST: "temporal-frontend.temporal.svc.cluster.local:7233"
   TEMPORAL_NAMESPACE: "default"
 
 cnpgAdminSecret: "cnpg-admin-dsn"
+keycloakAdminSecret: "keycloak-admin"
 
 ingress:
   host: api.stage.freezenith.com
