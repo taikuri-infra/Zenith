@@ -27,6 +27,34 @@ locals {
       namespace    = "monitoring"
       match_labels = { "app.kubernetes.io/name" = "grafana" }
     }
+    temporal-frontend = {
+      namespace    = "temporal"
+      match_labels = { "app.kubernetes.io/component" = "frontend" }
+    }
+    temporal-history = {
+      namespace    = "temporal"
+      match_labels = { "app.kubernetes.io/component" = "history" }
+    }
+    harbor-core = {
+      namespace    = "harbor"
+      match_labels = { "component" = "core" }
+    }
+    harbor-registry = {
+      namespace    = "harbor"
+      match_labels = { "component" = "registry" }
+    }
+    cert-manager-webhook = {
+      namespace    = "cert-manager"
+      match_labels = { "app.kubernetes.io/component" = "webhook" }
+    }
+    alertmanager = {
+      namespace    = "monitoring"
+      match_labels = { "app.kubernetes.io/name" = "alertmanager" }
+    }
+    loki = {
+      namespace    = "monitoring"
+      match_labels = { "app.kubernetes.io/name" = "loki" }
+    }
   }
 }
 
