@@ -116,10 +116,14 @@ func (r *PostgresAppRepository) GetAppBySubdomain(ctx context.Context, subdomain
 }
 
 func (r *PostgresAppRepository) ListAppsByUser(ctx context.Context, userID string) ([]entities.App, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, name, repo_url, branch, framework, status, subdomain, port, created_at, updated_at
-		 FROM apps WHERE user_id = $1 ORDER BY created_at DESC`, userID,
-	)
+	query := `SELECT id, user_id, name, repo_url, branch, framework, status, subdomain, port, created_at, updated_at FROM apps`
+	var args []interface{}
+	if userID != "" {
+		query += ` WHERE user_id = $1`
+		args = append(args, userID)
+	}
+	query += ` ORDER BY created_at DESC`
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list apps: %w", err)
 	}
