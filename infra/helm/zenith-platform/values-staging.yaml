@@ -43,6 +43,12 @@ certificate:
     - cloud.stage.freezenith.com
     - embermind-ms.stage.freezenith.com
     - embermind.stage.freezenith.com
+    - auth.stage.freezenith.com
+
+keycloak:
+  enabled: true
+  host: auth.stage.freezenith.com
+  tlsSecret: staging-tls
 
 kong:
   enabled: false

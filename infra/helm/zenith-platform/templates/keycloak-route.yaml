@@ -1,0 +1,26 @@
+{{- if .Values.keycloak.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: keycloak
+  namespace: {{ include "zenith.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: auth
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.keycloak.host }}`)
+      kind: Rule
+      services:
+        - name: keycloak
+          namespace: keycloak
+          port: 80
+  tls:
+    secretName: {{ .Values.keycloak.tlsSecret }}
+{{- end }}

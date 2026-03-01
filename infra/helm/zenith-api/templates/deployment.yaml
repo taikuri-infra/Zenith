@@ -86,6 +86,22 @@ spec:
             - name: TEMPORAL_NAMESPACE
               value: {{ .Values.env.TEMPORAL_NAMESPACE | quote }}
             {{- end }}
+            {{- if .Values.env.KEYCLOAK_URL }}
+            - name: KEYCLOAK_URL
+              value: {{ .Values.env.KEYCLOAK_URL | quote }}
+            {{- end }}
+            {{- if .Values.keycloakAdminSecret }}
+            - name: KEYCLOAK_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakAdminSecret }}
+                  key: admin-user
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloakAdminSecret }}
+                  key: admin-password
+            {{- end }}
             {{- if .Values.cnpgAdminSecret }}
             - name: CNPG_ADMIN_DSN
               valueFrom:
