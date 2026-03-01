@@ -19,6 +19,8 @@ secrets:
   jwtSecret: ""
   adminEmail: ""
   adminPassword: ""
+  githubWebhookSecret: ""
+  secretsEncryptionKey: ""
 
 # PostgreSQL (CloudNativePG)
 postgres:
