@@ -103,7 +103,7 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 				},
 				"spec": map[string]interface{}{
 					"imagePullSecrets": []map[string]interface{}{
-						{"name": "registry-credentials"},
+						{"name": "app-registry-auth"},
 					},
 					"containers": []map[string]interface{}{
 						{
