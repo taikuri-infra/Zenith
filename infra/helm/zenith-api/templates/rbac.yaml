@@ -55,6 +55,30 @@ rules:
   - apiGroups: ["traefik.io"]
     resources: ["ingressroutes"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
+  # Tenant provisioning: namespaces
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create", "delete"]
+  # Tenant provisioning: secrets
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "delete"]
+  # Tenant provisioning: resource quotas + limit ranges
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "create", "delete"]
+  # Tenant provisioning: APISIX routes
+  - apiGroups: ["apisix.apache.org"]
+    resources: ["apisixroutes"]
+    verbs: ["get", "create", "delete"]
+  # Tenant provisioning: cert-manager certificates
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates"]
+    verbs: ["get", "create", "delete"]
+  # Tenant provisioning: ArgoCD applications
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
