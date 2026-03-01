@@ -107,7 +107,7 @@ func (s *KanikoJobSpec) ToK8sJobManifest() map[string]interface{} {
 		{
 			"name": "docker-config",
 			"secret": map[string]interface{}{
-				"secretName": "registry-credentials",
+				"secretName": "kaniko-registry-auth",
 				"items": []map[string]interface{}{
 					{
 						"key":  ".dockerconfigjson",
