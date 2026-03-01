@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
@@ -43,15 +44,18 @@ type GitHubPushEvent struct {
 
 // HandlePush handles POST /api/v1/webhooks/github
 func (h *WebhookHandler) HandlePush(c *fiber.Ctx) error {
-	// Verify signature if webhook secret is configured
-	if h.webhookSecret != "" {
-		signature := c.Get("X-Hub-Signature-256")
-		if signature == "" {
-			return NewUnauthorized("missing webhook signature")
-		}
-		if !h.verifySignature(c.Body(), signature) {
-			return NewUnauthorized("invalid webhook signature")
-		}
+	// Fail-closed: reject all requests if no webhook secret is configured
+	if h.webhookSecret == "" {
+		log.Println("[webhook] SECURITY: webhook secret not configured — rejecting request")
+		return NewUnauthorized("webhook secret not configured")
+	}
+
+	signature := c.Get("X-Hub-Signature-256")
+	if signature == "" {
+		return NewUnauthorized("missing webhook signature")
+	}
+	if !h.verifySignature(c.Body(), signature) {
+		return NewUnauthorized("invalid webhook signature")
 	}
 
 	// Only process push events
@@ -162,12 +166,15 @@ func (h *WebhookHandler) verifySignature(body []byte, signature string) bool {
 
 // HandleGitLabPush handles POST /api/v1/webhooks/gitlab
 func (h *WebhookHandler) HandleGitLabPush(c *fiber.Ctx) error {
-	// Verify shared token if configured
-	if h.webhookSecret != "" {
-		token := c.Get("X-Gitlab-Token")
-		if token != h.webhookSecret {
-			return NewUnauthorized("invalid webhook token")
-		}
+	// Fail-closed: reject all requests if no webhook secret is configured
+	if h.webhookSecret == "" {
+		log.Println("[webhook:gitlab] SECURITY: webhook secret not configured — rejecting request")
+		return NewUnauthorized("webhook secret not configured")
+	}
+
+	token := c.Get("X-Gitlab-Token")
+	if !ConstantTimeCompare(token, h.webhookSecret) {
+		return NewUnauthorized("invalid webhook token")
 	}
 
 	// Only process Push Hook events
@@ -238,15 +245,18 @@ func (h *WebhookHandler) HandleGitLabPush(c *fiber.Ctx) error {
 
 // HandleBitbucketPush handles POST /api/v1/webhooks/bitbucket
 func (h *WebhookHandler) HandleBitbucketPush(c *fiber.Ctx) error {
-	// Verify HMAC signature if configured (Bitbucket uses X-Hub-Signature)
-	if h.webhookSecret != "" {
-		signature := c.Get("X-Hub-Signature")
-		if signature == "" {
-			return NewUnauthorized("missing webhook signature")
-		}
-		if !h.verifySignature(c.Body(), signature) {
-			return NewUnauthorized("invalid webhook signature")
-		}
+	// Fail-closed: reject all requests if no webhook secret is configured
+	if h.webhookSecret == "" {
+		log.Println("[webhook:bitbucket] SECURITY: webhook secret not configured — rejecting request")
+		return NewUnauthorized("webhook secret not configured")
+	}
+
+	signature := c.Get("X-Hub-Signature")
+	if signature == "" {
+		return NewUnauthorized("missing webhook signature")
+	}
+	if !h.verifySignature(c.Body(), signature) {
+		return NewUnauthorized("invalid webhook signature")
 	}
 
 	eventKey := c.Get("X-Event-Key")
@@ -339,4 +349,9 @@ func extractBranch(ref string) string {
 		return ref[len(prefix):]
 	}
 	return ""
+}
+
+// ConstantTimeCompare provides timing-safe string comparison for webhook tokens.
+func ConstantTimeCompare(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
