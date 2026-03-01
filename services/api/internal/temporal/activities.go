@@ -11,6 +11,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/adapters/s3client"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/jackc/pgx/v5"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // ProvisionInput is the workflow input for customer provisioning.
@@ -108,14 +109,17 @@ func (a *Activities) CreateDatabase(ctx context.Context, input ProvisionInput) (
 	}
 	defer conn.Close(ctx)
 
-	// Create user and database (SQL identifiers can't be parameterized)
-	commands := []string{
-		fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", pgx.Identifier{dbUser}.Sanitize(), dbPass),
-		fmt.Sprintf("CREATE DATABASE %s OWNER %s", pgx.Identifier{dbName}.Sanitize(), pgx.Identifier{dbUser}.Sanitize()),
+	// Create user and database (idempotent — ignore "already exists")
+	createUser := fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", pgx.Identifier{dbUser}.Sanitize(), dbPass)
+	if _, err := conn.Exec(ctx, createUser); err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			return nil, fmt.Errorf("create user: %w", err)
+		}
 	}
-	for _, cmd := range commands {
-		if _, err := conn.Exec(ctx, cmd); err != nil {
-			return nil, fmt.Errorf("exec %q: %w", cmd, err)
+	createDB := fmt.Sprintf("CREATE DATABASE %s OWNER %s", pgx.Identifier{dbName}.Sanitize(), pgx.Identifier{dbUser}.Sanitize())
+	if _, err := conn.Exec(ctx, createDB); err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			return nil, fmt.Errorf("create database: %w", err)
 		}
 	}
 
@@ -155,7 +159,7 @@ func (a *Activities) CreateNamespace(ctx context.Context, input ProvisionInput) 
 		"zenith.dev/plan":              input.PlanTier,
 	}
 
-	if err := a.K8s.CreateNamespace(ctx, ns, labels); err != nil {
+	if err := a.K8s.CreateNamespace(ctx, ns, labels); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return nil, fmt.Errorf("create namespace %s: %w", ns, err)
 	}
 	return &CreateNamespaceResult{Namespace: ns}, nil
@@ -186,7 +190,7 @@ func (a *Activities) CreateSecrets(ctx context.Context, input CreateSecretsInput
 			"DB_NAME":     []byte(input.DBName),
 			"DB_USER":     []byte(input.DBUser),
 			"DB_PASSWORD": []byte(input.DBPass),
-		}, labels); err != nil {
+		}, labels); err != nil && !k8serrors.IsAlreadyExists(err) {
 			return fmt.Errorf("create db-credentials secret: %w", err)
 		}
 	}
@@ -197,7 +201,7 @@ func (a *Activities) CreateSecrets(ctx context.Context, input CreateSecretsInput
 			"KEYCLOAK_REALM":         []byte(input.RealmName),
 			"KEYCLOAK_CLIENT_ID":     []byte("zenith-app"),
 			"KEYCLOAK_CLIENT_SECRET": []byte(input.ClientSecret),
-		}, labels); err != nil {
+		}, labels); err != nil && !k8serrors.IsAlreadyExists(err) {
 			return fmt.Errorf("create keycloak-credentials secret: %w", err)
 		}
 	}
@@ -206,7 +210,7 @@ func (a *Activities) CreateSecrets(ctx context.Context, input CreateSecretsInput
 	if input.BucketName != "" {
 		if err := a.K8s.CreateSecret(ctx, input.Namespace, "s3-credentials", map[string][]byte{
 			"S3_BUCKET": []byte(input.BucketName),
-		}, labels); err != nil {
+		}, labels); err != nil && !k8serrors.IsAlreadyExists(err) {
 			return fmt.Errorf("create s3-credentials secret: %w", err)
 		}
 	}
@@ -238,7 +242,7 @@ func (a *Activities) CreateResourceQuota(ctx context.Context, input ProvisionInp
 		}
 	}
 
-	if err := a.K8s.CreateResourceQuota(ctx, namespace, "tenant-quota", hard); err != nil {
+	if err := a.K8s.CreateResourceQuota(ctx, namespace, "tenant-quota", hard); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create resource quota: %w", err)
 	}
 
@@ -252,38 +256,41 @@ func (a *Activities) CreateResourceQuota(ctx context.Context, input ProvisionInp
 		MinCPU:           "50m",
 		MinMemory:        "64Mi",
 	}
-	if err := a.K8s.CreateLimitRange(ctx, namespace, "tenant-limits", limits); err != nil {
+	if err := a.K8s.CreateLimitRange(ctx, namespace, "tenant-limits", limits); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create limit range: %w", err)
 	}
 
 	return nil
 }
 
-// --- Activity: CreateRouting (APISIX Route CRD) ---
+// --- Activity: CreateRouting (Traefik IngressRoute CRD) ---
 
 func (a *Activities) CreateRouting(ctx context.Context, input ProvisionInput, namespace string) error {
 	host := fmt.Sprintf("%s.%s", strings.ReplaceAll(input.Domain, ".", "-"), a.BaseDomain)
 
 	routeSpec := map[string]interface{}{
-		"http": map[string]interface{}{
-			"rules": []map[string]interface{}{
-				{
-					"host": host,
-					"backends": []map[string]interface{}{
-						{
-							"serviceName": "tenant-gateway",
-							"servicePort": 80,
-						},
+		"entryPoints": []string{"websecure"},
+		"routes": []map[string]interface{}{
+			{
+				"match": fmt.Sprintf("Host(`%s`)", host),
+				"kind":  "Rule",
+				"services": []map[string]interface{}{
+					{
+						"name": "tenant-gateway",
+						"port": 80,
 					},
 				},
 			},
+		},
+		"tls": map[string]interface{}{
+			"secretName": "tenant-tls",
 		},
 	}
 
 	specBytes, _ := json.Marshal(routeSpec)
 	route := &k8sclient.CRDObject{
-		APIVersion: "apisix.apache.org/v2",
-		Kind:       "ApisixRoute",
+		APIVersion: "traefik.io/v1alpha1",
+		Kind:       "IngressRoute",
 		Metadata: k8sclient.ObjectMeta{
 			Name:      "tenant-route",
 			Namespace: namespace,
@@ -295,7 +302,10 @@ func (a *Activities) CreateRouting(ctx context.Context, input ProvisionInput, na
 		Spec: specBytes,
 	}
 
-	return a.K8s.CreateCRD(ctx, route)
+	if err := a.K8s.CreateCRD(ctx, route); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
 }
 
 // --- Activity: CreateTLS (cert-manager Certificate CRD) ---
@@ -327,7 +337,10 @@ func (a *Activities) CreateTLS(ctx context.Context, input ProvisionInput, namesp
 		Spec: specBytes,
 	}
 
-	return a.K8s.CreateCRD(ctx, cert)
+	if err := a.K8s.CreateCRD(ctx, cert); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
 }
 
 // --- Activity: CreateArgoCD (ArgoCD Application CRD) ---
@@ -371,7 +384,10 @@ func (a *Activities) CreateArgoCD(ctx context.Context, input ProvisionInput, nam
 		Spec: specBytes,
 	}
 
-	return a.K8s.CreateCRD(ctx, argoApp)
+	if err := a.K8s.CreateCRD(ctx, argoApp); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
 }
 
 // --- Activity: NotifyReady ---
