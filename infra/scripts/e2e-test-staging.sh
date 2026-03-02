@@ -1,9 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# Zenith Platform End-to-End Test Script
-# Tests all endpoints, SSL certificates, DNS resolution, and content.
+# Zenith Platform — Staging E2E Test
+# Tests DNS resolution, SSL certificates, HTTPS connectivity, HTTP→HTTPS
+# redirects, content verification, and API endpoints for the V2 staging
+# environment at *.stage.freezenith.com (77.42.88.149).
 #
-# Usage: ./infra/scripts/e2e-test.sh [--verbose]
+# Usage: ./infra/scripts/e2e-test-staging.sh [--verbose]
 #
 # Can be run from anywhere (local machine, CI, etc.)
 # Returns exit 0 if all tests pass, exit 1 if any fail.
@@ -49,11 +51,11 @@ section() {
   echo -e "${BLUE}[$1]${NC} $2"
 }
 
-SERVER_IP="161.35.82.211"
+SERVER_IP="77.42.88.149"
 
 echo ""
 echo "============================================="
-echo "   Zenith Platform E2E Tests"
+echo "   Zenith Staging E2E Tests"
 echo "   $(date '+%Y-%m-%d %H:%M:%S')"
 echo "============================================="
 
@@ -76,12 +78,20 @@ check_dns() {
   fi
 }
 
-check_dns "freezenith.com" "$SERVER_IP"
-check_dns "www.freezenith.com" "$SERVER_IP"
-check_dns "demo.freezenith.com" "$SERVER_IP"
-check_dns "api.freezenith.com" "$SERVER_IP"
-check_dns "mission.embermind.app" "$SERVER_IP"
-check_dns "cloud.embermind.app" "$SERVER_IP"
+check_dns "stage.freezenith.com"           "$SERVER_IP"
+check_dns "api.stage.freezenith.com"       "$SERVER_IP"
+check_dns "app.stage.freezenith.com"       "$SERVER_IP"
+check_dns "auth.stage.freezenith.com"      "$SERVER_IP"
+# Registry may resolve to cluster IP or dedicated Harbor server — just verify it resolves
+registry_ip=$(dig +short "registry.stage.freezenith.com" 2>/dev/null | head -1)
+if [[ -n "$registry_ip" ]]; then
+  pass "registry.stage.freezenith.com -> ${registry_ip}"
+else
+  fail "registry.stage.freezenith.com -> no DNS response"
+fi
+check_dns "hub.stage.freezenith.com"       "$SERVER_IP"
+check_dns "argocd.stage.freezenith.com"    "$SERVER_IP"
+check_dns "grafana.stage.freezenith.com"   "$SERVER_IP"
 
 # -------------------------------------------------------
 # Section 2: HTTPS Connectivity
@@ -102,12 +112,11 @@ check_https() {
   fi
 }
 
-check_https "https://freezenith.com" "200"
-check_https "https://www.freezenith.com" "200"
-check_https "https://demo.freezenith.com" "200"
-check_https "https://api.freezenith.com/health" "200"
-check_https "https://mission.embermind.app" "200"
-check_https "https://cloud.embermind.app" "200"
+check_https "https://stage.freezenith.com"              "200"
+check_https "https://api.stage.freezenith.com/health"   "200"
+check_https "https://app.stage.freezenith.com"          "200"
+check_https "https://auth.stage.freezenith.com"         "302"  # Keycloak redirects to login page
+check_https "https://argocd.stage.freezenith.com"       "200"
 
 # -------------------------------------------------------
 # Section 3: HTTP -> HTTPS Redirect
@@ -116,10 +125,8 @@ section "3/6" "HTTP to HTTPS Redirect"
 
 check_redirect() {
   local url="$1"
-  local actual_code
-
-  actual_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -L "$url" 2>/dev/null)
   local redirect_code
+
   redirect_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null)
 
   if [[ "$redirect_code" == "301" || "$redirect_code" == "308" ]]; then
@@ -131,12 +138,9 @@ check_redirect() {
   fi
 }
 
-check_redirect "http://freezenith.com"
-check_redirect "http://www.freezenith.com"
-check_redirect "http://demo.freezenith.com"
-check_redirect "http://api.freezenith.com"
-check_redirect "http://mission.embermind.app"
-check_redirect "http://cloud.embermind.app"
+check_redirect "http://stage.freezenith.com"
+check_redirect "http://api.stage.freezenith.com"
+check_redirect "http://app.stage.freezenith.com"
 
 # -------------------------------------------------------
 # Section 4: SSL Certificate Validity
@@ -166,11 +170,14 @@ check_ssl() {
   fi
 }
 
-check_ssl "freezenith.com"
-check_ssl "demo.freezenith.com"
-check_ssl "api.freezenith.com"
-check_ssl "mission.embermind.app"
-check_ssl "cloud.embermind.app"
+check_ssl "stage.freezenith.com"
+check_ssl "api.stage.freezenith.com"
+check_ssl "app.stage.freezenith.com"
+check_ssl "auth.stage.freezenith.com"
+check_ssl "registry.stage.freezenith.com"
+check_ssl "hub.stage.freezenith.com"
+check_ssl "argocd.stage.freezenith.com"
+check_ssl "grafana.stage.freezenith.com"
 
 # -------------------------------------------------------
 # Section 5: Content Checks
@@ -192,31 +199,54 @@ check_content() {
   fi
 }
 
-check_content "https://freezenith.com" "zenith" "Landing page contains 'zenith'"
-check_content "https://demo.freezenith.com" "mission\|control\|zenith" "Demo showroom loads"
-check_content "https://api.freezenith.com/health" "ok\|healthy\|status" "API health endpoint responds"
-check_content "https://mission.embermind.app" "mission\|control\|zenith" "Embermind Mission Control loads"
-check_content "https://cloud.embermind.app" "zenith\|embermind" "Embermind cloud platform loads"
+check_content "https://stage.freezenith.com"              "zenith\|freezenith"    "Landing page loads"
+check_content "https://api.stage.freezenith.com/health"   "ok\|healthy\|status"   "API health endpoint responds"
+check_content "https://app.stage.freezenith.com"          "zenith\|freezenith"    "Web dashboard loads"
+check_content "https://auth.stage.freezenith.com/realms/master/.well-known/openid-configuration" "authorization_endpoint\|issuer" "Keycloak OIDC discovery endpoint responds"
 
 # -------------------------------------------------------
 # Section 6: API Endpoint Tests
 # -------------------------------------------------------
 section "6/6" "API Endpoints"
 
+API_BASE="https://api.stage.freezenith.com"
+
 # Health check (JSON)
-api_health=$(curl -s --max-time 10 "https://api.freezenith.com/health" 2>/dev/null)
+api_health=$(curl -s --max-time 10 "${API_BASE}/health" 2>/dev/null)
 if echo "$api_health" | grep -qi "ok\|healthy"; then
   pass "GET /health -> healthy"
 else
   fail "GET /health -> unhealthy" "$api_health"
 fi
 
-# API version/info (if available)
-api_response_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://api.freezenith.com/api/v1" 2>/dev/null)
-if [[ "$api_response_code" != "000" ]]; then
-  pass "GET /api/v1 -> responds (HTTP ${api_response_code})"
+# API version endpoint
+api_version=$(curl -s --max-time 10 "${API_BASE}/api/v1/version" 2>/dev/null)
+if echo "$api_version" | grep -qi "version"; then
+  pass "GET /api/v1/version -> responds with version info"
 else
-  fail "GET /api/v1 -> connection failed" "No response"
+  # Fallback: just check it responds
+  api_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${API_BASE}/api/v1/version" 2>/dev/null)
+  if [[ "$api_code" != "000" ]]; then
+    pass "GET /api/v1/version -> responds (HTTP ${api_code})"
+  else
+    fail "GET /api/v1/version -> connection failed" "No response"
+  fi
+fi
+
+# Auth endpoints are reachable (should return 4xx without valid body, not 000)
+auth_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST "${API_BASE}/api/v1/auth/login" 2>/dev/null)
+if [[ "$auth_code" != "000" ]]; then
+  pass "POST /api/v1/auth/login -> reachable (HTTP ${auth_code})"
+else
+  fail "POST /api/v1/auth/login -> connection failed" "No response"
+fi
+
+# Protected endpoint without JWT should return 401
+protected_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${API_BASE}/api/v1/apps" 2>/dev/null)
+if [[ "$protected_code" == "401" ]]; then
+  pass "GET /api/v1/apps -> 401 without JWT (auth enforced)"
+else
+  fail "GET /api/v1/apps -> expected 401, got ${protected_code}" "HTTP ${protected_code}"
 fi
 
 # -------------------------------------------------------
