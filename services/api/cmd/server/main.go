@@ -354,10 +354,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	api.Post("/webhooks/bitbucket", webhookHandler.HandleBitbucketPush)
 
 	// Public app auth routes (signup/login — no platform JWT required)
-	// Registered BEFORE protected group so Fiber matches these first.
-	publicAppAuth := api.Group("/apps/:appId/auth")
-	publicAppAuth.Post("/signup", appAuthHandler.Signup)
-	publicAppAuth.Post("/login", appAuthHandler.Login)
+	// Registered directly on api (not via Group) to avoid Fiber middleware leakage
+	// from the protected group's empty-prefix matcher.
+	api.Post("/apps/:appId/auth/signup", appAuthHandler.Signup)
+	api.Post("/apps/:appId/auth/login", appAuthHandler.Login)
 
 	// Internal routes (metering agent — SaaS only)
 	if cfg.Mode == "saas" && cfg.InternalSecret != "" {
