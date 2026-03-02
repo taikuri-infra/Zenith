@@ -1,0 +1,177 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: storagebuckets.zenith.dev
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: zenith.dev
+  names:
+    kind: StorageBucket
+    listKind: StorageBucketList
+    plural: storagebuckets
+    singular: storagebucket
+    shortNames:
+      - sb
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Access
+          type: string
+          jsonPath: .spec.access
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Endpoint
+          type: string
+          jsonPath: .status.endpoint
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          description: StorageBucket is the Schema for the storagebuckets API. Represents S3-compatible object storage.
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: StorageBucketSpec defines the desired state of a StorageBucket
+              type: object
+              properties:
+                access:
+                  description: Access controls the bucket access level
+                  type: string
+                  enum:
+                    - private
+                    - public-read
+                  default: private
+                versioning:
+                  description: Versioning enables object versioning
+                  type: boolean
+                  default: false
+                region:
+                  description: Region is the storage region
+                  type: string
+                  enum:
+                    - fsn1
+                    - nbg1
+                  default: fsn1
+                lifecycleRules:
+                  description: LifecycleRules define object lifecycle policies
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      prefix:
+                        description: Prefix filters objects by prefix
+                        type: string
+                      expirationDays:
+                        description: ExpirationDays is the number of days before objects expire
+                        type: integer
+                      transitionDays:
+                        description: TransitionDays is the number of days before transitioning storage class
+                        type: integer
+                corsRules:
+                  description: CORSRules define CORS configuration
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - allowedOrigins
+                      - allowedMethods
+                    properties:
+                      allowedOrigins:
+                        description: AllowedOrigins is the list of allowed origins
+                        type: array
+                        items:
+                          type: string
+                      allowedMethods:
+                        description: AllowedMethods is the list of allowed HTTP methods
+                        type: array
+                        items:
+                          type: string
+                      allowedHeaders:
+                        description: AllowedHeaders is the list of allowed headers
+                        type: array
+                        items:
+                          type: string
+                      maxAgeSeconds:
+                        description: MaxAgeSeconds is the max age for preflight requests
+                        type: integer
+            status:
+              description: StorageBucketStatus defines the observed state of StorageBucket
+              type: object
+              properties:
+                phase:
+                  description: Phase represents the current lifecycle phase
+                  type: string
+                  enum:
+                    - Pending
+                    - Creating
+                    - Ready
+                    - Failed
+                    - Deleting
+                endpoint:
+                  description: Endpoint is the S3-compatible endpoint URL
+                  type: string
+                bucketName:
+                  description: BucketName is the actual bucket name in Hetzner
+                  type: string
+                secretName:
+                  description: SecretName is the name of the K8s Secret containing S3 credentials
+                  type: string
+                sizeBytes:
+                  description: SizeBytes is the current bucket size in bytes
+                  type: integer
+                  format: int64
+                objectCount:
+                  description: ObjectCount is the number of objects in the bucket
+                  type: integer
+                  format: int64
+                conditions:
+                  description: Conditions represent the latest available observations
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      message:
+                        type: string
+                        maxLength: 32768
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                      reason:
+                        type: string
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      type:
+                        type: string
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$

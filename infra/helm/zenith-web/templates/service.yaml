@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-web
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-web
+    app.kubernetes.io/name: zenith-web
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: web
+spec:
+  ports:
+    - name: http
+      port: {{ .Values.port }}
+      targetPort: {{ .Values.port }}
+      protocol: TCP
+  selector:
+    app: zenith-web

@@ -13,7 +13,11 @@ spec:
     - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule
       services:
-        {{- if .Values.ingress.kongEnabled }}
+        {{- if .Values.ingress.apisixEnabled }}
+        - name: apisix-gateway
+          namespace: apisix
+          port: 9080
+        {{- else if .Values.ingress.kongEnabled }}
         - name: kong-gateway-proxy
           namespace: kong
           port: 80
@@ -40,7 +44,11 @@ spec:
       middlewares:
         - name: redirect-to-https
       services:
-        {{- if .Values.ingress.kongEnabled }}
+        {{- if .Values.ingress.apisixEnabled }}
+        - name: apisix-gateway
+          namespace: apisix
+          port: 9080
+        {{- else if .Values.ingress.kongEnabled }}
         - name: kong-gateway-proxy
           namespace: kong
           port: 80

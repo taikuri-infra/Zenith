@@ -1,0 +1,6 @@
+apiVersion: v2
+name: zenith-web
+description: Zenith Web — Next.js platform dashboard
+type: application
+version: 0.4.0
+appVersion: "0.4.0"

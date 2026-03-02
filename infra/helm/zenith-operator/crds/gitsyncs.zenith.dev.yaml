@@ -1,0 +1,152 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gitsyncs.zenith.dev
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: zenith.dev
+  names:
+    kind: GitSync
+    listKind: GitSyncList
+    plural: gitsyncs
+    singular: gitsync
+    shortNames:
+      - gs
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Repo
+          type: string
+          jsonPath: .spec.repoURL
+        - name: Branch
+          type: string
+          jsonPath: .spec.branch
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Last Sync
+          type: date
+          jsonPath: .status.lastSyncTime
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          description: GitSync is the Schema for the gitsyncs API. Represents a GitOps sync configuration.
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: GitSyncSpec defines the desired state of a GitSync resource
+              type: object
+              required:
+                - repoURL
+              properties:
+                repoURL:
+                  description: RepoURL is the Git repository URL
+                  type: string
+                branch:
+                  description: Branch to sync from
+                  type: string
+                  default: "main"
+                path:
+                  description: Path within the repo to sync
+                  type: string
+                  default: "/"
+                interval:
+                  description: Interval is the sync interval (e.g., "5m", "1h")
+                  type: string
+                  default: "5m"
+                secretRef:
+                  description: SecretRef is the reference to git credentials secret
+                  type: object
+                  required:
+                    - name
+                    - key
+                  properties:
+                    name:
+                      description: Name is the Secret name
+                      type: string
+                    key:
+                      description: Key is the key within the Secret
+                      type: string
+                autoSync:
+                  description: AutoSync enables automatic sync on the configured interval
+                  type: boolean
+                  default: true
+                pruneResources:
+                  description: PruneResources removes resources from the cluster that are not present in git
+                  type: boolean
+            status:
+              description: GitSyncStatus defines the observed state of GitSync
+              type: object
+              properties:
+                phase:
+                  description: Phase represents the current sync lifecycle phase
+                  type: string
+                  enum:
+                    - Pending
+                    - Syncing
+                    - Synced
+                    - Failed
+                lastSyncTime:
+                  description: LastSyncTime is the timestamp of the last successful sync
+                  type: string
+                  format: date-time
+                lastCommitHash:
+                  description: LastCommitHash is the git commit hash of the last successful sync
+                  type: string
+                message:
+                  description: Message is a human-readable status message
+                  type: string
+                syncedResources:
+                  description: SyncedResources is the number of resources applied from git
+                  type: integer
+                conditions:
+                  description: Conditions represent the latest available observations
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      message:
+                        type: string
+                        maxLength: 32768
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                      reason:
+                        type: string
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      type:
+                        type: string
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
