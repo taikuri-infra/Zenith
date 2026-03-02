@@ -199,3 +199,103 @@
   background: rgba(16, 185, 129, 0.08);
   border-radius: 6px;
 }
+
+/* ===== Hero Aurora Orb ===== */
+@keyframes auroraShift {
+  0%, 100% {
+    transform: translate(-50%, -40%) scale(1) rotate(0deg);
+    border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%;
+  }
+  25% {
+    transform: translate(-50%, -35%) scale(1.05) rotate(90deg);
+    border-radius: 60% 40% 30% 70% / 40% 60% 40% 60%;
+  }
+  50% {
+    transform: translate(-50%, -45%) scale(0.95) rotate(180deg);
+    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+  }
+  75% {
+    transform: translate(-50%, -38%) scale(1.02) rotate(270deg);
+    border-radius: 50% 40% 50% 60% / 35% 55% 45% 65%;
+  }
+}
+
+.aurora-orb {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 800px;
+  height: 600px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(16, 185, 129, 0.15) 0%,
+    rgba(16, 185, 129, 0.08) 30%,
+    rgba(52, 211, 153, 0.04) 60%,
+    transparent 80%
+  );
+  filter: blur(80px);
+  animation: auroraShift 12s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform, border-radius;
+}
+
+.aurora-orb-secondary {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  width: 600px;
+  height: 400px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(110, 231, 183, 0.1) 0%,
+    rgba(16, 185, 129, 0.05) 40%,
+    transparent 70%
+  );
+  filter: blur(100px);
+  animation: auroraShift 16s ease-in-out infinite reverse;
+  pointer-events: none;
+  will-change: transform, border-radius;
+}
+
+/* ===== Animated Terminal Border ===== */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes spinBorder {
+  from { --border-angle: 0deg; }
+  to { --border-angle: 360deg; }
+}
+
+.terminal-glow-border {
+  position: relative;
+  isolation: isolate;
+}
+
+.terminal-glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 1rem;
+  background: conic-gradient(
+    from var(--border-angle),
+    transparent 30%,
+    rgba(16, 185, 129, 0.5) 48%,
+    rgba(52, 211, 153, 0.8) 50%,
+    rgba(16, 185, 129, 0.5) 52%,
+    transparent 70%
+  );
+  z-index: -1;
+  animation: spinBorder 4s linear infinite;
+}
+
+.terminal-glow-border::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  background: inherit;
+  z-index: -1;
+}

@@ -132,13 +132,24 @@ export default function LandingPage() {
 }
 
 /* ===== Hero Section ===== */
+const heroWords = [
+  { text: "Ship", gradient: false },
+  { text: "Faster.", gradient: false },
+  { text: "Scale", gradient: true },
+  { text: "Freely.", gradient: true },
+];
+
 function HeroSection() {
   return (
     <section className="relative overflow-hidden pt-32 pb-8 md:pt-40 md:pb-12">
       {/* Background layers */}
       <div className="absolute inset-0 grid-pattern opacity-60" />
       <div className="absolute inset-0 hero-gradient" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-accent-500/[0.04] rounded-full blur-[120px]" />
+
+      {/* Aurora orbs */}
+      <div className="aurora-orb" />
+      <div className="aurora-orb-secondary" />
+
       <div className="absolute inset-0 noise" />
 
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
@@ -159,22 +170,32 @@ function HeroSection() {
             </span>
           </motion.div>
 
-          {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="max-w-4xl text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl leading-[1.1]"
-          >
-            Ship Faster.{" "}
-            <span className="gradient-text-hero">Scale Freely.</span>
-          </motion.h1>
+          {/* Headline — word-by-word reveal */}
+          <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl leading-[1.1]">
+            {heroWords.map((word, i) => (
+              <motion.span
+                key={i}
+                initial={{ opacity: 0, y: 30, filter: "blur(8px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                transition={{
+                  duration: 0.5,
+                  delay: 0.15 + i * 0.12,
+                  ease: [0.25, 0.4, 0.25, 1],
+                }}
+                className={`inline-block mr-[0.25em] ${
+                  word.gradient ? "gradient-text-hero" : ""
+                }`}
+              >
+                {word.text}
+              </motion.span>
+            ))}
+          </h1>
 
           {/* Subheadline */}
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+            transition={{ duration: 0.6, delay: 0.7 }}
             className="mt-6 max-w-2xl text-base text-neutral-400 sm:text-lg md:text-xl leading-relaxed"
           >
             Deploy apps, databases, and APIs on Zenith Cloud in seconds — or
@@ -185,7 +206,7 @@ function HeroSection() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
+            transition={{ duration: 0.6, delay: 0.85 }}
             className="mt-10 flex flex-col gap-3 sm:flex-row sm:gap-4"
           >
             <Link
@@ -203,12 +224,12 @@ function HeroSection() {
             </Link>
           </motion.div>
 
-          {/* Animated Terminal */}
+          {/* Animated Terminal with glowing border */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.5 }}
-            className="mt-16 w-full max-w-2xl"
+            transition={{ duration: 0.7, delay: 1.0 }}
+            className="mt-16 w-full max-w-2xl terminal-glow-border"
           >
             <AnimatedTerminal />
           </motion.div>
