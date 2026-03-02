@@ -11,11 +11,12 @@ import (
 type BackupHandlerV2 struct {
 	backupRepo ports.BackupRepository
 	dbRepo     ports.DatabaseRepository
+	planRepo   ports.UserPlanRepository
 }
 
 // NewBackupHandlerV2 creates a new BackupHandlerV2.
-func NewBackupHandlerV2(backupRepo ports.BackupRepository, dbRepo ports.DatabaseRepository) *BackupHandlerV2 {
-	return &BackupHandlerV2{backupRepo: backupRepo, dbRepo: dbRepo}
+func NewBackupHandlerV2(backupRepo ports.BackupRepository, dbRepo ports.DatabaseRepository, planRepo ports.UserPlanRepository) *BackupHandlerV2 {
+	return &BackupHandlerV2{backupRepo: backupRepo, dbRepo: dbRepo, planRepo: planRepo}
 }
 
 // Create initiates a new backup for a database.
@@ -23,6 +24,14 @@ func NewBackupHandlerV2(backupRepo ports.BackupRepository, dbRepo ports.Database
 func (h *BackupHandlerV2) Create(c *fiber.Ctx) error {
 	dbID := c.Params("dbId")
 	userID, _ := c.Locals("user_id").(string)
+
+	// Check plan: backups require Pro+ tier
+	if h.planRepo != nil {
+		plan, err := h.planRepo.GetUserPlan(c.Context(), userID)
+		if err == nil && !plan.Limits.BackupsEnabled {
+			return fiber.NewError(fiber.StatusForbidden, "backups require Pro plan or higher. Upgrade your plan.")
+		}
+	}
 
 	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
 	if err != nil {

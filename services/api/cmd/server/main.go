@@ -301,6 +301,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Plan management (Phase 4 — user plan + limits)
 	planRepo := memory.NewMemoryUserPlanRepository()
 
+	// App Auth (created early so public routes can be registered before protected group)
+	appAuthRepo := memory.NewMemoryAppAuthRepository()
+	appAuthHandler := handlers.NewAppAuthHandler(appAuthRepo, appRepo)
+
 	// Phase 2 handlers
 	logHub := deploy.NewLogHub(500)
 	eventHub := deploy.NewEventHub(50)
@@ -348,6 +352,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	api.Post("/webhooks/github", webhookHandler.HandlePush)
 	api.Post("/webhooks/gitlab", webhookHandler.HandleGitLabPush)
 	api.Post("/webhooks/bitbucket", webhookHandler.HandleBitbucketPush)
+
+	// Public app auth routes (signup/login — no platform JWT required)
+	// Registered BEFORE protected group so Fiber matches these first.
+	publicAppAuth := api.Group("/apps/:appId/auth")
+	publicAppAuth.Post("/signup", appAuthHandler.Signup)
+	publicAppAuth.Post("/login", appAuthHandler.Login)
 
 	// Internal routes (metering agent — SaaS only)
 	if cfg.Mode == "saas" && cfg.InternalSecret != "" {
@@ -418,7 +428,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
 	backupRepo := memory.NewMemoryBackupRepository()
-	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo)
+	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo, planRepo)
 	appByID.Post("/databases/:dbId/backups", backupHandler.Create)
 	appByID.Get("/databases/:dbId/backups", backupHandler.List)
 	appByID.Get("/databases/:dbId/backups/:backupId", backupHandler.Get)
@@ -438,18 +448,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/storage-buckets", storageHandlerV2.ListByUser)
 
 	// App Auth (Phase 3 — built-in auth per app)
-	appAuthRepo := memory.NewMemoryAppAuthRepository()
-	appAuthHandler := handlers.NewAppAuthHandler(appAuthRepo, appRepo)
 	appByID.Get("/auth", appAuthHandler.Status)
 	appByID.Post("/auth/enable", appAuthHandler.Enable)
 	appByID.Post("/auth/disable", appAuthHandler.Disable)
 	appByID.Get("/auth/users", appAuthHandler.ListUsers)
 	appByID.Delete("/auth/users/:userId", appAuthHandler.DeleteUser)
-
-	// Public app auth routes (signup/login — no platform JWT required)
-	publicAppAuth := api.Group("/apps/:appId/auth")
-	publicAppAuth.Post("/signup", appAuthHandler.Signup)
-	publicAppAuth.Post("/login", appAuthHandler.Login)
 
 	planSvc := services.NewPlanService(planRepo, appRepo, dbRepo, storageRepo, appAuthRepo)
 	planHandler := handlers.NewPlanHandler(planSvc)

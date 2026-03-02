@@ -351,17 +351,15 @@ def run_tests(base_url: str, t: TestRunner, no_cleanup: bool) -> None:
         else:
             t.failed("2nd bucket should be 403", f"got {status}")
 
-    # Backup on free tier — backups_enabled=false in plan limits but
-    # backup handler doesn't enforce it yet (TODO: add plan check)
-    # For now, just verify the endpoint responds
+    # Backup → should be 403 (free tier: backups_enabled=false)
     if app1_id and db1_id:
         status, body = api_request(base_url, "POST",
                                    f"/api/v1/apps/{app1_id}/databases/{db1_id}/backups",
                                    token=user1_token)
-        if status in (201, 403):
-            t.passed(f"Backup on free tier → {status}")
+        if status == 403:
+            t.passed("Backup → 403 (free tier, Pro required)")
         else:
-            t.failed("Backup endpoint", f"got {status}")
+            t.failed("Backup should be 403 on free tier", f"got {status}")
 
     # ===================================================================
     # E. Security / IDOR — 5/7
@@ -492,12 +490,10 @@ def run_tests(base_url: str, t: TestRunner, no_cleanup: bool) -> None:
         else:
             t.failed("Enable app auth", f"status={status} body={body}")
 
-    # Signup an end-user for the app
-    # NOTE: public app auth route requires token due to Fiber routing issue
-    # (protected group's empty prefix catches /apps/:appId/auth/* before public routes)
+    # Signup an end-user for the app (public endpoint — no platform JWT needed)
     if app1_id:
         status, body = api_request(base_url, "POST", f"/api/v1/apps/{app1_id}/auth/signup",
-                                   token=user1_token, body={
+                                   body={
                                        "email": f"enduser-{uid}@test.zenith.dev",
                                        "password": f"EndUser-{uid}-Pass!",
                                        "name": "End User",
