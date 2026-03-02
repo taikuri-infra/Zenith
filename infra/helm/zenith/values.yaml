@@ -128,19 +128,9 @@ keda:
     maxReplicas: 3
     targetRequestRate: 10
 
-# -- Kong API Gateway
-kong:
-  enabled: false
-  plugins:
-    - zenith-rate-limiting
-    - zenith-cors
-  rateLimiting:
-    enabled: true
-    requestsPerMinute: 60
-  cors:
-    enabled: true
-    origins:
-      - "https://freezenith.com"
+# Legacy Kong — removed, now using APISIX via zenith-api chart
+# kong:
+#   enabled: false
 
 # -- Secrets (set via --set or values file, never commit real values)
 secrets:

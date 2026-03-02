@@ -13,7 +13,6 @@ env:
 ingress:
   host: api.freezenith.com
   tlsSecret: freezenith-tls
-  kongEnabled: false
   apisixEnabled: false
 
 resources:

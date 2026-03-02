@@ -59,15 +59,6 @@ certificate:
 tenantQuotas:
   enabled: false
 
-# Kong routes (optional)
-kong:
-  enabled: false
-  plugins: []
-  apiHost: api.freezenith.com
-  apiPort: 8080
-  rateLimiting:
-    enabled: false
-    requestsPerMinute: 60
-  cors:
-    enabled: false
-    origins: []
+# Legacy Kong routes — removed, now using APISIX via zenith-api chart
+# kong:
+#   enabled: false

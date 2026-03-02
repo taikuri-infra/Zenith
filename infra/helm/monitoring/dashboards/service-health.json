@@ -83,9 +83,9 @@
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
       "id": 5,
       "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
-      "title": "Kong Gateway",
+      "title": "APISIX Gateway",
       "type": "stat",
-      "targets": [{ "expr": "up{job=\"kong\"}", "legendFormat": "Kong" }]
+      "targets": [{ "expr": "up{job=\"apisix\"}", "legendFormat": "APISIX" }]
     },
     {
       "collapsed": false,

@@ -49,5 +49,3 @@ keycloak:
   enabled: true
   host: auth.stage.freezenith.com
 
-kong:
-  enabled: false

@@ -67,15 +67,8 @@ spec:
     - match: Host(`{{ .Values.ingress.api.host }}`)
       kind: Rule
       services:
-        {{- if .Values.kong.enabled }}
-        # Route through Kong API Gateway
-        - name: kong-gateway-proxy
-          namespace: kong
-          port: 80
-        {{- else }}
         - name: zenith-api
           port: {{ .Values.api.port }}
-        {{- end }}
   tls:
     secretName: {{ .Values.ingress.api.tlsSecret }}
 ---
@@ -93,14 +86,8 @@ spec:
       middlewares:
         - name: redirect-to-https
       services:
-        {{- if .Values.kong.enabled }}
-        - name: kong-gateway-proxy
-          namespace: kong
-          port: 80
-        {{- else }}
         - name: zenith-api
           port: {{ .Values.api.port }}
-        {{- end }}
 {{- end }}
 
 # =============================================

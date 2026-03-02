@@ -233,14 +233,14 @@ serviceMonitors:
         interval: 15s
         path: /metrics
 
-  # Kong API Gateway
-  kong:
+  # APISIX API Gateway
+  apisix:
     enabled: true
-    namespace: kong
+    namespace: apisix
     selector:
       matchLabels:
-        app: kong
+        app.kubernetes.io/name: apisix
     endpoints:
       - port: metrics
         interval: 15s
-        path: /metrics
+        path: /apisix/prometheus/metrics

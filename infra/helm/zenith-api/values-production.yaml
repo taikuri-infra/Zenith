@@ -1,0 +1,34 @@
+# Production values for zenith-api
+namespace: zenith-platform
+replicas: 2
+image: zenith-api:latest
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+imagePullSecret: ""  # set via Terraform
+port: 8080
+metricsPort: 9090
+
+env:
+  CORS_ORIGINS: "https://freezenith.com,https://app.freezenith.com"
+  K8S_MODE: "real"
+  ZENITH_MODE: "saas"
+  REGISTRY: ""  # set via Terraform
+  BASE_DOMAIN: "apps.freezenith.com"
+  KEYCLOAK_URL: "http://keycloak.keycloak.svc.cluster.local"
+  TEMPORAL_ENABLED: "true"
+  TEMPORAL_HOST: "temporal-frontend.temporal.svc.cluster.local:7233"
+  TEMPORAL_NAMESPACE: "default"
+
+ingress:
+  host: api.freezenith.com
+  tlsSecret: freezenith-tls
+  apisixEnabled: true
+  apisixCorsOrigins: "https://freezenith.com,https://app.freezenith.com"
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 256Mi
+    cpu: 500m
