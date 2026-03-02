@@ -35,7 +35,7 @@ spec:
           jsonPath: .metadata.creationTimestamp
       schema:
         openAPIV3Schema:
-          description: GatewayRoute is the Schema for the gatewayroutes API. Represents a Kong API gateway route.
+          description: GatewayRoute is the Schema for the gatewayroutes API. Represents an API gateway route.
           type: object
           properties:
             apiVersion:
@@ -148,8 +148,8 @@ spec:
                     - Configuring
                     - Active
                     - Failed
-                kongRouteId:
-                  description: KongRouteID is the ID of the route in Kong
+                gatewayRouteId:
+                  description: GatewayRouteID is the ID of the route in the gateway
                   type: string
                 conditions:
                   description: Conditions represent the latest available observations

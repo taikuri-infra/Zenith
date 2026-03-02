@@ -1,0 +1,20 @@
+# Production values for zenith-operator
+namespace: zenith-platform
+replicas: 1
+image: zenith-operator:latest
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+imagePullSecret: ""  # set via Terraform
+
+healthPort: 8081
+metricsPort: 8080
+
+leaderElection: true
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 256Mi
+    cpu: 500m

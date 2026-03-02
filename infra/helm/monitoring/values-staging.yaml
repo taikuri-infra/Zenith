@@ -1,0 +1,23 @@
+# Staging values for monitoring
+global:
+  zenith:
+    domain: stage.freezenith.com
+    platformNamespace: zenith-staging
+    multiTenant: true
+
+serviceMonitors:
+  api:
+    enabled: true
+    namespace: zenith-staging
+  operator:
+    enabled: false
+    namespace: zenith-staging
+  auth:
+    enabled: false
+    namespace: zenith-staging
+  traefik:
+    enabled: true
+    namespace: kube-system
+  apisix:
+    enabled: true
+    namespace: apisix

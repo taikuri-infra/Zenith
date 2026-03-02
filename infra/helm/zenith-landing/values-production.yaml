@@ -1,0 +1,22 @@
+# Production values for zenith-landing
+namespace: zenith-platform
+replicas: 2
+image: zenith-landing:latest
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+imagePullSecret: ""  # set via Terraform
+port: 3000
+
+ingress:
+  hosts:
+    - freezenith.com
+    - www.freezenith.com
+  tlsSecret: freezenith-tls
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    memory: 128Mi
+    cpu: 100m

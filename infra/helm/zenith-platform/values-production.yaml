@@ -1,0 +1,47 @@
+# Production values for zenith-platform (shared infrastructure)
+namespace: zenith-platform
+
+buildInfra:
+  enabled: true
+
+registry:
+  enabled: true
+  secretName: harbor-registry
+  # host, username, password injected via Terraform set_sensitive
+
+postgres:
+  enabled: true
+  image: ghcr.io/cloudnative-pg/postgresql:16.6
+  instances: 3
+  storage: 10Gi
+  database: zenith
+  user: zenith
+  maxConnections: "200"
+  sharedBuffers: "256MB"
+  monitoring: true
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+
+tenantQuotas:
+  enabled: true
+
+certManager:
+  issuer: letsencrypt-prod
+  issuerKind: ClusterIssuer
+
+certificate:
+  secretName: freezenith-tls
+  domains:
+    - freezenith.com
+    - www.freezenith.com
+    - api.freezenith.com
+    - app.freezenith.com
+
+keycloak:
+  enabled: true
+  host: auth.freezenith.com

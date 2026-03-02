@@ -1,0 +1,23 @@
+# Production values for monitoring
+global:
+  zenith:
+    domain: freezenith.com
+    platformNamespace: zenith-platform
+    multiTenant: true
+
+serviceMonitors:
+  api:
+    enabled: true
+    namespace: zenith-platform
+  operator:
+    enabled: true
+    namespace: zenith-platform
+  auth:
+    enabled: true
+    namespace: zenith-platform
+  traefik:
+    enabled: true
+    namespace: kube-system
+  apisix:
+    enabled: true
+    namespace: apisix

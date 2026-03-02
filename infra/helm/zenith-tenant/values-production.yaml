@@ -1,0 +1,35 @@
+# Production values for zenith-tenant
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+
+registry:
+  enabled: true
+  secretName: harbor-registry
+  # host, username, password injected via Terraform set_sensitive
+
+certManager:
+  issuer: letsencrypt-prod
+  issuerKind: ClusterIssuer
+
+tenants: {}
+#  embermind:
+#    domain: embermind.app
+#    namespace: zenith-embermind
+#    labels:
+#      zenith.dev/tenant: embermind
+#      zenith.dev/domain: embermind.app
+#    mc:
+#      image: zenith-mc:latest
+#      host: ms.embermind.app
+#      replicas: 2
+#      port: 3100
+#    web:
+#      image: zenith-web:latest
+#      host: cloud.embermind.app
+#      replicas: 2
+#      port: 3000
+#    certificate:
+#      secretName: embermind-tls
+#      domains:
+#        - ms.embermind.app
+#        - cloud.embermind.app

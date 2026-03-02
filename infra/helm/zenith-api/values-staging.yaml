@@ -27,7 +27,6 @@ keycloakAdminSecret: "keycloak-admin"
 ingress:
   host: api.stage.freezenith.com
   tlsSecret: staging-tls
-  kongEnabled: false
   apisixEnabled: true
   apisixCorsOrigins: "https://stage.freezenith.com,https://app.stage.freezenith.com"
 

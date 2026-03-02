@@ -38,21 +38,6 @@ landing:
       memory: 128Mi
       cpu: 100m
 
-kong:
-  enabled: true
-  plugins:
-    - zenith-rate-limiting
-    - zenith-cors
-  rateLimiting:
-    enabled: true
-    requestsPerMinute: 120
-  cors:
-    enabled: true
-    origins:
-      - "https://stage.freezenith.com"
-      - "https://ms.stage.freezenith.com"
-      - "https://cloud.stage.freezenith.com"
-
 mcDemo:
   enabled: false
 
