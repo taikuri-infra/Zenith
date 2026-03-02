@@ -377,7 +377,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Apps — Phase 2 (under /apps)
 	apps := protected.Group("/apps")
-	apps.Post("/", appHandlerV2.Create)
+	apps.Post("/", handlers.CheckLimit(planRepo, "apps", func(c *fiber.Ctx, userID string) (int, error) {
+		return appRepo.CountAppsByUser(c.Context(), userID)
+	}), appHandlerV2.Create)
 	apps.Get("/", appHandlerV2.List)
 
 	// All /apps/:appId routes require ownership check (IDOR prevention)
@@ -406,7 +408,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Databases (Phase 3 — per-app provisioning under /apps/:appId)
 	dbRepo := memory.NewMemoryDatabaseRepository()
 	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbRepo, appRepo)
-	appByID.Post("/databases", dbHandlerV2.Create)
+	appByID.Post("/databases", handlers.CheckLimit(planRepo, "databases", func(c *fiber.Ctx, userID string) (int, error) {
+		return dbRepo.CountDatabasesByUser(c.Context(), userID)
+	}), dbHandlerV2.Create)
 	appByID.Get("/databases", dbHandlerV2.List)
 	appByID.Get("/databases/:dbId", dbHandlerV2.Get)
 	appByID.Delete("/databases/:dbId", dbHandlerV2.Delete)
@@ -425,7 +429,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Storage (Phase 3 — per-app S3-compatible storage)
 	storageRepo := memory.NewMemoryStorageRepository()
 	storageHandlerV2 := handlers.NewStorageHandlerV2(storageRepo, appRepo)
-	appByID.Post("/storage", storageHandlerV2.Create)
+	appByID.Post("/storage", handlers.CheckLimit(planRepo, "buckets", func(c *fiber.Ctx, userID string) (int, error) {
+		return storageRepo.CountBucketsByUser(c.Context(), userID)
+	}), storageHandlerV2.Create)
 	appByID.Get("/storage", storageHandlerV2.List)
 	appByID.Get("/storage/:bucketId", storageHandlerV2.Get)
 	appByID.Delete("/storage/:bucketId", storageHandlerV2.Delete)

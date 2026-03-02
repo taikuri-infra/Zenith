@@ -221,11 +221,13 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 				p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &failedStatus})
 				return
 			}
+		} else {
+			// No deployer — mark as running directly (dev mode)
+			runningStatus := entities.AppStatusRunning
+			p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &runningStatus})
 		}
 
 		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusActive, "", "")
-		runningStatus := entities.AppStatusRunning
-		p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &runningStatus})
 		p.emitLog(deployment.ID, "deploy", fmt.Sprintf("✓ %s is live — %s", app.Name, image))
 		p.emitEvent(EventDeployComplete, app, deployment, image, fmt.Sprintf("%s is live", app.Name))
 	}()
