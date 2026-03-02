@@ -1,3 +1,22 @@
+{{- if .Values.ingress.apisixEnabled }}
+---
+# ExternalName Service to bridge Traefik (local namespace) → APISIX gateway
+# (in apisix namespace). Required because Traefik does not allow cross-namespace
+# service references by default (needs allowCrossNamespace=true).
+apiVersion: v1
+kind: Service
+metadata:
+  name: apisix-gateway-proxy
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  type: ExternalName
+  externalName: apisix-gateway.apisix.svc.cluster.local
+  ports:
+    - port: 80
+      protocol: TCP
+{{- end }}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -14,8 +33,7 @@ spec:
       kind: Rule
       services:
         {{- if .Values.ingress.apisixEnabled }}
-        - name: apisix-gateway
-          namespace: apisix
+        - name: apisix-gateway-proxy
           port: 80
         {{- else if .Values.ingress.kongEnabled }}
         - name: kong-gateway-proxy
@@ -45,8 +63,7 @@ spec:
         - name: redirect-to-https
       services:
         {{- if .Values.ingress.apisixEnabled }}
-        - name: apisix-gateway
-          namespace: apisix
+        - name: apisix-gateway-proxy
           port: 80
         {{- else if .Values.ingress.kongEnabled }}
         - name: kong-gateway-proxy
