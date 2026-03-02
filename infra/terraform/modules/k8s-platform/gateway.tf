@@ -170,6 +170,22 @@ resource "helm_release" "external_dns" {
     value = var.domain
   }
 
+  # Sources: service + ingress (default) + traefik-proxy (IngressRoute CRDs)
+  set {
+    name  = "sources[0]"
+    value = "service"
+  }
+
+  set {
+    name  = "sources[1]"
+    value = "ingress"
+  }
+
+  set {
+    name  = "sources[2]"
+    value = "traefik-proxy"
+  }
+
   set {
     name  = "policy"
     value = "sync"
