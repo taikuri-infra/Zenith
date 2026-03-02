@@ -1,61 +1,57 @@
 "use client";
 
 import { Section, SectionHeader } from "@/components/section";
-import { PricingCard } from "@/components/pricing-card";
-import { CostCalculator } from "@/components/cost-calculator";
+import { PricingTabs } from "@/components/pricing-tabs";
 import Link from "next/link";
 import { motion, useInView } from "framer-motion";
 import { useRef, useState } from "react";
 import { ArrowRight, Check, ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
 
-const comparisonFeatures = [
-  { feature: "Apps (unlimited)", free: true, pro: true, enterprise: true },
-  { feature: "Databases (PostgreSQL, MySQL, MongoDB, Redis)", free: true, pro: true, enterprise: true },
-  { feature: "Built-in Auth (OAuth, SAML, MFA)", free: true, pro: true, enterprise: true },
-  { feature: "API Gateway (Kong)", free: true, pro: true, enterprise: true },
-  { feature: "Monitoring (Grafana, Prometheus, Loki)", free: true, pro: true, enterprise: true },
-  { feature: "S3-compatible Storage", free: true, pro: true, enterprise: true },
-  { feature: "CLI + Web Dashboard", free: true, pro: true, enterprise: true },
-  { feature: "Custom Domains + TLS", free: true, pro: true, enterprise: true },
-  { feature: "Auto-scaling", free: true, pro: true, enterprise: true },
-  { feature: "GitOps (zen export/apply/diff)", free: true, pro: true, enterprise: true },
-  { feature: "Community Support", free: true, pro: true, enterprise: true },
-  { feature: "Priority Email Support", free: false, pro: true, enterprise: true },
-  { feature: "Response SLA (48h)", free: false, pro: true, enterprise: true },
-  { feature: "Assisted Upgrades", free: false, pro: true, enterprise: true },
-  { feature: "Architecture Review", free: false, pro: true, enterprise: true },
-  { feature: "Private Discord Channel", free: false, pro: true, enterprise: true },
-  { feature: "Dedicated Support Engineer", free: false, pro: false, enterprise: true },
-  { feature: "Custom SLAs", free: false, pro: false, enterprise: true },
-  { feature: "White-label Option", free: false, pro: false, enterprise: true },
-  { feature: "On-call Incident Response", free: false, pro: false, enterprise: true },
-  { feature: "Custom Feature Development", free: false, pro: false, enterprise: true },
+const cloudFeatures = [
+  { feature: "Apps", free: "1", pro: "5", team: "20", enterprise: "Unlimited" },
+  { feature: "Databases", free: "1 (500MB)", pro: "3 (5GB)", team: "10 (20GB)", enterprise: "Unlimited" },
+  { feature: "Storage", free: "1GB", pro: "10GB", team: "100GB", enterprise: "Custom" },
+  { feature: "Custom Domains", free: false, pro: true, team: true, enterprise: true },
+  { feature: "Always On", free: false, pro: true, team: true, enterprise: true },
+  { feature: "Auto-scaling", free: false, pro: true, team: true, enterprise: true },
+  { feature: "Automated Backups", free: false, pro: true, team: true, enterprise: true },
+  { feature: "Team Members", free: "1", pro: "1", team: "10", enterprise: "Unlimited" },
+  { feature: "RBAC + SSO", free: false, pro: false, team: true, enterprise: true },
+  { feature: "Dedicated Infrastructure", free: false, pro: false, team: false, enterprise: true },
+  { feature: "Compliance (SOC 2, GDPR)", free: false, pro: false, team: false, enterprise: true },
+  { feature: "Custom SLAs", free: false, pro: false, team: false, enterprise: true },
+  { feature: "Priority Support", free: false, pro: false, team: true, enterprise: true },
+  { feature: "Dedicated Support Engineer", free: false, pro: false, team: false, enterprise: true },
 ];
 
 const faqs = [
   {
-    q: "Is Zenith really free?",
-    a: "Yes. Zenith is 100% open source under the MIT license. All features are included with no restrictions. You only pay for Hetzner Cloud infrastructure (starting at ~4.50 EUR/month for a small server).",
+    q: "Is there really a free tier?",
+    a: "Yes. The free tier gives you 1 app and 1 database with 500MB storage — no credit card required. Your app sleeps after 15 minutes of idle but wakes up automatically on the next request.",
   },
   {
-    q: "How much does Hetzner infrastructure cost?",
-    a: "A minimal Zenith setup runs on a single CX22 (2 vCPU, 4 GB RAM) at ~4.50 EUR/month. Production setups with multiple worker nodes typically cost 20-50 EUR/month. Use the cost calculator above to estimate your specific needs.",
+    q: "How does the free tier compare to the self-hosted version?",
+    a: "Zenith Cloud's free tier is limited to 1 app and 1 database. Self-hosted Zenith is MIT-licensed with no limits — you can run as many apps and databases as your infrastructure supports.",
   },
   {
-    q: "What does Pro Support include?",
-    a: "Pro Support gives you priority email support with a 48-hour response SLA, assisted upgrades, architecture reviews, and a private Discord channel for your team.",
+    q: "Can I switch between Cloud and Self-Hosted?",
+    a: "Yes. Zenith uses the same deployment format for both. You can export your app configuration from Cloud and import it into a self-hosted cluster.",
   },
   {
-    q: "Can I switch plans later?",
-    a: "Absolutely. Since the software is identical across all plans, you can start free and add Pro Support whenever you need it. Downgrading is just as easy -- you never lose access to any features.",
+    q: "What does the self-hosted version cost?",
+    a: "Zenith is 100% free and open source under the MIT license. You only pay for Hetzner Cloud infrastructure (starting at ~€4.50/month for a small server). Use the cost calculator on the Self-Hosted tab to estimate.",
   },
   {
-    q: "How does Zenith compare to AWS/GCP cost-wise?",
-    a: "For a typical setup with 10 apps, 5 databases, and 100GB storage, Zenith on Hetzner costs approximately 20 EUR/month compared to $500+ on AWS. That is up to 96% savings, with the same capabilities.",
+    q: "Can I upgrade or downgrade my plan?",
+    a: "Absolutely. You can upgrade or downgrade your Cloud plan at any time from your dashboard. Changes take effect immediately, and billing is prorated.",
   },
   {
-    q: "Do you offer a managed version?",
-    a: "Not yet. Zenith is self-hosted only for now. A managed offering is on our roadmap -- join the waitlist to be the first to know.",
+    q: "How does Zenith Cloud compare to AWS/GCP cost-wise?",
+    a: "For a typical setup with 5 apps and 3 databases, Zenith Pro costs €29/month. A comparable setup on AWS would cost $200-300/month. Even self-hosting on Hetzner brings similar savings.",
+  },
+  {
+    q: "Do you offer Enterprise on-premise?",
+    a: "Yes. Enterprise customers can choose between managed Cloud with dedicated infrastructure or on-premise self-hosted with our support plan. Contact us for details.",
   },
 ];
 
@@ -95,13 +91,27 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
   );
 }
 
+function FeatureCell({ value }: { value: boolean | string }) {
+  if (typeof value === "string") {
+    return <span className="text-sm text-neutral-300">{value}</span>;
+  }
+  if (value) {
+    return (
+      <div className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent-500/10">
+        <Check className="h-3 w-3 text-accent-400" />
+      </div>
+    );
+  }
+  return <span className="text-neutral-700">—</span>;
+}
+
 export default function PricingPage() {
   const tableRef = useRef(null);
   const tableInView = useInView(tableRef, { once: true, margin: "-100px" });
 
   return (
     <div className="pt-24">
-      {/* Pricing cards */}
+      {/* Pricing tabs */}
       <Section>
         <div className="text-center mb-16">
           <motion.div
@@ -128,80 +138,18 @@ export default function PricingPage() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-4 max-w-xl text-neutral-400 leading-relaxed"
           >
-            The platform is free forever. Support plans are optional for teams that need guaranteed response times.
+            Start free on Zenith Cloud or self-host the open-source platform on your own servers.
           </motion.p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
-          <PricingCard
-            name="Free"
-            price="$0"
-            period="forever"
-            description="Everything included. Self-hosted on your Hetzner account."
-            features={[
-              "All platform features",
-              "Unlimited apps and databases",
-              "Built-in auth, gateway, monitoring",
-              "CLI and web dashboard",
-              "Community support",
-              "MIT licensed",
-            ]}
-            cta="Get Started"
-            ctaHref="/#get-started"
-            featured
-            index={0}
-          />
-          <PricingCard
-            name="Pro Support"
-            price="$49"
-            period="/month"
-            description="Priority support for teams running Zenith in production."
-            features={[
-              "Everything in Free",
-              "Priority email support",
-              "48-hour response SLA",
-              "Assisted upgrades",
-              "Architecture review",
-              "Private Discord channel",
-            ]}
-            cta="Contact Sales"
-            ctaHref="mailto:support@freezenith.com"
-            index={1}
-          />
-          <PricingCard
-            name="Enterprise"
-            price="Custom"
-            description="Dedicated support for large-scale deployments."
-            features={[
-              "Everything in Pro Support",
-              "Dedicated support engineer",
-              "Custom SLAs",
-              "White-label option",
-              "On-call incident response",
-              "Custom feature development",
-            ]}
-            cta="Talk to Us"
-            ctaHref="mailto:enterprise@freezenith.com"
-            index={2}
-          />
-        </div>
+        <PricingTabs defaultTab="cloud" showCalculator showComparison />
       </Section>
 
-      {/* Cost Calculator */}
+      {/* Cloud feature comparison table */}
       <Section className="border-t border-border/50">
         <SectionHeader
-          label="Calculator"
-          title="Estimate your infrastructure cost"
-          description="See how much you will pay for Hetzner Cloud infrastructure based on your workload."
-        />
-        <CostCalculator />
-      </Section>
-
-      {/* Feature comparison table */}
-      <Section className="border-t border-border/50">
-        <SectionHeader
-          title="Feature comparison"
-          description="Every feature is available on every plan. Support plans add response time guarantees."
+          title="Cloud feature comparison"
+          description="See exactly what is included in each plan."
         />
 
         <motion.div
@@ -211,15 +159,18 @@ export default function PricingPage() {
           transition={{ duration: 0.6 }}
           className="overflow-x-auto rounded-2xl border border-border"
         >
-          <table className="w-full min-w-[600px] text-sm">
+          <table className="w-full min-w-[700px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-50/50">
                 <th className="p-4 text-left font-medium text-neutral-400">Feature</th>
                 <th className="p-4 text-center">
-                  <span className="font-semibold text-accent-400">Free</span>
+                  <span className="font-semibold text-neutral-300">Free</span>
                 </th>
                 <th className="p-4 text-center">
-                  <span className="font-semibold text-white">Pro Support</span>
+                  <span className="font-semibold text-accent-400">Pro</span>
+                </th>
+                <th className="p-4 text-center">
+                  <span className="font-semibold text-white">Team</span>
                 </th>
                 <th className="p-4 text-center">
                   <span className="font-semibold text-white">Enterprise</span>
@@ -227,36 +178,13 @@ export default function PricingPage() {
               </tr>
             </thead>
             <tbody>
-              {comparisonFeatures.map((row, i) => (
+              {cloudFeatures.map((row, i) => (
                 <tr key={row.feature} className={`border-b border-border/40 ${i % 2 === 0 ? "bg-surface-50/20" : ""}`}>
                   <td className="p-4 text-neutral-300">{row.feature}</td>
-                  <td className="p-4 text-center">
-                    {row.free ? (
-                      <div className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent-500/10">
-                        <Check className="h-3 w-3 text-accent-400" />
-                      </div>
-                    ) : (
-                      <span className="text-neutral-700">--</span>
-                    )}
-                  </td>
-                  <td className="p-4 text-center">
-                    {row.pro ? (
-                      <div className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent-500/10">
-                        <Check className="h-3 w-3 text-accent-400" />
-                      </div>
-                    ) : (
-                      <span className="text-neutral-700">--</span>
-                    )}
-                  </td>
-                  <td className="p-4 text-center">
-                    {row.enterprise ? (
-                      <div className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent-500/10">
-                        <Check className="h-3 w-3 text-accent-400" />
-                      </div>
-                    ) : (
-                      <span className="text-neutral-700">--</span>
-                    )}
-                  </td>
+                  <td className="p-4 text-center"><FeatureCell value={row.free} /></td>
+                  <td className="p-4 text-center"><FeatureCell value={row.pro} /></td>
+                  <td className="p-4 text-center"><FeatureCell value={row.team} /></td>
+                  <td className="p-4 text-center"><FeatureCell value={row.enterprise} /></td>
                 </tr>
               ))}
             </tbody>
@@ -288,15 +216,22 @@ export default function PricingPage() {
             Ready to get started?
           </h2>
           <p className="mt-4 text-neutral-400 leading-relaxed">
-            Install Zenith in under 10 minutes. No credit card required.
+            Deploy your first app in under 5 minutes. No credit card required.
           </p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
             <Link
-              href="/#get-started"
+              href="https://app.freezenith.com/register"
               className="group inline-flex items-center gap-2 rounded-xl bg-accent-500 px-7 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/25"
             >
-              Get Started
+              Start Free on Cloud
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              href="/docs"
+              className="inline-flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white"
+            >
+              Self-Host Guide
+              <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </motion.div>

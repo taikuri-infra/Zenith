@@ -4,28 +4,30 @@ import { Footer } from "@/components/footer";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Zenith - Your Own Cloud Platform. 10x Cheaper.",
+  title: "Zenith — Cloud Platform for Developers",
   description:
-    "One command turns Hetzner Cloud into your own platform. Apps, databases, auth, storage, gateway, monitoring. 100% free and open source. 10x cheaper than AWS.",
+    "Deploy apps, databases, and APIs on Zenith Cloud in seconds — or self-host on your own infrastructure. Free tier available. Open source, MIT licensed.",
   keywords: [
-    "kubernetes",
-    "paas",
-    "open source",
-    "hetzner",
     "cloud platform",
+    "paas",
     "deployment",
+    "kubernetes",
+    "open source",
     "self-hosted",
+    "hetzner",
     "devops",
     "infrastructure",
     "docker",
     "containers",
     "microservices",
+    "saas",
+    "developer tools",
   ],
   authors: [{ name: "DoTech", url: "https://dotech.com" }],
   openGraph: {
-    title: "Zenith - Your Own Cloud Platform. 10x Cheaper.",
+    title: "Zenith — Cloud Platform for Developers",
     description:
-      "One zen install command turns Hetzner Cloud into your own platform. Apps, databases, auth, storage, gateway, monitoring. 100% free and open source.",
+      "Deploy apps, databases, and APIs on Zenith Cloud in seconds — or self-host the open-source PaaS on your own infrastructure.",
     url: "https://freezenith.com",
     siteName: "Zenith",
     type: "website",
@@ -33,9 +35,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Zenith - Your Own Cloud Platform. 10x Cheaper.",
+    title: "Zenith — Cloud Platform for Developers",
     description:
-      "One command turns Hetzner Cloud into your own platform. 100% free, open source. 10x cheaper than AWS.",
+      "Deploy on Zenith Cloud or self-host. Free tier, open source, MIT licensed.",
     creator: "@freezenith",
   },
   robots: {

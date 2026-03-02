@@ -19,13 +19,21 @@ import {
   GitBranch,
   FileCode2,
   Search,
+  Cloud,
 } from "lucide-react";
 
 const quickLinks = [
   {
+    icon: Cloud,
+    title: "Cloud Quick Start",
+    description: "Sign up for Zenith Cloud and deploy your first app in under 5 minutes.",
+    href: "https://app.freezenith.com/register",
+    color: "accent",
+  },
+  {
     icon: Terminal,
-    title: "Quick Start",
-    description: "Install Zenith and deploy your first app in under 10 minutes.",
+    title: "Self-Host Quick Start",
+    description: "Install Zenith on your own Hetzner servers and deploy your first app.",
     href: "#",
     color: "accent",
   },
@@ -92,7 +100,7 @@ const docSections = [
   {
     icon: Network,
     title: "API Gateway",
-    description: "Route traffic, validate JWTs, configure rate limits with Kong.",
+    description: "Route traffic, validate JWTs, configure rate limits with APISIX.",
     links: [
       { label: "Gateway Setup", href: "#" },
       { label: "Route Configuration", href: "#" },
@@ -161,7 +169,7 @@ function QuickLinkCard({
         <p className="text-sm text-neutral-500 leading-relaxed">{description}</p>
         <div className="mt-auto pt-4">
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent-400 transition-all group-hover:gap-2">
-            Read more
+            {href.startsWith("http") ? "Go" : "Read more"}
             <ArrowRight className="h-3 w-3" />
           </span>
         </div>
@@ -249,7 +257,7 @@ export default function DocsPage() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-4 max-w-xl text-neutral-400 leading-relaxed"
           >
-            Install, configure, and operate Zenith. From quick start to advanced infrastructure management.
+            Get started with Zenith Cloud or self-host on your own infrastructure. From quick start to advanced management.
           </motion.p>
         </div>
 
@@ -272,7 +280,7 @@ export default function DocsPage() {
         </motion.div>
 
         {/* Quick links */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-16">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-16">
           {quickLinks.map((link, i) => (
             <QuickLinkCard key={link.title} {...link} index={i} />
           ))}
