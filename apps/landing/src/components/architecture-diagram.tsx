@@ -99,10 +99,10 @@ export function ArchitectureDiagram() {
         />
         <Connector delay={0.2} isInView={isInView_} />
 
-        {/* Kong */}
+        {/* APISIX */}
         <ArchNode
           icon={Shield}
-          label="Kong API Gateway"
+          label="APISIX API Gateway"
           sublabel="JWT validation, rate limiting, routing"
           accent
           delay={0.25}

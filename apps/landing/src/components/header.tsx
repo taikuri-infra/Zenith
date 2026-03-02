@@ -9,9 +9,13 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const navLinks = [
   { href: "/#features", label: "Features" },
-  { href: "/#how-it-works", label: "How it Works" },
   { href: "/pricing", label: "Pricing" },
   { href: "/docs", label: "Docs" },
+  {
+    href: "https://github.com/DoTech/zenith",
+    label: "GitHub",
+    external: true,
+  },
 ];
 
 export function Header() {
@@ -66,8 +70,18 @@ export function Header() {
                   ? "text-white"
                   : "text-neutral-400 hover:text-white"
               )}
+              {...(link.external
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
             >
-              {link.label}
+              {link.label === "GitHub" ? (
+                <span className="flex items-center gap-1.5">
+                  <Github className="h-4 w-4" />
+                  {link.label}
+                </span>
+              ) : (
+                link.label
+              )}
             </Link>
           ))}
         </nav>
@@ -75,19 +89,16 @@ export function Header() {
         {/* Desktop CTA */}
         <div className="hidden items-center gap-3 md:flex">
           <Link
-            href="https://github.com/DoTech/zenith"
-            className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm text-neutral-400 transition-colors hover:text-white"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="https://app.freezenith.com/login"
+            className="rounded-lg px-3.5 py-2 text-sm text-neutral-400 transition-colors hover:text-white"
           >
-            <Github className="h-4 w-4" />
-            <span>GitHub</span>
+            Login
           </Link>
           <Link
-            href="#get-started"
+            href="https://app.freezenith.com/register"
             className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-500/25"
           >
-            Get Started
+            Start Free
           </Link>
         </div>
 
@@ -123,6 +134,9 @@ export function Header() {
                     href={link.href}
                     onClick={() => setMobileOpen(false)}
                     className="block rounded-lg px-3 py-2.5 text-sm text-neutral-300 transition-colors hover:text-white hover:bg-surface-200"
+                    {...(link.external
+                      ? { target: "_blank", rel: "noopener noreferrer" }
+                      : {})}
                   >
                     {link.label}
                   </Link>
@@ -130,21 +144,18 @@ export function Header() {
               ))}
               <div className="mt-3 flex flex-col gap-2 border-t border-border pt-4">
                 <Link
-                  href="https://github.com/DoTech/zenith"
+                  href="https://app.freezenith.com/login"
                   onClick={() => setMobileOpen(false)}
-                  className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-200 px-4 py-2.5 text-sm font-medium text-neutral-300 transition-all hover:text-white"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  className="flex items-center justify-center rounded-lg border border-border bg-surface-200 px-4 py-2.5 text-sm font-medium text-neutral-300 transition-all hover:text-white"
                 >
-                  <Github className="h-4 w-4" />
-                  Star on GitHub
+                  Login
                 </Link>
                 <Link
-                  href="#get-started"
+                  href="https://app.freezenith.com/register"
                   onClick={() => setMobileOpen(false)}
                   className="block rounded-lg bg-accent-500 px-4 py-2.5 text-center text-sm font-medium text-white transition-all hover:bg-accent-600"
                 >
-                  Get Started
+                  Start Free
                 </Link>
               </div>
             </nav>

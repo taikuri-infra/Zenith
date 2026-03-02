@@ -11,20 +11,19 @@ interface TerminalLine {
 }
 
 const terminalSequence: TerminalLine[] = [
-  { text: "zen install --provider hetzner --token hc_xxx", type: "command", delay: 0 },
-  { text: "", type: "output", delay: 800 },
-  { text: "  Connecting to Hetzner Cloud API...", type: "info", delay: 1200 },
-  { text: "  Provisioning CX22 management node (Falkenstein)...", type: "info", delay: 2000 },
-  { text: "  [##########] Installing k3s cluster", type: "progress", delay: 3200 },
-  { text: "  [##########] Deploying Zenith operator", type: "progress", delay: 4200 },
-  { text: "  [##########] Setting up Kong API gateway", type: "progress", delay: 5000 },
-  { text: "  [##########] Configuring auth service", type: "progress", delay: 5800 },
-  { text: "  [##########] Starting monitoring stack", type: "progress", delay: 6400 },
-  { text: "", type: "output", delay: 7000 },
-  { text: "  Ready! Your platform is live.", type: "success", delay: 7200 },
-  { text: "  Dashboard:  https://zenith.your-domain.com", type: "success", delay: 7600 },
-  { text: "  API:        https://api.your-domain.com", type: "success", delay: 7900 },
-  { text: "  Monitoring: https://grafana.your-domain.com", type: "success", delay: 8200 },
+  { text: "zen deploy", type: "command", delay: 0 },
+  { text: "", type: "output", delay: 600 },
+  { text: "  Detecting framework... Next.js 15", type: "info", delay: 1000 },
+  { text: "  Building container image...", type: "info", delay: 1800 },
+  { text: "  [##########] Pushing image", type: "progress", delay: 3000 },
+  { text: "  [##########] Configuring routing", type: "progress", delay: 4000 },
+  { text: "  [##########] Provisioning TLS certificate", type: "progress", delay: 4800 },
+  { text: "  [##########] Starting health checks", type: "progress", delay: 5600 },
+  { text: "", type: "output", delay: 6200 },
+  { text: "  Deployed! Your app is live.", type: "success", delay: 6400 },
+  { text: "  URL:     https://my-app.freezenith.com", type: "success", delay: 6800 },
+  { text: "  Status:  healthy (3/3 replicas)", type: "success", delay: 7100 },
+  { text: "  Latency: 12ms (p99)", type: "success", delay: 7400 },
 ];
 
 export function AnimatedTerminal({ className }: { className?: string }) {
@@ -70,7 +69,7 @@ export function AnimatedTerminal({ className }: { className?: string }) {
           if (index === 0) return;
           setTimeout(() => {
             setVisibleLines(index + 1);
-          }, line.delay! - 800);
+          }, line.delay! - 600);
         });
       }
     }, 35);
@@ -105,7 +104,7 @@ export function AnimatedTerminal({ className }: { className?: string }) {
             <div className="h-3 w-3 rounded-full bg-[#febc2e] opacity-80 hover:opacity-100 transition-opacity" />
             <div className="h-3 w-3 rounded-full bg-[#28c840] opacity-80 hover:opacity-100 transition-opacity" />
           </div>
-          <span className="ml-3 text-xs text-neutral-500 font-mono">~/zenith</span>
+          <span className="ml-3 text-xs text-neutral-500 font-mono">~/my-app</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="h-1 w-1 rounded-full bg-accent-500 animate-subtle-pulse" />

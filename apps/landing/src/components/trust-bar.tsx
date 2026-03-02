@@ -61,7 +61,7 @@ const technologies = [
     ),
   },
   {
-    name: "Kong",
+    name: "APISIX",
     svg: (
       <svg viewBox="0 0 32 32" className="h-6 w-6" fill="currentColor">
         <path d="M16 4L6 10v12l10 6 10-6V10L16 4zm0 2.4L23.6 10 16 13.6 8.4 10 16 6.4zM8 11.5l7 3.9v7.8l-7-4.2V11.5zm16 0v7.5l-7 4.2v-7.8l7-3.9z" />

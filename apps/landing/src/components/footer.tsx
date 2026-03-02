@@ -16,6 +16,11 @@ const footerLinks = {
     { label: "Helm Charts", href: "/docs" },
     { label: "GitHub", href: "https://github.com/DoTech/zenith" },
   ],
+  Account: [
+    { label: "Login", href: "https://app.freezenith.com/login" },
+    { label: "Sign Up", href: "https://app.freezenith.com/register" },
+    { label: "Dashboard", href: "https://app.freezenith.com" },
+  ],
   Community: [
     { label: "Discord", href: "https://discord.gg/zenith" },
     { label: "Twitter", href: "https://twitter.com/freezenith" },
@@ -29,7 +34,7 @@ export function Footer() {
   return (
     <footer className="border-t border-border bg-surface">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 md:py-20">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-6">
           {/* Brand column */}
           <div className="col-span-2">
             <Link href="/" className="flex items-center gap-2.5 group">
@@ -42,7 +47,7 @@ export function Footer() {
               <span className="text-lg font-bold tracking-tight text-white">Zenith</span>
             </Link>
             <p className="mt-4 max-w-xs text-sm text-neutral-500 leading-relaxed">
-              Your own cloud platform, 10x cheaper. 100% free, open-source Kubernetes PaaS on Hetzner Cloud.
+              Cloud platform for developers. Deploy on Zenith Cloud or self-host the open-source PaaS.
             </p>
             <div className="mt-6 flex items-center gap-2">
               <Link
