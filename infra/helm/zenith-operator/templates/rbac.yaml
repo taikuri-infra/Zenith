@@ -16,13 +16,25 @@ rules:
   - apiGroups: ["zenith.dev"]
     resources: ["*/status"]
     verbs: ["get", "update", "patch"]
-  # Core resources — namespaces, quotas, limits, secrets, services, events
+  # Core resources — namespaces, quotas, limits, secrets, services, events, configmaps, pvcs
   - apiGroups: [""]
-    resources: ["namespaces", "resourcequotas", "limitranges", "secrets", "services", "events"]
+    resources: ["namespaces", "resourcequotas", "limitranges", "secrets", "services", "events", "configmaps", "persistentvolumeclaims"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Deployments
+  # Deployments and StatefulSets
   - apiGroups: ["apps"]
-    resources: ["deployments"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Networking — Ingress resources (owned by App, Domain, AuthRealm, GatewayRoute)
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Batch — CronJobs (owned by Database for backups)
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Autoscaling — HPA (owned by App)
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Traefik IngressRoutes + Middlewares
   - apiGroups: ["traefik.io"]
