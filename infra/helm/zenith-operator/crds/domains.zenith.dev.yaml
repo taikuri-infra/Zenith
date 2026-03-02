@@ -1,0 +1,148 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: domains.zenith.dev
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: zenith.dev
+  names:
+    kind: Domain
+    listKind: DomainList
+    plural: domains
+    singular: domain
+    shortNames:
+      - dom
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Domain
+          type: string
+          jsonPath: .spec.domain
+        - name: App
+          type: string
+          jsonPath: .spec.appRef
+        - name: SSL
+          type: boolean
+          jsonPath: .status.sslReady
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          description: Domain is the Schema for the domains API. Represents a custom domain with auto SSL.
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: DomainSpec defines the desired state of a Domain
+              type: object
+              required:
+                - domain
+                - appRef
+              properties:
+                domain:
+                  description: Domain is the fully qualified domain name
+                  type: string
+                appRef:
+                  description: AppRef is the name of the App this domain points to
+                  type: string
+                ssl:
+                  description: SSL configures SSL/TLS settings
+                  type: object
+                  properties:
+                    enabled:
+                      description: Enabled enables automatic SSL via cert-manager
+                      type: boolean
+                      default: true
+                    issuer:
+                      description: Issuer is the cert-manager issuer to use
+                      type: string
+                      default: "letsencrypt-prod"
+                dns:
+                  description: DNS configures DNS record settings
+                  type: object
+                  properties:
+                    autoConfigure:
+                      description: AutoConfigure enables automatic DNS record creation via Hetzner DNS
+                      type: boolean
+                      default: true
+                    type:
+                      description: Type is the DNS record type
+                      type: string
+                      enum:
+                        - A
+                        - CNAME
+                      default: A
+            status:
+              description: DomainStatus defines the observed state of Domain
+              type: object
+              properties:
+                phase:
+                  description: Phase represents the current lifecycle phase
+                  type: string
+                  enum:
+                    - Pending
+                    - Configuring
+                    - Active
+                    - Failed
+                sslReady:
+                  description: SSLReady indicates if the SSL certificate is ready
+                  type: boolean
+                dnsConfigured:
+                  description: DNSConfigured indicates if DNS records are configured
+                  type: boolean
+                certificateExpiry:
+                  description: CertificateExpiry is the SSL certificate expiry date
+                  type: string
+                  format: date-time
+                conditions:
+                  description: Conditions represent the latest available observations
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      message:
+                        type: string
+                        maxLength: 32768
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                      reason:
+                        type: string
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      type:
+                        type: string
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$

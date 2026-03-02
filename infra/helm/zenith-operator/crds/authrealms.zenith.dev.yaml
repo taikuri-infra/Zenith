@@ -1,0 +1,217 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: authrealms.zenith.dev
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: zenith.dev
+  names:
+    kind: AuthRealm
+    listKind: AuthRealmList
+    plural: authrealms
+    singular: authrealm
+    shortNames:
+      - realm
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Display Name
+          type: string
+          jsonPath: .spec.displayName
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Users
+          type: integer
+          jsonPath: .status.userCount
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          description: AuthRealm is the Schema for the authrealms API. Represents an authentication realm.
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: AuthRealmSpec defines the desired state of an AuthRealm
+              type: object
+              required:
+                - displayName
+              properties:
+                displayName:
+                  description: DisplayName is the human-readable realm name
+                  type: string
+                providers:
+                  description: Providers is the list of identity providers
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - type
+                    properties:
+                      name:
+                        description: Name is the provider identifier
+                        type: string
+                      type:
+                        description: Type is the provider type
+                        type: string
+                        enum:
+                          - google
+                          - github
+                          - azure-ad
+                          - saml
+                          - oidc
+                          - ldap
+                      clientID:
+                        description: ClientID is the OAuth2 client ID
+                        type: string
+                      clientSecretRef:
+                        description: ClientSecretRef is a reference to a Secret containing the client secret
+                        type: object
+                        required:
+                          - name
+                          - key
+                        properties:
+                          name:
+                            description: Name is the Secret name
+                            type: string
+                          key:
+                            description: Key is the key within the Secret
+                            type: string
+                      enabled:
+                        description: Enabled controls whether this provider is active
+                        type: boolean
+                        default: true
+                      config:
+                        description: Config holds provider-specific configuration
+                        type: object
+                        additionalProperties:
+                          type: string
+                clients:
+                  description: Clients is the list of OAuth2/OIDC clients
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        description: Name is the client identifier
+                        type: string
+                      type:
+                        description: Type is the client type
+                        type: string
+                        enum:
+                          - public
+                          - confidential
+                        default: public
+                      redirectURIs:
+                        description: RedirectURIs is the list of allowed redirect URIs
+                        type: array
+                        items:
+                          type: string
+                      scopes:
+                        description: Scopes is the list of allowed scopes
+                        type: array
+                        items:
+                          type: string
+                settings:
+                  description: Settings configures realm-level settings
+                  type: object
+                  properties:
+                    mfaRequired:
+                      description: MFARequired requires multi-factor authentication
+                      type: boolean
+                      default: false
+                    sessionTimeout:
+                      description: SessionTimeout is the session timeout duration
+                      type: string
+                      default: "24h"
+                    passwordPolicy:
+                      description: PasswordPolicy configures password requirements
+                      type: object
+                      properties:
+                        minLength:
+                          description: MinLength is the minimum password length
+                          type: integer
+                          default: 8
+                        requireUppercase:
+                          description: RequireUppercase requires uppercase characters
+                          type: boolean
+                        requireNumbers:
+                          description: RequireNumbers requires numeric characters
+                          type: boolean
+                        requireSpecial:
+                          description: RequireSpecial requires special characters
+                          type: boolean
+            status:
+              description: AuthRealmStatus defines the observed state of AuthRealm
+              type: object
+              properties:
+                phase:
+                  description: Phase represents the current lifecycle phase
+                  type: string
+                  enum:
+                    - Pending
+                    - Provisioning
+                    - Ready
+                    - Failed
+                endpoint:
+                  description: Endpoint is the OIDC discovery endpoint
+                  type: string
+                userCount:
+                  description: UserCount is the number of registered users
+                  type: integer
+                clientCount:
+                  description: ClientCount is the number of configured clients
+                  type: integer
+                conditions:
+                  description: Conditions represent the latest available observations
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    properties:
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      message:
+                        type: string
+                        maxLength: 32768
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                      reason:
+                        type: string
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      type:
+                        type: string
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$

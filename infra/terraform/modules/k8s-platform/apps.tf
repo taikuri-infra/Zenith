@@ -43,6 +43,16 @@ resource "helm_release" "zenith_platform" {
   }
 
   set_sensitive {
+    name  = "secrets.keycloakAdminUser"
+    value = "admin"
+  }
+
+  set_sensitive {
+    name  = "secrets.keycloakAdminPassword"
+    value = var.keycloak_admin_password
+  }
+
+  set_sensitive {
     name  = "registry.host"
     value = var.registry_host
   }

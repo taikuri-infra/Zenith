@@ -21,6 +21,8 @@ secrets:
   adminPassword: ""
   githubWebhookSecret: ""
   secretsEncryptionKey: ""
+  keycloakAdminUser: ""
+  keycloakAdminPassword: ""
 
 # PostgreSQL (CloudNativePG)
 postgres:

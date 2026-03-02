@@ -95,6 +95,12 @@ func generateIngressRouteWithColdStart(app *entities.App, namespace string, labe
 				{
 					"match": fmt.Sprintf("Host(`%s`)", host),
 					"kind":  "Rule",
+					"middlewares": []map[string]interface{}{
+						{
+							"name":      "cold-start-errors",
+							"namespace": namespace,
+						},
+					},
 					"services": []map[string]interface{}{
 						{
 							"name": app.Subdomain,
