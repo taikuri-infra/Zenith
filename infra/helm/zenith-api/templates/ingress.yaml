@@ -16,7 +16,7 @@ spec:
         {{- if .Values.ingress.apisixEnabled }}
         - name: apisix-gateway
           namespace: apisix
-          port: 9080
+          port: 80
         {{- else if .Values.ingress.kongEnabled }}
         - name: kong-gateway-proxy
           namespace: kong
@@ -47,7 +47,7 @@ spec:
         {{- if .Values.ingress.apisixEnabled }}
         - name: apisix-gateway
           namespace: apisix
-          port: 9080
+          port: 80
         {{- else if .Values.ingress.kongEnabled }}
         - name: kong-gateway-proxy
           namespace: kong

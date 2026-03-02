@@ -47,4 +47,114 @@ metadata:
 type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: {{ include "zenith.dockerconfigjson" . }}
+---
+# Traefik errors middleware for KEDA scale-to-zero cold starts.
+# When a pod is scaled to 0, the KEDA interceptor returns 502/503.
+# This middleware catches those errors and serves the splash page instead.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cold-start-errors
+  namespace: zenith-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  errors:
+    status:
+      - "502-503"
+    service:
+      name: cold-start-page
+      port: 80
+    query: /
+---
+# Minimal cold-start splash page served while app is waking up.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cold-start-page
+  namespace: zenith-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Starting up...</title>
+      <style>
+        body{display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif}
+        .c{text-align:center}
+        .spinner{width:48px;height:48px;border:4px solid #334155;border-top:4px solid #3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 1.5rem}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        h1{font-size:1.5rem;margin:0 0 .5rem}
+        p{color:#94a3b8;margin:0}
+      </style>
+      <meta http-equiv="refresh" content="5">
+    </head>
+    <body>
+      <div class="c">
+        <div class="spinner"></div>
+        <h1>Waking up your app</h1>
+        <p>This usually takes a few seconds. The page will refresh automatically.</p>
+      </div>
+    </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cold-start-page
+  namespace: zenith-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app: cold-start-page
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cold-start-page
+  template:
+    metadata:
+      labels:
+        app: cold-start-page
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 20m
+              memory: 16Mi
+      volumes:
+        - name: html
+          configMap:
+            name: cold-start-page
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cold-start-page
+  namespace: zenith-apps
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app: cold-start-page
+spec:
+  selector:
+    app: cold-start-page
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
 {{- end }}
