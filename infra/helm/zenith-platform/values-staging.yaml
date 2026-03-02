@@ -39,6 +39,7 @@ certificate:
   domains:
     - stage.freezenith.com
     - api.stage.freezenith.com
+    - app.stage.freezenith.com
     - ms.stage.freezenith.com
     - cloud.stage.freezenith.com
     - embermind-ms.stage.freezenith.com

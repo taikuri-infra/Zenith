@@ -77,6 +77,8 @@ module "dns" {
     hubble       = { name = "hubble.stage" }
     tempo        = { name = "tempo.stage" }
     alertmanager = { name = "alerts.stage" }
+    # Web dashboard
+    app          = { name = "app.stage" }
     # Wildcard for customer apps (*.apps.stage.freezenith.com)
     apps_wildcard = { name = "*.apps.stage" }
   }
