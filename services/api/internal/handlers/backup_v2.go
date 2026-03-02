@@ -28,7 +28,7 @@ func (h *BackupHandlerV2) Create(c *fiber.Ctx) error {
 	// Check plan: backups require Pro+ tier
 	if h.planRepo != nil {
 		plan, err := h.planRepo.GetUserPlan(c.Context(), userID)
-		if err == nil && !plan.Limits.BackupsEnabled {
+		if err != nil || !plan.Limits.BackupsEnabled {
 			return fiber.NewError(fiber.StatusForbidden, "backups require Pro plan or higher. Upgrade your plan.")
 		}
 	}
