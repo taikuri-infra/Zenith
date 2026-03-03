@@ -169,10 +169,12 @@ func (h *AuthHandler) OAuthRedirect(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "unsupported OAuth provider")
 	}
 
-	// Build the callback URL from the current request
-	scheme := "https"
-	if c.Protocol() == "http" {
-		scheme = "http"
+	// Build the callback URL from the current request.
+	// Use X-Forwarded-Proto if set by the TLS-terminating proxy, otherwise default
+	// to https (OAuth providers require https redirect URIs).
+	scheme := c.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		scheme = "https"
 	}
 	callbackURL := fmt.Sprintf("%s://%s%s/callback", scheme, c.Hostname(), c.Path())
 
@@ -224,10 +226,11 @@ func (h *AuthHandler) OAuthCallback(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(-1 * time.Hour),
 	})
 
-	// Build the callback URL that matches what was sent in the initial redirect
-	scheme := "https"
-	if c.Protocol() == "http" {
-		scheme = "http"
+	// Build the callback URL that matches what was sent in the initial redirect.
+	// Use X-Forwarded-Proto if set by the TLS-terminating proxy.
+	scheme := c.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		scheme = "https"
 	}
 	callbackURL := fmt.Sprintf("%s://%s%s", scheme, c.Hostname(), c.Path())
 
