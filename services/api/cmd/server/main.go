@@ -238,7 +238,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Services
 	adminSvc := services.NewAdminService(k8sClient, capiClient, adminRepo)
-	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret)
+
+	// Plan management (Phase 4 — user plan + limits)
+	planRepo := memory.NewMemoryUserPlanRepository()
+
+	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret, planRepo)
 
 	// Email verification (opt-in: only when RESEND_API_KEY is set)
 	if cfg.ResendAPIKey != "" {
@@ -311,9 +315,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		meteringHandler = handlers.NewMeteringHandler(meteringRepo, customerRepo)
 	}
 	authHandler := handlers.NewAuthHandler(authSvc)
-
-	// Plan management (Phase 4 — user plan + limits)
-	planRepo := memory.NewMemoryUserPlanRepository()
 
 	// App Auth (created early so public routes can be registered before protected group)
 	appAuthRepo := memory.NewMemoryAppAuthRepository()
