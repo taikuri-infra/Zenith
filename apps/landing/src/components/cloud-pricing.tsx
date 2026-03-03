@@ -1,6 +1,7 @@
 "use client";
 
 import { PricingCard } from "@/components/pricing-card";
+import { registerUrl } from "@/lib/urls";
 
 export function CloudPricing() {
   return (
@@ -18,7 +19,7 @@ export function CloudPricing() {
           "Community support",
         ]}
         cta="Start Free"
-        ctaHref="https://app.freezenith.com/register"
+        ctaHref={registerUrl}
         index={0}
       />
       <PricingCard
@@ -35,7 +36,7 @@ export function CloudPricing() {
           "Automated backups",
         ]}
         cta="Upgrade to Pro"
-        ctaHref="https://app.freezenith.com/register"
+        ctaHref={registerUrl}
         featured
         index={1}
       />
@@ -53,7 +54,7 @@ export function CloudPricing() {
           "Priority support",
         ]}
         cta="Start Team Trial"
-        ctaHref="https://app.freezenith.com/register"
+        ctaHref={registerUrl}
         index={2}
       />
       <PricingCard

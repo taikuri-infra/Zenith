@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Github, MessageCircle, Twitter } from "lucide-react";
+import { loginUrl, registerUrl, dashboardUrl } from "@/lib/urls";
 
 const footerLinks = {
   Product: [
@@ -17,9 +18,9 @@ const footerLinks = {
     { label: "GitHub", href: "https://github.com/DoTech/zenith" },
   ],
   Account: [
-    { label: "Login", href: "https://app.freezenith.com/login" },
-    { label: "Sign Up", href: "https://app.freezenith.com/register" },
-    { label: "Dashboard", href: "https://app.freezenith.com" },
+    { label: "Login", href: loginUrl },
+    { label: "Sign Up", href: registerUrl },
+    { label: "Dashboard", href: dashboardUrl },
   ],
   Community: [
     { label: "Discord", href: "https://discord.gg/zenith" },

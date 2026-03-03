@@ -3,6 +3,10 @@
 import { isDemoMode } from "@/lib/get-api";
 import { Eye } from "lucide-react";
 
+const landingUrl =
+  process.env.NEXT_PUBLIC_LANDING_URL?.replace(/\/+$/, "") ||
+  "https://freezenith.com";
+
 /**
  * Renders a subtle banner at the top of the page when demo mode is active.
  * Completely hidden in production / real-API mode.
@@ -17,7 +21,7 @@ export function DemoBanner() {
         <span className="font-semibold">Demo Mode</span> &mdash; Viewing with
         sample data.{" "}
         <a
-          href="https://freezenith.com"
+          href={landingUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="underline underline-offset-2 hover:text-accent-300 transition-colors"

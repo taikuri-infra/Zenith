@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion, useInView } from "framer-motion";
 import { useRef, useState } from "react";
 import { ArrowRight, Check, ChevronDown, ChevronUp, HelpCircle } from "lucide-react";
+import { registerUrl } from "@/lib/urls";
 
 const cloudFeatures = [
   { feature: "Apps", free: "1", pro: "5", team: "20", enterprise: "Unlimited" },
@@ -220,7 +221,7 @@ export default function PricingPage() {
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
             <Link
-              href="https://app.freezenith.com/register"
+              href={registerUrl}
               className="group inline-flex items-center gap-2 rounded-xl bg-accent-500 px-7 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/25"
             >
               Start Free on Cloud
