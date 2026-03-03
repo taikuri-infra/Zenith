@@ -28,7 +28,10 @@ export default function DatabaseDetailPage() {
     loading,
     error,
     refetch,
-  } = useApi(() => databases.get(projectId, name), [projectId, name]);
+  } = useApi(
+    () => projectId ? databases.get(projectId, name) : Promise.resolve(null),
+    [projectId, name]
+  );
 
   if (loading) {
     return (

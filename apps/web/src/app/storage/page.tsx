@@ -21,7 +21,10 @@ export default function StoragePage() {
     loading,
     error,
     refetch,
-  } = useApi(() => storage.list(projectId), [projectId]);
+  } = useApi(
+    () => projectId ? storage.list(projectId) : Promise.resolve({ items: [] }),
+    [projectId]
+  );
 
   const [buckets, setBuckets] = useState<StorageBucket[]>([]);
   const [showCreate, setShowCreate] = useState(false);
