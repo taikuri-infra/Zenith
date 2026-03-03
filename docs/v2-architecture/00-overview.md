@@ -545,6 +545,8 @@ zenith-api starts Temporal workflow: "provision-dedicated-cluster"
 
 ## Document Index
 
+### Deployment Phase Docs
+
 | Document | Description |
 |----------|-------------|
 | [00-overview.md](./00-overview.md) | This document — full architecture overview |
@@ -552,9 +554,48 @@ zenith-api starts Temporal workflow: "provision-dedicated-cluster"
 | [02-phase2-ansible-k3s.md](./02-phase2-ansible-k3s.md) | Phase 2: Ansible + k3s + Cilium |
 | [03-phase3-cluster-bootstrap.md](./03-phase3-cluster-bootstrap.md) | Phase 3: All infra components via Terraform |
 | [04-phase4-argocd-apps.md](./04-phase4-argocd-apps.md) | Phase 4: ArgoCD application deployment |
+
+### Cross-Cutting Concern Docs
+
+| Document | Description |
+|----------|-------------|
 | [05-user-flows.md](./05-user-flows.md) | Customer, admin, and developer user flows |
 | [06-security-model.md](./06-security-model.md) | Defense-in-depth security architecture |
 | [07-backup-disaster-recovery.md](./07-backup-disaster-recovery.md) | Backup strategy and restore procedures |
 | [08-observability.md](./08-observability.md) | Monitoring, logging, tracing, alerting |
 | [09-migration-v1-to-v2.md](./09-migration-v1-to-v2.md) | Migration plan from current to v2 |
+| [10-backend-architecture.md](./10-backend-architecture.md) | Go backend Lich Architecture, Keycloak design, request flow diagrams |
+
+### Per-Component Architecture Docs (NEW)
+
+| Document | Component(s) | Description |
+|----------|-------------|-------------|
+| [SYSTEM-MAP.md](./SYSTEM-MAP.md) | ALL | Master system diagram, communication table, 5 request flows, namespace map, DNS map |
+| [11-infrastructure-provisioning.md](./11-infrastructure-provisioning.md) | Terraform + Ansible | 3-layer provisioning model, full environment setup flow |
+| [12-traefik-ingress.md](./12-traefik-ingress.md) | Traefik | TLS termination, IngressRoute CRDs, cross-namespace routing |
+| [13-apisix-gateway.md](./13-apisix-gateway.md) | APISIX + etcd | JWT auth, CORS, rate-limiting, plugin pipeline, route configuration |
+| [14-cilium-networking.md](./14-cilium-networking.md) | Cilium + Hubble | eBPF networking, WireGuard encryption, network policies, flow observability |
+| [15-argocd-gitops.md](./15-argocd-gitops.md) | ArgoCD | App-of-Apps pattern, image updater, sync waves, deployment flow |
+| [16-data-storage.md](./16-data-storage.md) | CNPG + Hetzner S3 + KEDA | PostgreSQL sharding, S3 buckets, scale-to-zero, customer data lifecycle |
+| [17-temporal-workflows.md](./17-temporal-workflows.md) | Temporal | Provisioning workflows, activity execution, retry/compensation |
+| [18-kyverno-policies.md](./18-kyverno-policies.md) | Kyverno + Falco | Admission policies, runtime security, detection rules |
+| [19-velero-backup.md](./19-velero-backup.md) | Velero | Cluster backup/restore, schedule, S3 storage |
+| [20-sealed-secrets.md](./20-sealed-secrets.md) | Sealed Secrets | Encrypted secrets for GitOps, key management |
+
+### Developer Experience Docs (NEW)
+
+| Document | Description |
+|----------|-------------|
+| [21-local-development-setup.md](./21-local-development-setup.md) | Prerequisites, Docker Compose, local processes, staging access, IDE setup |
+| [22-day-to-day-operations.md](./22-day-to-day-operations.md) | Add API endpoints, add pages, migrations, deploy, logs, debug, Git workflow |
+| [23-frontend-architecture.md](./23-frontend-architecture.md) | 3 Next.js apps: landing, web dashboard, mission control — routing, API client, auth, styling |
+| [24-ci-cd-pipeline.md](./24-ci-cd-pipeline.md) | GitHub Actions workflows, image tagging, security scanning, ArgoCD handoff |
+| [25-monitoring-runbook.md](./25-monitoring-runbook.md) | Alert response procedures, Grafana dashboards, Loki queries, Tempo traces |
+| [26-keycloak-administration.md](./26-keycloak-administration.md) | Realm-per-tenant model, admin console guide, JWT flow, API integration |
+
+### Implementation Plans
+
+| Document | Description |
+|----------|-------------|
+| [BACKEND-REFACTOR.md](./BACKEND-REFACTOR.md) | Backend refactoring implementation plan (step-by-step with checkboxes) |
 | [HANDOVER.md](./HANDOVER.md) | AI handover document for multi-account workflow |

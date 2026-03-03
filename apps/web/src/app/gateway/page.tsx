@@ -115,7 +115,7 @@ export default function GatewayPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-lg font-semibold text-white">API Gateway</h1>
-          <p className="text-sm text-neutral-500">Kong-powered traffic management and routing</p>
+          <p className="text-sm text-neutral-500">APISIX-powered traffic management and routing</p>
         </div>
 
         {/* Stats Bar */}

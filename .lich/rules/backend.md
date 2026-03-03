@@ -1,6 +1,6 @@
 # Backend Architecture Rules
 
-> **Lich Architecture - Clean Architecture for Python (FastAPI)**
+> **Lich Architecture - Clean Architecture for Python (FastAPI) ang GO **
 
 ---
 

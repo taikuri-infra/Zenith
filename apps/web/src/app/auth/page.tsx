@@ -165,7 +165,7 @@ export default function AuthPage() {
         {/* Info Banner */}
         <div className="rounded-lg border border-accent-500/30 bg-accent-500/5 px-4 py-3">
           <p className="text-xs text-accent-400">
-            Powered by Zenith Auth (OpenID Connect + SAML) &mdash; Kong Gateway validates JWT tokens automatically
+            Powered by Zenith Auth (OpenID Connect + SAML) &mdash; APISIX Gateway validates JWT tokens automatically
           </p>
         </div>
 

@@ -98,13 +98,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controllers.NewGatewayRouteReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("gatewayroute-controller"),
-	).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "GatewayRoute")
-		os.Exit(1)
-	}
-
 	if err = controllers.NewGitSyncReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("gitsync-controller"),
 	).SetupWithManager(mgr); err != nil {

@@ -161,7 +161,7 @@ export const demoModules: Module[] = [
     installed: "v3.6.0",
     latest: "v3.6.0",
     status: "up_to_date",
-    description: "Kong API gateway with rate limiting",
+    description: "APISIX API gateway with rate limiting",
   },
   {
     name: "Auth",
