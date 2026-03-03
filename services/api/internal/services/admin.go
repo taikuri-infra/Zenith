@@ -8,26 +8,24 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
-	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 // AdminService handles Mission Control admin business logic.
 type AdminService struct {
-	capiClient *capiclient.Client
-	k8sClient  k8sclient.Client
-	store      ports.AdminRepository
+	clusters ports.ClusterProvisioner
+	k8s      ports.KubernetesClient
+	store    ports.AdminRepository
 }
 
 // NewAdminService creates a new AdminService.
-func NewAdminService(k8sClient k8sclient.Client, capiClient *capiclient.Client, store ports.AdminRepository) *AdminService {
-	return &AdminService{capiClient: capiClient, k8sClient: k8sClient, store: store}
+func NewAdminService(k8s ports.KubernetesClient, clusters ports.ClusterProvisioner, store ports.AdminRepository) *AdminService {
+	return &AdminService{clusters: clusters, k8s: k8s, store: store}
 }
 
 // GetDashboardStats returns aggregate statistics for the dashboard.
 func (s *AdminService) GetDashboardStats(ctx context.Context) (*entities.DashboardStats, error) {
-	clusters, err := s.capiClient.ListClusters(ctx)
+	clusters, err := s.clusters.ListClusters(ctx)
 	if err != nil {
 		clusters = []entities.Cluster{}
 	}
@@ -40,7 +38,7 @@ func (s *AdminService) GetDashboardStats(ctx context.Context) (*entities.Dashboa
 		}
 	}
 
-	projects, _ := s.k8sClient.ListCRDs(ctx, "Project", "")
+	projects, _ := s.k8s.ListCRDs(ctx, "Project", "")
 	tenantCount := len(projects)
 
 	activeToday := 0
@@ -71,17 +69,17 @@ func (s *AdminService) GetDashboardStats(ctx context.Context) (*entities.Dashboa
 
 // ListClusters returns all CAPI-managed clusters.
 func (s *AdminService) ListClusters(ctx context.Context) ([]entities.Cluster, error) {
-	return s.capiClient.ListClusters(ctx)
+	return s.clusters.ListClusters(ctx)
 }
 
 // GetCluster returns a single cluster by name.
 func (s *AdminService) GetCluster(ctx context.Context, name string) (*entities.Cluster, error) {
-	return s.capiClient.GetCluster(ctx, name)
+	return s.clusters.GetCluster(ctx, name)
 }
 
 // CreateCluster provisions a new CAPI cluster.
 func (s *AdminService) CreateCluster(ctx context.Context, input dto.CreateClusterInput, actor string) (*entities.Cluster, error) {
-	cluster, err := s.capiClient.CreateCluster(ctx, input)
+	cluster, err := s.clusters.CreateCluster(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +96,7 @@ func (s *AdminService) CreateCluster(ctx context.Context, input dto.CreateCluste
 
 // DeleteCluster removes a CAPI cluster.
 func (s *AdminService) DeleteCluster(ctx context.Context, name, actor string) error {
-	if err := s.capiClient.DeleteCluster(ctx, name); err != nil {
+	if err := s.clusters.DeleteCluster(ctx, name); err != nil {
 		return err
 	}
 
@@ -114,7 +112,7 @@ func (s *AdminService) DeleteCluster(ctx context.Context, name, actor string) er
 
 // UpgradeCluster initiates a Kubernetes version upgrade.
 func (s *AdminService) UpgradeCluster(ctx context.Context, name, version, actor string) error {
-	if err := s.capiClient.UpgradeCluster(ctx, name, version); err != nil {
+	if err := s.clusters.UpgradeCluster(ctx, name, version); err != nil {
 		return err
 	}
 
@@ -130,7 +128,7 @@ func (s *AdminService) UpgradeCluster(ctx context.Context, name, version, actor 
 
 // ListTenants returns all tenants derived from Project CRDs.
 func (s *AdminService) ListTenants(ctx context.Context) ([]entities.Tenant, error) {
-	projects, err := s.k8sClient.ListCRDs(ctx, "Project", "")
+	projects, err := s.k8s.ListCRDs(ctx, "Project", "")
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +142,7 @@ func (s *AdminService) ListTenants(ctx context.Context) ([]entities.Tenant, erro
 
 // GetTenant returns a single tenant by project name.
 func (s *AdminService) GetTenant(ctx context.Context, id string) (*entities.Tenant, error) {
-	proj, err := s.k8sClient.GetCRD(ctx, "Project", "", id)
+	proj, err := s.k8s.GetCRD(ctx, "Project", "", id)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +152,7 @@ func (s *AdminService) GetTenant(ctx context.Context, id string) (*entities.Tena
 
 // SuspendTenant suspends a tenant by adding an annotation.
 func (s *AdminService) SuspendTenant(ctx context.Context, id, actor string) error {
-	proj, err := s.k8sClient.GetCRD(ctx, "Project", "", id)
+	proj, err := s.k8s.GetCRD(ctx, "Project", "", id)
 	if err != nil {
 		return err
 	}
@@ -165,7 +163,7 @@ func (s *AdminService) SuspendTenant(ctx context.Context, id, actor string) erro
 	proj.Metadata.Annotations["zenith.dev/suspended"] = "true"
 	proj.Metadata.Annotations["zenith.dev/suspended-at"] = time.Now().Format(time.RFC3339)
 
-	if err := s.k8sClient.UpdateCRD(ctx, proj); err != nil {
+	if err := s.k8s.UpdateCRD(ctx, proj); err != nil {
 		return err
 	}
 
@@ -270,7 +268,7 @@ func (s *AdminService) ListUpdateHistory(ctx context.Context) ([]entities.Update
 
 // GetInfraOverview returns a summary of infrastructure.
 func (s *AdminService) GetInfraOverview(ctx context.Context) (*entities.InfraOverview, error) {
-	clusters, _ := s.capiClient.ListClusters(ctx)
+	clusters, _ := s.clusters.ListClusters(ctx)
 
 	totalServers := 0
 	resources := make([]entities.InfraNode, 0)
@@ -334,8 +332,8 @@ func (s *AdminService) GetPlatformState(ctx context.Context) (*entities.Platform
 
 // ExportState exports the full platform state as JSON bytes.
 func (s *AdminService) ExportState(ctx context.Context) ([]byte, error) {
-	clusters, _ := s.capiClient.ListClusters(ctx)
-	projects, _ := s.k8sClient.ListCRDs(ctx, "Project", "")
+	clusters, _ := s.clusters.ListClusters(ctx)
+	projects, _ := s.k8s.ListCRDs(ctx, "Project", "")
 	settings, _ := s.store.GetSettings(ctx)
 	modules, _ := s.store.ListModules(ctx)
 
@@ -380,7 +378,7 @@ func (s *AdminService) UpdateSettings(ctx context.Context, input *entities.Platf
 }
 
 // projectToTenant converts a Project CRD to a Tenant model.
-func projectToTenant(p *k8sclient.CRDObject) entities.Tenant {
+func projectToTenant(p *ports.K8sCRDObject) entities.Tenant {
 	var spec map[string]interface{}
 	_ = json.Unmarshal(p.Spec, &spec)
 

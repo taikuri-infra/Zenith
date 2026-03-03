@@ -2,22 +2,17 @@ package middleware
 
 import (
 	"crypto/subtle"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	zenithJWT "github.com/dotechhq/zenith/services/api/pkg/jwt"
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 )
 
-type Claims struct {
-	jwt.RegisteredClaims
-	Email     string      `json:"email"`
-	Name      string      `json:"name"`
-	Role      entities.Role `json:"role"`
-	ProjectID string      `json:"project_id,omitempty"`
-}
+// Claims is an alias for pkg/jwt.Claims. Kept here for backward compatibility
+// with code that references middleware.Claims.
+type Claims = zenithJWT.Claims
 
 // JWTAuth validates JWT tokens from the Authorization header
 func JWTAuth(secret string) fiber.Handler {
@@ -32,17 +27,8 @@ func JWTAuth(secret string) fiber.Handler {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid authorization format")
 		}
 
-		tokenString := parts[1]
-		claims := &Claims{}
-
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fiber.NewError(fiber.StatusUnauthorized, "unexpected signing method")
-			}
-			return []byte(secret), nil
-		})
-
-		if err != nil || !token.Valid {
+		claims, err := zenithJWT.ParseToken(secret, parts[1])
+		if err != nil {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
 		}
 
@@ -145,38 +131,14 @@ func RequireInternalSecret(secret string) fiber.Handler {
 	}
 }
 
-// GenerateToken creates a JWT token for a user
+// GenerateToken creates a JWT token for a user. Delegates to pkg/jwt.
 func GenerateToken(secret string, user *entities.User, expiry time.Duration) (string, error) {
-	claims := Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   user.ID,
-			Issuer:    "zenith",
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
-		},
-		Email:     user.Email,
-		Name:      user.Name,
-		Role:      user.Role,
-		ProjectID: user.ProjectID,
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(secret))
+	return zenithJWT.GenerateToken(secret, user, expiry)
 }
 
-// ParseToken validates a JWT string and returns its claims.
+// ParseToken validates a JWT string and returns its claims. Delegates to pkg/jwt.
 func ParseToken(secret, tokenString string) (*Claims, error) {
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method")
-		}
-		return []byte(secret), nil
-	})
-	if err != nil || !token.Valid {
-		return nil, fmt.Errorf("invalid or expired token")
-	}
-	return claims, nil
+	return zenithJWT.ParseToken(secret, tokenString)
 }
 
 // ConstantTimeCompare provides timing-safe string comparison

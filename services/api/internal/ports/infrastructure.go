@@ -206,6 +206,44 @@ type CloudServerResult struct {
 }
 
 // ---------------------------------------------------------------------------
+// Cluster Orchestrator (Provisioning / Deprovisioning)
+// ---------------------------------------------------------------------------
+
+// ClusterOrchestrator abstracts cluster lifecycle operations for customer management.
+// Implemented by: cluster.Provisioner (CAPI-based goroutine fallback)
+type ClusterOrchestrator interface {
+	ProvisionCluster(ctx context.Context, customer *entities.Customer) error
+	TeardownCluster(ctx context.Context, customer *entities.Customer) error
+	GetCluster(ctx context.Context, clusterName string) (*entities.Cluster, error)
+	ScaleCluster(ctx context.Context, customer *entities.Customer, nodes int) error
+	UpgradeCluster(ctx context.Context, customer *entities.Customer, version string) error
+}
+
+// ProvisioningWorkflow abstracts Temporal-based provisioning.
+// Implemented by: temporal.WorkflowClient (wraps go.temporal.io/sdk/client)
+type ProvisioningWorkflow interface {
+	StartProvision(ctx context.Context, input ProvisionInput) error
+	StartDeprovision(ctx context.Context, input DeprovisionInput) error
+}
+
+// ProvisionInput holds parameters for tenant provisioning workflows.
+type ProvisionInput struct {
+	CustomerID   string
+	CustomerName string
+	Domain       string
+	PlanTier     string
+	ContactEmail string
+}
+
+// DeprovisionInput holds parameters for tenant teardown workflows.
+type DeprovisionInput struct {
+	CustomerID   string
+	CustomerName string
+	Domain       string
+	Namespace    string
+}
+
+// ---------------------------------------------------------------------------
 // Token Generator (JWT)
 // ---------------------------------------------------------------------------
 
