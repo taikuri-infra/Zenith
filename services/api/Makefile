@@ -1,4 +1,4 @@
-.PHONY: build test lint docker-build run clean stage-version stage-health stage-status stage-logs
+.PHONY: build test lint docker-build run clean stage-version stage-health stage-status stage-logs e2e-infra e2e-smoke e2e
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -62,3 +62,12 @@ stage-logs:
 stage-restart:
 	@ssh zen-stage "kubectl rollout restart deployment/zenith-api -n zenith-staging"
 	@ssh zen-stage "kubectl rollout status deployment/zenith-api -n zenith-staging --timeout=120s"
+
+# --- E2E tests ---
+e2e-infra:
+	@python3 ../../infra/scripts/e2e-infra-staging.py
+
+e2e-smoke:
+	@python3 ../../infra/scripts/e2e-smoke-staging.py --base-url $(STAGE_API) --no-port-forward
+
+e2e: e2e-infra e2e-smoke
