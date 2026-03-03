@@ -7,30 +7,32 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
-	zenithTemporal "github.com/dotechhq/zenith/services/api/internal/temporal"
-	"go.temporal.io/sdk/client"
 )
+
+// tenantNamespace derives the Kubernetes namespace for a customer domain.
+func tenantNamespace(domain string) string {
+	return "zenith-" + strings.ReplaceAll(strings.ReplaceAll(domain, ".", "-"), "_", "-")
+}
 
 // CustomerService handles customer management business logic.
 type CustomerService struct {
-	store          ports.CustomerRepository
-	admin          ports.AdminRepository
-	provisioner    *cluster.Provisioner
-	temporalClient client.Client // nil when Temporal is disabled
+	store        ports.CustomerRepository
+	admin        ports.AdminRepository
+	orchestrator ports.ClusterOrchestrator     // CAPI provisioner (fallback)
+	workflows    ports.ProvisioningWorkflow    // Temporal workflows (preferred)
 }
 
 // NewCustomerService creates a new CustomerService.
-func NewCustomerService(store ports.CustomerRepository, admin ports.AdminRepository, provisioner *cluster.Provisioner) *CustomerService {
-	return &CustomerService{store: store, admin: admin, provisioner: provisioner}
+func NewCustomerService(store ports.CustomerRepository, admin ports.AdminRepository, orchestrator ports.ClusterOrchestrator) *CustomerService {
+	return &CustomerService{store: store, admin: admin, orchestrator: orchestrator}
 }
 
-// SetTemporalClient enables Temporal-based provisioning workflows.
-func (s *CustomerService) SetTemporalClient(tc client.Client) {
-	s.temporalClient = tc
+// SetWorkflows enables Temporal-based provisioning workflows.
+func (s *CustomerService) SetWorkflows(wf ports.ProvisioningWorkflow) {
+	s.workflows = wf
 }
 
 // ListCustomers returns all customers.
@@ -62,16 +64,12 @@ func (s *CustomerService) CreateCustomer(ctx context.Context, input *dto.CreateC
 	})
 
 	// Trigger provisioning: prefer Temporal workflow, fallback to CAPI goroutine
-	if s.temporalClient != nil {
+	if s.workflows != nil {
 		planTier := "free"
 		if customer.Plan != nil && customer.Plan.PriceCents > 10000 {
 			planTier = "pro"
 		}
-		workflowOpts := client.StartWorkflowOptions{
-			ID:        "provision-" + customer.ID,
-			TaskQueue: zenithTemporal.TaskQueue,
-		}
-		_, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOpts, zenithTemporal.WorkflowProvisionCustomer, zenithTemporal.ProvisionInput{
+		err := s.workflows.StartProvision(ctx, ports.ProvisionInput{
 			CustomerID:   customer.ID,
 			CustomerName: customer.Name,
 			Domain:       customer.Domain,
@@ -81,9 +79,9 @@ func (s *CustomerService) CreateCustomer(ctx context.Context, input *dto.CreateC
 		if err != nil {
 			log.Printf("[temporal] failed to start provision workflow for %s: %v", customer.Name, err)
 		}
-	} else if s.provisioner != nil {
+	} else if s.orchestrator != nil {
 		go func() {
-			_ = s.provisioner.ProvisionCluster(ctx, customer)
+			_ = s.orchestrator.ProvisionCluster(ctx, customer)
 		}()
 	}
 
@@ -114,13 +112,9 @@ func (s *CustomerService) DeleteCustomer(ctx context.Context, id, actor string) 
 		customerName = customer.Name
 
 		// Trigger deprovisioning: prefer Temporal, fallback to CAPI
-		if s.temporalClient != nil {
-			ns := "zenith-" + strings.ReplaceAll(strings.ReplaceAll(customer.Domain, ".", "-"), "_", "-")
-			workflowOpts := client.StartWorkflowOptions{
-				ID:        "deprovision-" + customer.ID,
-				TaskQueue: zenithTemporal.TaskQueue,
-			}
-			_, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOpts, zenithTemporal.WorkflowDeprovisionCustomer, zenithTemporal.DeprovisionInput{
+		if s.workflows != nil {
+			ns := tenantNamespace(customer.Domain)
+			err := s.workflows.StartDeprovision(ctx, ports.DeprovisionInput{
 				CustomerID:   customer.ID,
 				CustomerName: customer.Name,
 				Domain:       customer.Domain,
@@ -129,8 +123,8 @@ func (s *CustomerService) DeleteCustomer(ctx context.Context, id, actor string) 
 			if err != nil {
 				log.Printf("[temporal] failed to start deprovision workflow for %s: %v", customer.Name, err)
 			}
-		} else if s.provisioner != nil {
-			_ = s.provisioner.TeardownCluster(ctx, customer)
+		} else if s.orchestrator != nil {
+			_ = s.orchestrator.TeardownCluster(ctx, customer)
 		}
 	}
 
@@ -193,7 +187,7 @@ func (s *CustomerService) GetCustomerCluster(ctx context.Context, id string) (in
 		}, nil
 	}
 
-	if s.provisioner == nil {
+	if s.orchestrator == nil {
 		return map[string]interface{}{
 			"clusterStatus":   customer.ClusterStatus,
 			"capiClusterName": customer.CAPIClusterName,
@@ -203,7 +197,7 @@ func (s *CustomerService) GetCustomerCluster(ctx context.Context, id string) (in
 		}, nil
 	}
 
-	cl, err := s.provisioner.GetCluster(ctx, customer.CAPIClusterName)
+	cl, err := s.orchestrator.GetCluster(ctx, customer.CAPIClusterName)
 	if err != nil {
 		return map[string]interface{}{
 			"clusterStatus":   customer.ClusterStatus,
@@ -222,11 +216,11 @@ func (s *CustomerService) ScaleCluster(ctx context.Context, id string, nodes int
 		return err
 	}
 
-	if s.provisioner == nil {
+	if s.orchestrator == nil {
 		return fmt.Errorf("cluster provisioner not available")
 	}
 
-	return s.provisioner.ScaleCluster(ctx, customer, nodes)
+	return s.orchestrator.ScaleCluster(ctx, customer, nodes)
 }
 
 // UpgradeCluster upgrades the customer's cluster K8s version.
@@ -236,11 +230,11 @@ func (s *CustomerService) UpgradeCluster(ctx context.Context, id, version string
 		return err
 	}
 
-	if s.provisioner == nil {
+	if s.orchestrator == nil {
 		return fmt.Errorf("cluster provisioner not available")
 	}
 
-	return s.provisioner.UpgradeCluster(ctx, customer, version)
+	return s.orchestrator.UpgradeCluster(ctx, customer, version)
 }
 
 // Plans

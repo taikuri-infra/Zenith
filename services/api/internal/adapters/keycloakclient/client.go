@@ -5,14 +5,15 @@ import (
 	"fmt"
 
 	"github.com/Nerzal/gocloak/v13"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
-// KeycloakAPI abstracts Keycloak admin operations for tenant provisioning.
-type KeycloakAPI interface {
-	CreateRealm(ctx context.Context, realmName, displayName string) error
-	DeleteRealm(ctx context.Context, realmName string) error
-	CreateClient(ctx context.Context, realmName, clientID, redirectURI string) (string, error)
-}
+// KeycloakAPI is an alias for ports.IdentityProvider. Kept for backward compatibility.
+type KeycloakAPI = ports.IdentityProvider
+
+// Compile-time checks.
+var _ ports.IdentityProvider = (*Client)(nil)
+var _ ports.IdentityProvider = (*MemoryKeycloakClient)(nil)
 
 // Client implements KeycloakAPI using gocloak.
 type Client struct {

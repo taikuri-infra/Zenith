@@ -4,30 +4,31 @@ import (
 	"context"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	gostripe "github.com/stripe/stripe-go/v82"
 )
 
 // MockStripeAPI is a test double for StripeAPI.
 type MockStripeAPI struct {
-	CreateCheckoutSessionFn func(ctx context.Context, params CheckoutParams) (*CheckoutResult, error)
-	CreatePortalSessionFn   func(ctx context.Context, customerID, returnURL string) (*PortalResult, error)
+	CreateCheckoutSessionFn func(ctx context.Context, params ports.CheckoutParams) (*ports.CheckoutResult, error)
+	CreatePortalSessionFn   func(ctx context.Context, customerID, returnURL string) (*ports.PortalResult, error)
 	CancelSubscriptionFn    func(ctx context.Context, subID string, atPeriodEnd bool) error
-	GetSubscriptionFn       func(ctx context.Context, subID string) (*SubscriptionResult, error)
+	GetSubscriptionFn       func(ctx context.Context, subID string) (*ports.SubscriptionResult, error)
 	ConstructWebhookEventFn func(payload []byte, signature string) (*gostripe.Event, error)
 }
 
-func (m *MockStripeAPI) CreateCheckoutSession(ctx context.Context, params CheckoutParams) (*CheckoutResult, error) {
+func (m *MockStripeAPI) CreateCheckoutSession(ctx context.Context, params ports.CheckoutParams) (*ports.CheckoutResult, error) {
 	if m.CreateCheckoutSessionFn != nil {
 		return m.CreateCheckoutSessionFn(ctx, params)
 	}
-	return &CheckoutResult{SessionID: "cs_test", URL: "https://checkout.stripe.com/test"}, nil
+	return &ports.CheckoutResult{SessionID: "cs_test", URL: "https://checkout.stripe.com/test"}, nil
 }
 
-func (m *MockStripeAPI) CreatePortalSession(ctx context.Context, customerID, returnURL string) (*PortalResult, error) {
+func (m *MockStripeAPI) CreatePortalSession(ctx context.Context, customerID, returnURL string) (*ports.PortalResult, error) {
 	if m.CreatePortalSessionFn != nil {
 		return m.CreatePortalSessionFn(ctx, customerID, returnURL)
 	}
-	return &PortalResult{URL: "https://billing.stripe.com/test"}, nil
+	return &ports.PortalResult{URL: "https://billing.stripe.com/test"}, nil
 }
 
 func (m *MockStripeAPI) CancelSubscription(ctx context.Context, subID string, atPeriodEnd bool) error {
@@ -37,11 +38,11 @@ func (m *MockStripeAPI) CancelSubscription(ctx context.Context, subID string, at
 	return nil
 }
 
-func (m *MockStripeAPI) GetSubscription(ctx context.Context, subID string) (*SubscriptionResult, error) {
+func (m *MockStripeAPI) GetSubscription(ctx context.Context, subID string) (*ports.SubscriptionResult, error) {
 	if m.GetSubscriptionFn != nil {
 		return m.GetSubscriptionFn(ctx, subID)
 	}
-	return &SubscriptionResult{
+	return &ports.SubscriptionResult{
 		ID:         subID,
 		CustomerID: "cus_test",
 		PriceID:    "price_test",
@@ -64,7 +65,7 @@ func TestMockStripeAPI_Defaults(t *testing.T) {
 	mock := &MockStripeAPI{}
 	ctx := context.Background()
 
-	result, err := mock.CreateCheckoutSession(ctx, CheckoutParams{PriceID: "price_pro"})
+	result, err := mock.CreateCheckoutSession(ctx, ports.CheckoutParams{PriceID: "price_pro"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

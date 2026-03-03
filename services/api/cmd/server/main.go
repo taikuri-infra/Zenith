@@ -18,10 +18,10 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres/migrations"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/s3client"
 	stripeClient "github.com/dotechhq/zenith/services/api/internal/adapters/stripeclient"
-	"github.com/dotechhq/zenith/services/api/internal/autoscale"
-	"github.com/dotechhq/zenith/services/api/internal/cluster"
+	"github.com/dotechhq/zenith/services/api/internal/services/autoscale"
+	"github.com/dotechhq/zenith/services/api/internal/services/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/config"
-	"github.com/dotechhq/zenith/services/api/internal/deploy"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/hetznerclient"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
@@ -29,7 +29,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/dotechhq/zenith/services/api/internal/telemetry"
-	zenithTemporal "github.com/dotechhq/zenith/services/api/internal/temporal"
+	zenithTemporal "github.com/dotechhq/zenith/services/api/internal/services/temporal"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -276,7 +276,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 				}
 
 				tw = zenithTemporal.NewWorker(tc, activities)
-				customerSvc.SetTemporalClient(tc)
+				customerSvc.SetWorkflows(zenithTemporal.NewWorkflowClient(tc))
 				log.Printf("[temporal] Connected to %s (namespace: %s)", cfg.TemporalHost, cfg.TemporalNamespace)
 			}
 		} else {
@@ -476,7 +476,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	)
 	// Wire S3 for upgrade provisioning (reuse S3 config if available)
 	if cfg.S3Endpoint != "" {
-		billingSvc.SetS3(s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region))
+		billingSvc.SetStorage(s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region))
 	}
 	billingHandler := handlers.NewBillingHandler(billingSvc)
 	protected.Get("/billing", billingHandler.GetBillingStatus)
@@ -487,7 +487,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Stripe webhook (unauthenticated — uses Stripe signature verification)
 	if stripeAPI != nil {
-		webhookHandlerStripe := handlers.NewStripeWebhookHandler(billingSvc)
+		webhookHandlerStripe := handlers.NewStripeWebhookHandler(billingSvc, stripeAPI)
 		api.Post("/webhooks/stripe", webhookHandlerStripe.HandleEvent)
 	}
 
