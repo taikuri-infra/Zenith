@@ -1,4 +1,4 @@
-.PHONY: build test lint docker-build run clean
+.PHONY: build test lint docker-build run clean stage-version stage-health stage-status stage-logs
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -37,3 +37,28 @@ docker-run: docker-build
 
 clean:
 	rm -rf bin/ coverage.out coverage.html
+
+# --- Staging helpers ---
+STAGE_API := https://api.stage.freezenith.com
+
+stage-version:
+	@curl -s $(STAGE_API)/api/v1/version | jq .
+
+stage-health:
+	@curl -s $(STAGE_API)/health | jq .
+
+stage-status:
+	@echo "=== Pod ==="
+	@ssh zen-stage "kubectl get pod -n zenith-staging -l app=zenith-api -o wide"
+	@echo "\n=== Image ==="
+	@ssh zen-stage "kubectl get pod -n zenith-staging -l app=zenith-api -o jsonpath='{.items[0].spec.containers[0].image}'"
+	@echo "\n\n=== ArgoCD ==="
+	@ssh zen-stage "kubectl get application zenith-api -n argocd -o jsonpath='sync={.status.sync.status} health={.status.health.status} rev={.status.sync.revision}'"
+	@echo ""
+
+stage-logs:
+	@ssh zen-stage "kubectl logs -n zenith-staging -l app=zenith-api --tail=50"
+
+stage-restart:
+	@ssh zen-stage "kubectl rollout restart deployment/zenith-api -n zenith-staging"
+	@ssh zen-stage "kubectl rollout status deployment/zenith-api -n zenith-staging --timeout=120s"
