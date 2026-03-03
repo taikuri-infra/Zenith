@@ -28,14 +28,20 @@ export default function OverviewPage() {
     loading: projectLoading,
     error: projectError,
     refetch: refetchProject,
-  } = useApi(() => projects.get(projectId), [projectId]);
+  } = useApi(
+    () => projectId ? projects.get(projectId) : Promise.resolve(null),
+    [projectId]
+  );
 
   const {
     data: appsData,
     loading: appsLoading,
     error: appsError,
     refetch: refetchApps,
-  } = useApi(() => apps.list(projectId), [projectId]);
+  } = useApi(
+    () => projectId ? apps.list(projectId) : Promise.resolve({ items: [] }),
+    [projectId]
+  );
 
   const {
     data: deployData,

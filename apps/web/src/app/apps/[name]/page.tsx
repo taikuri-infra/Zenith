@@ -23,7 +23,10 @@ export default function AppDetailPage() {
     loading,
     error,
     refetch,
-  } = useApi(() => apps.get(projectId, name), [projectId, name]);
+  } = useApi(
+    () => projectId ? apps.get(projectId, name) : Promise.resolve(null),
+    [projectId, name]
+  );
 
   const tabs = [
     "Overview",
