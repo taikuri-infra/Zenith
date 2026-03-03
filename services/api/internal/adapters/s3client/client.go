@@ -7,13 +7,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
-// S3API abstracts S3-compatible object storage operations for tenant provisioning.
-type S3API interface {
-	CreateBucket(ctx context.Context, bucketName string) error
-	DeleteBucket(ctx context.Context, bucketName string) error
-}
+// S3API is an alias for ports.ObjectStorage. Kept for backward compatibility.
+type S3API = ports.ObjectStorage
+
+// Compile-time checks.
+var _ ports.ObjectStorage = (*Client)(nil)
+var _ ports.ObjectStorage = (*MemoryS3Client)(nil)
 
 // Client implements S3API using AWS SDK v2 (Hetzner S3-compatible).
 type Client struct {

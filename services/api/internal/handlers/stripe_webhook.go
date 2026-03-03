@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	stripeClient "github.com/dotechhq/zenith/services/api/internal/adapters/stripeclient"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
@@ -12,13 +13,16 @@ import (
 )
 
 // StripeWebhookHandler processes incoming Stripe webhook events.
+// This handler lives in the handler layer and holds a direct reference to the
+// StripeAPI adapter (for ConstructWebhookEvent which returns a concrete Stripe type).
 type StripeWebhookHandler struct {
 	billingSvc *services.BillingService
+	stripeAPI  stripeClient.StripeAPI
 }
 
 // NewStripeWebhookHandler creates a new StripeWebhookHandler.
-func NewStripeWebhookHandler(billingSvc *services.BillingService) *StripeWebhookHandler {
-	return &StripeWebhookHandler{billingSvc: billingSvc}
+func NewStripeWebhookHandler(billingSvc *services.BillingService, stripeAPI stripeClient.StripeAPI) *StripeWebhookHandler {
+	return &StripeWebhookHandler{billingSvc: billingSvc, stripeAPI: stripeAPI}
 }
 
 // HandleEvent processes a Stripe webhook event.
@@ -27,7 +31,7 @@ func (h *StripeWebhookHandler) HandleEvent(c *fiber.Ctx) error {
 	payload := c.Body()
 	signature := c.Get("Stripe-Signature")
 
-	event, err := h.billingSvc.Stripe().ConstructWebhookEvent(payload, signature)
+	event, err := h.stripeAPI.ConstructWebhookEvent(payload, signature)
 	if err != nil {
 		log.Printf("[stripe-webhook] signature verification failed: %v", err)
 		return fiber.NewError(fiber.StatusBadRequest, "invalid webhook signature")

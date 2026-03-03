@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -15,25 +16,14 @@ const (
 	roleWorker     = "worker"
 )
 
-// HetznerAPI defines the operations the autoscaler needs from Hetzner Cloud.
-type HetznerAPI interface {
-	CreateServer(ctx context.Context, name, serverType, location, userData string) (*ServerResult, error)
-	DeleteServer(ctx context.Context, serverID int64) error
-	ListServers(ctx context.Context) ([]ServerResult, error)
-	GetServer(ctx context.Context, serverID int64) (*ServerResult, error)
-}
+// HetznerAPI is an alias for ports.CloudProvider. Kept for backward compatibility.
+type HetznerAPI = ports.CloudProvider
 
-// ServerResult is the information returned about a Hetzner server.
-type ServerResult struct {
-	ID         int64
-	Name       string
-	PublicIPv4 string
-	Status     string // running, starting, stopping, off
-	ServerType string
-	CPUCores   int
-	RAMMB      int
-	MonthlyCost float64
-}
+// ServerResult is an alias for ports.CloudServerResult.
+type ServerResult = ports.CloudServerResult
+
+// Compile-time check.
+var _ ports.CloudProvider = (*Client)(nil)
 
 // Client wraps the hcloud-go SDK.
 type Client struct {

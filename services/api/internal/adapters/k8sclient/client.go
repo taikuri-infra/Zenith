@@ -2,39 +2,20 @@ package k8sclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
-// CRDObject represents a generic Kubernetes CRD object
-type CRDObject struct {
-	APIVersion string          `json:"apiVersion"`
-	Kind       string          `json:"kind"`
-	Metadata   ObjectMeta      `json:"metadata"`
-	Spec       json.RawMessage `json:"spec"`
-	Status     json.RawMessage `json:"status,omitempty"`
-}
-
-type ObjectMeta struct {
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
-// JobObject represents a Kubernetes batch/v1 Job.
-type JobObject struct {
-	Name      string
-	Namespace string
-	Labels    map[string]string
-	Spec      map[string]interface{}
-	// Status fields set by the fake/real client
-	Active    int32
-	Succeeded int32
-	Failed    int32
-}
+// Type aliases: canonical definitions live in ports/infrastructure.go.
+// These aliases ensure backward compatibility — all existing code continues
+// to use k8sclient.CRDObject etc. without changes.
+type CRDObject = ports.K8sCRDObject
+type ObjectMeta = ports.K8sObjectMeta
+type JobObject = ports.K8sJobObject
+type LimitRangeSpec = ports.K8sLimitRangeSpec
 
 // Client provides an interface for Kubernetes operations.
 // In production, this wraps a real K8s client. For testing, use MemoryClient.
@@ -78,18 +59,6 @@ type Client interface {
 	// Generic CRD operations with explicit apiVersion (for non-Zenith CRDs)
 	GetCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) (*CRDObject, error)
 	DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error
-}
-
-// LimitRangeSpec holds container default/limit values for CreateLimitRange.
-type LimitRangeSpec struct {
-	DefaultCPU       string
-	DefaultMemory    string
-	DefaultReqCPU    string
-	DefaultReqMemory string
-	MaxCPU           string
-	MaxMemory        string
-	MinCPU           string
-	MinMemory        string
 }
 
 // MemoryClient is an in-memory K8s client for testing and development.

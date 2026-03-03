@@ -8,8 +8,6 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
-	"github.com/dotechhq/zenith/services/api/internal/adapters/s3client"
-	stripeClient "github.com/dotechhq/zenith/services/api/internal/adapters/stripeclient"
 )
 
 // PriceForTier returns (priceCents, priceID) for a given tier.
@@ -26,14 +24,14 @@ func PriceForTier(tier entities.PlanTier, proPriceID, teamPriceID string) (int, 
 
 // BillingService handles billing business logic.
 type BillingService struct {
-	stripe      stripeClient.StripeAPI
+	payments    ports.PaymentGateway
 	billingRepo ports.BillingRepository
 	planRepo    ports.UserPlanRepository
 	appRepo     ports.AppRepository
 	dbRepo      ports.DatabaseRepository
 	storageRepo ports.StorageRepository
 	authRepo    ports.AppAuthRepository
-	s3          s3client.S3API
+	storage     ports.ObjectStorage
 	proPriceID  string
 	teamPriceID string
 	baseDomain  string
@@ -41,7 +39,7 @@ type BillingService struct {
 
 // NewBillingService creates a new BillingService.
 func NewBillingService(
-	stripe stripeClient.StripeAPI,
+	payments ports.PaymentGateway,
 	billingRepo ports.BillingRepository,
 	planRepo ports.UserPlanRepository,
 	appRepo ports.AppRepository,
@@ -51,7 +49,7 @@ func NewBillingService(
 	proPriceID, teamPriceID, baseDomain string,
 ) *BillingService {
 	return &BillingService{
-		stripe:      stripe,
+		payments:    payments,
 		billingRepo: billingRepo,
 		planRepo:    planRepo,
 		appRepo:     appRepo,
@@ -81,7 +79,7 @@ func (s *BillingService) GetBillingStatus(ctx context.Context, userID string) (*
 		Currency:      "eur",
 		Limits:        plan.Limits,
 		Usage:         usage,
-		StripeEnabled: s.stripe != nil,
+		StripeEnabled: s.payments != nil,
 	}
 
 	sub, err := s.billingRepo.GetSubscriptionByUser(ctx, userID)
@@ -97,7 +95,7 @@ func (s *BillingService) GetBillingStatus(ctx context.Context, userID string) (*
 
 // CreateCheckoutSession creates a Stripe checkout session and returns the URL.
 func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID, userEmail, tierStr string) (*dto.CheckoutResponse, error) {
-	if s.stripe == nil {
+	if s.payments == nil {
 		return nil, fmt.Errorf("Stripe billing is not enabled")
 	}
 
@@ -117,7 +115,7 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID, user
 	successURL := "https://" + s.baseDomain + "/billing?success=true"
 	cancelURL := "https://" + s.baseDomain + "/billing?canceled=true"
 
-	result, err := s.stripe.CreateCheckoutSession(ctx, stripeClient.CheckoutParams{
+	result, err := s.payments.CreateCheckoutSession(ctx, ports.CheckoutParams{
 		CustomerID: customerID,
 		PriceID:    priceID,
 		SuccessURL: successURL,
@@ -140,7 +138,7 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID, user
 
 // CreatePortalSession creates a Stripe customer portal session.
 func (s *BillingService) CreatePortalSession(ctx context.Context, userID string) (*dto.PortalResponse, error) {
-	if s.stripe == nil {
+	if s.payments == nil {
 		return nil, fmt.Errorf("Stripe billing is not enabled")
 	}
 
@@ -151,7 +149,7 @@ func (s *BillingService) CreatePortalSession(ctx context.Context, userID string)
 
 	returnURL := "https://" + s.baseDomain + "/billing"
 
-	result, err := s.stripe.CreatePortalSession(ctx, customerID, returnURL)
+	result, err := s.payments.CreatePortalSession(ctx, customerID, returnURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create portal session")
 	}
@@ -161,7 +159,7 @@ func (s *BillingService) CreatePortalSession(ctx context.Context, userID string)
 
 // CancelSubscription cancels the user's subscription.
 func (s *BillingService) CancelSubscription(ctx context.Context, userID string, immediate bool) error {
-	if s.stripe == nil {
+	if s.payments == nil {
 		return fmt.Errorf("Stripe billing is not enabled")
 	}
 
@@ -170,7 +168,7 @@ func (s *BillingService) CancelSubscription(ctx context.Context, userID string, 
 		return fmt.Errorf("no active subscription found")
 	}
 
-	return s.stripe.CancelSubscription(ctx, sub.StripeSubscriptionID, !immediate)
+	return s.payments.CancelSubscription(ctx, sub.StripeSubscriptionID, !immediate)
 }
 
 // ListInvoices returns the user's invoice history.
@@ -226,11 +224,11 @@ func (s *BillingService) BillingRepo() ports.BillingRepository { return s.billin
 // PlanRepo exposes the plan repository for webhook handler usage.
 func (s *BillingService) PlanRepo() ports.UserPlanRepository { return s.planRepo }
 
-// Stripe exposes the Stripe API for webhook handler usage.
-func (s *BillingService) Stripe() stripeClient.StripeAPI { return s.stripe }
+// Payments exposes the payment gateway for webhook handler usage.
+func (s *BillingService) Payments() ports.PaymentGateway { return s.payments }
 
-// SetS3 configures the S3 client for upgrade resource provisioning.
-func (s *BillingService) SetS3(s3API s3client.S3API) { s.s3 = s3API }
+// SetStorage configures the object storage client for upgrade resource provisioning.
+func (s *BillingService) SetStorage(storage ports.ObjectStorage) { s.storage = storage }
 
 // ProvisionUpgradeResources creates infrastructure for a newly upgraded user.
 // For Pro/Team: creates an S3 bucket for artifact storage.
@@ -241,9 +239,9 @@ func (s *BillingService) ProvisionUpgradeResources(ctx context.Context, userID s
 	}
 
 	// S3 bucket for user artifacts
-	if s.s3 != nil {
+	if s.storage != nil {
 		bucketName := fmt.Sprintf("zenith-user-%s", userID)
-		if err := s.s3.CreateBucket(ctx, bucketName); err != nil {
+		if err := s.storage.CreateBucket(ctx, bucketName); err != nil {
 			log.Printf("[billing] Warning: failed to create S3 bucket for user %s: %v", userID, err)
 		} else {
 			log.Printf("[billing] Created S3 bucket %s for user %s (tier=%s)", bucketName, userID, tier)
