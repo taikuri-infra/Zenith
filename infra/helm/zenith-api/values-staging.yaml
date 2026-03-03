@@ -9,7 +9,7 @@ port: 8080
 metricsPort: 9090
 
 env:
-  CORS_ORIGINS: "https://stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com,https://embermind-ms.stage.freezenith.com,https://embermind.stage.freezenith.com"
+  CORS_ORIGINS: "https://app.stage.freezenith.com,https://stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com,https://embermind-ms.stage.freezenith.com,https://embermind.stage.freezenith.com"
   K8S_MODE: "real"
   ZENITH_MODE: "saas"
   REGISTRY: "registry.stage.freezenith.com/zenith-stage"
@@ -21,7 +21,7 @@ env:
   GITHUB_WEBHOOK_SECRET: "true"  # actual value stored in zenith-secrets Secret
   SECRETS_ENCRYPTION_KEY: "true"  # actual value stored in zenith-secrets Secret
   RESEND_API_KEY: "true"  # actual value stored in zenith-secrets Secret
-  APP_URL: "https://stage.freezenith.com"
+  APP_URL: "https://app.stage.freezenith.com"
   GOOGLE_CLIENT_ID: "true"  # actual value stored in zenith-auth-secrets Secret
   GOOGLE_CLIENT_SECRET: "true"  # actual value stored in zenith-auth-secrets Secret
   GITHUB_CLIENT_ID: "true"  # actual value stored in zenith-auth-secrets Secret
