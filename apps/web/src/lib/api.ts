@@ -393,8 +393,15 @@ export interface DeployApp {
 
 export interface CreateDeployAppRequest {
   name: string;
-  repo_url: string;
+  deploy_source: "git" | "image";
+  port?: number;
+  // Git deploy fields
+  repo_url?: string;
   branch?: string;
+  // Image deploy fields
+  image_url?: string;
+  registry_username?: string;
+  registry_password?: string;
 }
 
 export interface Deployment {
@@ -1116,6 +1123,20 @@ export const autoscaler = {
     apiFetch<{ items: HetznerNode[]; total: number }>("/api/v1/admin/autoscaler/nodes"),
   listEvents: (limit = 50) =>
     apiFetch<{ items: AutoscaleEvent[]; total: number }>(`/api/v1/admin/autoscaler/events?limit=${limit}`),
+};
+
+// ---- Registry API ----
+
+export interface RegistryImage {
+  name: string;
+  tags: string[];
+  size: string;
+  lastPushed: string;
+}
+
+export const registry = {
+  listImages: () =>
+    apiFetch<{ items: RegistryImage[] }>("/api/v1/registry/images"),
 };
 
 // ---- WebSocket for real-time updates ----

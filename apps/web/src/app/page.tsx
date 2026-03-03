@@ -242,7 +242,7 @@ export default function OverviewPage() {
             {deployList.map((app) => (
               <Link
                 key={app.id}
-                href={`/deploy/${app.id}`}
+                href={`/apps/${app.id}`}
                 className="group flex items-start gap-3 rounded-lg border border-border bg-surface-100 p-4 transition-all hover:border-accent-500/40 hover:shadow-lg hover:shadow-accent-500/5"
               >
                 <span
@@ -334,7 +334,7 @@ export default function OverviewPage() {
                 <Activity className="mx-auto mb-2 h-6 w-6 text-neutral-600" />
                 <p className="text-sm text-neutral-500">No services provisioned yet</p>
                 <Link
-                  href="/deploy"
+                  href="/apps"
                   className="mt-2 inline-block text-sm text-accent-400 hover:text-accent-300"
                 >
                   Deploy your first app

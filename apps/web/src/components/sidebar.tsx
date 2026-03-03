@@ -17,7 +17,6 @@ import {
   BookOpen,
   CreditCard,
   Settings,
-  Rocket,
 } from "lucide-react";
 
 const isStandalone = process.env.NEXT_PUBLIC_ZENITH_MODE !== "saas";
@@ -46,7 +45,6 @@ const navSections: NavSection[] = [
     label: "COMPUTE",
     items: [
       { name: "Apps", href: "/apps", icon: Boxes },
-      { name: "Deploy Engine", href: "/deploy", icon: Rocket },
       { name: "Databases", href: "/databases", icon: Database },
       { name: "Storage", href: "/storage", icon: HardDrive },
     ],
