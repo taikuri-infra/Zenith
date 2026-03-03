@@ -62,6 +62,7 @@ type oauthCodeEntry struct {
 // AuthService handles authentication business logic.
 type AuthService struct {
 	users       ports.UserRepository
+	planRepo    ports.UserPlanRepository // nil-safe — skips plan assignment when nil
 	jwtSecret   string
 	emailSender ports.EmailSender // nil = skip sending emails (dev mode)
 	appURL      string            // frontend URL for verification links
@@ -72,10 +73,11 @@ type AuthService struct {
 }
 
 // NewAuthService creates a new AuthService.
-func NewAuthService(users ports.UserRepository, jwtSecret string) *AuthService {
+func NewAuthService(users ports.UserRepository, jwtSecret string, planRepo ports.UserPlanRepository) *AuthService {
 	return &AuthService{
 		users:      users,
 		jwtSecret:  jwtSecret,
+		planRepo:   planRepo,
 		oauthCodes: make(map[string]*oauthCodeEntry),
 	}
 }
@@ -109,7 +111,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Token
 // Register creates a new user and sends a verification email.
 // Returns a message (not tokens) for email/password registration.
 func (s *AuthService) Register(ctx context.Context, email, password, name string) (*RegisterResult, error) {
-	role := entities.RoleDeveloper
+	role := entities.RoleCustomer
 	count, err := s.users.Count(ctx)
 	if err == nil && count == 0 {
 		role = entities.RoleOwner
@@ -118,6 +120,11 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 	user, err := s.users.Create(ctx, email, password, name, role)
 	if err != nil {
 		return nil, err
+	}
+
+	// Auto-assign free plan for new customers
+	if s.planRepo != nil {
+		_, _ = s.planRepo.SetUserPlan(ctx, user.ID, entities.PlanFree)
 	}
 
 	// Generate verification token
@@ -566,7 +573,7 @@ func (s *AuthService) findOrCreateOAuthUser(ctx context.Context, email, name, pr
 		name = email
 	}
 
-	role := entities.RoleDeveloper
+	role := entities.RoleCustomer
 	count, err := s.users.Count(ctx)
 	if err == nil && count == 0 {
 		role = entities.RoleOwner
@@ -575,6 +582,11 @@ func (s *AuthService) findOrCreateOAuthUser(ctx context.Context, email, name, pr
 	user, err := s.users.Create(ctx, email, randomPassword, name, role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Auto-assign free plan for new customers
+	if s.planRepo != nil {
+		_, _ = s.planRepo.SetUserPlan(ctx, user.ID, entities.PlanFree)
 	}
 
 	// OAuth-verified users are auto-verified

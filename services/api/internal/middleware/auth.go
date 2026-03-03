@@ -90,6 +90,7 @@ func RequireRole(minRole entities.Role) fiber.Handler {
 			entities.RoleAdmin:     3,
 			entities.RoleDeveloper: 2,
 			entities.RoleViewer:    1,
+			entities.RoleCustomer:  0,
 		}
 
 		if roleOrder[role] < roleOrder[minRole] {

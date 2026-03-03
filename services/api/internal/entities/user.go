@@ -10,6 +10,7 @@ const (
 	RoleAdmin     Role = "admin"
 	RoleDeveloper Role = "developer"
 	RoleViewer    Role = "viewer"
+	RoleCustomer  Role = "customer"
 )
 
 // CanPerform checks if a role can perform a given action.
@@ -33,6 +34,10 @@ func (r Role) CanPerform(action string) bool {
 			"read": true,
 			"view": true,
 		},
+		RoleCustomer: {
+			"read": true, "write": true, "deploy": true, "delete": true,
+			"view": true, "manage_billing": true,
+		},
 	}
 
 	if perms, ok := permissions[r]; ok {
@@ -44,7 +49,7 @@ func (r Role) CanPerform(action string) bool {
 // IsValid checks if the role is a valid known role.
 func (r Role) IsValid() bool {
 	switch r {
-	case RoleOwner, RoleAdmin, RoleDeveloper, RoleViewer:
+	case RoleOwner, RoleAdmin, RoleDeveloper, RoleViewer, RoleCustomer:
 		return true
 	}
 	return false
