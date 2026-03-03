@@ -19,7 +19,7 @@ import (
 func setupV2Test() (*fiber.App, *handlers.AppHandlerV2, *handlers.DeployHandler, *handlers.WebhookHandler, ports.AppRepository) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	repo := memory.NewMemoryAppRepository()
-	appHandler := handlers.NewAppHandlerV2(repo, "freezenith.com", nil)
+	appHandler := handlers.NewAppHandlerV2(repo, "freezenith.com", nil, nil)
 	deployHandler := handlers.NewDeployHandler(repo, nil)
 	webhookHandler := handlers.NewWebhookHandler(repo, nil, "test-secret")
 	return app, appHandler, deployHandler, webhookHandler, repo
@@ -598,5 +598,70 @@ func TestV2ListDatabasesByUser(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	if len(result) != 1 {
 		t.Errorf("Expected 1 database, got %d", len(result))
+	}
+}
+
+// --- Image deploy tests ---
+
+func TestV2CreateImageApp(t *testing.T) {
+	app, handler, _, _, _ := setupV2Test()
+	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
+
+	body := `{"name":"my-api","deploy_source":"image","image_url":"docker.io/myuser/myapi:latest","port":3000}`
+	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != 201 {
+		var errBody map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&errBody)
+		t.Fatalf("Expected 201, got %d: %v", resp.StatusCode, errBody)
+	}
+
+	var result handlers.AppV2Response
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if result.Name != "my-api" {
+		t.Errorf("Expected name 'my-api', got '%s'", result.Name)
+	}
+	if result.DeploySource != "image" {
+		t.Errorf("Expected deploy_source 'image', got '%s'", result.DeploySource)
+	}
+	if result.ImageURL != "docker.io/myuser/myapi:latest" {
+		t.Errorf("Expected image_url, got '%s'", result.ImageURL)
+	}
+	if result.Port != 3000 {
+		t.Errorf("Expected port 3000, got %d", result.Port)
+	}
+	if result.Status != "pending" {
+		t.Errorf("Expected status 'pending', got '%s'", result.Status)
+	}
+}
+
+func TestV2CreateImageAppNoImage(t *testing.T) {
+	app, handler, _, _, _ := setupV2Test()
+	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
+
+	body := `{"name":"my-api","deploy_source":"image"}`
+	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestV2CreateImageAppInvalidSource(t *testing.T) {
+	app, handler, _, _, _ := setupV2Test()
+	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
+
+	body := `{"name":"my-api","deploy_source":"ftp","image_url":"something"}`
+	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected 400 for invalid deploy_source, got %d", resp.StatusCode)
 	}
 }

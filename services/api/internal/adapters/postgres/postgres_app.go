@@ -28,16 +28,30 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 	if input.Name == "" {
 		return nil, fmt.Errorf("app name is required")
 	}
-	if input.RepoURL == "" {
-		return nil, fmt.Errorf("repo_url is required")
-	}
 	if input.UserID == "" {
 		return nil, fmt.Errorf("user_id is required")
 	}
 
+	deploySource := input.DeploySource
+	if deploySource == "" {
+		deploySource = entities.DeploySourceGit
+	}
+
+	if deploySource == entities.DeploySourceGit && input.RepoURL == "" {
+		return nil, fmt.Errorf("repo_url is required for git deploys")
+	}
+	if deploySource == entities.DeploySourceImage && input.ImageURL == "" {
+		return nil, fmt.Errorf("image_url is required for image deploys")
+	}
+
 	branch := input.Branch
-	if branch == "" {
+	if branch == "" && deploySource == entities.DeploySourceGit {
 		branch = "main"
+	}
+
+	port := input.Port
+	if port == 0 {
+		port = 8080
 	}
 
 	subdomain := strings.ToLower(strings.ReplaceAll(input.Name, "_", "-"))
@@ -47,10 +61,11 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 	now := time.Now()
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO apps (id, user_id, name, repo_url, branch, framework, status, subdomain, port, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		id, input.UserID, input.Name, input.RepoURL, branch,
-		string(entities.FrameworkUnknown), string(entities.AppStatusPending), subdomain, 8080, now, now,
+		`INSERT INTO apps (id, user_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		id, input.UserID, input.Name, string(deploySource), input.RepoURL, branch,
+		input.ImageURL, input.RegistryUsername, input.RegistryPassword,
+		string(entities.FrameworkUnknown), string(entities.AppStatusPending), subdomain, port, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_apps_user_name") {
@@ -63,15 +78,19 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 	}
 
 	return &entities.App{
-		ID:        id,
-		UserID:    input.UserID,
-		Name:      input.Name,
-		RepoURL:   input.RepoURL,
-		Branch:    branch,
-		Framework: entities.FrameworkUnknown,
-		Status:    entities.AppStatusPending,
-		Subdomain: subdomain,
-		Port:      8080,
+		ID:               id,
+		UserID:           input.UserID,
+		Name:             input.Name,
+		DeploySource:     deploySource,
+		RepoURL:          input.RepoURL,
+		Branch:           branch,
+		ImageURL:         input.ImageURL,
+		RegistryUser:     input.RegistryUsername,
+		RegistryPassword: input.RegistryPassword,
+		Framework:        entities.FrameworkUnknown,
+		Status:           entities.AppStatusPending,
+		Subdomain:        subdomain,
+		Port:             port,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -79,44 +98,47 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 	}, nil
 }
 
-func (r *PostgresAppRepository) GetApp(ctx context.Context, id string) (*entities.App, error) {
+func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	var app entities.App
-	var framework, status string
+	var framework, status, deploySource string
 
-	err := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, name, repo_url, branch, framework, status, subdomain, port, created_at, updated_at
-		 FROM apps WHERE id = $1`, id,
-	).Scan(&app.ID, &app.UserID, &app.Name, &app.RepoURL, &app.Branch,
+	err := scan(&app.ID, &app.UserID, &app.Name, &deploySource, &app.RepoURL, &app.Branch,
+		&app.ImageURL, &app.RegistryUser, &app.RegistryPassword,
 		&framework, &status, &app.Subdomain, &app.Port, &app.CreatedAt, &app.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	app.DeploySource = entities.DeploySource(deploySource)
+	app.Framework = entities.Framework(framework)
+	app.Status = entities.AppStatus(status)
+	return &app, nil
+}
+
+const appColumns = `id, user_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, created_at, updated_at`
+
+func (r *PostgresAppRepository) GetApp(ctx context.Context, id string) (*entities.App, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT `+appColumns+` FROM apps WHERE id = $1`, id)
+	app, err := scanApp(row.Scan)
 	if err != nil {
 		return nil, fmt.Errorf("app not found")
 	}
-
-	app.Framework = entities.Framework(framework)
-	app.Status = entities.AppStatus(status)
-	return &app, nil
+	return app, nil
 }
 
 func (r *PostgresAppRepository) GetAppBySubdomain(ctx context.Context, subdomain string) (*entities.App, error) {
-	var app entities.App
-	var framework, status string
-
-	err := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, name, repo_url, branch, framework, status, subdomain, port, created_at, updated_at
-		 FROM apps WHERE subdomain = $1`, subdomain,
-	).Scan(&app.ID, &app.UserID, &app.Name, &app.RepoURL, &app.Branch,
-		&framework, &status, &app.Subdomain, &app.Port, &app.CreatedAt, &app.UpdatedAt)
+	row := r.pool.QueryRow(ctx,
+		`SELECT `+appColumns+` FROM apps WHERE subdomain = $1`, subdomain)
+	app, err := scanApp(row.Scan)
 	if err != nil {
 		return nil, fmt.Errorf("app not found for subdomain '%s'", subdomain)
 	}
-
-	app.Framework = entities.Framework(framework)
-	app.Status = entities.AppStatus(status)
-	return &app, nil
+	return app, nil
 }
 
 func (r *PostgresAppRepository) ListAppsByUser(ctx context.Context, userID string) ([]entities.App, error) {
-	query := `SELECT id, user_id, name, repo_url, branch, framework, status, subdomain, port, created_at, updated_at FROM apps`
+	query := `SELECT ` + appColumns + ` FROM apps`
 	var args []interface{}
 	if userID != "" {
 		query += ` WHERE user_id = $1`
@@ -131,15 +153,11 @@ func (r *PostgresAppRepository) ListAppsByUser(ctx context.Context, userID strin
 
 	var apps []entities.App
 	for rows.Next() {
-		var app entities.App
-		var framework, status string
-		if err := rows.Scan(&app.ID, &app.UserID, &app.Name, &app.RepoURL, &app.Branch,
-			&framework, &status, &app.Subdomain, &app.Port, &app.CreatedAt, &app.UpdatedAt); err != nil {
+		app, err := scanApp(rows.Scan)
+		if err != nil {
 			return nil, fmt.Errorf("failed to scan app: %w", err)
 		}
-		app.Framework = entities.Framework(framework)
-		app.Status = entities.AppStatus(status)
-		apps = append(apps, app)
+		apps = append(apps, *app)
 	}
 
 	return apps, nil

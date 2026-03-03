@@ -48,11 +48,19 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 	if input.Name == "" {
 		return nil, fmt.Errorf("app name is required")
 	}
-	if input.RepoURL == "" {
-		return nil, fmt.Errorf("repo_url is required")
-	}
 	if input.UserID == "" {
 		return nil, fmt.Errorf("user_id is required")
+	}
+
+	deploySource := input.DeploySource
+	if deploySource == "" {
+		deploySource = entities.DeploySourceGit
+	}
+	if deploySource == entities.DeploySourceGit && input.RepoURL == "" {
+		return nil, fmt.Errorf("repo_url is required for git deploys")
+	}
+	if deploySource == entities.DeploySourceImage && input.ImageURL == "" {
+		return nil, fmt.Errorf("image_url is required for image deploys")
 	}
 
 	// Check for duplicate name under same user
@@ -63,8 +71,13 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 	}
 
 	branch := input.Branch
-	if branch == "" {
+	if branch == "" && deploySource == entities.DeploySourceGit {
 		branch = "main"
+	}
+
+	port := input.Port
+	if port == 0 {
+		port = 8080
 	}
 
 	// Derive subdomain from name (lowercase, replace spaces/underscores with dash)
@@ -73,15 +86,19 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 
 	now := time.Now()
 	app := &entities.App{
-		ID:        uuid.New().String(),
-		UserID:    input.UserID,
-		Name:      input.Name,
-		RepoURL:   input.RepoURL,
-		Branch:    branch,
-		Framework: entities.FrameworkUnknown,
-		Status:    entities.AppStatusPending,
-		Subdomain: subdomain,
-		Port:      8080,
+		ID:               uuid.New().String(),
+		UserID:           input.UserID,
+		Name:             input.Name,
+		DeploySource:     deploySource,
+		RepoURL:          input.RepoURL,
+		Branch:           branch,
+		ImageURL:         input.ImageURL,
+		RegistryUser:     input.RegistryUsername,
+		RegistryPassword: input.RegistryPassword,
+		Framework:        entities.FrameworkUnknown,
+		Status:           entities.AppStatusPending,
+		Subdomain:        subdomain,
+		Port:             port,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
