@@ -170,13 +170,9 @@ func (h *AuthHandler) OAuthRedirect(c *fiber.Ctx) error {
 	}
 
 	// Build the callback URL from the current request.
-	// Use X-Forwarded-Proto if set by the TLS-terminating proxy, otherwise default
-	// to https (OAuth providers require https redirect URIs).
-	scheme := c.Get("X-Forwarded-Proto")
-	if scheme == "" {
-		scheme = "https"
-	}
-	callbackURL := fmt.Sprintf("%s://%s%s/callback", scheme, c.Hostname(), c.Path())
+	// Always use https — the API runs behind TLS-terminating proxy (Traefik/APISIX)
+	// and OAuth providers require https redirect URIs.
+	callbackURL := fmt.Sprintf("https://%s%s/callback", c.Hostname(), c.Path())
 
 	redirectURL, state, err := h.svc.GetOAuthRedirectURLWithCallback(provider, callbackURL)
 	if err != nil {
@@ -188,7 +184,7 @@ func (h *AuthHandler) OAuthRedirect(c *fiber.Ctx) error {
 		Name:     "oauth_state",
 		Value:    state,
 		HTTPOnly: true,
-		Secure:   scheme == "https",
+		Secure:   true,
 		SameSite: "Lax",
 		MaxAge:   600, // 10 minutes
 		Path:     "/",
@@ -227,12 +223,8 @@ func (h *AuthHandler) OAuthCallback(c *fiber.Ctx) error {
 	})
 
 	// Build the callback URL that matches what was sent in the initial redirect.
-	// Use X-Forwarded-Proto if set by the TLS-terminating proxy.
-	scheme := c.Get("X-Forwarded-Proto")
-	if scheme == "" {
-		scheme = "https"
-	}
-	callbackURL := fmt.Sprintf("%s://%s%s", scheme, c.Hostname(), c.Path())
+	// Always https — same as the initial redirect.
+	callbackURL := fmt.Sprintf("https://%s%s", c.Hostname(), c.Path())
 
 	oneTimeCode, err := h.svc.HandleOAuthCallbackWithURL(c.Context(), provider, code, callbackURL)
 	if err != nil {
