@@ -1,0 +1,4 @@
+ALTER TABLE apps DROP COLUMN IF EXISTS deploy_source;
+ALTER TABLE apps DROP COLUMN IF EXISTS image_url;
+ALTER TABLE apps DROP COLUMN IF EXISTS registry_username;
+ALTER TABLE apps DROP COLUMN IF EXISTS registry_password;

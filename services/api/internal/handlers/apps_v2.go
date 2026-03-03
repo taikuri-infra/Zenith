@@ -16,41 +16,54 @@ type AppDeleter interface {
 	DeleteApp(ctx context.Context, app *entities.App) error
 }
 
+// AppImageDeployer triggers image-based deploys.
+type AppImageDeployer interface {
+	TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string)
+}
+
 // AppHandlerV2 handles app CRUD operations using the AppRepository.
 // This replaces the original CRD-based AppHandler for Phase 2.
 type AppHandlerV2 struct {
 	appRepo    ports.AppRepository
 	baseDomain string
 	deployer   AppDeleter
+	pipeline   AppImageDeployer
 }
 
 // NewAppHandlerV2 creates a new AppHandlerV2.
-func NewAppHandlerV2(appRepo ports.AppRepository, baseDomain string, deployer AppDeleter) *AppHandlerV2 {
-	return &AppHandlerV2{appRepo: appRepo, baseDomain: baseDomain, deployer: deployer}
+func NewAppHandlerV2(appRepo ports.AppRepository, baseDomain string, deployer AppDeleter, pipeline AppImageDeployer) *AppHandlerV2 {
+	return &AppHandlerV2{appRepo: appRepo, baseDomain: baseDomain, deployer: deployer, pipeline: pipeline}
 }
 
 // --- Request/Response types ---
 
 // CreateAppV2Request is the request body for creating a new app.
 type CreateAppV2Request struct {
-	Name    string `json:"name"`
-	RepoURL string `json:"repo_url"`
-	Branch  string `json:"branch,omitempty"`
+	Name             string `json:"name"`
+	DeploySource     string `json:"deploy_source"`
+	RepoURL          string `json:"repo_url,omitempty"`
+	Branch           string `json:"branch,omitempty"`
+	ImageURL         string `json:"image_url,omitempty"`
+	Port             int    `json:"port,omitempty"`
+	RegistryUsername string `json:"registry_username,omitempty"`
+	RegistryPassword string `json:"registry_password,omitempty"`
 }
 
 // AppV2Response is the API response for an app.
 type AppV2Response struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	RepoURL   string          `json:"repo_url"`
-	Branch    string          `json:"branch"`
-	Framework string          `json:"framework"`
-	Status    string          `json:"status"`
-	Subdomain string          `json:"subdomain"`
-	URL       string          `json:"url"`
-	Port      int             `json:"port"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	DeploySource string    `json:"deploy_source"`
+	RepoURL      string    `json:"repo_url,omitempty"`
+	Branch       string    `json:"branch,omitempty"`
+	ImageURL     string    `json:"image_url,omitempty"`
+	Framework    string    `json:"framework"`
+	Status       string    `json:"status"`
+	Subdomain    string    `json:"subdomain"`
+	URL          string    `json:"url"`
+	Port         int       `json:"port"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (h *AppHandlerV2) appToResponse(app *entities.App) AppV2Response {
@@ -59,17 +72,19 @@ func (h *AppHandlerV2) appToResponse(app *entities.App) AppV2Response {
 		url = "https://" + app.Subdomain + "." + h.baseDomain
 	}
 	return AppV2Response{
-		ID:        app.ID,
-		Name:      app.Name,
-		RepoURL:   app.RepoURL,
-		Branch:    app.Branch,
-		Framework: string(app.Framework),
-		Status:    string(app.Status),
-		Subdomain: app.Subdomain,
-		URL:       url,
-		Port:      app.Port,
-		CreatedAt: app.CreatedAt,
-		UpdatedAt: app.UpdatedAt,
+		ID:           app.ID,
+		Name:         app.Name,
+		DeploySource: string(app.DeploySource),
+		RepoURL:      app.RepoURL,
+		Branch:       app.Branch,
+		ImageURL:     app.ImageURL,
+		Framework:    string(app.Framework),
+		Status:       string(app.Status),
+		Subdomain:    app.Subdomain,
+		URL:          url,
+		Port:         app.Port,
+		CreatedAt:    app.CreatedAt,
+		UpdatedAt:    app.UpdatedAt,
 	}
 }
 
@@ -88,21 +103,49 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 	if req.Name == "" {
 		return NewBadRequest("name is required")
 	}
-	if req.RepoURL == "" {
-		return NewBadRequest("repo_url is required")
+
+	deploySource := entities.DeploySource(req.DeploySource)
+	if deploySource == "" {
+		deploySource = entities.DeploySourceGit
+	}
+	if deploySource != entities.DeploySourceGit && deploySource != entities.DeploySourceImage {
+		return NewBadRequest("deploy_source must be 'git' or 'image'")
+	}
+
+	if deploySource == entities.DeploySourceGit && req.RepoURL == "" {
+		return NewBadRequest("repo_url is required for git deploys")
+	}
+	if deploySource == entities.DeploySourceImage && req.ImageURL == "" {
+		return NewBadRequest("image_url is required for image deploys")
 	}
 
 	app, err := h.appRepo.CreateApp(c.Context(), &dto.CreateAppInput{
-		UserID:  userID.(string),
-		Name:    req.Name,
-		RepoURL: req.RepoURL,
-		Branch:  req.Branch,
+		UserID:           userID.(string),
+		Name:             req.Name,
+		DeploySource:     deploySource,
+		RepoURL:          req.RepoURL,
+		Branch:           req.Branch,
+		ImageURL:         req.ImageURL,
+		Port:             req.Port,
+		RegistryUsername:  req.RegistryUsername,
+		RegistryPassword: req.RegistryPassword,
 	})
 	if err != nil {
 		if isAlreadyExists(err) {
 			return NewConflict(err.Error())
 		}
+		log.Printf("[apps_v2] failed to create app: %v", err)
 		return NewInternal("failed to create app")
+	}
+
+	// For image deploys, immediately trigger deployment (no build step needed)
+	if deploySource == entities.DeploySourceImage && h.pipeline != nil {
+		deployment, err := h.appRepo.CreateDeployment(c.Context(), app.ID, req.ImageURL)
+		if err != nil {
+			log.Printf("[apps_v2] failed to create deployment record: %v", err)
+		} else {
+			go h.pipeline.TriggerImageDeploy(app, deployment, req.ImageURL)
+		}
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(h.appToResponse(app))

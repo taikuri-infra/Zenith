@@ -13,6 +13,14 @@ const (
 	AppStatusStopped   AppStatus = "stopped"
 )
 
+// DeploySource indicates how the app is deployed.
+type DeploySource string
+
+const (
+	DeploySourceGit   DeploySource = "git"
+	DeploySourceImage DeploySource = "image"
+)
+
 // Framework represents the detected framework type.
 type Framework string
 
@@ -31,14 +39,18 @@ const (
 
 // App represents a user-deployed application on the platform.
 type App struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Name      string    `json:"name"`
-	RepoURL   string    `json:"repo_url"`
-	Branch    string    `json:"branch"`
-	Framework Framework `json:"framework"`
-	Status    AppStatus `json:"status"`
-	Subdomain string    `json:"subdomain"`
-	Port      int       `json:"port"`
+	ID               string       `json:"id"`
+	UserID           string       `json:"user_id"`
+	Name             string       `json:"name"`
+	DeploySource     DeploySource `json:"deploy_source"`
+	RepoURL          string       `json:"repo_url"`
+	Branch           string       `json:"branch"`
+	ImageURL         string       `json:"image_url"`
+	RegistryUser     string       `json:"registry_username,omitempty"`
+	RegistryPassword string       `json:"registry_password,omitempty"`
+	Framework        Framework    `json:"framework"`
+	Status           AppStatus    `json:"status"`
+	Subdomain        string       `json:"subdomain"`
+	Port             int          `json:"port"`
 	Timestamps
 }
