@@ -24,7 +24,10 @@ export default function AppsPage() {
     loading: crdLoading,
     error: crdError,
     refetch: crdRefetch,
-  } = useApi(() => apps.list(projectId), [projectId]);
+  } = useApi(
+    () => projectId ? apps.list(projectId) : Promise.resolve({ items: [] }),
+    [projectId]
+  );
 
   // Deploy Engine apps
   const {

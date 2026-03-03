@@ -19,11 +19,19 @@ type Config struct {
 	InCluster  bool
 
 	// Auth
-	JWTSecret      string
-	JWTIssuer      string
-	AdminEmail     string
-	AdminPassword  string
-	GoogleClientID string
+	JWTSecret          string
+	JWTIssuer          string
+	AdminEmail         string
+	AdminPassword      string
+	GoogleClientID     string
+	GoogleClientSecret string
+	GitHubClientID     string
+	GitHubClientSecret string
+
+	// Email (Resend)
+	ResendAPIKey string
+	AppURL       string
+	EmailFrom    string
 
 	// Internal
 	InternalSecret string
@@ -102,7 +110,13 @@ func Load() *Config {
 		JWTIssuer:     getEnv("JWT_ISSUER", "zenith"),
 		AdminEmail:     getEnv("ADMIN_EMAIL", ""),
 		AdminPassword:  getEnv("ADMIN_PASSWORD", ""),
-		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GitHubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
+		GitHubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
+		ResendAPIKey:   getEnv("RESEND_API_KEY", ""),
+		AppURL:         getEnv("APP_URL", ""),
+		EmailFrom:      getEnv("EMAIL_FROM", "Zenith <noreply@freezenith.com>"),
 		InternalSecret: getEnv("INTERNAL_SECRET", ""),
 		GitHubWebhookSecret: getEnv("GITHUB_WEBHOOK_SECRET", ""),
 		BaseDomain:          getEnv("BASE_DOMAIN", "freezenith.com"),

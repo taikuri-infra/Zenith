@@ -16,6 +16,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres/migrations"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/resendclient"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/s3client"
 	stripeClient "github.com/dotechhq/zenith/services/api/internal/adapters/stripeclient"
 	"github.com/dotechhq/zenith/services/api/internal/services/autoscale"
@@ -239,6 +240,19 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	adminSvc := services.NewAdminService(k8sClient, capiClient, adminRepo)
 	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret)
 
+	// Email verification (opt-in: only when RESEND_API_KEY is set)
+	if cfg.ResendAPIKey != "" {
+		emailFrom := cfg.EmailFrom
+		if emailFrom == "" {
+			emailFrom = "Zenith <noreply@freezenith.com>"
+		}
+		emailSender := resendclient.NewClient(cfg.ResendAPIKey, emailFrom)
+		authSvc.SetEmailSender(emailSender, cfg.AppURL)
+		log.Println("[auth] Email verification enabled (Resend)")
+	} else {
+		log.Println("[auth] Email verification disabled (no RESEND_API_KEY)")
+	}
+
 	var customerSvc *services.CustomerService
 	var tw temporalWorker.Worker
 	if cfg.Mode == "saas" {
@@ -342,10 +356,26 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	authRoutes.Post("/login", authHandler.Login)
 	authRoutes.Post("/register", authHandler.Register)
 	authRoutes.Post("/refresh", authHandler.Refresh)
-	if cfg.GoogleClientID != "" {
-		authSvc.SetGoogleClientID(cfg.GoogleClientID)
-		authRoutes.Post("/google", authHandler.GoogleLogin)
-		log.Printf("[auth] Google OAuth enabled (client_id: %s...)", cfg.GoogleClientID[:8])
+	authRoutes.Post("/verify-email", authHandler.VerifyEmail)
+	authRoutes.Post("/resend-verification", authHandler.ResendVerification)
+	if cfg.GoogleClientID != "" || cfg.GitHubClientID != "" {
+		authSvc.SetOAuthConfig(services.OAuthConfig{
+			GoogleClientID:     cfg.GoogleClientID,
+			GoogleClientSecret: cfg.GoogleClientSecret,
+			GitHubClientID:     cfg.GitHubClientID,
+			GitHubClientSecret: cfg.GitHubClientSecret,
+			AppURL:             cfg.AppURL,
+		})
+		authHandler.SetAppURL(cfg.AppURL)
+		authRoutes.Get("/oauth/:provider", authHandler.OAuthRedirect)
+		authRoutes.Get("/oauth/:provider/callback", authHandler.OAuthCallback)
+		authRoutes.Post("/exchange", authHandler.ExchangeOAuthCode)
+		if cfg.GoogleClientID != "" {
+			log.Printf("[auth] Google OAuth enabled (client_id: %s...)", cfg.GoogleClientID[:8])
+		}
+		if cfg.GitHubClientID != "" {
+			log.Printf("[auth] GitHub OAuth enabled (client_id: %s...)", cfg.GitHubClientID[:8])
+		}
 	}
 
 	// Webhook routes (no auth — uses HMAC signature)

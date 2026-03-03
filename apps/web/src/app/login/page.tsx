@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { LogIn, UserPlus, Github, Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { LogIn, UserPlus, Github, Loader2, Mail, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { auth } from "@/lib/api";
 import { isDemoMode } from "@/lib/get-api";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, register } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
+  const [verifyEmailSent, setVerifyEmailSent] = useState(false);
 
   // In demo mode, skip login entirely
   useEffect(() => {
@@ -23,6 +25,21 @@ export default function LoginPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  // Read OAuth error from URL
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError) {
+      setError(
+        oauthError === "oauth_failed"
+          ? "OAuth sign in failed. Please try again."
+          : oauthError === "invalid_state"
+          ? "Invalid session. Please try again."
+          : `OAuth error: ${oauthError}`
+      );
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,33 +47,108 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      let success: boolean;
       if (mode === "login") {
-        success = await login(email, password);
+        const success = await login(email, password);
+        if (success) {
+          router.push("/");
+        } else {
+          setError("Invalid email or password");
+        }
       } else {
         if (!name.trim()) {
           setError("Name is required");
           setLoading(false);
           return;
         }
-        success = await register(email, password, name);
+        const result = await register(email, password, name);
+        if (result === "verify_email") {
+          setVerifyEmailSent(true);
+        } else if (result === true) {
+          router.push("/");
+        } else {
+          setError("Registration failed. Please try again.");
+        }
       }
-
-      if (success) {
-        router.push("/");
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("verify your email")) {
+        setError("Please verify your email before logging in");
       } else {
-        setError(
-          mode === "login"
-            ? "Invalid email or password"
-            : "Registration failed. Please try again."
-        );
+        setError("An error occurred. Please try again.");
       }
-    } catch {
-      setError("An error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
+
+  const handleResendVerification = async () => {
+    if (!email) return;
+    setResending(true);
+    try {
+      await auth.resendVerification({ email });
+    } catch {
+      // Silently ignore — the API always returns 200
+    } finally {
+      setResending(false);
+    }
+  };
+
+  // Email verification sent screen
+  if (verifyEmailSent) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="w-6 h-6 text-emerald-500" fill="currentColor">
+                  <polygon points="12,2 22,8.5 22,15.5 12,22 2,15.5 2,8.5" />
+                </svg>
+              </div>
+              <span className="text-2xl font-bold text-white">Zenith</span>
+            </div>
+          </div>
+
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-8 text-center">
+            <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Mail className="w-8 h-8 text-emerald-500" />
+            </div>
+            <h2 className="text-xl font-semibold text-white mb-2">Check your email</h2>
+            <p className="text-neutral-400 text-sm mb-6">
+              We&apos;ve sent a verification link to{" "}
+              <span className="text-white font-medium">{email}</span>.
+              Click the link to activate your account.
+            </p>
+
+            <button
+              onClick={handleResendVerification}
+              disabled={resending}
+              className="flex items-center justify-center gap-2 mx-auto px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+            >
+              {resending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Resend verification email
+            </button>
+
+            <div className="mt-6 pt-6 border-t border-neutral-800">
+              <button
+                onClick={() => {
+                  setVerifyEmailSent(false);
+                  setMode("login");
+                  setError(null);
+                }}
+                className="text-sm text-emerald-500 hover:text-emerald-400 font-medium"
+              >
+                Back to sign in
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">

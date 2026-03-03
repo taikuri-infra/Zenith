@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -20,6 +21,13 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id string) (*StoredUser, error)
 	CheckPassword(user *StoredUser, password string) bool
 	Count(ctx context.Context) (int, error)
+
+	// Email verification
+	SetEmailVerified(ctx context.Context, userID string) error
+	SetAuthProvider(ctx context.Context, userID, provider string) error
+	CreateVerificationToken(ctx context.Context, userID string, tokenHash string, expiresAt time.Time) error
+	GetVerificationToken(ctx context.Context, tokenHash string) (userID string, err error)
+	DeleteVerificationTokens(ctx context.Context, userID string) error
 }
 
 // CustomerRepository defines customer and plan persistence operations.

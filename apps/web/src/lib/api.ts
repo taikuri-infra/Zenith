@@ -155,6 +155,16 @@ export interface RegisterRequest {
   name: string;
 }
 
+export interface RegisterResponse {
+  // Tokens are present for OAuth registration (auto-verified)
+  access_token?: string;
+  refresh_token?: string;
+  token_type?: string;
+  expires_in?: number;
+  // Message is present for email/password registration (verify email)
+  message?: string;
+}
+
 export const auth = {
   async login(data: LoginRequest): Promise<LoginResponse> {
     const response = await apiFetch<LoginResponse>("/api/v1/auth/login", {
@@ -165,8 +175,31 @@ export const auth = {
     return response;
   },
 
-  async register(data: RegisterRequest): Promise<LoginResponse> {
-    const response = await apiFetch<LoginResponse>("/api/v1/auth/register", {
+  async register(data: RegisterRequest): Promise<RegisterResponse> {
+    return apiFetch<RegisterResponse>("/api/v1/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async verifyEmail(data: { token: string }): Promise<LoginResponse> {
+    const response = await apiFetch<LoginResponse>("/api/v1/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    setTokens(response.access_token, response.refresh_token);
+    return response;
+  },
+
+  async resendVerification(data: { email: string }): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>("/api/v1/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async exchangeOAuthCode(data: { code: string }): Promise<LoginResponse> {
+    const response = await apiFetch<LoginResponse>("/api/v1/auth/exchange", {
       method: "POST",
       body: JSON.stringify(data),
     });

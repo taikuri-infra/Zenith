@@ -20,6 +20,12 @@ env:
   TEMPORAL_NAMESPACE: "default"
   GITHUB_WEBHOOK_SECRET: "true"  # actual value stored in zenith-secrets Secret
   SECRETS_ENCRYPTION_KEY: "true"  # actual value stored in zenith-secrets Secret
+  RESEND_API_KEY: "true"  # actual value stored in zenith-secrets Secret
+  APP_URL: "https://stage.freezenith.com"
+  GOOGLE_CLIENT_ID: "true"  # actual value stored in zenith-auth-secrets Secret
+  GOOGLE_CLIENT_SECRET: "true"  # actual value stored in zenith-auth-secrets Secret
+  GITHUB_CLIENT_ID: "true"  # actual value stored in zenith-auth-secrets Secret
+  GITHUB_CLIENT_SECRET: "true"  # actual value stored in zenith-auth-secrets Secret
 
 cnpgAdminSecret: "cnpg-admin-dsn"
 keycloakAdminSecret: "keycloak-admin"

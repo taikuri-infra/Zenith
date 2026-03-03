@@ -244,6 +244,16 @@ type DeprovisionInput struct {
 }
 
 // ---------------------------------------------------------------------------
+// Email Sender
+// ---------------------------------------------------------------------------
+
+// EmailSender abstracts email delivery.
+// Implemented by: adapters/resendclient/client.go
+type EmailSender interface {
+	SendVerificationEmail(ctx context.Context, to, name, verificationURL string) error
+}
+
+// ---------------------------------------------------------------------------
 // Token Generator (JWT)
 // ---------------------------------------------------------------------------
 
