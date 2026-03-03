@@ -133,6 +133,8 @@ module "platform" {
   admin_password         = var.admin_password
   github_webhook_secret  = var.github_webhook_secret
   secrets_encryption_key = var.secrets_encryption_key
+  resend_api_key         = var.resend_api_key
+  google_client_id       = var.google_client_id
 
   # S3 / Object Storage (Hetzner)
   s3_access_key = var.s3_access_key

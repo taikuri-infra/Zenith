@@ -42,6 +42,9 @@ resource "helm_release" "zenith_platform" {
     value = var.secrets_encryption_key
   }
 
+  # resend-api-key and google-client-id are in zenith-auth-secrets (SealedSecret)
+  # see auth_secrets.tf
+
   set_sensitive {
     name  = "secrets.keycloakAdminUser"
     value = "admin"

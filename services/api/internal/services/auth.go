@@ -3,12 +3,18 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
+
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/github"
+	"golang.org/x/oauth2/google"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
@@ -16,8 +22,11 @@ import (
 )
 
 const (
-	AccessTokenExpiry  = 1 * time.Hour
-	RefreshTokenExpiry = 7 * 24 * time.Hour
+	AccessTokenExpiry       = 1 * time.Hour
+	RefreshTokenExpiry      = 7 * 24 * time.Hour
+	VerificationTokenExpiry = 24 * time.Hour
+
+	oauthCodeTTL = 5 * time.Minute
 )
 
 // TokenPair holds issued JWT tokens.
@@ -27,26 +36,59 @@ type TokenPair struct {
 	ExpiresIn    int
 }
 
+// RegisterResult is returned by Register.
+// For email/password, Message is set and Tokens is nil (verification required).
+// For OAuth, Tokens is set and Message is empty.
+type RegisterResult struct {
+	Tokens  *TokenPair
+	Message string
+}
+
+// OAuthConfig holds OAuth provider credentials.
+type OAuthConfig struct {
+	GoogleClientID     string
+	GoogleClientSecret string
+	GitHubClientID     string
+	GitHubClientSecret string
+	AppURL             string // frontend URL for the callback redirect
+}
+
+// oauthCodeEntry stores a one-time code mapped to tokens.
+type oauthCodeEntry struct {
+	tokens    *TokenPair
+	expiresAt time.Time
+}
+
 // AuthService handles authentication business logic.
 type AuthService struct {
-	users          ports.UserRepository
-	jwtSecret      string
-	googleClientID string
+	users       ports.UserRepository
+	jwtSecret   string
+	emailSender ports.EmailSender // nil = skip sending emails (dev mode)
+	appURL      string            // frontend URL for verification links
+	oauthCfg    *OAuthConfig
+
+	oauthCodesMu sync.Mutex
+	oauthCodes   map[string]*oauthCodeEntry
 }
 
 // NewAuthService creates a new AuthService.
 func NewAuthService(users ports.UserRepository, jwtSecret string) *AuthService {
-	return &AuthService{users: users, jwtSecret: jwtSecret}
+	return &AuthService{
+		users:      users,
+		jwtSecret:  jwtSecret,
+		oauthCodes: make(map[string]*oauthCodeEntry),
+	}
 }
 
-// SetGoogleClientID configures the Google OAuth client ID for token verification.
-func (s *AuthService) SetGoogleClientID(clientID string) {
-	s.googleClientID = clientID
+// SetOAuthConfig configures OAuth provider credentials.
+func (s *AuthService) SetOAuthConfig(cfg OAuthConfig) {
+	s.oauthCfg = &cfg
 }
 
-// GoogleClientID returns the configured Google client ID.
-func (s *AuthService) GoogleClientID() string {
-	return s.googleClientID
+// SetEmailSender configures the email sender for verification emails.
+func (s *AuthService) SetEmailSender(sender ports.EmailSender, appURL string) {
+	s.emailSender = sender
+	s.appURL = appURL
 }
 
 // Login validates credentials and returns a token pair.
@@ -55,12 +97,18 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Token
 	if err != nil || !s.users.CheckPassword(user, password) {
 		return nil, fmt.Errorf("invalid email or password")
 	}
+
+	// Block login if email is not verified (email/password users only)
+	if user.AuthProvider == "email" && !user.EmailVerified {
+		return nil, fmt.Errorf("please verify your email before logging in")
+	}
+
 	return s.issueTokens(&user.User)
 }
 
-// Register creates a new user and returns a token pair.
-// The first user gets owner role; subsequent users get developer.
-func (s *AuthService) Register(ctx context.Context, email, password, name string) (*TokenPair, error) {
+// Register creates a new user and sends a verification email.
+// Returns a message (not tokens) for email/password registration.
+func (s *AuthService) Register(ctx context.Context, email, password, name string) (*RegisterResult, error) {
 	role := entities.RoleDeveloper
 	count, err := s.users.Count(ctx)
 	if err == nil && count == 0 {
@@ -72,7 +120,89 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 		return nil, err
 	}
 
-	return s.issueTokens(user)
+	// Generate verification token
+	rawToken, err := generateRandomToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate verification token: %w", err)
+	}
+	tokenHash := hashToken(rawToken)
+
+	if err := s.users.CreateVerificationToken(ctx, user.ID, tokenHash, time.Now().Add(VerificationTokenExpiry)); err != nil {
+		return nil, fmt.Errorf("failed to store verification token: %w", err)
+	}
+
+	// Send verification email (skip if no email sender configured)
+	if s.emailSender != nil && s.appURL != "" {
+		verificationURL := s.appURL + "/verify-email?token=" + rawToken
+		if err := s.emailSender.SendVerificationEmail(ctx, email, name, verificationURL); err != nil {
+			// Log but don't fail — user can resend
+			fmt.Printf("[auth] failed to send verification email to %s: %v\n", email, err)
+		}
+	}
+
+	return &RegisterResult{
+		Message: "Please check your email to verify your account",
+	}, nil
+}
+
+// VerifyEmail validates a verification token and returns a token pair.
+func (s *AuthService) VerifyEmail(ctx context.Context, token string) (*TokenPair, error) {
+	tokenHash := hashToken(token)
+
+	userID, err := s.users.GetVerificationToken(ctx, tokenHash)
+	if err != nil {
+		return nil, fmt.Errorf("invalid or expired verification token")
+	}
+
+	if err := s.users.SetEmailVerified(ctx, userID); err != nil {
+		return nil, fmt.Errorf("failed to verify email: %w", err)
+	}
+
+	// Clean up tokens
+	_ = s.users.DeleteVerificationTokens(ctx, userID)
+
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	return s.issueTokens(&user.User)
+}
+
+// ResendVerification generates a new verification token and sends the email.
+func (s *AuthService) ResendVerification(ctx context.Context, email string) error {
+	user, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		// Don't reveal whether the email exists
+		return nil
+	}
+
+	if user.EmailVerified {
+		return nil // Already verified, no-op
+	}
+
+	// Delete old tokens
+	_ = s.users.DeleteVerificationTokens(ctx, user.ID)
+
+	// Generate new token
+	rawToken, err := generateRandomToken()
+	if err != nil {
+		return fmt.Errorf("failed to generate verification token: %w", err)
+	}
+	tokenHash := hashToken(rawToken)
+
+	if err := s.users.CreateVerificationToken(ctx, user.ID, tokenHash, time.Now().Add(VerificationTokenExpiry)); err != nil {
+		return fmt.Errorf("failed to store verification token: %w", err)
+	}
+
+	if s.emailSender != nil && s.appURL != "" {
+		verificationURL := s.appURL + "/verify-email?token=" + rawToken
+		if err := s.emailSender.SendVerificationEmail(ctx, email, user.Name, verificationURL); err != nil {
+			return fmt.Errorf("failed to send verification email: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Refresh validates a refresh token and returns a new token pair.
@@ -90,50 +220,338 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenP
 	return s.issueTokens(&user.User)
 }
 
-// GoogleLogin verifies a Google ID token and creates/logs in the user.
-func (s *AuthService) GoogleLogin(ctx context.Context, idToken string) (*TokenPair, error) {
-	if s.googleClientID == "" {
-		return nil, fmt.Errorf("Google OAuth is not configured")
+// GetOAuthRedirectURL builds the provider authorization URL and returns a random state.
+func (s *AuthService) GetOAuthRedirectURL(provider string) (string, string, error) {
+	cfg, err := s.oauth2Config(provider)
+	if err != nil {
+		return "", "", err
 	}
 
-	// Verify token with Google's tokeninfo endpoint
-	resp, err := http.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken)
+	state, err := generateRandomToken()
 	if err != nil {
-		return nil, fmt.Errorf("failed to verify Google token")
+		return "", "", fmt.Errorf("failed to generate state: %w", err)
+	}
+
+	url := cfg.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	return url, state, nil
+}
+
+// HandleOAuthCallback exchanges the authorization code, fetches user info,
+// creates/finds the user, and returns a one-time code for token exchange.
+func (s *AuthService) HandleOAuthCallback(ctx context.Context, provider, code string) (string, error) {
+	cfg, err := s.oauth2Config(provider)
+	if err != nil {
+		return "", err
+	}
+
+	// Exchange code for access token
+	oauthToken, err := cfg.Exchange(ctx, code)
+	if err != nil {
+		return "", fmt.Errorf("failed to exchange authorization code: %w", err)
+	}
+
+	// Fetch user info from provider
+	email, name, err := s.fetchOAuthUserInfo(provider, oauthToken.AccessToken)
+	if err != nil {
+		return "", err
+	}
+
+	// Find or create user
+	tokens, err := s.findOrCreateOAuthUser(ctx, email, name, provider)
+	if err != nil {
+		return "", err
+	}
+
+	// Store tokens with a one-time code
+	oneTimeCode, err := generateRandomToken()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate one-time code: %w", err)
+	}
+
+	s.oauthCodesMu.Lock()
+	s.oauthCodes[oneTimeCode] = &oauthCodeEntry{
+		tokens:    tokens,
+		expiresAt: time.Now().Add(oauthCodeTTL),
+	}
+	s.oauthCodesMu.Unlock()
+
+	return oneTimeCode, nil
+}
+
+// ExchangeOAuthCode looks up the one-time code and returns the stored tokens.
+func (s *AuthService) ExchangeOAuthCode(_ context.Context, code string) (*TokenPair, error) {
+	s.oauthCodesMu.Lock()
+	entry, ok := s.oauthCodes[code]
+	if ok {
+		delete(s.oauthCodes, code)
+	}
+	s.oauthCodesMu.Unlock()
+
+	if !ok {
+		return nil, fmt.Errorf("invalid or expired code")
+	}
+
+	if time.Now().After(entry.expiresAt) {
+		return nil, fmt.Errorf("invalid or expired code")
+	}
+
+	return entry.tokens, nil
+}
+
+// oauth2Config returns the oauth2.Config for the given provider.
+func (s *AuthService) oauth2Config(provider string) (*oauth2.Config, error) {
+	if s.oauthCfg == nil {
+		return nil, fmt.Errorf("OAuth is not configured")
+	}
+
+	appURL := s.oauthCfg.AppURL
+	// Derive the API base URL from the app URL for the redirect URI.
+	// The callback URL is on the API, not the frontend.
+	// We use the APP_URL's scheme and swap the hostname prefix.
+	// e.g. https://stage.freezenith.com -> the redirect is registered on the API domain.
+	// However, the redirect_uri must match what's registered in the provider console.
+	// The handler constructs the redirect URI from the request's own host.
+
+	switch provider {
+	case "google":
+		if s.oauthCfg.GoogleClientID == "" || s.oauthCfg.GoogleClientSecret == "" {
+			return nil, fmt.Errorf("Google OAuth is not configured")
+		}
+		return &oauth2.Config{
+			ClientID:     s.oauthCfg.GoogleClientID,
+			ClientSecret: s.oauthCfg.GoogleClientSecret,
+			Endpoint:     google.Endpoint,
+			Scopes:       []string{"openid", "email", "profile"},
+			// RedirectURL is set dynamically in the handler based on the request host
+			RedirectURL: appURL, // placeholder, overridden by handler
+		}, nil
+
+	case "github":
+		if s.oauthCfg.GitHubClientID == "" || s.oauthCfg.GitHubClientSecret == "" {
+			return nil, fmt.Errorf("GitHub OAuth is not configured")
+		}
+		return &oauth2.Config{
+			ClientID:     s.oauthCfg.GitHubClientID,
+			ClientSecret: s.oauthCfg.GitHubClientSecret,
+			Endpoint:     github.Endpoint,
+			Scopes:       []string{"user:email", "read:user"},
+			RedirectURL:  appURL, // placeholder, overridden by handler
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported OAuth provider: %s", provider)
+	}
+}
+
+// GetOAuthRedirectURLWithCallback builds the redirect URL using the given callback URL.
+func (s *AuthService) GetOAuthRedirectURLWithCallback(provider, callbackURL string) (string, string, error) {
+	cfg, err := s.oauth2Config(provider)
+	if err != nil {
+		return "", "", err
+	}
+
+	cfg.RedirectURL = callbackURL
+
+	state, err := generateRandomToken()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate state: %w", err)
+	}
+
+	url := cfg.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	return url, state, nil
+}
+
+// HandleOAuthCallbackWithURL is like HandleOAuthCallback but uses a specific redirect URL.
+func (s *AuthService) HandleOAuthCallbackWithURL(ctx context.Context, provider, code, callbackURL string) (string, error) {
+	cfg, err := s.oauth2Config(provider)
+	if err != nil {
+		return "", err
+	}
+	cfg.RedirectURL = callbackURL
+
+	oauthToken, err := cfg.Exchange(ctx, code)
+	if err != nil {
+		return "", fmt.Errorf("failed to exchange authorization code: %w", err)
+	}
+
+	email, name, err := s.fetchOAuthUserInfo(provider, oauthToken.AccessToken)
+	if err != nil {
+		return "", err
+	}
+
+	tokens, err := s.findOrCreateOAuthUser(ctx, email, name, provider)
+	if err != nil {
+		return "", err
+	}
+
+	oneTimeCode, err := generateRandomToken()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate one-time code: %w", err)
+	}
+
+	s.oauthCodesMu.Lock()
+	s.oauthCodes[oneTimeCode] = &oauthCodeEntry{
+		tokens:    tokens,
+		expiresAt: time.Now().Add(oauthCodeTTL),
+	}
+	s.oauthCodesMu.Unlock()
+
+	return oneTimeCode, nil
+}
+
+// fetchOAuthUserInfo fetches the user's email and name from the provider's API.
+func (s *AuthService) fetchOAuthUserInfo(provider, accessToken string) (email, name string, err error) {
+	switch provider {
+	case "google":
+		return s.fetchGoogleUserInfo(accessToken)
+	case "github":
+		return s.fetchGitHubUserInfo(accessToken)
+	default:
+		return "", "", fmt.Errorf("unsupported OAuth provider: %s", provider)
+	}
+}
+
+func (s *AuthService) fetchGoogleUserInfo(accessToken string) (string, string, error) {
+	req, err := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v2/userinfo", nil)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create Google userinfo request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to fetch Google user info: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid Google ID token")
+		return "", "", fmt.Errorf("Google userinfo returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read Google token response")
+		return "", "", fmt.Errorf("failed to read Google userinfo response: %w", err)
 	}
 
-	var claims struct {
+	var info struct {
 		Email         string `json:"email"`
-		EmailVerified string `json:"email_verified"`
+		VerifiedEmail bool   `json:"verified_email"`
 		Name          string `json:"name"`
-		Aud           string `json:"aud"`
 	}
-	if err := json.Unmarshal(body, &claims); err != nil {
-		return nil, fmt.Errorf("failed to parse Google token claims")
-	}
-
-	// Verify audience matches our client ID
-	if claims.Aud != s.googleClientID {
-		return nil, fmt.Errorf("token audience mismatch")
+	if err := json.Unmarshal(body, &info); err != nil {
+		return "", "", fmt.Errorf("failed to parse Google userinfo: %w", err)
 	}
 
-	if claims.Email == "" || claims.EmailVerified != "true" {
-		return nil, fmt.Errorf("email not verified")
+	if info.Email == "" || !info.VerifiedEmail {
+		return "", "", fmt.Errorf("Google account email not verified")
 	}
 
+	return info.Email, info.Name, nil
+}
+
+func (s *AuthService) fetchGitHubUserInfo(accessToken string) (string, string, error) {
+	// Fetch user profile
+	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create GitHub user request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to fetch GitHub user info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("GitHub user API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read GitHub user response: %w", err)
+	}
+
+	var user struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+		Login string `json:"login"`
+	}
+	if err := json.Unmarshal(body, &user); err != nil {
+		return "", "", fmt.Errorf("failed to parse GitHub user: %w", err)
+	}
+
+	name := user.Name
+	if name == "" {
+		name = user.Login
+	}
+
+	// If email is not public, fetch from /user/emails
+	email := user.Email
+	if email == "" {
+		email, err = s.fetchGitHubPrimaryEmail(accessToken)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	return email, name, nil
+}
+
+func (s *AuthService) fetchGitHubPrimaryEmail(accessToken string) (string, error) {
+	req, err := http.NewRequest("GET", "https://api.github.com/user/emails", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GitHub emails request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch GitHub emails: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub emails API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read GitHub emails response: %w", err)
+	}
+
+	var emails []struct {
+		Email    string `json:"email"`
+		Primary  bool   `json:"primary"`
+		Verified bool   `json:"verified"`
+	}
+	if err := json.Unmarshal(body, &emails); err != nil {
+		return "", fmt.Errorf("failed to parse GitHub emails: %w", err)
+	}
+
+	for _, e := range emails {
+		if e.Primary && e.Verified {
+			return e.Email, nil
+		}
+	}
+
+	return "", fmt.Errorf("no verified primary email found on GitHub account")
+}
+
+// findOrCreateOAuthUser finds an existing user or creates one.
+func (s *AuthService) findOrCreateOAuthUser(ctx context.Context, email, name, provider string) (*TokenPair, error) {
 	// Check if user exists
-	existing, err := s.users.GetByEmail(ctx, claims.Email)
+	existing, err := s.users.GetByEmail(ctx, email)
 	if err == nil {
+		// Existing user — update auth provider if needed
+		if existing.AuthProvider != provider {
+			_ = s.users.SetAuthProvider(ctx, existing.ID, provider)
+		}
+		if !existing.EmailVerified {
+			_ = s.users.SetEmailVerified(ctx, existing.ID)
+		}
 		return s.issueTokens(&existing.User)
 	}
 
@@ -144,9 +562,8 @@ func (s *AuthService) GoogleLogin(ctx context.Context, idToken string) (*TokenPa
 	}
 	randomPassword := hex.EncodeToString(randBytes)
 
-	name := claims.Name
 	if name == "" {
-		name = claims.Email
+		name = email
 	}
 
 	role := entities.RoleDeveloper
@@ -155,10 +572,17 @@ func (s *AuthService) GoogleLogin(ctx context.Context, idToken string) (*TokenPa
 		role = entities.RoleOwner
 	}
 
-	user, err := s.users.Create(ctx, claims.Email, randomPassword, name, role)
+	user, err := s.users.Create(ctx, email, randomPassword, name, role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
+
+	// OAuth-verified users are auto-verified
+	_ = s.users.SetEmailVerified(ctx, user.ID)
+	_ = s.users.SetAuthProvider(ctx, user.ID, provider)
+
+	user.EmailVerified = true
+	user.AuthProvider = provider
 
 	return s.issueTokens(user)
 }
@@ -179,4 +603,17 @@ func (s *AuthService) issueTokens(user *entities.User) (*TokenPair, error) {
 		RefreshToken: refreshToken,
 		ExpiresIn:    int(AccessTokenExpiry.Seconds()),
 	}, nil
+}
+
+func generateRandomToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func hashToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
 }

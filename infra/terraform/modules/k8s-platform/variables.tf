@@ -162,6 +162,20 @@ variable "secrets_encryption_key" {
   default     = ""
 }
 
+variable "resend_api_key" {
+  description = "Resend API key for email verification"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "google_client_id" {
+  description = "Google OAuth client ID for login"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # --- cert-manager ---
 
 variable "cert_manager_version" {

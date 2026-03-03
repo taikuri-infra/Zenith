@@ -11,10 +11,11 @@ import (
 // Claims holds the JWT payload.
 type Claims struct {
 	jwt.RegisteredClaims
-	Email     string        `json:"email"`
-	Name      string        `json:"name"`
-	Role      entities.Role `json:"role"`
-	ProjectID string        `json:"project_id,omitempty"`
+	Email         string        `json:"email"`
+	Name          string        `json:"name"`
+	Role          entities.Role `json:"role"`
+	ProjectID     string        `json:"project_id,omitempty"`
+	EmailVerified bool          `json:"email_verified"`
 }
 
 // GenerateToken creates a signed JWT for the given user.
@@ -26,10 +27,11 @@ func GenerateToken(secret string, user *entities.User, expiry time.Duration) (st
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 		},
-		Email:     user.Email,
-		Name:      user.Name,
-		Role:      user.Role,
-		ProjectID: user.ProjectID,
+		Email:         user.Email,
+		Name:          user.Name,
+		Role:          user.Role,
+		ProjectID:     user.ProjectID,
+		EmailVerified: user.EmailVerified,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

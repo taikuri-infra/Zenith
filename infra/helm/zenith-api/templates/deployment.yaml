@@ -123,6 +123,45 @@ spec:
                   name: zenith-secrets
                   key: secrets-encryption-key
             {{- end }}
+            {{- if .Values.env.RESEND_API_KEY }}
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-auth-secrets
+                  key: resend-api-key
+            {{- end }}
+            {{- if .Values.env.APP_URL }}
+            - name: APP_URL
+              value: {{ .Values.env.APP_URL | quote }}
+            {{- end }}
+            {{- if .Values.env.GOOGLE_CLIENT_ID }}
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-auth-secrets
+                  key: google-client-id
+            {{- end }}
+            {{- if .Values.env.GOOGLE_CLIENT_SECRET }}
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-auth-secrets
+                  key: google-client-secret
+            {{- end }}
+            {{- if .Values.env.GITHUB_CLIENT_ID }}
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-auth-secrets
+                  key: github-client-id
+            {{- end }}
+            {{- if .Values.env.GITHUB_CLIENT_SECRET }}
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-auth-secrets
+                  key: github-client-secret
+            {{- end }}
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
