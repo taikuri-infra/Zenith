@@ -5,18 +5,24 @@ import { StatusBadge } from "@/components/status-badge";
 import { PageWithTableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
-import { Modal } from "@/components/modal";
+import { DeployWizard } from "@/components/deploy-wizard";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type App, type DeployApp } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Rocket, GitBranch, Box, ExternalLink, Clock } from "lucide-react";
+import {
+  Rocket,
+  Box,
+  ExternalLink,
+  Clock,
+  Container,
+} from "lucide-react";
 
 export default function AppsPage() {
   const projectId = useProject();
-  const { apps, appsDeploy } = getApi();
+  const { apps, appsDeploy, userPlan } = getApi();
 
   // CRD-based K8s apps
   const {
@@ -36,12 +42,13 @@ export default function AppsPage() {
     error: deployError,
   } = useApi(() => appsDeploy.list(), []);
 
+  // User plan (for showing Zenith registry hint)
+  const { data: planData } = useApi(() => userPlan.get(), []);
+  const tier = planData?.tier ?? "free";
+  const isPro = tier !== "free";
+
   const [appList, setAppList] = useState<App[]>([]);
   const [showDeploy, setShowDeploy] = useState(false);
-  const [formName, setFormName] = useState("");
-  const [formRepo, setFormRepo] = useState("");
-  const [formPort, setFormPort] = useState("8080");
-  const [formReplicas, setFormReplicas] = useState("1");
 
   const deployApps: DeployApp[] = deployData?.items ?? [];
 
@@ -73,28 +80,6 @@ export default function AppsPage() {
   const runningCount = appList.filter((a) => a.status === "running").length;
   const stoppedCount = appList.length - runningCount;
 
-  const handleDeploy = () => {
-    if (!formName.trim()) return;
-    const newApp: App = {
-      name: formName.trim(),
-      image: formRepo.trim() || `${formName.trim()}:latest`,
-      replicas: parseInt(formReplicas) || 1,
-      port: parseInt(formPort) || 8080,
-      status: "building",
-      cpu: "0.25",
-      memory: "256Mi",
-      domain: undefined,
-      env: {},
-      created_at: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    };
-    setAppList((prev) => [...prev, newApp]);
-    setShowDeploy(false);
-    setFormName("");
-    setFormRepo("");
-    setFormPort("8080");
-    setFormReplicas("1");
-  };
-
   const statusColor = (status: string) => {
     switch (status) {
       case "running":
@@ -120,21 +105,17 @@ export default function AppsPage() {
           <div>
             <h1 className="text-lg font-semibold text-white">Apps</h1>
             <p className="text-sm text-neutral-500">
-              {appList.length} service{appList.length !== 1 ? "s" : ""}
+              {appList.length + deployApps.length} app{appList.length + deployApps.length !== 1 ? "s" : ""}
               {runningCount > 0 ? `, ${runningCount} running` : ""}
               {stoppedCount > 0 ? `, ${stoppedCount} stopped` : ""}
-              {deployApps.length > 0 && (
-                <span className="text-accent-400">
-                  {" "}· {deployApps.length} Deploy Engine
-                </span>
-              )}
             </p>
           </div>
           <button
             onClick={() => setShowDeploy(true)}
-            className="rounded-lg bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 text-sm transition-colors"
+            className="flex items-center gap-2 rounded-lg bg-accent-500 hover:bg-accent-600 text-white px-3 py-1.5 text-sm transition-colors"
           >
-            + Deploy App
+            <Rocket className="h-4 w-4" />
+            Deploy App
           </button>
         </div>
 
@@ -156,7 +137,7 @@ export default function AppsPage() {
             </svg>
             <input
               type="text"
-              placeholder="Filter services..."
+              placeholder="Filter apps..."
               className="w-full rounded-lg border border-border bg-surface-100 py-1.5 pl-9 pr-3 text-sm text-white placeholder:text-neutral-500 focus:border-accent-500 focus:outline-none"
             />
           </div>
@@ -165,7 +146,7 @@ export default function AppsPage() {
             <option value="running">Running</option>
             <option value="stopped">Stopped</option>
             <option value="deploying">Deploying</option>
-            <option value="crashed">Crashed</option>
+            <option value="failed">Failed</option>
           </select>
         </div>
 
@@ -173,8 +154,8 @@ export default function AppsPage() {
         {appList.length === 0 && deployApps.length === 0 ? (
           <EmptyState
             title="No apps yet"
-            description="Deploy your first application to get started."
-            actionLabel="+ Deploy App"
+            description="Deploy a container image to get started."
+            actionLabel="Deploy App"
           />
         ) : appList.length > 0 ? (
           <div className="overflow-hidden rounded-lg border border-border">
@@ -256,36 +237,16 @@ export default function AppsPage() {
         ) : null}
 
         {/* ── Deploy Engine Apps ── */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
+        {deployApps.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2.5 mb-4">
               <Rocket className="h-5 w-5 text-accent-400" />
-              <h2 className="text-base font-semibold text-white">Deploy Engine</h2>
+              <h2 className="text-base font-semibold text-white">Deployed Apps</h2>
               <span className="text-xs text-neutral-500">
                 {deployApps.length} app{deployApps.length !== 1 ? "s" : ""}
               </span>
             </div>
-            <Link
-              href="/deploy"
-              className="flex items-center gap-1.5 rounded-lg border border-accent-500/30 px-3 py-1.5 text-xs font-medium text-accent-400 hover:bg-accent-500/10 transition-colors"
-            >
-              <Rocket className="h-3.5 w-3.5" />
-              Deploy from Git
-            </Link>
-          </div>
 
-          {deployApps.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border p-8 text-center">
-              <Rocket className="mx-auto h-8 w-8 text-neutral-600 mb-2" />
-              <p className="text-sm text-neutral-500">No Deploy Engine apps yet</p>
-              <Link
-                href="/deploy"
-                className="mt-2 inline-block text-xs text-accent-400 hover:text-accent-300 transition-colors"
-              >
-                Deploy your first app from Git →
-              </Link>
-            </div>
-          ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {deployApps.map((app) => (
                 <div
@@ -309,7 +270,7 @@ export default function AppsPage() {
                     />
                   </div>
 
-                  <Link href={`/deploy/${app.id}`} className="block">
+                  <Link href={`/apps/${app.id}`} className="block">
                     <h3 className="text-base font-semibold text-white group-hover:text-accent-400 transition-colors">
                       {app.name}
                     </h3>
@@ -321,8 +282,8 @@ export default function AppsPage() {
                       <span>{app.framework || "—"}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-neutral-400">
-                      <GitBranch className="h-3.5 w-3.5" />
-                      <span className="font-mono">{app.branch}</span>
+                      <Container className="h-3.5 w-3.5" />
+                      <span className="font-mono text-neutral-500">{app.port}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                       <Clock className="h-3.5 w-3.5 text-neutral-500" />
@@ -356,75 +317,13 @@ export default function AppsPage() {
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
+      {/* Deploy Wizard */}
       {showDeploy && (
-        <Modal title="Deploy App" onClose={() => setShowDeploy(false)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleDeploy();
-            }}
-            className="space-y-3"
-          >
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">App Name</label>
-              <input
-                type="text"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="my-app"
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Git Repository</label>
-              <input
-                type="text"
-                value={formRepo}
-                onChange={(e) => setFormRepo(e.target.value)}
-                placeholder="https://github.com/org/repo"
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Port</label>
-              <input
-                type="number"
-                value={formPort}
-                onChange={(e) => setFormPort(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Replicas</label>
-              <input
-                type="number"
-                value={formReplicas}
-                onChange={(e) => setFormReplicas(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowDeploy(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
-              >
-                Deploy
-              </button>
-            </div>
-          </form>
-        </Modal>
+        <DeployWizard onClose={() => setShowDeploy(false)} isPro={isPro} projectId={projectId} />
       )}
     </Shell>
   );

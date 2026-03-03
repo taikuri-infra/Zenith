@@ -36,12 +36,14 @@ import type {
   PreviewDeployment,
   BillingStatus,
   InvoiceRecord,
+  RegistryImage,
 } from "./api";
 
 import {
   mockApps,
   mockDatabases,
   mockStorage,
+  mockRegistryRepos,
 } from "./mock-data";
 
 // Simulate a short network delay so skeleton states flash briefly
@@ -947,6 +949,22 @@ export const demoBilling = {
   },
 };
 
+// ---- Registry Demo ----
+
+export const demoRegistry = {
+  listImages: async (): Promise<{ items: RegistryImage[] }> => {
+    await delay();
+    return {
+      items: mockRegistryRepos.map((repo) => ({
+        name: repo.name,
+        tags: repo.tags.map((t) => t.tag),
+        size: repo.totalSize,
+        lastPushed: repo.lastPushed,
+      })),
+    };
+  },
+};
+
 // Re-export as a unified object matching the real API import pattern
 export const demoApi = {
   auth: demoAuth,
@@ -970,4 +988,5 @@ export const demoApi = {
   previews: demoPreviews,
   autoscaler: demoAutoscaler,
   billing: demoBilling,
+  registry: demoRegistry,
 };
