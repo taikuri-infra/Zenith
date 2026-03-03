@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	gostripe "github.com/stripe/stripe-go/v82"
 	portalsession "github.com/stripe/stripe-go/v82/billingportal/session"
 	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
@@ -11,45 +12,15 @@ import (
 	"github.com/stripe/stripe-go/v82/webhook"
 )
 
-// CheckoutParams holds the parameters for creating a checkout session.
-type CheckoutParams struct {
-	CustomerID string
-	PriceID    string
-	SuccessURL string
-	CancelURL  string
-	UserEmail  string
-	Metadata   map[string]string
-}
-
-// CheckoutResult is the result of creating a checkout session.
-type CheckoutResult struct {
-	SessionID  string
-	URL        string
-}
-
-// PortalResult is the result of creating a portal session.
-type PortalResult struct {
-	URL string
-}
-
-// SubscriptionResult wraps relevant fields from a Stripe subscription.
-type SubscriptionResult struct {
-	ID                string
-	CustomerID        string
-	PriceID           string
-	Status            string
-	CurrentPeriodEnd  int64
-	CancelAtPeriodEnd bool
-}
-
-// StripeAPI defines the operations the billing system needs from Stripe.
+// StripeAPI extends ports.PaymentGateway with Stripe-specific webhook verification.
+// The handler layer uses this interface; the service layer uses ports.PaymentGateway.
 type StripeAPI interface {
-	CreateCheckoutSession(ctx context.Context, params CheckoutParams) (*CheckoutResult, error)
-	CreatePortalSession(ctx context.Context, customerID, returnURL string) (*PortalResult, error)
-	CancelSubscription(ctx context.Context, subID string, atPeriodEnd bool) error
-	GetSubscription(ctx context.Context, subID string) (*SubscriptionResult, error)
+	ports.PaymentGateway
 	ConstructWebhookEvent(payload []byte, signature string) (*gostripe.Event, error)
 }
+
+// Compile-time check: Client implements both StripeAPI and ports.PaymentGateway.
+var _ StripeAPI = (*Client)(nil)
 
 // Client wraps the stripe-go SDK.
 type Client struct {
@@ -65,7 +36,7 @@ func NewClient(secretKey, webhookSecret string) *Client {
 	}
 }
 
-func (c *Client) CreateCheckoutSession(_ context.Context, params CheckoutParams) (*CheckoutResult, error) {
+func (c *Client) CreateCheckoutSession(_ context.Context, params ports.CheckoutParams) (*ports.CheckoutResult, error) {
 	p := &gostripe.CheckoutSessionParams{
 		Mode: gostripe.String(string(gostripe.CheckoutSessionModeSubscription)),
 		LineItems: []*gostripe.CheckoutSessionLineItemParams{
@@ -93,13 +64,13 @@ func (c *Client) CreateCheckoutSession(_ context.Context, params CheckoutParams)
 		return nil, fmt.Errorf("stripe: create checkout session: %w", err)
 	}
 
-	return &CheckoutResult{
+	return &ports.CheckoutResult{
 		SessionID: sess.ID,
 		URL:       sess.URL,
 	}, nil
 }
 
-func (c *Client) CreatePortalSession(_ context.Context, customerID, returnURL string) (*PortalResult, error) {
+func (c *Client) CreatePortalSession(_ context.Context, customerID, returnURL string) (*ports.PortalResult, error) {
 	p := &gostripe.BillingPortalSessionParams{
 		Customer:  gostripe.String(customerID),
 		ReturnURL: gostripe.String(returnURL),
@@ -110,7 +81,7 @@ func (c *Client) CreatePortalSession(_ context.Context, customerID, returnURL st
 		return nil, fmt.Errorf("stripe: create portal session: %w", err)
 	}
 
-	return &PortalResult{URL: sess.URL}, nil
+	return &ports.PortalResult{URL: sess.URL}, nil
 }
 
 func (c *Client) CancelSubscription(_ context.Context, subID string, atPeriodEnd bool) error {
@@ -131,7 +102,7 @@ func (c *Client) CancelSubscription(_ context.Context, subID string, atPeriodEnd
 	return nil
 }
 
-func (c *Client) GetSubscription(_ context.Context, subID string) (*SubscriptionResult, error) {
+func (c *Client) GetSubscription(_ context.Context, subID string) (*ports.SubscriptionResult, error) {
 	sub, err := subscription.Get(subID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("stripe: get subscription: %w", err)
@@ -144,7 +115,7 @@ func (c *Client) GetSubscription(_ context.Context, subID string) (*Subscription
 		periodEnd = sub.Items.Data[0].CurrentPeriodEnd
 	}
 
-	return &SubscriptionResult{
+	return &ports.SubscriptionResult{
 		ID:                sub.ID,
 		CustomerID:        sub.Customer.ID,
 		PriceID:           priceID,

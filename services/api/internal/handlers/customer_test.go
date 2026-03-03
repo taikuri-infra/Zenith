@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
-	"github.com/dotechhq/zenith/services/api/internal/cluster"
+	"github.com/dotechhq/zenith/services/api/internal/services/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/entities"

@@ -9,7 +9,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/dotechhq/zenith/services/api/internal/deploy"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"

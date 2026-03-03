@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
-	"github.com/dotechhq/zenith/services/api/internal/autoscale"
+	"github.com/dotechhq/zenith/services/api/internal/services/autoscale"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/hetznerclient"
 	"github.com/dotechhq/zenith/services/api/internal/ports"

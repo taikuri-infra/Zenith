@@ -7,8 +7,12 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
-"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
+
+// Compile-time check: Client implements ports.ClusterProvisioner.
+var _ ports.ClusterProvisioner = (*Client)(nil)
 
 const (
 	// CAPINamespace is the management namespace where CAPI resources live.
