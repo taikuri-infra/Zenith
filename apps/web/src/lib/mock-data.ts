@@ -98,7 +98,7 @@ export interface AuthClient {
   enabled: boolean;
 }
 
-// Gateway (Kong) data
+// Gateway (APISIX) data
 export interface GatewayRoute {
   name: string;
   path: string;
@@ -436,7 +436,7 @@ export const mockAuthClients: AuthClient[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Gateway (Kong) mock data
+// Gateway (APISIX) mock data
 // ---------------------------------------------------------------------------
 
 export const mockGatewayRoutes: GatewayRoute[] = [

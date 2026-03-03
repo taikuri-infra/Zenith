@@ -24,7 +24,7 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Networking — Ingress resources (owned by App, Domain, AuthRealm, GatewayRoute)
+  # Networking — Ingress resources (owned by App, Domain, AuthRealm)
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
