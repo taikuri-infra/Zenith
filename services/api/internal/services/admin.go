@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
+
+var errNoCAPI = fmt.Errorf("CAPI cluster provisioner not configured")
 
 // AdminService handles Mission Control admin business logic.
 type AdminService struct {
@@ -25,9 +28,13 @@ func NewAdminService(k8s ports.KubernetesClient, clusters ports.ClusterProvision
 
 // GetDashboardStats returns aggregate statistics for the dashboard.
 func (s *AdminService) GetDashboardStats(ctx context.Context) (*entities.DashboardStats, error) {
-	clusters, err := s.clusters.ListClusters(ctx)
-	if err != nil {
-		clusters = []entities.Cluster{}
+	var clusters []entities.Cluster
+	if s.clusters != nil {
+		var err error
+		clusters, err = s.clusters.ListClusters(ctx)
+		if err != nil {
+			clusters = []entities.Cluster{}
+		}
 	}
 
 	allHealthy := true
@@ -69,16 +76,29 @@ func (s *AdminService) GetDashboardStats(ctx context.Context) (*entities.Dashboa
 
 // ListClusters returns all CAPI-managed clusters.
 func (s *AdminService) ListClusters(ctx context.Context) ([]entities.Cluster, error) {
-	return s.clusters.ListClusters(ctx)
+	if s.clusters == nil {
+		return []entities.Cluster{}, nil
+	}
+	clusters, err := s.clusters.ListClusters(ctx)
+	if err != nil {
+		return []entities.Cluster{}, nil
+	}
+	return clusters, nil
 }
 
 // GetCluster returns a single cluster by name.
 func (s *AdminService) GetCluster(ctx context.Context, name string) (*entities.Cluster, error) {
+	if s.clusters == nil {
+		return nil, errNoCAPI
+	}
 	return s.clusters.GetCluster(ctx, name)
 }
 
 // CreateCluster provisions a new CAPI cluster.
 func (s *AdminService) CreateCluster(ctx context.Context, input dto.CreateClusterInput, actor string) (*entities.Cluster, error) {
+	if s.clusters == nil {
+		return nil, errNoCAPI
+	}
 	cluster, err := s.clusters.CreateCluster(ctx, input)
 	if err != nil {
 		return nil, err
@@ -96,6 +116,9 @@ func (s *AdminService) CreateCluster(ctx context.Context, input dto.CreateCluste
 
 // DeleteCluster removes a CAPI cluster.
 func (s *AdminService) DeleteCluster(ctx context.Context, name, actor string) error {
+	if s.clusters == nil {
+		return errNoCAPI
+	}
 	if err := s.clusters.DeleteCluster(ctx, name); err != nil {
 		return err
 	}
@@ -112,6 +135,9 @@ func (s *AdminService) DeleteCluster(ctx context.Context, name, actor string) er
 
 // UpgradeCluster initiates a Kubernetes version upgrade.
 func (s *AdminService) UpgradeCluster(ctx context.Context, name, version, actor string) error {
+	if s.clusters == nil {
+		return errNoCAPI
+	}
 	if err := s.clusters.UpgradeCluster(ctx, name, version); err != nil {
 		return err
 	}
@@ -268,7 +294,10 @@ func (s *AdminService) ListUpdateHistory(ctx context.Context) ([]entities.Update
 
 // GetInfraOverview returns a summary of infrastructure.
 func (s *AdminService) GetInfraOverview(ctx context.Context) (*entities.InfraOverview, error) {
-	clusters, _ := s.clusters.ListClusters(ctx)
+	var clusters []entities.Cluster
+	if s.clusters != nil {
+		clusters, _ = s.clusters.ListClusters(ctx)
+	}
 
 	totalServers := 0
 	resources := make([]entities.InfraNode, 0)
@@ -332,7 +361,10 @@ func (s *AdminService) GetPlatformState(ctx context.Context) (*entities.Platform
 
 // ExportState exports the full platform state as JSON bytes.
 func (s *AdminService) ExportState(ctx context.Context) ([]byte, error) {
-	clusters, _ := s.clusters.ListClusters(ctx)
+	var clusters []entities.Cluster
+	if s.clusters != nil {
+		clusters, _ = s.clusters.ListClusters(ctx)
+	}
 	projects, _ := s.k8s.ListCRDs(ctx, "Project", "")
 	settings, _ := s.store.GetSettings(ctx)
 	modules, _ := s.store.ListModules(ctx)
