@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { loginUrl, registerUrl } from "@/lib/urls";
 import { Menu, X, Github } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -89,13 +90,13 @@ export function Header() {
         {/* Desktop CTA */}
         <div className="hidden items-center gap-3 md:flex">
           <Link
-            href="https://app.freezenith.com/login"
+            href={loginUrl}
             className="rounded-lg px-3.5 py-2 text-sm text-neutral-400 transition-colors hover:text-white"
           >
             Login
           </Link>
           <Link
-            href="https://app.freezenith.com/register"
+            href={registerUrl}
             className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-500/25"
           >
             Start Free
@@ -144,14 +145,14 @@ export function Header() {
               ))}
               <div className="mt-3 flex flex-col gap-2 border-t border-border pt-4">
                 <Link
-                  href="https://app.freezenith.com/login"
+                  href={loginUrl}
                   onClick={() => setMobileOpen(false)}
                   className="flex items-center justify-center rounded-lg border border-border bg-surface-200 px-4 py-2.5 text-sm font-medium text-neutral-300 transition-all hover:text-white"
                 >
                   Login
                 </Link>
                 <Link
-                  href="https://app.freezenith.com/register"
+                  href={registerUrl}
                   onClick={() => setMobileOpen(false)}
                   className="block rounded-lg bg-accent-500 px-4 py-2.5 text-center text-sm font-medium text-white transition-all hover:bg-accent-600"
                 >

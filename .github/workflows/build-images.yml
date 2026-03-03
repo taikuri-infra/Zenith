@@ -162,6 +162,8 @@ jobs:
           file: apps/landing/Dockerfile
           push: true
           platforms: linux/amd64
+          build-args: |
+            NEXT_PUBLIC_APP_URL=https://app.stage.freezenith.com
           tags: |
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing:sha-${{ needs.prepare.outputs.sha_short }}
@@ -195,6 +197,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com
+            NEXT_PUBLIC_LANDING_URL=https://stage.freezenith.com
           tags: |
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc:sha-${{ needs.prepare.outputs.sha_short }}
@@ -242,6 +245,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com
+            NEXT_PUBLIC_LANDING_URL=https://stage.freezenith.com
           tags: |
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:sha-${{ needs.prepare.outputs.sha_short }}

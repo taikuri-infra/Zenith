@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
+import { registerUrl } from "@/lib/urls";
 
 const options = [
   {
@@ -26,7 +27,7 @@ const options = [
       "Upgrade anytime",
     ],
     cta: "Start Free",
-    ctaHref: "https://app.freezenith.com/register",
+    ctaHref: registerUrl,
     featured: true,
   },
   {

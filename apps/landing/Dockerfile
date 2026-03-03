@@ -24,6 +24,10 @@ WORKDIR /app
 # Copy installed dependencies from deps stage
 COPY --from=deps /app/ ./
 
+# NEXT_PUBLIC_* must be set at build time for client components
+ARG NEXT_PUBLIC_APP_URL=https://app.freezenith.com
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+
 # Copy source code
 COPY packages/ui/ ./packages/ui/
 COPY apps/landing/ ./apps/landing/

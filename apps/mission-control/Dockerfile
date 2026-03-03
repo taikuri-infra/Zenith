@@ -24,8 +24,10 @@ WORKDIR /app
 # NEXT_PUBLIC_* must be set at build time for client components
 ARG NEXT_PUBLIC_DEMO_MODE=false
 ARG NEXT_PUBLIC_API_URL=https://api.freezenith.com
+ARG NEXT_PUBLIC_LANDING_URL=https://freezenith.com
 ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_LANDING_URL=$NEXT_PUBLIC_LANDING_URL
 
 # Copy installed dependencies from deps stage
 COPY --from=deps /app/ ./

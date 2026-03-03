@@ -21,13 +21,14 @@ import {
   Search,
   Cloud,
 } from "lucide-react";
+import { registerUrl } from "@/lib/urls";
 
 const quickLinks = [
   {
     icon: Cloud,
     title: "Cloud Quick Start",
     description: "Sign up for Zenith Cloud and deploy your first app in under 5 minutes.",
-    href: "https://app.freezenith.com/register",
+    href: registerUrl,
     color: "accent",
   },
   {
