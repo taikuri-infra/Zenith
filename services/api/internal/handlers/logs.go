@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dotechhq/zenith/services/api/internal/deploy"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )

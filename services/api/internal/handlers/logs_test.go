@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
-	"github.com/dotechhq/zenith/services/api/internal/deploy"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
