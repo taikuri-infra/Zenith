@@ -60,12 +60,18 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 	id := uuid.New().String()
 	now := time.Now()
 
+	appType := input.AppType
+	if appType == "" {
+		appType = entities.AppTypeWeb
+	}
+
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO apps (id, user_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		`INSERT INTO apps (id, user_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
 		id, input.UserID, input.Name, string(deploySource), input.RepoURL, branch,
 		input.ImageURL, input.RegistryUsername, input.RegistryPassword,
-		string(entities.FrameworkUnknown), string(entities.AppStatusPending), subdomain, port, now, now,
+		string(entities.FrameworkUnknown), string(entities.AppStatusPending), subdomain, port,
+		string(appType), input.Command, input.CronSchedule, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_apps_user_name") {
@@ -91,6 +97,9 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 		Status:           entities.AppStatusPending,
 		Subdomain:        subdomain,
 		Port:             port,
+		AppType:          appType,
+		Command:          input.Command,
+		CronSchedule:     input.CronSchedule,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -100,11 +109,13 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 
 func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	var app entities.App
-	var framework, status, deploySource string
+	var framework, status, deploySource, appType string
 
 	err := scan(&app.ID, &app.UserID, &app.Name, &deploySource, &app.RepoURL, &app.Branch,
 		&app.ImageURL, &app.RegistryUser, &app.RegistryPassword,
-		&framework, &status, &app.Subdomain, &app.Port, &app.CreatedAt, &app.UpdatedAt)
+		&framework, &status, &app.Subdomain, &app.Port,
+		&appType, &app.Command, &app.CronSchedule,
+		&app.CreatedAt, &app.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -112,10 +123,14 @@ func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	app.DeploySource = entities.DeploySource(deploySource)
 	app.Framework = entities.Framework(framework)
 	app.Status = entities.AppStatus(status)
+	app.AppType = entities.AppType(appType)
+	if app.AppType == "" {
+		app.AppType = entities.AppTypeWeb
+	}
 	return &app, nil
 }
 
-const appColumns = `id, user_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, created_at, updated_at`
+const appColumns = `id, user_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, created_at, updated_at`
 
 func (r *PostgresAppRepository) GetApp(ctx context.Context, id string) (*entities.App, error) {
 	row := r.pool.QueryRow(ctx,

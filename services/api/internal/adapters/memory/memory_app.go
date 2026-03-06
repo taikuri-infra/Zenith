@@ -84,6 +84,11 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 	subdomain := strings.ToLower(strings.ReplaceAll(input.Name, "_", "-"))
 	subdomain = strings.ReplaceAll(subdomain, " ", "-")
 
+	appType := input.AppType
+	if appType == "" {
+		appType = entities.AppTypeWeb
+	}
+
 	now := time.Now()
 	app := &entities.App{
 		ID:               uuid.New().String(),
@@ -99,6 +104,9 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 		Status:           entities.AppStatusPending,
 		Subdomain:        subdomain,
 		Port:             port,
+		AppType:          appType,
+		Command:          input.Command,
+		CronSchedule:     input.CronSchedule,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,

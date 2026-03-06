@@ -47,6 +47,9 @@ type CreateAppV2Request struct {
 	Port             int    `json:"port,omitempty"`
 	RegistryUsername string `json:"registry_username,omitempty"`
 	RegistryPassword string `json:"registry_password,omitempty"`
+	AppType          string `json:"app_type,omitempty"`
+	Command          string `json:"command,omitempty"`
+	CronSchedule     string `json:"cron_schedule,omitempty"`
 }
 
 // AppV2Response is the API response for an app.
@@ -62,6 +65,9 @@ type AppV2Response struct {
 	Subdomain    string    `json:"subdomain"`
 	URL          string    `json:"url"`
 	Port         int       `json:"port"`
+	AppType      string    `json:"app_type"`
+	Command      string    `json:"command,omitempty"`
+	CronSchedule string    `json:"cron_schedule,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -70,6 +76,10 @@ func (h *AppHandlerV2) appToResponse(app *entities.App) AppV2Response {
 	url := ""
 	if app.Subdomain != "" && h.baseDomain != "" {
 		url = "https://" + app.Subdomain + "." + h.baseDomain
+	}
+	appType := string(app.AppType)
+	if appType == "" {
+		appType = "web"
 	}
 	return AppV2Response{
 		ID:           app.ID,
@@ -83,6 +93,9 @@ func (h *AppHandlerV2) appToResponse(app *entities.App) AppV2Response {
 		Subdomain:    app.Subdomain,
 		URL:          url,
 		Port:         app.Port,
+		AppType:      appType,
+		Command:      app.Command,
+		CronSchedule: app.CronSchedule,
 		CreatedAt:    app.CreatedAt,
 		UpdatedAt:    app.UpdatedAt,
 	}
@@ -119,6 +132,14 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		return NewBadRequest("image_url is required for image deploys")
 	}
 
+	appType := entities.AppType(req.AppType)
+	if appType == "" {
+		appType = entities.AppTypeWeb
+	}
+	if appType != entities.AppTypeWeb && appType != entities.AppTypeWorker && appType != entities.AppTypeCron {
+		return NewBadRequest("app_type must be 'web', 'worker', or 'cron'")
+	}
+
 	app, err := h.appRepo.CreateApp(c.Context(), &dto.CreateAppInput{
 		UserID:           userID.(string),
 		Name:             req.Name,
@@ -129,6 +150,9 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		Port:             req.Port,
 		RegistryUsername:  req.RegistryUsername,
 		RegistryPassword: req.RegistryPassword,
+		AppType:          appType,
+		Command:          req.Command,
+		CronSchedule:     req.CronSchedule,
 	})
 	if err != nil {
 		if isAlreadyExists(err) {
