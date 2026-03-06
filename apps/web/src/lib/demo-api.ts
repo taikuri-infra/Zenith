@@ -9,6 +9,10 @@ import type {
   App,
   Database,
   StorageBucket,
+  StorageBucketV2,
+  StorageObject,
+  ListObjectsResponse,
+  PresignedURLResponse,
   DeployApp,
   Deployment,
   EnvVar,
@@ -208,6 +212,84 @@ export const demoStorage = {
   },
   delete: async (): Promise<void> => {
     throw new Error("Not available in demo mode");
+  },
+};
+
+// Mock standalone storage buckets
+const mockStandaloneBuckets: StorageBucketV2[] = [
+  {
+    id: "sb-1", app_id: "", name: "media-assets", access: "public", region: "fsn1",
+    size_mb: 256, max_size_mb: 1024, objects: 142, status: "active",
+    endpoint: "https://media-assets.s3.zenith.local", created_at: "2026-02-15T10:00:00Z",
+  },
+  {
+    id: "sb-2", app_id: "", name: "backup-data", access: "private", region: "fsn1",
+    size_mb: 512, max_size_mb: 1024, objects: 38, status: "active",
+    endpoint: "https://backup-data.s3.zenith.local", created_at: "2026-02-20T14:00:00Z",
+  },
+  {
+    id: "sb-3", app_id: "", name: "user-uploads", access: "private", region: "fsn1",
+    size_mb: 89, max_size_mb: 1024, objects: 215, status: "active",
+    endpoint: "https://user-uploads.s3.zenith.local", created_at: "2026-03-01T09:00:00Z",
+  },
+];
+
+const mockObjects: StorageObject[] = [
+  { key: "images/", size: 0, last_modified: "", etag: "", is_folder: true },
+  { key: "docs/", size: 0, last_modified: "", etag: "", is_folder: true },
+  { key: "readme.txt", size: 1024, last_modified: "2026-03-02T10:00:00Z", etag: "\"abc123\"", is_folder: false },
+  { key: "config.json", size: 4096, last_modified: "2026-03-03T14:30:00Z", etag: "\"def456\"", is_folder: false },
+  { key: "logo.png", size: 52428, last_modified: "2026-02-28T08:00:00Z", etag: "\"ghi789\"", is_folder: false },
+];
+
+export const demoStorageBuckets = {
+  list: async (): Promise<StorageBucketV2[]> => {
+    await delay();
+    return mockStandaloneBuckets;
+  },
+  get: async (id: string): Promise<StorageBucketV2> => {
+    await delay();
+    const bucket = mockStandaloneBuckets.find((b) => b.id === id);
+    if (!bucket) throw new Error("Bucket not found");
+    return bucket;
+  },
+  create: async (data: { name: string; access?: string }): Promise<StorageBucketV2> => {
+    await delay();
+    return {
+      id: `sb-${Date.now()}`, app_id: "", name: data.name, access: data.access || "private",
+      region: "fsn1", size_mb: 0, max_size_mb: 1024, objects: 0, status: "active",
+      endpoint: `https://${data.name}.s3.zenith.local`, created_at: new Date().toISOString(),
+    };
+  },
+  update: async (id: string, data: { access: string }): Promise<StorageBucketV2> => {
+    await delay();
+    const bucket = mockStandaloneBuckets.find((b) => b.id === id);
+    if (!bucket) throw new Error("Bucket not found");
+    return { ...bucket, access: data.access };
+  },
+  delete: async (): Promise<{ message: string }> => {
+    await delay();
+    return { message: "bucket deleted" };
+  },
+  listObjects: async (): Promise<ListObjectsResponse> => {
+    await delay();
+    return { objects: mockObjects, common_prefixes: ["images/", "docs/"], prefix: "", is_truncated: false };
+  },
+  getUploadURL: async (_bucketId: string, key: string): Promise<PresignedURLResponse> => {
+    await delay();
+    return { url: `https://demo-bucket.s3.zenith.local/${key}?presigned=true`, method: "PUT", expires_in: 900 };
+  },
+  getDownloadURL: async (_bucketId: string, key: string): Promise<PresignedURLResponse> => {
+    await delay();
+    return { url: `https://demo-bucket.s3.zenith.local/${key}?presigned=true`, method: "GET", expires_in: 900 };
+  },
+  deleteObject: async (): Promise<{ message: string }> => {
+    await delay();
+    return { message: "object deleted" };
+  },
+  createFolder: async (_bucketId: string, prefix: string): Promise<{ message: string; prefix: string }> => {
+    await delay();
+    return { message: "folder created", prefix };
   },
 };
 
@@ -1127,6 +1209,7 @@ export const demoApi = {
   apps: demoApps,
   databases: demoDatabases,
   storage: demoStorage,
+  storageBuckets: demoStorageBuckets,
   appsDeploy: demoAppsDeploy,
   userDatabases: demoUserDatabases,
   standaloneDatabases: demoStandaloneDatabases,

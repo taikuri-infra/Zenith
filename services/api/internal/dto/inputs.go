@@ -190,6 +190,46 @@ type BucketInfo struct {
 	CreatedAt string                 `json:"created_at"`
 }
 
+// UpdateBucketInput is the request body for updating a bucket's access.
+type UpdateBucketInput struct {
+	Access entities.BucketAccess `json:"access" validate:"required"`
+}
+
+// ObjectEntry represents a single file or folder in a bucket listing.
+type ObjectEntry struct {
+	Key          string `json:"key"`
+	Size         int64  `json:"size"`
+	LastModified string `json:"last_modified,omitempty"`
+	ETag         string `json:"etag,omitempty"`
+	IsFolder     bool   `json:"is_folder"`
+}
+
+// ListObjectsResponse is the response for listing objects in a bucket.
+type ListObjectsResponse struct {
+	Objects        []ObjectEntry `json:"objects"`
+	CommonPrefixes []string      `json:"common_prefixes"`
+	Prefix         string        `json:"prefix"`
+	IsTruncated    bool          `json:"is_truncated"`
+}
+
+// PresignedURLResponse is the response containing a presigned URL.
+type PresignedURLResponse struct {
+	URL       string `json:"url"`
+	Method    string `json:"method"`
+	ExpiresIn int    `json:"expires_in"`
+}
+
+// UploadURLInput is the request body for generating a presigned upload URL.
+type UploadURLInput struct {
+	Key         string `json:"key"          validate:"required"`
+	ContentType string `json:"content_type"`
+}
+
+// CreateFolderInput is the request body for creating a folder in a bucket.
+type CreateFolderInput struct {
+	Prefix string `json:"prefix" validate:"required"`
+}
+
 // --- App Auth DTOs ---
 
 // AppAuthSignupInput is the request body for registering a user in an app's auth.

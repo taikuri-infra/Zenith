@@ -151,6 +151,27 @@ type SubscriptionResult struct {
 type ObjectStorage interface {
 	CreateBucket(ctx context.Context, bucketName string) error
 	DeleteBucket(ctx context.Context, bucketName string) error
+	ListObjects(ctx context.Context, bucket, prefix, delimiter string, maxKeys int) (*ObjectListResult, error)
+	DeleteObject(ctx context.Context, bucket, key string) error
+	GeneratePresignedUploadURL(ctx context.Context, bucket, key, contentType string, expiry time.Duration) (string, error)
+	GeneratePresignedDownloadURL(ctx context.Context, bucket, key string, expiry time.Duration) (string, error)
+	CreateFolder(ctx context.Context, bucket, prefix string) error
+}
+
+// ObjectListResult holds the response from listing objects in a bucket.
+type ObjectListResult struct {
+	Objects        []ObjectInfo `json:"objects"`
+	CommonPrefixes []string    `json:"common_prefixes"`
+	Prefix         string      `json:"prefix"`
+	IsTruncated    bool        `json:"is_truncated"`
+}
+
+// ObjectInfo holds metadata for a single S3 object.
+type ObjectInfo struct {
+	Key          string    `json:"key"`
+	Size         int64     `json:"size"`
+	LastModified time.Time `json:"last_modified"`
+	ETag         string    `json:"etag"`
 }
 
 // ---------------------------------------------------------------------------

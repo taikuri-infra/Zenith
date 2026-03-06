@@ -509,6 +509,92 @@ export const standaloneDatabases = {
     apiFetch<void>(`/api/v1/databases/${id}`, { method: "DELETE" }),
 };
 
+// ---- Standalone Storage Buckets API ----
+
+export interface StorageBucketV2 {
+  id: string;
+  app_id: string;
+  name: string;
+  access: string;
+  region: string;
+  size_mb: number;
+  max_size_mb: number;
+  objects: number;
+  status: string;
+  endpoint: string;
+  created_at: string;
+}
+
+export interface StorageObject {
+  key: string;
+  size: number;
+  last_modified: string;
+  etag: string;
+  is_folder: boolean;
+}
+
+export interface ListObjectsResponse {
+  objects: StorageObject[];
+  common_prefixes: string[];
+  prefix: string;
+  is_truncated: boolean;
+}
+
+export interface PresignedURLResponse {
+  url: string;
+  method: string;
+  expires_in: number;
+}
+
+export const storageBuckets = {
+  list: () => apiFetch<StorageBucketV2[]>("/api/v1/storage-buckets"),
+  get: (id: string) =>
+    apiFetch<StorageBucketV2>(`/api/v1/storage-buckets/${id}`),
+  create: (data: { name: string; access?: string }) =>
+    apiFetch<StorageBucketV2>("/api/v1/storage-buckets", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { access: string }) =>
+    apiFetch<StorageBucketV2>(`/api/v1/storage-buckets/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    apiFetch<{ message: string }>(`/api/v1/storage-buckets/${id}`, {
+      method: "DELETE",
+    }),
+  listObjects: (bucketId: string, prefix = "", delimiter = "/") =>
+    apiFetch<ListObjectsResponse>(
+      `/api/v1/storage-buckets/${bucketId}/objects?prefix=${encodeURIComponent(prefix)}&delimiter=${encodeURIComponent(delimiter)}`
+    ),
+  getUploadURL: (bucketId: string, key: string, contentType?: string) =>
+    apiFetch<PresignedURLResponse>(
+      `/api/v1/storage-buckets/${bucketId}/objects/upload`,
+      {
+        method: "POST",
+        body: JSON.stringify({ key, content_type: contentType }),
+      }
+    ),
+  getDownloadURL: (bucketId: string, key: string) =>
+    apiFetch<PresignedURLResponse>(
+      `/api/v1/storage-buckets/${bucketId}/objects/download?key=${encodeURIComponent(key)}`
+    ),
+  deleteObject: (bucketId: string, key: string) =>
+    apiFetch<{ message: string }>(
+      `/api/v1/storage-buckets/${bucketId}/objects?key=${encodeURIComponent(key)}`,
+      { method: "DELETE" }
+    ),
+  createFolder: (bucketId: string, prefix: string) =>
+    apiFetch<{ message: string; prefix: string }>(
+      `/api/v1/storage-buckets/${bucketId}/objects/folder`,
+      {
+        method: "POST",
+        body: JSON.stringify({ prefix }),
+      }
+    ),
+};
+
 // ---- Notifications ----
 
 export interface Notification {

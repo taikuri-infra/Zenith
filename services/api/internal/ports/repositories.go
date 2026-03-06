@@ -116,8 +116,10 @@ type DatabaseRepository interface {
 type StorageRepository interface {
 	CreateBucket(ctx context.Context, appID, userID string, input *dto.CreateBucketInput) (*entities.UserBucket, error)
 	GetBucket(ctx context.Context, id string) (*entities.UserBucket, error)
+	GetBucketByName(ctx context.Context, userID, name string) (*entities.UserBucket, error)
 	ListBucketsByApp(ctx context.Context, appID string) ([]entities.UserBucket, error)
 	ListBucketsByUser(ctx context.Context, userID string) ([]entities.UserBucket, error)
+	UpdateBucket(ctx context.Context, id string, access entities.BucketAccess) (*entities.UserBucket, error)
 	DeleteBucket(ctx context.Context, id string) error
 	CountBucketsByUser(ctx context.Context, userID string) (int, error)
 }

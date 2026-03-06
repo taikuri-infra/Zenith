@@ -1,8 +1,10 @@
 package s3client
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -55,6 +57,104 @@ func (c *Client) DeleteBucket(ctx context.Context, bucketName string) error {
 	return nil
 }
 
+// ListObjects lists objects in a bucket with optional prefix/delimiter filtering.
+func (c *Client) ListObjects(ctx context.Context, bucket, prefix, delimiter string, maxKeys int) (*ports.ObjectListResult, error) {
+	if maxKeys <= 0 {
+		maxKeys = 1000
+	}
+	input := &s3.ListObjectsV2Input{
+		Bucket:  aws.String(bucket),
+		MaxKeys: aws.Int32(int32(maxKeys)),
+	}
+	if prefix != "" {
+		input.Prefix = aws.String(prefix)
+	}
+	if delimiter != "" {
+		input.Delimiter = aws.String(delimiter)
+	}
+
+	out, err := c.s3Client.ListObjectsV2(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list objects in %s: %w", bucket, err)
+	}
+
+	result := &ports.ObjectListResult{
+		Prefix:      prefix,
+		IsTruncated: aws.ToBool(out.IsTruncated),
+	}
+
+	for _, obj := range out.Contents {
+		result.Objects = append(result.Objects, ports.ObjectInfo{
+			Key:          aws.ToString(obj.Key),
+			Size:         aws.ToInt64(obj.Size),
+			LastModified: aws.ToTime(obj.LastModified),
+			ETag:         aws.ToString(obj.ETag),
+		})
+	}
+
+	for _, cp := range out.CommonPrefixes {
+		result.CommonPrefixes = append(result.CommonPrefixes, aws.ToString(cp.Prefix))
+	}
+
+	return result, nil
+}
+
+// DeleteObject deletes an object from a bucket.
+func (c *Client) DeleteObject(ctx context.Context, bucket, key string) error {
+	_, err := c.s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("delete object %s/%s: %w", bucket, key, err)
+	}
+	return nil
+}
+
+// GeneratePresignedUploadURL creates a presigned PUT URL for uploading an object.
+func (c *Client) GeneratePresignedUploadURL(ctx context.Context, bucket, key, contentType string, expiry time.Duration) (string, error) {
+	presignClient := s3.NewPresignClient(c.s3Client)
+	input := &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}
+	if contentType != "" {
+		input.ContentType = aws.String(contentType)
+	}
+	out, err := presignClient.PresignPutObject(ctx, input, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign upload %s/%s: %w", bucket, key, err)
+	}
+	return out.URL, nil
+}
+
+// GeneratePresignedDownloadURL creates a presigned GET URL for downloading an object.
+func (c *Client) GeneratePresignedDownloadURL(ctx context.Context, bucket, key string, expiry time.Duration) (string, error) {
+	presignClient := s3.NewPresignClient(c.s3Client)
+	out, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign download %s/%s: %w", bucket, key, err)
+	}
+	return out.URL, nil
+}
+
+// CreateFolder creates a zero-byte object representing a folder.
+func (c *Client) CreateFolder(ctx context.Context, bucket, prefix string) error {
+	_, err := c.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(bucket),
+		Key:           aws.String(prefix),
+		Body:          bytes.NewReader([]byte{}),
+		ContentLength: aws.Int64(0),
+	})
+	if err != nil {
+		return fmt.Errorf("create folder %s/%s: %w", bucket, prefix, err)
+	}
+	return nil
+}
+
 // MemoryS3Client is a no-op implementation for dev/test.
 type MemoryS3Client struct{}
 
@@ -62,3 +162,28 @@ func NewMemoryClient() *MemoryS3Client { return &MemoryS3Client{} }
 
 func (m *MemoryS3Client) CreateBucket(_ context.Context, _ string) error { return nil }
 func (m *MemoryS3Client) DeleteBucket(_ context.Context, _ string) error { return nil }
+
+func (m *MemoryS3Client) ListObjects(_ context.Context, _, prefix, _ string, _ int) (*ports.ObjectListResult, error) {
+	// Return sample objects for dev/test
+	result := &ports.ObjectListResult{
+		Prefix: prefix,
+		Objects: []ports.ObjectInfo{
+			{Key: prefix + "readme.txt", Size: 1024, LastModified: time.Now().Add(-24 * time.Hour), ETag: "\"abc123\""},
+			{Key: prefix + "data.json", Size: 4096, LastModified: time.Now().Add(-2 * time.Hour), ETag: "\"def456\""},
+		},
+		CommonPrefixes: []string{prefix + "images/", prefix + "docs/"},
+	}
+	return result, nil
+}
+
+func (m *MemoryS3Client) DeleteObject(_ context.Context, _, _ string) error { return nil }
+
+func (m *MemoryS3Client) GeneratePresignedUploadURL(_ context.Context, bucket, key, _ string, expiry time.Duration) (string, error) {
+	return fmt.Sprintf("https://%s.s3.zenith.local/%s?X-Amz-Expires=%.0f", bucket, key, expiry.Seconds()), nil
+}
+
+func (m *MemoryS3Client) GeneratePresignedDownloadURL(_ context.Context, bucket, key string, expiry time.Duration) (string, error) {
+	return fmt.Sprintf("https://%s.s3.zenith.local/%s?X-Amz-Expires=%.0f", bucket, key, expiry.Seconds()), nil
+}
+
+func (m *MemoryS3Client) CreateFolder(_ context.Context, _, _ string) error { return nil }

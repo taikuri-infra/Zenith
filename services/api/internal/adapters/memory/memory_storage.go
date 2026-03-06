@@ -25,19 +25,19 @@ func NewMemoryStorageRepository() *MemoryStorageRepository {
 }
 
 func (r *MemoryStorageRepository) CreateBucket(_ context.Context, appID, userID string, input *dto.CreateBucketInput) (*entities.UserBucket, error) {
-	if appID == "" || userID == "" {
-		return nil, fmt.Errorf("app_id and user_id are required")
+	if userID == "" {
+		return nil, fmt.Errorf("user_id is required")
 	}
 	if input.Name == "" {
 		return nil, fmt.Errorf("name is required")
 	}
 
-	// Check for duplicate name within app
+	// Check for duplicate name within user
 	r.mu.RLock()
 	for _, b := range r.buckets {
-		if b.AppID == appID && b.Name == input.Name {
+		if b.UserID == userID && b.Name == input.Name {
 			r.mu.RUnlock()
-			return nil, fmt.Errorf("bucket %q already exists for this app", input.Name)
+			return nil, fmt.Errorf("bucket %q already exists", input.Name)
 		}
 	}
 	r.mu.RUnlock()
@@ -81,6 +81,31 @@ func (r *MemoryStorageRepository) GetBucket(_ context.Context, id string) (*enti
 	if !ok {
 		return nil, fmt.Errorf("bucket not found: %s", id)
 	}
+	return b, nil
+}
+
+func (r *MemoryStorageRepository) GetBucketByName(_ context.Context, userID, name string) (*entities.UserBucket, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, b := range r.buckets {
+		if b.UserID == userID && b.Name == name {
+			return b, nil
+		}
+	}
+	return nil, fmt.Errorf("bucket not found: %s", name)
+}
+
+func (r *MemoryStorageRepository) UpdateBucket(_ context.Context, id string, access entities.BucketAccess) (*entities.UserBucket, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	b, ok := r.buckets[id]
+	if !ok {
+		return nil, fmt.Errorf("bucket not found: %s", id)
+	}
+	b.Access = access
+	b.UpdatedAt = time.Now()
 	return b, nil
 }
 

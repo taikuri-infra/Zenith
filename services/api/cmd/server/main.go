@@ -468,7 +468,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/backups", backupHandler.ListByUser)
 
 	// Storage (Phase 3 — per-app S3-compatible storage)
-	storageRepo := memory.NewMemoryStorageRepository()
+	var storageRepo ports.StorageRepository
+	if pool != nil {
+		storageRepo = postgres.NewPostgresStorageRepository(pool)
+	} else {
+		storageRepo = memory.NewMemoryStorageRepository()
+	}
 	storageHandlerV2 := handlers.NewStorageHandlerV2(storageRepo, appRepo)
 	appByID.Post("/storage", handlers.CheckLimit(planRepo, "buckets", func(c *fiber.Ctx, userID string) (int, error) {
 		return storageRepo.CountBucketsByUser(c.Context(), userID)
@@ -476,7 +481,37 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Get("/storage", storageHandlerV2.List)
 	appByID.Get("/storage/:bucketId", storageHandlerV2.Get)
 	appByID.Delete("/storage/:bucketId", storageHandlerV2.Delete)
-	protected.Get("/storage-buckets", storageHandlerV2.ListByUser)
+
+	// Wire S3 client for standalone bucket operations
+	if cfg.S3Endpoint != "" {
+		storageHandlerV2.SetObjectStorage(s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region))
+	}
+
+	// Standalone storage buckets (not app-scoped)
+	storageBuckets := protected.Group("/storage-buckets")
+	storageBuckets.Post("/", handlers.CheckLimit(planRepo, "buckets", func(c *fiber.Ctx, userID string) (int, error) {
+		return storageRepo.CountBucketsByUser(c.Context(), userID)
+	}), storageHandlerV2.CreateStandalone)
+	storageBuckets.Get("/", storageHandlerV2.ListByUser)
+
+	storageBucketByID := storageBuckets.Group("/:bucketId")
+	storageBucketByID.Get("/", storageHandlerV2.GetStandalone)
+	storageBucketByID.Put("/", storageHandlerV2.UpdateBucket)
+	storageBucketByID.Delete("/", storageHandlerV2.DeleteStandalone)
+
+	// Object operations within buckets
+	var objStorage ports.ObjectStorage
+	if cfg.S3Endpoint != "" {
+		objStorage = s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+	} else {
+		objStorage = s3client.NewMemoryClient()
+	}
+	storageObjHandler := handlers.NewStorageObjectHandler(storageRepo, objStorage)
+	storageBucketByID.Get("/objects", storageObjHandler.ListObjects)
+	storageBucketByID.Post("/objects/upload", storageObjHandler.GetUploadURL)
+	storageBucketByID.Get("/objects/download", storageObjHandler.GetDownloadURL)
+	storageBucketByID.Delete("/objects", storageObjHandler.DeleteObject)
+	storageBucketByID.Post("/objects/folder", storageObjHandler.CreateFolder)
 
 	// App Auth (Phase 3 — built-in auth per app)
 	appByID.Get("/auth", appAuthHandler.Status)
