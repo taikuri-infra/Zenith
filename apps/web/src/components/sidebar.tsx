@@ -17,6 +17,9 @@ import {
   BookOpen,
   CreditCard,
   Settings,
+  ScrollText,
+  History,
+  ListOrdered,
 } from "lucide-react";
 
 const isStandalone = process.env.NEXT_PUBLIC_ZENITH_MODE !== "saas";
@@ -47,6 +50,7 @@ const navSections: NavSection[] = [
       { name: "Apps", href: "/apps", icon: Boxes },
       { name: "Databases", href: "/databases", icon: Database },
       { name: "Storage", href: "/storage", icon: HardDrive },
+      { name: "Queues", href: "/queues", icon: ListOrdered },
     ],
   },
   {
@@ -66,6 +70,8 @@ const navSections: NavSection[] = [
   {
     label: "OBSERVABILITY",
     items: [
+      { name: "Logs", href: "/logs", icon: ScrollText },
+      { name: "Activity", href: "/activity", icon: History },
       { name: "Monitoring", href: "/monitoring", icon: Activity },
       { name: "Registry", href: "/registry", icon: Container },
     ],

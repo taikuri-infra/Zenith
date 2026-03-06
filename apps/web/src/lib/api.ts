@@ -376,6 +376,21 @@ export const storage = {
 
 // ---- Deploy Engine API (Phase 2) ----
 
+export type AppType = "web" | "worker" | "cron";
+
+export interface HealthCheckConfig {
+  path: string;
+  interval_seconds: number;
+  timeout_seconds: number;
+}
+
+export interface HealthCheckStatus {
+  status: "healthy" | "unhealthy" | "unknown";
+  uptime_percent: number;
+  last_check: string;
+  response_time_ms: number;
+}
+
 export interface DeployApp {
   id: string;
   user_id: string;
@@ -387,6 +402,11 @@ export interface DeployApp {
   subdomain: string;
   port: number;
   url: string;
+  app_type?: AppType;
+  command?: string;
+  cron_schedule?: string;
+  health_check?: HealthCheckConfig;
+  health_status?: HealthCheckStatus;
   created_at: string;
   updated_at: string;
 }
@@ -395,6 +415,9 @@ export interface CreateDeployAppRequest {
   name: string;
   deploy_source: "git" | "image";
   port?: number;
+  app_type?: AppType;
+  command?: string;
+  cron_schedule?: string;
   // Git deploy fields
   repo_url?: string;
   branch?: string;
@@ -441,13 +464,14 @@ export interface Release {
 
 export interface AppDatabase {
   id: string;
-  app_id: string;
+  app_id?: string;
   name: string;
   engine: string;
   host: string;
   port: number;
   db_name: string;
   db_user: string;
+  db_password?: string;
   connection_string?: string;
   size_mb: number;
   max_size_mb: number;
@@ -464,6 +488,56 @@ export interface CreateAppDatabaseRequest {
 
 export const userDatabases = {
   list: () => apiFetch<AppDatabase[]>("/api/v1/databases"),
+};
+
+// ---- Standalone databases (not tied to an app) ----
+
+export interface CreateStandaloneDatabaseRequest {
+  name: string;
+  engine: string;
+}
+
+export const standaloneDatabases = {
+  list: () => apiFetch<AppDatabase[]>("/api/v1/databases"),
+  get: (id: string) => apiFetch<AppDatabase>(`/api/v1/databases/${id}`),
+  create: (data: CreateStandaloneDatabaseRequest) =>
+    apiFetch<AppDatabase>("/api/v1/databases", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    apiFetch<void>(`/api/v1/databases/${id}`, { method: "DELETE" }),
+};
+
+// ---- Notifications ----
+
+export interface Notification {
+  id: string;
+  type: "deploy_started" | "deploy_success" | "deploy_failed" | "app_crashed" | "plan_warning";
+  title: string;
+  description: string;
+  read: boolean;
+  created_at: string;
+}
+
+export const notifications = {
+  list: () => apiFetch<Notification[]>("/api/v1/notifications"),
+  markAllRead: () =>
+    apiFetch<void>("/api/v1/notifications/read", { method: "POST" }),
+};
+
+// ---- Activity Log ----
+
+export interface ActivityEvent {
+  id: string;
+  type: "deploy" | "db_create" | "app_create" | "plan_change" | "domain_add";
+  title: string;
+  description: string;
+  created_at: string;
+}
+
+export const activity = {
+  list: () => apiFetch<ActivityEvent[]>("/api/v1/activity"),
 };
 
 // ---- Database Backup types (Phase 3) ----

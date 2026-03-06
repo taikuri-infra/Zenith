@@ -37,6 +37,8 @@ import type {
   BillingStatus,
   InvoiceRecord,
   RegistryImage,
+  Notification,
+  ActivityEvent,
 } from "./api";
 
 import {
@@ -222,6 +224,9 @@ const mockDeployApps: DeployApp[] = [
     subdomain: "my-next-app",
     port: 3000,
     url: "https://my-next-app.freezenith.com",
+    app_type: "web",
+    health_check: { path: "/api/health", interval_seconds: 30, timeout_seconds: 5 },
+    health_status: { status: "healthy", uptime_percent: 99.9, last_check: "2026-03-04T11:59:00Z", response_time_ms: 42 },
     created_at: "2026-02-10T08:00:00Z",
     updated_at: "2026-02-20T14:30:00Z",
   },
@@ -236,6 +241,9 @@ const mockDeployApps: DeployApp[] = [
     subdomain: "go-api",
     port: 8080,
     url: "https://go-api.freezenith.com",
+    app_type: "web",
+    health_check: { path: "/healthz", interval_seconds: 15, timeout_seconds: 3 },
+    health_status: { status: "healthy", uptime_percent: 99.7, last_check: "2026-03-04T11:58:45Z", response_time_ms: 12 },
     created_at: "2026-02-12T10:00:00Z",
     updated_at: "2026-02-19T09:15:00Z",
   },
@@ -250,8 +258,42 @@ const mockDeployApps: DeployApp[] = [
     subdomain: "flask-ml",
     port: 5000,
     url: "",
+    app_type: "web",
     created_at: "2026-02-21T12:00:00Z",
     updated_at: "2026-02-21T12:00:00Z",
+  },
+  {
+    id: "da-4",
+    user_id: "demo-user",
+    name: "email-worker",
+    repo_url: "https://github.com/demo/email-worker",
+    branch: "main",
+    framework: "go",
+    status: "running",
+    subdomain: "",
+    port: 0,
+    url: "",
+    app_type: "worker",
+    command: "go run ./cmd/worker",
+    created_at: "2026-02-14T09:00:00Z",
+    updated_at: "2026-02-22T06:00:00Z",
+  },
+  {
+    id: "da-5",
+    user_id: "demo-user",
+    name: "daily-report",
+    repo_url: "https://github.com/demo/daily-report",
+    branch: "main",
+    framework: "python",
+    status: "running",
+    subdomain: "",
+    port: 0,
+    url: "",
+    app_type: "cron",
+    command: "python generate_report.py",
+    cron_schedule: "0 6 * * *",
+    created_at: "2026-02-16T11:00:00Z",
+    updated_at: "2026-02-22T06:00:00Z",
   },
 ];
 
@@ -554,53 +596,115 @@ export const demoAppsDeploy = {
   },
 };
 
+const allDemoDatabases: AppDatabase[] = [
+  {
+    id: "db-1",
+    app_id: "da-1",
+    name: "db-my-next",
+    engine: "postgresql",
+    host: "localhost",
+    port: 5432,
+    db_name: "z_demo_my_next",
+    db_user: "u_db1user",
+    db_password: "xK9mPq2rLvN8wJ4hTfBs3yAe",
+    size_mb: 45,
+    max_size_mb: 500,
+    status: "ready",
+    created_at: "2026-02-15T10:00:00Z",
+  },
+  {
+    id: "db-2",
+    app_id: "da-2",
+    name: "db-go-api",
+    engine: "postgresql",
+    host: "localhost",
+    port: 5432,
+    db_name: "z_demo_go_api",
+    db_user: "u_db2user",
+    db_password: "Rm7nVcXp4wQkLj9hYtDs2bFe",
+    size_mb: 120,
+    max_size_mb: 500,
+    status: "ready",
+    created_at: "2026-02-16T12:00:00Z",
+  },
+  {
+    id: "db-3",
+    app_id: "da-2",
+    name: "cache-go-api",
+    engine: "redis",
+    host: "localhost",
+    port: 6379,
+    db_name: "0",
+    db_user: "",
+    db_password: "Wn5kHt8mPvCx3qRjLs7yBfAe",
+    size_mb: 8,
+    max_size_mb: 500,
+    status: "ready",
+    created_at: "2026-02-17T08:00:00Z",
+  },
+  {
+    id: "db-4",
+    name: "shared-analytics",
+    engine: "postgresql",
+    host: "localhost",
+    port: 5432,
+    db_name: "z_analytics",
+    db_user: "u_analytics",
+    db_password: "Qp6mTv9nXwKr2hLj4sBfYcAe",
+    connection_string: "postgresql://u_analytics:Qp6mTv9nXwKr2hLj4sBfYcAe@localhost:5432/z_analytics?sslmode=disable",
+    size_mb: 230,
+    max_size_mb: 5120,
+    status: "ready",
+    created_at: "2026-01-20T09:00:00Z",
+  },
+];
+
 export const demoUserDatabases = {
   list: async (): Promise<AppDatabase[]> => {
     await delay();
-    return [
-      {
-        id: "db-1",
-        app_id: "da-1",
-        name: "db-my-next",
-        engine: "postgresql",
-        host: "localhost",
-        port: 5432,
-        db_name: "z_demo_my_next",
-        db_user: "u_db1user",
-        size_mb: 45,
-        max_size_mb: 500,
-        status: "ready",
-        created_at: "2026-02-15T10:00:00Z",
-      },
-      {
-        id: "db-2",
-        app_id: "da-2",
-        name: "db-go-api",
-        engine: "postgresql",
-        host: "localhost",
-        port: 5432,
-        db_name: "z_demo_go_api",
-        db_user: "u_db2user",
-        size_mb: 120,
-        max_size_mb: 500,
-        status: "ready",
-        created_at: "2026-02-16T12:00:00Z",
-      },
-      {
-        id: "db-3",
-        app_id: "da-2",
-        name: "cache-go-api",
-        engine: "redis",
-        host: "localhost",
-        port: 6379,
-        db_name: "0",
-        db_user: "",
-        size_mb: 8,
-        max_size_mb: 500,
-        status: "ready",
-        created_at: "2026-02-17T08:00:00Z",
-      },
-    ];
+    return allDemoDatabases;
+  },
+};
+
+export const demoStandaloneDatabases = {
+  list: async (): Promise<AppDatabase[]> => {
+    await delay();
+    return allDemoDatabases;
+  },
+  get: async (id: string): Promise<AppDatabase> => {
+    await delay();
+    const db = allDemoDatabases.find((d) => d.id === id);
+    if (!db) throw new Error("Database not found");
+    return {
+      ...db,
+      connection_string: db.connection_string || `${db.engine}://${db.db_user}:${db.db_password}@${db.host}:${db.port}/${db.db_name}`,
+    };
+  },
+  create: async (data: { name: string; engine: string }): Promise<AppDatabase> => {
+    await delay();
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const password = Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    const user = `u_${data.name.replace(/-/g, "_")}`;
+    const dbName = `z_${data.name.replace(/-/g, "_")}`;
+    const port = data.engine === "redis" ? 6379 : 5432;
+    return {
+      id: `db-new-${Date.now()}`,
+      name: data.name,
+      engine: data.engine,
+      host: "localhost",
+      port,
+      db_name: dbName,
+      db_user: user,
+      db_password: password,
+      connection_string: `${data.engine}://${user}:${password}@localhost:${port}/${dbName}`,
+      size_mb: 0,
+      max_size_mb: 500,
+      status: "provisioning",
+      created_at: new Date().toISOString(),
+    };
+  },
+  delete: async (): Promise<void> => {
+    await delay();
   },
 };
 
@@ -965,6 +1069,57 @@ export const demoRegistry = {
   },
 };
 
+// ---- Notifications Demo ----
+
+export const demoNotifications = {
+  list: async (): Promise<Notification[]> => {
+    await delay();
+    return [
+      { id: "n-1", type: "deploy_success", title: "Deploy successful", description: "my-next-app deployed to production", read: false, created_at: "2026-03-04T11:30:00Z" },
+      { id: "n-2", type: "deploy_failed", title: "Deploy failed", description: "flask-ml build failed: exit code 1", read: false, created_at: "2026-03-04T10:15:00Z" },
+      { id: "n-3", type: "deploy_started", title: "Deploy started", description: "go-api deploying from main@a1b2c3d", read: true, created_at: "2026-03-04T09:00:00Z" },
+      { id: "n-4", type: "plan_warning", title: "Approaching app limit", description: "You are using 4/5 apps on the Pro plan", read: false, created_at: "2026-03-03T16:00:00Z" },
+      { id: "n-5", type: "app_crashed", title: "App crashed", description: "email-worker restarted 3 times in 5 minutes", read: true, created_at: "2026-03-02T22:00:00Z" },
+    ];
+  },
+  markAllRead: async (): Promise<void> => {
+    await delay();
+  },
+};
+
+// ---- Activity Demo ----
+
+export const demoActivity = {
+  list: async (): Promise<ActivityEvent[]> => {
+    await delay();
+    return [
+      { id: "act-1", type: "deploy", title: "Deployed my-next-app", description: "main@a1b2c3d → production", created_at: "2026-03-04T11:30:00Z" },
+      { id: "act-2", type: "db_create", title: "Created database shared-analytics", description: "PostgreSQL standalone database", created_at: "2026-03-03T14:00:00Z" },
+      { id: "act-3", type: "app_create", title: "Created daily-report", description: "Cron job: 0 6 * * *", created_at: "2026-03-02T11:00:00Z" },
+      { id: "act-4", type: "plan_change", title: "Upgraded to Pro", description: "Free → Pro plan", created_at: "2026-03-01T09:00:00Z" },
+      { id: "act-5", type: "domain_add", title: "Added custom domain", description: "myapp.example.com → my-next-app", created_at: "2026-02-28T15:00:00Z" },
+      { id: "act-6", type: "deploy", title: "Deployed go-api", description: "main@e4f5g6h → production", created_at: "2026-02-27T10:00:00Z" },
+    ];
+  },
+};
+
+// ---- Aggregated Logs Demo ----
+
+export const demoAggregatedLogs = [
+  { timestamp: "2026-03-04T11:30:05Z", level: "deploy", message: "[my-next-app] Deployment completed successfully" },
+  { timestamp: "2026-03-04T11:30:02Z", level: "build", message: "[my-next-app] Image pushed to registry" },
+  { timestamp: "2026-03-04T11:29:50Z", level: "build", message: "[my-next-app] Building from main@a1b2c3d" },
+  { timestamp: "2026-03-04T10:15:30Z", level: "error", message: "[flask-ml] Build failed: ModuleNotFoundError: No module named 'torch'" },
+  { timestamp: "2026-03-04T10:15:00Z", level: "build", message: "[flask-ml] Building from develop@f9e8d7c" },
+  { timestamp: "2026-03-04T09:00:10Z", level: "deploy", message: "[go-api] Deployment completed successfully" },
+  { timestamp: "2026-03-04T09:00:05Z", level: "info", message: "[go-api] Health check passed" },
+  { timestamp: "2026-03-04T09:00:00Z", level: "build", message: "[go-api] Building from main@b2c3d4e" },
+  { timestamp: "2026-03-04T06:00:01Z", level: "info", message: "[daily-report] Cron job completed (exit 0)" },
+  { timestamp: "2026-03-04T06:00:00Z", level: "info", message: "[daily-report] Cron job started" },
+  { timestamp: "2026-03-03T22:05:00Z", level: "warn", message: "[email-worker] High memory usage: 450MB / 512MB" },
+  { timestamp: "2026-03-03T22:00:00Z", level: "error", message: "[email-worker] Process crashed: OOM killed, restarting..." },
+];
+
 // Re-export as a unified object matching the real API import pattern
 export const demoApi = {
   auth: demoAuth,
@@ -974,6 +1129,9 @@ export const demoApi = {
   storage: demoStorage,
   appsDeploy: demoAppsDeploy,
   userDatabases: demoUserDatabases,
+  standaloneDatabases: demoStandaloneDatabases,
+  notifications: demoNotifications,
+  activity: demoActivity,
   userPlan: demoUserPlan,
   apiKeys: demoAPIKeys,
   sessions: demoSessions,
