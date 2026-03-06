@@ -148,6 +148,94 @@ func (h *DatabaseHandlerV2) Delete(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "database deleted"})
 }
 
+// CreateStandalone provisions a standalone database (not tied to an app).
+// POST /api/v1/databases
+func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+
+	var input dto.CreateDatabaseInput
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	if input.Engine == "" {
+		input.Engine = entities.DatabaseEnginePostgres
+	}
+
+	// Use DatabaseService for real provisioning if available
+	if h.dbSvc != nil {
+		db, err := h.dbSvc.ProvisionDatabase(c.Context(), "", userID, &input)
+		if err != nil {
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, ""))
+	}
+
+	// Fallback: metadata-only (dev mode)
+	db, err := h.dbRepo.CreateDatabase(c.Context(), "", userID, &input)
+	if err != nil {
+		return fiber.NewError(fiber.StatusConflict, err.Error())
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, ""))
+}
+
+// GetStandalone returns a single standalone database with connection string.
+// GET /api/v1/databases/:dbId
+func (h *DatabaseHandlerV2) GetStandalone(c *fiber.Ctx) error {
+	dbID := c.Params("dbId")
+	userID, _ := c.Locals("user_id").(string)
+
+	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "database not found")
+	}
+	if db.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your database")
+	}
+
+	connStr := ""
+	if h.dbSvc != nil {
+		if pw, err := h.dbSvc.GetDatabasePassword(c.Context(), db.ID); err == nil {
+			connStr = db.ConnectionString(pw)
+		}
+	} else if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
+		if pw, ok := memRepo.GetPassword(db.ID); ok {
+			connStr = db.ConnectionString(pw)
+		}
+	}
+
+	return c.JSON(toDatabaseInfoV2(db, connStr))
+}
+
+// DeleteStandalone deprovisions a standalone database.
+// DELETE /api/v1/databases/:dbId
+func (h *DatabaseHandlerV2) DeleteStandalone(c *fiber.Ctx) error {
+	dbID := c.Params("dbId")
+	userID, _ := c.Locals("user_id").(string)
+
+	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "database not found")
+	}
+	if db.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your database")
+	}
+
+	if h.dbSvc != nil {
+		if err := h.dbSvc.DeleteDatabase(c.Context(), dbID); err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(fiber.Map{"message": "database deleted"})
+	}
+
+	if err := h.dbRepo.DeleteDatabase(c.Context(), dbID); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "database deleted"})
+}
+
 // ListByUser returns all databases for the authenticated user.
 // GET /api/v1/databases
 func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {

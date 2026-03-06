@@ -469,7 +469,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Get("/databases", dbHandlerV2.List)
 	appByID.Get("/databases/:dbId", dbHandlerV2.Get)
 	appByID.Delete("/databases/:dbId", dbHandlerV2.Delete)
+
+	// Standalone databases (not tied to an app)
+	protected.Post("/databases", handlers.CheckLimit(planRepo, "databases", func(c *fiber.Ctx, userID string) (int, error) {
+		return dbRepo.CountDatabasesByUser(c.Context(), userID)
+	}), dbHandlerV2.CreateStandalone)
 	protected.Get("/databases", dbHandlerV2.ListByUser)
+	protected.Get("/databases/:dbId", dbHandlerV2.GetStandalone)
+	protected.Delete("/databases/:dbId", dbHandlerV2.DeleteStandalone)
 
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
 	backupRepo := memory.NewMemoryBackupRepository()
