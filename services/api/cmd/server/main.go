@@ -634,6 +634,19 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/events", eventHandler.StreamEvents)
 	protected.Get("/events/history", eventHandler.GetRecentEvents)
 
+	// Notifications (stub — returns empty list until full implementation)
+	protected.Get("/notifications", func(c *fiber.Ctx) error {
+		return c.JSON([]interface{}{})
+	})
+	protected.Post("/notifications/read", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "ok"})
+	})
+
+	// Activity log (stub — returns empty list until full implementation)
+	protected.Get("/activity", func(c *fiber.Ctx) error {
+		return c.JSON([]interface{}{})
+	})
+
 	// Backstage catalog integration
 	protected.Get("/backstage/catalog", backstageHandler.GetCatalog)
 	protected.Get("/backstage/catalog/:kind", backstageHandler.GetCatalogByKind)

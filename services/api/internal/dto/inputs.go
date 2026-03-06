@@ -15,6 +15,9 @@ type CreateAppInput struct {
 	Port             int                   `json:"port"`
 	RegistryUsername string                `json:"registry_username"`
 	RegistryPassword string                `json:"registry_password"`
+	AppType          entities.AppType      `json:"app_type"`
+	Command          string                `json:"command"`
+	CronSchedule     string                `json:"cron_schedule"`
 }
 
 // UpdateAppInput is the request body for updating an existing app.

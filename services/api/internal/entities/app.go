@@ -21,6 +21,15 @@ const (
 	DeploySourceImage DeploySource = "image"
 )
 
+// AppType classifies the workload kind.
+type AppType string
+
+const (
+	AppTypeWeb    AppType = "web"
+	AppTypeWorker AppType = "worker"
+	AppTypeCron   AppType = "cron"
+)
+
 // Framework represents the detected framework type.
 type Framework string
 
@@ -52,5 +61,8 @@ type App struct {
 	Status           AppStatus    `json:"status"`
 	Subdomain        string       `json:"subdomain"`
 	Port             int          `json:"port"`
+	AppType          AppType      `json:"app_type"`
+	Command          string       `json:"command,omitempty"`
+	CronSchedule     string       `json:"cron_schedule,omitempty"`
 	Timestamps
 }
