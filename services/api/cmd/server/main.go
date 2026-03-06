@@ -241,7 +241,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	adminSvc := services.NewAdminService(k8sClient, capiClient, adminRepo)
 
 	// Plan management (Phase 4 — user plan + limits)
-	planRepo := memory.NewMemoryUserPlanRepository()
+	var planRepo ports.UserPlanRepository
+	if pool != nil {
+		planRepo = postgres.NewPostgresUserPlanRepository(pool)
+	} else {
+		planRepo = memory.NewMemoryUserPlanRepository()
+	}
 
 	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret, planRepo)
 
