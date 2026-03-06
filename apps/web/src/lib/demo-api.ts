@@ -291,6 +291,14 @@ export const demoStorageBuckets = {
     await delay();
     return { message: "folder created", prefix };
   },
+  uploadObject: async (): Promise<{ message: string }> => {
+    await delay();
+    return { message: "object uploaded" };
+  },
+  downloadObject: async (): Promise<void> => {
+    await delay();
+    alert("Download not available in demo mode");
+  },
 };
 
 // Mock deploy engine apps

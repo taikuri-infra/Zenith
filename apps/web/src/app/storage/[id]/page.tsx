@@ -114,12 +114,7 @@ export default function BucketDetailPage() {
     try {
       for (const file of Array.from(files)) {
         const key = prefix + file.name;
-        const { url } = await storageBuckets.getUploadURL(bucketId, key, file.type);
-        await fetch(url, {
-          method: "PUT",
-          body: file,
-          headers: file.type ? { "Content-Type": file.type } : {},
-        });
+        await storageBuckets.uploadObject(bucketId, key, file);
       }
       refetchObjects();
     } catch (err) {
@@ -132,8 +127,7 @@ export default function BucketDetailPage() {
 
   const handleDownload = async (key: string) => {
     try {
-      const { url } = await storageBuckets.getDownloadURL(bucketId, key);
-      window.open(url, "_blank");
+      await storageBuckets.downloadObject(bucketId, key);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Download failed");
     }

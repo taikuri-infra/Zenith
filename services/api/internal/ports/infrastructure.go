@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -155,6 +156,8 @@ type ObjectStorage interface {
 	DeleteObject(ctx context.Context, bucket, key string) error
 	GeneratePresignedUploadURL(ctx context.Context, bucket, key, contentType string, expiry time.Duration) (string, error)
 	GeneratePresignedDownloadURL(ctx context.Context, bucket, key string, expiry time.Duration) (string, error)
+	PutObject(ctx context.Context, bucket, key, contentType string, body io.Reader, size int64) error
+	GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, string, int64, error) // returns body, contentType, size
 	CreateFolder(ctx context.Context, bucket, prefix string) error
 }
 

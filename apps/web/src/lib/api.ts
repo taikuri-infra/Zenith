@@ -593,6 +593,52 @@ export const storageBuckets = {
         body: JSON.stringify({ prefix }),
       }
     ),
+  uploadObject: async (
+    bucketId: string,
+    key: string,
+    file: File
+  ): Promise<{ message: string }> => {
+    const token = getAccessToken();
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/storage-buckets/${bucketId}/objects/content?key=${encodeURIComponent(key)}`,
+      {
+        method: "PUT",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      }
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => null);
+      throw new ApiError(response.status, response.statusText, err);
+    }
+    return response.json();
+  },
+  downloadObject: async (bucketId: string, key: string): Promise<void> => {
+    const token = getAccessToken();
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/storage-buckets/${bucketId}/objects/content?key=${encodeURIComponent(key)}`,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    );
+    if (!response.ok) {
+      throw new ApiError(response.status, response.statusText);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = key.split("/").pop() || "download";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 };
 
 // ---- Notifications ----

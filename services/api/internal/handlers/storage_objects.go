@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 	"time"
 
@@ -161,6 +163,74 @@ func (h *StorageObjectHandler) DeleteObject(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "object deleted"})
+}
+
+// UploadObject accepts a raw file body and proxies it to S3.
+// PUT /api/v1/storage-buckets/:bucketId/objects/content?key=
+func (h *StorageObjectHandler) UploadObject(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	bucketID := c.Params("bucketId")
+
+	bucket, err := h.storageRepo.GetBucket(c.Context(), bucketID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "bucket not found")
+	}
+	if bucket.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your bucket")
+	}
+
+	key := c.Query("key")
+	if key == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "key query parameter is required")
+	}
+
+	contentType := c.Get("Content-Type", "application/octet-stream")
+	body := c.Body()
+	size := int64(len(body))
+
+	if err := h.objStorage.PutObject(c.Context(), bucket.Name, key, contentType, bytes.NewReader(body), size); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "object uploaded", "key": key})
+}
+
+// DownloadObject streams an object from S3 through the API.
+// GET /api/v1/storage-buckets/:bucketId/objects/content?key=
+func (h *StorageObjectHandler) DownloadObject(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	bucketID := c.Params("bucketId")
+
+	bucket, err := h.storageRepo.GetBucket(c.Context(), bucketID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "bucket not found")
+	}
+	if bucket.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your bucket")
+	}
+
+	key := c.Query("key")
+	if key == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "key query parameter is required")
+	}
+
+	body, contentType, size, err := h.objStorage.GetObject(c.Context(), bucket.Name, key)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	defer body.Close()
+
+	if contentType != "" {
+		c.Set("Content-Type", contentType)
+	}
+	if size > 0 {
+		c.Set("Content-Length", fmt.Sprintf("%d", size))
+	}
+	parts := strings.Split(key, "/")
+	filename := parts[len(parts)-1]
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+
+	return c.SendStream(body, int(size))
 }
 
 // CreateFolder creates a folder (zero-byte object with trailing /) in a bucket.

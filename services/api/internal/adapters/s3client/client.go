@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -155,6 +156,46 @@ func (c *Client) CreateFolder(ctx context.Context, bucket, prefix string) error 
 	return nil
 }
 
+// PutObject uploads an object to a bucket.
+func (c *Client) PutObject(ctx context.Context, bucket, key, contentType string, body io.Reader, size int64) error {
+	input := &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   body,
+	}
+	if contentType != "" {
+		input.ContentType = aws.String(contentType)
+	}
+	if size > 0 {
+		input.ContentLength = aws.Int64(size)
+	}
+	_, err := c.s3Client.PutObject(ctx, input)
+	if err != nil {
+		return fmt.Errorf("put object %s/%s: %w", bucket, key, err)
+	}
+	return nil
+}
+
+// GetObject downloads an object from a bucket. Returns body, contentType, size.
+func (c *Client) GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, string, int64, error) {
+	out, err := c.s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
+	}
+	contentType := ""
+	if out.ContentType != nil {
+		contentType = *out.ContentType
+	}
+	size := int64(0)
+	if out.ContentLength != nil {
+		size = *out.ContentLength
+	}
+	return out.Body, contentType, size, nil
+}
+
 // MemoryS3Client is a no-op implementation for dev/test.
 type MemoryS3Client struct{}
 
@@ -184,6 +225,15 @@ func (m *MemoryS3Client) GeneratePresignedUploadURL(_ context.Context, bucket, k
 
 func (m *MemoryS3Client) GeneratePresignedDownloadURL(_ context.Context, bucket, key string, expiry time.Duration) (string, error) {
 	return fmt.Sprintf("https://%s.s3.zenith.local/%s?X-Amz-Expires=%.0f", bucket, key, expiry.Seconds()), nil
+}
+
+func (m *MemoryS3Client) PutObject(_ context.Context, _, _, _ string, _ io.Reader, _ int64) error {
+	return nil
+}
+
+func (m *MemoryS3Client) GetObject(_ context.Context, _, key string) (io.ReadCloser, string, int64, error) {
+	content := []byte("sample file content for " + key)
+	return io.NopCloser(bytes.NewReader(content)), "application/octet-stream", int64(len(content)), nil
 }
 
 func (m *MemoryS3Client) CreateFolder(_ context.Context, _, _ string) error { return nil }

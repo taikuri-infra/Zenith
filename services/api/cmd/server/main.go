@@ -129,6 +129,7 @@ func main() {
 		AppName:      "Zenith API",
 		ServerHeader: "Zenith",
 		ErrorHandler: handlers.ErrorHandler,
+		BodyLimit:    100 * 1024 * 1024, // 100 MB for file uploads
 	})
 
 	app.Use(recover.New())
@@ -510,6 +511,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	storageBucketByID.Get("/objects", storageObjHandler.ListObjects)
 	storageBucketByID.Post("/objects/upload", storageObjHandler.GetUploadURL)
 	storageBucketByID.Get("/objects/download", storageObjHandler.GetDownloadURL)
+	storageBucketByID.Put("/objects/content", storageObjHandler.UploadObject)
+	storageBucketByID.Get("/objects/content", storageObjHandler.DownloadObject)
 	storageBucketByID.Delete("/objects", storageObjHandler.DeleteObject)
 	storageBucketByID.Post("/objects/folder", storageObjHandler.CreateFolder)
 
