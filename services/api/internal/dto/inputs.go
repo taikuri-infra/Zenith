@@ -160,6 +160,7 @@ type DatabaseInfo struct {
 	Port             int                    `json:"port"`
 	DBName           string                 `json:"db_name"`
 	DBUser           string                 `json:"db_user"`
+	Password         string                 `json:"db_password,omitempty"`
 	ConnectionString string                 `json:"connection_string,omitempty"`
 	SizeMB           int                    `json:"size_mb"`
 	MaxSizeMB        int                    `json:"max_size_mb"`

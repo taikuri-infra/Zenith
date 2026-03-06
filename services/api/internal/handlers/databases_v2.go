@@ -51,7 +51,7 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 		if err != nil {
 			return fiber.NewError(fiber.StatusConflict, err.Error())
 		}
-		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, ""))
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
 	}
 
 	// Fallback: metadata-only (dev mode, no CNPG)
@@ -69,7 +69,7 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, ""))
+	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
 }
 
 // List returns all databases for an app.
@@ -84,7 +84,7 @@ func (h *DatabaseHandlerV2) List(c *fiber.Ctx) error {
 
 	result := make([]dto.DatabaseInfo, len(dbs))
 	for i, db := range dbs {
-		result[i] = toDatabaseInfoV2(&db, "")
+		result[i] = toDatabaseInfoV2(&db, "", "")
 	}
 	return c.JSON(result)
 }
@@ -99,19 +99,22 @@ func (h *DatabaseHandlerV2) Get(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "database not found")
 	}
 
-	// Include connection string for the owner
+	// Include connection string and password for the owner
 	connStr := ""
+	password := ""
 	if h.dbSvc != nil {
 		if pw, err := h.dbSvc.GetDatabasePassword(c.Context(), db.ID); err == nil {
+			password = pw
 			connStr = db.ConnectionString(pw)
 		}
 	} else if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
 		if pw, ok := memRepo.GetPassword(db.ID); ok {
+			password = pw
 			connStr = db.ConnectionString(pw)
 		}
 	}
 
-	return c.JSON(toDatabaseInfoV2(db, connStr))
+	return c.JSON(toDatabaseInfoV2(db, password, connStr))
 }
 
 // Delete deprovisions a database.
@@ -168,7 +171,7 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 		if err != nil {
 			return fiber.NewError(fiber.StatusConflict, err.Error())
 		}
-		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, ""))
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
 	}
 
 	// Fallback: metadata-only (dev mode)
@@ -177,7 +180,7 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, ""))
+	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
 }
 
 // GetStandalone returns a single standalone database with connection string.
@@ -195,17 +198,20 @@ func (h *DatabaseHandlerV2) GetStandalone(c *fiber.Ctx) error {
 	}
 
 	connStr := ""
+	password := ""
 	if h.dbSvc != nil {
 		if pw, err := h.dbSvc.GetDatabasePassword(c.Context(), db.ID); err == nil {
+			password = pw
 			connStr = db.ConnectionString(pw)
 		}
 	} else if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
 		if pw, ok := memRepo.GetPassword(db.ID); ok {
+			password = pw
 			connStr = db.ConnectionString(pw)
 		}
 	}
 
-	return c.JSON(toDatabaseInfoV2(db, connStr))
+	return c.JSON(toDatabaseInfoV2(db, password, connStr))
 }
 
 // DeleteStandalone deprovisions a standalone database.
@@ -248,7 +254,7 @@ func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 
 	result := make([]dto.DatabaseInfo, len(dbs))
 	for i, db := range dbs {
-		result[i] = toDatabaseInfoV2(&db, "")
+		result[i] = toDatabaseInfoV2(&db, "", "")
 	}
 	return c.JSON(result)
 }
@@ -264,7 +270,7 @@ func envKeyForEngine(engine entities.DatabaseEngine) string {
 	}
 }
 
-func toDatabaseInfoV2(db *entities.UserDatabase, connStr string) dto.DatabaseInfo {
+func toDatabaseInfoV2(db *entities.UserDatabase, password, connStr string) dto.DatabaseInfo {
 	return dto.DatabaseInfo{
 		ID:               db.ID,
 		AppID:            db.AppID,
@@ -274,6 +280,7 @@ func toDatabaseInfoV2(db *entities.UserDatabase, connStr string) dto.DatabaseInf
 		Port:             db.Port,
 		DBName:           db.DBName,
 		DBUser:           db.DBUser,
+		Password:         password,
 		ConnectionString: connStr,
 		SizeMB:           db.SizeMB,
 		MaxSizeMB:        db.MaxSizeMB,

@@ -68,6 +68,9 @@ func (r *PostgresDatabaseRepository) CreateDatabase(ctx context.Context, appID, 
 		if strings.Contains(err.Error(), "idx_user_databases_app_engine") {
 			return nil, fmt.Errorf("database with engine %s already exists for this app", engine)
 		}
+		if strings.Contains(err.Error(), "idx_user_databases_user_name") {
+			return nil, fmt.Errorf("database '%s' already exists", name)
+		}
 		return nil, fmt.Errorf("create database: %w", err)
 	}
 
