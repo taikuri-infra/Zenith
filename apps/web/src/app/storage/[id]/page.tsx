@@ -70,6 +70,12 @@ export default function BucketDetailPage() {
   const [tab, setTab] = useState<"objects" | "settings">("objects");
   const [prefix, setPrefix] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    fileIndex: number;
+    fileCount: number;
+    loaded: number;
+    total: number;
+  } | null>(null);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -78,6 +84,9 @@ export default function BucketDetailPage() {
   const [savingAccess, setSavingAccess] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [deletingObjects, setDeletingObjects] = useState(false);
+  const [deleteObjKey, setDeleteObjKey] = useState<string | null>(null);
+  const [deletingObj, setDeletingObj] = useState(false);
+  const [showDeleteSelected, setShowDeleteSelected] = useState(false);
 
   const {
     data: bucket,
@@ -111,16 +120,22 @@ export default function BucketDetailPage() {
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0 || !bucket) return;
     setUploading(true);
+    const fileArr = Array.from(files);
     try {
-      for (const file of Array.from(files)) {
+      for (let i = 0; i < fileArr.length; i++) {
+        const file = fileArr[i];
         const key = prefix + file.name;
-        await storageBuckets.uploadObject(bucketId, key, file);
+        setUploadProgress({ fileIndex: i + 1, fileCount: fileArr.length, loaded: 0, total: file.size });
+        await storageBuckets.uploadObject(bucketId, key, file, (loaded, total) => {
+          setUploadProgress({ fileIndex: i + 1, fileCount: fileArr.length, loaded, total });
+        });
       }
       refetchObjects();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -133,16 +148,21 @@ export default function BucketDetailPage() {
     }
   };
 
-  const handleDeleteObject = async (key: string) => {
+  const confirmDeleteObject = async () => {
+    if (!deleteObjKey || deletingObj) return;
+    setDeletingObj(true);
     try {
-      await storageBuckets.deleteObject(bucketId, key);
+      await storageBuckets.deleteObject(bucketId, deleteObjKey);
+      setDeleteObjKey(null);
       refetchObjects();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeletingObj(false);
     }
   };
 
-  const handleDeleteSelected = async () => {
+  const confirmDeleteSelected = async () => {
     if (selectedKeys.size === 0) return;
     setDeletingObjects(true);
     try {
@@ -150,6 +170,7 @@ export default function BucketDetailPage() {
         await storageBuckets.deleteObject(bucketId, key);
       }
       setSelectedKeys(new Set());
+      setShowDeleteSelected(false);
       refetchObjects();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Delete failed");
@@ -333,7 +354,7 @@ export default function BucketDetailPage() {
               </button>
               {selectedKeys.size > 0 && (
                 <button
-                  onClick={handleDeleteSelected}
+                  onClick={() => setShowDeleteSelected(true)}
                   disabled={deletingObjects}
                   className="rounded-lg bg-red-600/10 border border-red-600/30 px-3 py-1.5 text-sm text-red-400 hover:bg-red-600/20 transition-colors disabled:opacity-50"
                 >
@@ -341,6 +362,30 @@ export default function BucketDetailPage() {
                 </button>
               )}
             </div>
+
+            {/* Upload Progress Bar */}
+            {uploadProgress && (
+              <div className="rounded-lg border border-border bg-surface-100 p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs text-neutral-400">
+                  <span>
+                    Uploading file {uploadProgress.fileIndex} of {uploadProgress.fileCount}
+                  </span>
+                  <span>
+                    {uploadProgress.total > 0
+                      ? `${Math.round((uploadProgress.loaded / uploadProgress.total) * 100)}%`
+                      : "0%"}
+                  </span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-surface-200 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-accent-500 transition-all duration-200"
+                    style={{
+                      width: `${uploadProgress.total > 0 ? (uploadProgress.loaded / uploadProgress.total) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Object table */}
             {objectsLoading ? (
@@ -440,7 +485,7 @@ export default function BucketDetailPage() {
                                     </svg>
                                   </button>
                                   <button
-                                    onClick={() => handleDeleteObject(obj.key)}
+                                    onClick={() => setDeleteObjKey(obj.key)}
                                     className="text-neutral-500 hover:text-red-400 transition-colors"
                                     title="Delete"
                                   >
@@ -601,6 +646,58 @@ export default function BucketDetailPage() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Delete Object Confirmation */}
+      {deleteObjKey && (
+        <Modal title="Delete Object" onClose={() => setDeleteObjKey(null)}>
+          <p className="text-sm text-neutral-400 mb-4">
+            Are you sure you want to delete{" "}
+            <strong className="text-white">{deleteObjKey.split("/").pop()}</strong>?
+            This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDeleteObjKey(null)}
+              className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDeleteObject}
+              disabled={deletingObj}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deletingObj ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete Selected Confirmation */}
+      {showDeleteSelected && (
+        <Modal title="Delete Objects" onClose={() => setShowDeleteSelected(false)}>
+          <p className="text-sm text-neutral-400 mb-4">
+            Are you sure you want to delete{" "}
+            <strong className="text-white">{selectedKeys.size} object{selectedKeys.size > 1 ? "s" : ""}</strong>?
+            This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setShowDeleteSelected(false)}
+              className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDeleteSelected}
+              disabled={deletingObjects}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deletingObjects ? "Deleting..." : `Delete ${selectedKeys.size} object${selectedKeys.size > 1 ? "s" : ""}`}
+            </button>
+          </div>
         </Modal>
       )}
 

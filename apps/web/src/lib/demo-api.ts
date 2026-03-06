@@ -291,8 +291,14 @@ export const demoStorageBuckets = {
     await delay();
     return { message: "folder created", prefix };
   },
-  uploadObject: async (): Promise<{ message: string }> => {
+  uploadObject: async (
+    _bucketId: string,
+    _key: string,
+    _file: File,
+    onProgress?: (loaded: number, total: number) => void
+  ): Promise<{ message: string }> => {
     await delay();
+    if (onProgress) onProgress(100, 100);
     return { message: "object uploaded" };
   },
   downloadObject: async (): Promise<void> => {

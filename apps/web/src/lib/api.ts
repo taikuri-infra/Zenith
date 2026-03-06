@@ -593,28 +593,39 @@ export const storageBuckets = {
         body: JSON.stringify({ prefix }),
       }
     ),
-  uploadObject: async (
+  uploadObject: (
     bucketId: string,
     key: string,
-    file: File
+    file: File,
+    onProgress?: (loaded: number, total: number) => void
   ): Promise<{ message: string }> => {
-    const token = getAccessToken();
-    const response = await fetch(
-      `${API_BASE_URL}/api/v1/storage-buckets/${bucketId}/objects/content?key=${encodeURIComponent(key)}`,
-      {
-        method: "PUT",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        body: file,
-      }
-    );
-    if (!response.ok) {
-      const err = await response.json().catch(() => null);
-      throw new ApiError(response.status, response.statusText, err);
-    }
-    return response.json();
+    return new Promise((resolve, reject) => {
+      const token = getAccessToken();
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        "PUT",
+        `${API_BASE_URL}/api/v1/storage-buckets/${bucketId}/objects/content?key=${encodeURIComponent(key)}`
+      );
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.setRequestHeader(
+        "Content-Type",
+        file.type || "application/octet-stream"
+      );
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(e.loaded, e.total);
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new ApiError(xhr.status, xhr.statusText));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Upload failed"));
+      xhr.send(file);
+    });
   },
   downloadObject: async (bucketId: string, key: string): Promise<void> => {
     const token = getAccessToken();

@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -196,28 +198,85 @@ func (c *Client) GetObject(ctx context.Context, bucket, key string) (io.ReadClos
 	return out.Body, contentType, size, nil
 }
 
-// MemoryS3Client is a no-op implementation for dev/test.
-type MemoryS3Client struct{}
+// memObject holds an in-memory object.
+type memObject struct {
+	data        []byte
+	contentType string
+	lastMod     time.Time
+}
 
-func NewMemoryClient() *MemoryS3Client { return &MemoryS3Client{} }
+// MemoryS3Client is an in-memory S3 implementation for dev/test.
+// It tracks uploaded objects so list/get/delete behave realistically.
+type MemoryS3Client struct {
+	mu      sync.Mutex
+	objects map[string]map[string]*memObject // bucket -> key -> object
+}
 
-func (m *MemoryS3Client) CreateBucket(_ context.Context, _ string) error { return nil }
-func (m *MemoryS3Client) DeleteBucket(_ context.Context, _ string) error { return nil }
+func NewMemoryClient() *MemoryS3Client {
+	return &MemoryS3Client{objects: make(map[string]map[string]*memObject)}
+}
 
-func (m *MemoryS3Client) ListObjects(_ context.Context, _, prefix, _ string, _ int) (*ports.ObjectListResult, error) {
-	// Return sample objects for dev/test
-	result := &ports.ObjectListResult{
-		Prefix: prefix,
-		Objects: []ports.ObjectInfo{
-			{Key: prefix + "readme.txt", Size: 1024, LastModified: time.Now().Add(-24 * time.Hour), ETag: "\"abc123\""},
-			{Key: prefix + "data.json", Size: 4096, LastModified: time.Now().Add(-2 * time.Hour), ETag: "\"def456\""},
-		},
-		CommonPrefixes: []string{prefix + "images/", prefix + "docs/"},
+func (m *MemoryS3Client) CreateBucket(_ context.Context, bucketName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.objects[bucketName] == nil {
+		m.objects[bucketName] = make(map[string]*memObject)
+	}
+	return nil
+}
+
+func (m *MemoryS3Client) DeleteBucket(_ context.Context, bucketName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.objects, bucketName)
+	return nil
+}
+
+func (m *MemoryS3Client) ListObjects(_ context.Context, bucket, prefix, delimiter string, _ int) (*ports.ObjectListResult, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := &ports.ObjectListResult{Prefix: prefix}
+	bucketObjs := m.objects[bucket]
+	if bucketObjs == nil {
+		return result, nil
+	}
+
+	seen := make(map[string]bool)
+	for key, obj := range bucketObjs {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		rest := key[len(prefix):]
+		// If delimiter is set and the remaining key contains it, it's a "folder"
+		if delimiter != "" {
+			if idx := strings.Index(rest, delimiter); idx >= 0 {
+				cp := prefix + rest[:idx+len(delimiter)]
+				if !seen[cp] {
+					seen[cp] = true
+					result.CommonPrefixes = append(result.CommonPrefixes, cp)
+				}
+				continue
+			}
+		}
+		result.Objects = append(result.Objects, ports.ObjectInfo{
+			Key:          key,
+			Size:         int64(len(obj.data)),
+			LastModified: obj.lastMod,
+			ETag:         fmt.Sprintf("\"%x\"", len(obj.data)),
+		})
 	}
 	return result, nil
 }
 
-func (m *MemoryS3Client) DeleteObject(_ context.Context, _, _ string) error { return nil }
+func (m *MemoryS3Client) DeleteObject(_ context.Context, bucket, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if bucketObjs := m.objects[bucket]; bucketObjs != nil {
+		delete(bucketObjs, key)
+	}
+	return nil
+}
 
 func (m *MemoryS3Client) GeneratePresignedUploadURL(_ context.Context, bucket, key, _ string, expiry time.Duration) (string, error) {
 	return fmt.Sprintf("https://%s.s3.zenith.local/%s?X-Amz-Expires=%.0f", bucket, key, expiry.Seconds()), nil
@@ -227,13 +286,37 @@ func (m *MemoryS3Client) GeneratePresignedDownloadURL(_ context.Context, bucket,
 	return fmt.Sprintf("https://%s.s3.zenith.local/%s?X-Amz-Expires=%.0f", bucket, key, expiry.Seconds()), nil
 }
 
-func (m *MemoryS3Client) PutObject(_ context.Context, _, _, _ string, _ io.Reader, _ int64) error {
+func (m *MemoryS3Client) PutObject(_ context.Context, bucket, key, contentType string, body io.Reader, _ int64) error {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.objects[bucket] == nil {
+		m.objects[bucket] = make(map[string]*memObject)
+	}
+	m.objects[bucket][key] = &memObject{data: data, contentType: contentType, lastMod: time.Now()}
 	return nil
 }
 
-func (m *MemoryS3Client) GetObject(_ context.Context, _, key string) (io.ReadCloser, string, int64, error) {
-	content := []byte("sample file content for " + key)
-	return io.NopCloser(bytes.NewReader(content)), "application/octet-stream", int64(len(content)), nil
+func (m *MemoryS3Client) GetObject(_ context.Context, bucket, key string) (io.ReadCloser, string, int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if bucketObjs := m.objects[bucket]; bucketObjs != nil {
+		if obj, ok := bucketObjs[key]; ok {
+			return io.NopCloser(bytes.NewReader(obj.data)), obj.contentType, int64(len(obj.data)), nil
+		}
+	}
+	return nil, "", 0, fmt.Errorf("object %s/%s not found", bucket, key)
 }
 
-func (m *MemoryS3Client) CreateFolder(_ context.Context, _, _ string) error { return nil }
+func (m *MemoryS3Client) CreateFolder(_ context.Context, bucket, prefix string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.objects[bucket] == nil {
+		m.objects[bucket] = make(map[string]*memObject)
+	}
+	m.objects[bucket][prefix] = &memObject{data: []byte{}, contentType: "application/x-directory", lastMod: time.Now()}
+	return nil
+}
