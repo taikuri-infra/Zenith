@@ -223,6 +223,7 @@ type PresignedURLResponse struct {
 type UploadURLInput struct {
 	Key         string `json:"key"          validate:"required"`
 	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
 }
 
 // CreateFolderInput is the request body for creating a folder in a bucket.

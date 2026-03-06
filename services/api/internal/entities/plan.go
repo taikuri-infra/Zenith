@@ -55,7 +55,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 		}
 	default: // Free
 		return PlanLimits{
-			MaxApps: 1, MaxDatabases: 1, MaxDBSizeMB: 500,
+			MaxApps: 1, MaxDatabases: 1, MaxDBSizeMB: 100,
 			MaxAuthUsers: 1000, MaxStorageMB: 1024, MaxBuckets: 0,
 			MaxCPUMillis: 500, MaxRAMMB: 512, MaxTeamMembers: 1,
 			BackupsEnabled: false, CustomDomain: false, AlwaysOn: false, SleepAfterMins: 15,

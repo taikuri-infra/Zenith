@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
+	"sort"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -64,9 +66,18 @@ func (s *PlanService) UpgradePlan(ctx context.Context, userID string, tier entit
 		return nil, fmt.Errorf("paid plan upgrades require payment; use POST /api/v1/billing/checkout instead")
 	}
 
+	// Check if this is a downgrade
+	oldPlan, _ := s.planRepo.GetUserPlan(ctx, userID)
+	isDowngrade := oldPlan != nil && tierRank(tier) < tierRank(oldPlan.Tier)
+
 	plan, err := s.planRepo.SetUserPlan(ctx, userID, tier)
 	if err != nil {
 		return nil, err
+	}
+
+	// Enforce resource limits on downgrade
+	if isDowngrade {
+		s.EnforceDowngrade(ctx, userID, tier)
 	}
 
 	usage := s.CalculateUsage(ctx, userID)
@@ -76,6 +87,49 @@ func (s *PlanService) UpgradePlan(ctx context.Context, userID string, tier entit
 		Limits: plan.Limits,
 		Usage:  usage,
 	}, nil
+}
+
+// EnforceDowngrade suspends excess apps when a user downgrades to a lower tier.
+// Storage buckets become inaccessible via CheckLimit (fail-closed), and data
+// is preserved in S3 in case the user re-upgrades.
+func (s *PlanService) EnforceDowngrade(ctx context.Context, userID string, newTier entities.PlanTier) {
+	limits := entities.DefaultPlanLimits(newTier)
+
+	apps, err := s.appRepo.ListAppsByUser(ctx, userID)
+	if err != nil {
+		log.Printf("[plan] EnforceDowngrade: failed to list apps for user %s: %v", userID, err)
+		return
+	}
+
+	if len(apps) > limits.MaxApps {
+		// Sort by creation time descending (newest first) — keep the newest up to MaxApps
+		sort.Slice(apps, func(i, j int) bool {
+			return apps[i].CreatedAt.After(apps[j].CreatedAt)
+		})
+
+		for i := limits.MaxApps; i < len(apps); i++ {
+			status := entities.AppStatusSuspended
+			if _, err := s.appRepo.UpdateApp(ctx, apps[i].ID, &dto.UpdateAppInput{Status: &status}); err != nil {
+				log.Printf("[plan] EnforceDowngrade: failed to suspend app %s: %v", apps[i].ID, err)
+			} else {
+				log.Printf("[plan] EnforceDowngrade: suspended app %s (%s) for user %s", apps[i].ID, apps[i].Name, userID)
+			}
+		}
+	}
+}
+
+// tierRank returns numeric rank for plan comparison (higher = better plan).
+func tierRank(t entities.PlanTier) int {
+	switch t {
+	case entities.PlanEnterprise:
+		return 4
+	case entities.PlanTeam:
+		return 3
+	case entities.PlanPro:
+		return 2
+	default:
+		return 1
+	}
 }
 
 // CalculateUsage returns current resource usage for a user.
@@ -96,7 +150,7 @@ func (s *PlanService) CalculateUsage(ctx context.Context, userID string) dto.Pla
 func (s *PlanService) CheckLimit(ctx context.Context, userID, resource string, currentCount int) error {
 	plan, err := s.planRepo.GetUserPlan(ctx, userID)
 	if err != nil {
-		return nil // don't block on plan lookup failure
+		return fmt.Errorf("unable to verify plan limits")
 	}
 
 	var limit int

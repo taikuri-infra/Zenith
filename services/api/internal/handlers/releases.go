@@ -76,7 +76,9 @@ func (h *ReleaseHandler) DeployRelease(c *fiber.Ctx) error {
 	}
 
 	// Trigger async pipeline with the pre-built image
-	go h.pipeline.TriggerImageDeploy(app, deployment, release.Image)
+	if err := h.pipeline.TriggerImageDeploy(app, deployment, release.Image); err != nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
+	}
 
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
 		"deployment_id": deployment.ID,

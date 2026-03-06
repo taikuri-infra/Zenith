@@ -37,10 +37,11 @@ type Config struct {
 	InternalSecret string
 
 	// Deploy
-	GitHubWebhookSecret string
-	BaseDomain          string
-	Registry            string // container registry for built images
-	BuildWorkDir        string // local temp dir for cloning repos
+	BaseDomain string
+	Registry   string // container registry for user images
+
+	// Deploy concurrency
+	MaxConcurrentDeploys int
 
 	// Secrets encryption
 	SecretsKey string // SECRETS_ENCRYPTION_KEY: 64-char hex (32 bytes)
@@ -71,10 +72,11 @@ type Config struct {
 	KeycloakAdminPassword string
 
 	// S3 / Hetzner Object Storage (tenant bucket provisioning)
-	S3Endpoint  string
-	S3AccessKey string
-	S3SecretKey string
-	S3Region    string
+	S3Endpoint       string
+	S3AccessKey      string
+	S3SecretKey      string
+	S3Region         string
+	S3PlatformBucket string // shared bucket for all user storage (prefix-isolated)
 
 	// CNPG Admin DSN (for CREATE DATABASE in shared cluster)
 	CNPGAdminDSN string
@@ -118,10 +120,9 @@ func Load() *Config {
 		AppURL:         getEnv("APP_URL", ""),
 		EmailFrom:      getEnv("EMAIL_FROM", "Zenith <noreply@freezenith.com>"),
 		InternalSecret: getEnv("INTERNAL_SECRET", ""),
-		GitHubWebhookSecret: getEnv("GITHUB_WEBHOOK_SECRET", ""),
-		BaseDomain:          getEnv("BASE_DOMAIN", "freezenith.com"),
-		Registry:            getEnv("REGISTRY", "registry.freezenith.com"),
-		BuildWorkDir:        getEnv("BUILD_WORKDIR", "/tmp/zenith-builds"),
+		BaseDomain: getEnv("BASE_DOMAIN", "freezenith.com"),
+		Registry:   getEnv("REGISTRY", "registry.freezenith.com"),
+		MaxConcurrentDeploys: getEnvInt("MAX_CONCURRENT_DEPLOYS", 5),
 		SecretsKey:          getEnv("SECRETS_ENCRYPTION_KEY", ""),
 		OTELEndpoint:        getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTELInsecure:        getEnvBool("OTEL_INSECURE", true),
@@ -142,6 +143,7 @@ func Load() *Config {
 		S3AccessKey:           getEnv("S3_ACCESS_KEY", ""),
 		S3SecretKey:           getEnv("S3_SECRET_KEY", ""),
 		S3Region:              getEnv("S3_REGION", "fsn1"),
+		S3PlatformBucket:      getEnv("S3_PLATFORM_BUCKET", "zenith-platform-storage"),
 		CNPGAdminDSN:          getEnv("CNPG_ADMIN_DSN", ""),
 		HetznerToken:          getEnv("HCLOUD_TOKEN", ""),
 		AutoscalerEnabled:   getEnvBool("AUTOSCALER_ENABLED", false),

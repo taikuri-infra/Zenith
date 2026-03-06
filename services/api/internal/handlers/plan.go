@@ -60,12 +60,12 @@ func CheckLimit(planRepo ports.UserPlanRepository, resource string, countFn func
 
 		plan, err := planRepo.GetUserPlan(c.Context(), userID)
 		if err != nil {
-			return c.Next()
+			return fiber.NewError(fiber.StatusServiceUnavailable, "unable to verify plan limits")
 		}
 
 		count, err := countFn(c, userID)
 		if err != nil {
-			return c.Next()
+			return fiber.NewError(fiber.StatusServiceUnavailable, "unable to verify resource usage")
 		}
 
 		var limit int

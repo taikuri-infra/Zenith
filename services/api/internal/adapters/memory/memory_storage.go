@@ -48,18 +48,29 @@ func (r *MemoryStorageRepository) CreateBucket(_ context.Context, appID, userID 
 	}
 
 	id := uuid.New().String()
+	s3Prefix := fmt.Sprintf("u/%s/%s/", userID, input.Name)
+
+	// Generate real S3 bucket name
+	uid := userID
+	if len(uid) > 12 {
+		uid = uid[:12]
+	}
+	s3BucketName := "zenith-" + uid + "-" + input.Name
+
 	bucket := &entities.UserBucket{
-		ID:        id,
-		AppID:     appID,
-		UserID:    userID,
-		Name:      input.Name,
-		Access:    access,
-		Region:    "fsn1",
-		SizeMB:    0,
-		MaxSizeMB: 1024, // free tier: 1GB
-		Objects:   0,
-		Status:    entities.BucketStatusActive,
-		Endpoint:  fmt.Sprintf("https://%s.s3.zenith.local", input.Name),
+		ID:           id,
+		AppID:        appID,
+		UserID:       userID,
+		Name:         input.Name,
+		S3Prefix:     s3Prefix,
+		S3BucketName: s3BucketName,
+		Access:       access,
+		Region:       "fsn1",
+		SizeMB:       0,
+		MaxSizeMB:    1024, // free tier: 1GB
+		Objects:      0,
+		Status:       entities.BucketStatusActive,
+		Endpoint:     fmt.Sprintf("https://%s.s3.zenith.local", input.Name),
 		Timestamps: entities.Timestamps{
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),

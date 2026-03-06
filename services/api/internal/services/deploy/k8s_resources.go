@@ -12,6 +12,7 @@ type K8sResources struct {
 	Service          map[string]interface{}
 	IngressRoute     map[string]interface{}
 	HTTPScaledObject map[string]interface{} // nil when always-on (paid tiers)
+	NetworkPolicy    map[string]interface{} // per-app tenant isolation
 }
 
 // PerAppResources returns CPU/RAM limits and requests per tier for a single app container.
@@ -42,8 +43,9 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 	scaleToZero := planLimits != nil && ShouldScaleToZero(planLimits)
 
 	res := &K8sResources{
-		Deployment: generateDeployment(app, imageTag, namespace, labels, envVars, tier),
-		Service:    generateService(app, namespace, labels),
+		Deployment:    generateDeployment(app, imageTag, namespace, labels, envVars, tier),
+		Service:       generateService(app, namespace, labels),
+		NetworkPolicy: generateNetworkPolicy(app, namespace, labels),
 	}
 
 	if scaleToZero {
@@ -116,6 +118,12 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 								},
 							},
 							"env": k8sEnv,
+							"securityContext": map[string]interface{}{
+								"allowPrivilegeEscalation": false,
+								"capabilities": map[string]interface{}{
+									"drop": []string{"ALL"},
+								},
+							},
 							"resources": map[string]interface{}{
 								"limits": map[string]string{
 									"cpu":    cpuLimit,
@@ -205,6 +213,80 @@ func generateIngressRoute(app *entities.App, namespace string, labels map[string
 				},
 			},
 			"tls": map[string]interface{}{},
+		},
+	}
+}
+
+// generateNetworkPolicy creates a NetworkPolicy that isolates user app pods:
+// - Ingress: only from Traefik (kube-system namespace)
+// - Egress: DNS (kube-dns) + internet (blocks 10.0.0.0/8, 172.16.0.0/12 to prevent pod-to-pod)
+func generateNetworkPolicy(app *entities.App, namespace string, labels map[string]string) map[string]interface{} {
+	return map[string]interface{}{
+		"apiVersion": "networking.k8s.io/v1",
+		"kind":       "NetworkPolicy",
+		"metadata": map[string]interface{}{
+			"name":      app.Subdomain + "-netpol",
+			"namespace": namespace,
+			"labels":    labels,
+		},
+		"spec": map[string]interface{}{
+			"podSelector": map[string]interface{}{
+				"matchLabels": map[string]string{
+					"app": app.Subdomain,
+				},
+			},
+			"policyTypes": []string{"Ingress", "Egress"},
+			"ingress": []map[string]interface{}{
+				{
+					"from": []map[string]interface{}{
+						{
+							"namespaceSelector": map[string]interface{}{
+								"matchLabels": map[string]string{
+									"kubernetes.io/metadata.name": "kube-system",
+								},
+							},
+							"podSelector": map[string]interface{}{
+								"matchLabels": map[string]string{
+									"app.kubernetes.io/name": "traefik",
+								},
+							},
+						},
+					},
+				},
+			},
+			"egress": []map[string]interface{}{
+				{
+					// DNS
+					"to": []map[string]interface{}{
+						{
+							"namespaceSelector": map[string]interface{}{
+								"matchLabels": map[string]string{
+									"kubernetes.io/metadata.name": "kube-system",
+								},
+							},
+						},
+					},
+					"ports": []map[string]interface{}{
+						{"protocol": "UDP", "port": 53},
+						{"protocol": "TCP", "port": 53},
+					},
+				},
+				{
+					// Internet (block private ranges to prevent pod-to-pod and internal svc access)
+					"to": []map[string]interface{}{
+						{
+							"ipBlock": map[string]interface{}{
+								"cidr": "0.0.0.0/0",
+								"except": []string{
+									"10.0.0.0/8",
+									"172.16.0.0/12",
+									"192.168.0.0/16",
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 }

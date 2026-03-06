@@ -1,27 +1,31 @@
 package handlers
 
 import (
+	"log"
+
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
 
 // StorageHandlerV2 manages per-app storage buckets (Phase 3).
 type StorageHandlerV2 struct {
-	storageRepo ports.StorageRepository
-	appRepo     ports.AppRepository
-	objStorage  ports.ObjectStorage
+	storageRepo   ports.StorageRepository
+	appRepo       ports.AppRepository
+	bucketSvc     *services.BucketService
+	tenantStorage *services.TenantStorage
 }
 
 // NewStorageHandlerV2 creates a new StorageHandlerV2.
-func NewStorageHandlerV2(storageRepo ports.StorageRepository, appRepo ports.AppRepository) *StorageHandlerV2 {
-	return &StorageHandlerV2{storageRepo: storageRepo, appRepo: appRepo}
+func NewStorageHandlerV2(storageRepo ports.StorageRepository, appRepo ports.AppRepository, bucketSvc *services.BucketService) *StorageHandlerV2 {
+	return &StorageHandlerV2{storageRepo: storageRepo, appRepo: appRepo, bucketSvc: bucketSvc}
 }
 
-// SetObjectStorage wires the S3 client for real bucket operations.
-func (h *StorageHandlerV2) SetObjectStorage(s ports.ObjectStorage) {
-	h.objStorage = s
+// SetTenantStorage wires the tenant storage service for S3 operations.
+func (h *StorageHandlerV2) SetTenantStorage(ts *services.TenantStorage) {
+	h.tenantStorage = ts
 }
 
 // Create provisions a new storage bucket for an app.
@@ -49,6 +53,16 @@ func (h *StorageHandlerV2) Create(c *fiber.Ctx) error {
 	bucket, err := h.storageRepo.CreateBucket(c.Context(), appID, userID, &input)
 	if err != nil {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
+	}
+
+	// Create real S3 bucket
+	if h.bucketSvc != nil && bucket.S3BucketName != "" {
+		if err := h.bucketSvc.CreateRealBucket(c.Context(), bucket.S3BucketName); err != nil {
+			log.Printf("[storage] Warning: failed to create real S3 bucket %s: %v", bucket.S3BucketName, err)
+			// Clean up DB record on S3 failure
+			h.storageRepo.DeleteBucket(c.Context(), bucket.ID)
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to create storage bucket")
+		}
 	}
 
 	// Auto-inject S3 endpoint as env var
@@ -104,6 +118,13 @@ func (h *StorageHandlerV2) Delete(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "not your bucket")
 	}
 
+	// Clean up real S3 bucket (empty + delete)
+	if h.bucketSvc != nil && bucket.S3BucketName != "" {
+		if err := h.bucketSvc.DeleteRealBucket(c.Context(), bucket.S3BucketName); err != nil {
+			log.Printf("[storage] Warning: failed to delete real S3 bucket %s: %v", bucket.S3BucketName, err)
+		}
+	}
+
 	if err := h.storageRepo.DeleteBucket(c.Context(), bucketID); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -133,6 +154,7 @@ func (h *StorageHandlerV2) ListByUser(c *fiber.Ctx) error {
 }
 
 // CreateStandalone provisions a standalone bucket (not tied to an app).
+// Virtual bucket = DB record only. No real S3 bucket is created.
 // POST /api/v1/storage-buckets
 func (h *StorageHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
@@ -150,11 +172,12 @@ func (h *StorageHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	}
 
-	// Create real S3 bucket if S3 client is available
-	if h.objStorage != nil {
-		if err := h.objStorage.CreateBucket(c.Context(), bucket.Name); err != nil {
-			// Don't fail the API call, bucket is stored but S3 may lag
-			bucket.Status = entities.BucketStatusError
+	// Create real S3 bucket
+	if h.bucketSvc != nil && bucket.S3BucketName != "" {
+		if err := h.bucketSvc.CreateRealBucket(c.Context(), bucket.S3BucketName); err != nil {
+			log.Printf("[storage] Warning: failed to create real S3 bucket %s: %v", bucket.S3BucketName, err)
+			h.storageRepo.DeleteBucket(c.Context(), bucket.ID)
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to create storage bucket")
 		}
 	}
 
@@ -179,6 +202,7 @@ func (h *StorageHandlerV2) GetStandalone(c *fiber.Ctx) error {
 }
 
 // DeleteStandalone removes a standalone bucket.
+// Cleans up all objects under the bucket's prefix before removing the DB record.
 // DELETE /api/v1/storage-buckets/:bucketId
 func (h *StorageHandlerV2) DeleteStandalone(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
@@ -192,13 +216,19 @@ func (h *StorageHandlerV2) DeleteStandalone(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "not your bucket")
 	}
 
-	if err := h.storageRepo.DeleteBucket(c.Context(), bucketID); err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	// Clean up S3 objects and real bucket
+	if h.bucketSvc != nil && bucket.S3BucketName != "" {
+		if err := h.bucketSvc.DeleteRealBucket(c.Context(), bucket.S3BucketName); err != nil {
+			log.Printf("[storage] Warning: failed to delete real S3 bucket %s: %v", bucket.S3BucketName, err)
+		}
+	} else if h.tenantStorage != nil {
+		if err := h.tenantStorage.DeleteAllForBucket(c.Context(), bucket); err != nil {
+			log.Printf("[storage] Warning: failed to clean up S3 objects for bucket %s: %v", bucketID, err)
+		}
 	}
 
-	// Delete real S3 bucket if S3 client is available
-	if h.objStorage != nil {
-		h.objStorage.DeleteBucket(c.Context(), bucket.Name)
+	if err := h.storageRepo.DeleteBucket(c.Context(), bucketID); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.JSON(fiber.Map{"message": "bucket deleted"})

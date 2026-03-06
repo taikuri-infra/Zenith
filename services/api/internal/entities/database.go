@@ -9,6 +9,14 @@ const (
 	DatabaseEngineRedis    DatabaseEngine = "redis"
 )
 
+// DatabaseProvisioner indicates how the database was provisioned.
+type DatabaseProvisioner string
+
+const (
+	DBProvisionerShared    DatabaseProvisioner = "shared"    // Free/Pro: SQL on shared cluster
+	DBProvisionerDedicated DatabaseProvisioner = "dedicated" // Team/Enterprise: CNPG CRD
+)
+
 // DatabaseStatus represents the lifecycle status of a provisioned database.
 type DatabaseStatus string
 
@@ -21,18 +29,19 @@ const (
 
 // UserDatabase represents a database provisioned for a user's app.
 type UserDatabase struct {
-	ID        string         `json:"id"`
-	AppID     string         `json:"app_id"`
-	UserID    string         `json:"user_id"`
-	Name      string         `json:"name"`
-	Engine    DatabaseEngine `json:"engine"`
-	DBName    string         `json:"db_name"`
-	DBUser    string         `json:"db_user"`
-	Host      string         `json:"host"`
-	Port      int            `json:"port"`
-	SizeMB    int            `json:"size_mb"`
-	MaxSizeMB int            `json:"max_size_mb"`
-	Status    DatabaseStatus `json:"status"`
+	ID          string              `json:"id"`
+	AppID       string              `json:"app_id"`
+	UserID      string              `json:"user_id"`
+	Name        string              `json:"name"`
+	Engine      DatabaseEngine      `json:"engine"`
+	DBName      string              `json:"db_name"`
+	DBUser      string              `json:"db_user"`
+	Host        string              `json:"host"`
+	Port        int                 `json:"port"`
+	SizeMB      int                 `json:"size_mb"`
+	MaxSizeMB   int                 `json:"max_size_mb"`
+	Status      DatabaseStatus      `json:"status"`
+	Provisioner DatabaseProvisioner `json:"provisioner"`
 	Timestamps
 }
 

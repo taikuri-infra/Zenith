@@ -8,18 +8,20 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
 
 // StorageObjectHandler manages object-level operations within buckets.
 type StorageObjectHandler struct {
-	storageRepo ports.StorageRepository
-	objStorage  ports.ObjectStorage
+	storageRepo    ports.StorageRepository
+	tenantStorage  *services.TenantStorage
+	quotaSvc       *services.StorageQuotaService
 }
 
 // NewStorageObjectHandler creates a new StorageObjectHandler.
-func NewStorageObjectHandler(storageRepo ports.StorageRepository, objStorage ports.ObjectStorage) *StorageObjectHandler {
-	return &StorageObjectHandler{storageRepo: storageRepo, objStorage: objStorage}
+func NewStorageObjectHandler(storageRepo ports.StorageRepository, tenantStorage *services.TenantStorage, quotaSvc *services.StorageQuotaService) *StorageObjectHandler {
+	return &StorageObjectHandler{storageRepo: storageRepo, tenantStorage: tenantStorage, quotaSvc: quotaSvc}
 }
 
 // ListObjects returns objects in a bucket with optional prefix/delimiter filtering.
@@ -39,7 +41,7 @@ func (h *StorageObjectHandler) ListObjects(c *fiber.Ctx) error {
 	prefix := c.Query("prefix", "")
 	delimiter := c.Query("delimiter", "/")
 
-	result, err := h.objStorage.ListObjects(c.Context(), bucket.Name, prefix, delimiter, 1000)
+	result, err := h.tenantStorage.ListObjects(c.Context(), bucket, prefix, delimiter, 1000)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -93,9 +95,23 @@ func (h *StorageObjectHandler) GetUploadURL(c *fiber.Ctx) error {
 	if input.Key == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "key is required")
 	}
+	if input.Size <= 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "size is required and must be positive")
+	}
+	const maxFileSize = 100 * 1024 * 1024 // 100 MB
+	if input.Size > maxFileSize {
+		return fiber.NewError(fiber.StatusBadRequest, "file size exceeds 100MB limit")
+	}
+
+	// Enforce storage quota
+	if h.quotaSvc != nil {
+		if err := h.quotaSvc.CheckUploadAllowed(c.Context(), userID, input.Size); err != nil {
+			return fiber.NewError(fiber.StatusForbidden, err.Error())
+		}
+	}
 
 	expiry := 15 * time.Minute
-	url, err := h.objStorage.GeneratePresignedUploadURL(c.Context(), bucket.Name, input.Key, input.ContentType, expiry)
+	url, err := h.tenantStorage.GeneratePresignedUploadURL(c.Context(), bucket, input.Key, input.ContentType, expiry)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -127,7 +143,7 @@ func (h *StorageObjectHandler) GetDownloadURL(c *fiber.Ctx) error {
 	}
 
 	expiry := 15 * time.Minute
-	url, err := h.objStorage.GeneratePresignedDownloadURL(c.Context(), bucket.Name, key, expiry)
+	url, err := h.tenantStorage.GeneratePresignedDownloadURL(c.Context(), bucket, key, expiry)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -158,7 +174,7 @@ func (h *StorageObjectHandler) DeleteObject(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "key query parameter is required")
 	}
 
-	if err := h.objStorage.DeleteObject(c.Context(), bucket.Name, key); err != nil {
+	if err := h.tenantStorage.DeleteObject(c.Context(), bucket, key); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
@@ -188,8 +204,19 @@ func (h *StorageObjectHandler) UploadObject(c *fiber.Ctx) error {
 	body := c.Body()
 	size := int64(len(body))
 
-	if err := h.objStorage.PutObject(c.Context(), bucket.Name, key, contentType, bytes.NewReader(body), size); err != nil {
+	// Enforce storage quota
+	if h.quotaSvc != nil {
+		if err := h.quotaSvc.CheckUploadAllowed(c.Context(), userID, size); err != nil {
+			return fiber.NewError(fiber.StatusForbidden, err.Error())
+		}
+	}
+
+	if err := h.tenantStorage.PutObject(c.Context(), bucket, key, contentType, bytes.NewReader(body), size); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	if h.quotaSvc != nil {
+		h.quotaSvc.InvalidateCache(userID)
 	}
 
 	return c.JSON(fiber.Map{"message": "object uploaded", "key": key})
@@ -214,7 +241,7 @@ func (h *StorageObjectHandler) DownloadObject(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "key query parameter is required")
 	}
 
-	body, contentType, size, err := h.objStorage.GetObject(c.Context(), bucket.Name, key)
+	body, contentType, size, err := h.tenantStorage.GetObject(c.Context(), bucket, key)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -260,7 +287,7 @@ func (h *StorageObjectHandler) CreateFolder(c *fiber.Ctx) error {
 		input.Prefix += "/"
 	}
 
-	if err := h.objStorage.CreateFolder(c.Context(), bucket.Name, input.Prefix); err != nil {
+	if err := h.tenantStorage.CreateFolder(c.Context(), bucket, input.Prefix); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 

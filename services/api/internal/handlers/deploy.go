@@ -11,13 +11,13 @@ import (
 type DeployHandler struct {
 	appRepo  ports.AppRepository
 	pipeline interface {
-		TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string)
+		TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string) error
 	}
 }
 
 // NewDeployHandler creates a new DeployHandler.
 func NewDeployHandler(appRepo ports.AppRepository, pipeline interface {
-	TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string)
+	TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string) error
 }) *DeployHandler {
 	return &DeployHandler{appRepo: appRepo, pipeline: pipeline}
 }
@@ -105,7 +105,9 @@ func (h *DeployHandler) Rollback(c *fiber.Ctx) error {
 	if h.pipeline != nil {
 		app, _ := h.appRepo.GetApp(c.Context(), appID)
 		if app != nil {
-			h.pipeline.TriggerImageDeploy(app, target, target.ImageTag)
+			if err := h.pipeline.TriggerImageDeploy(app, target, target.ImageTag); err != nil {
+				return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
+			}
 		}
 	}
 

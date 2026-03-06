@@ -31,7 +31,6 @@ type BillingService struct {
 	dbRepo      ports.DatabaseRepository
 	storageRepo ports.StorageRepository
 	authRepo    ports.AppAuthRepository
-	storage     ports.ObjectStorage
 	proPriceID  string
 	teamPriceID string
 	baseDomain  string
@@ -227,29 +226,19 @@ func (s *BillingService) PlanRepo() ports.UserPlanRepository { return s.planRepo
 // Payments exposes the payment gateway for webhook handler usage.
 func (s *BillingService) Payments() ports.PaymentGateway { return s.payments }
 
-// SetStorage configures the object storage client for upgrade resource provisioning.
-func (s *BillingService) SetStorage(storage ports.ObjectStorage) { s.storage = storage }
-
-// ProvisionUpgradeResources creates infrastructure for a newly upgraded user.
-// For Pro/Team: creates an S3 bucket for artifact storage.
-// Harbor project creation is deferred until the Harbor API client is implemented.
+// ProvisionUpgradeResources handles post-upgrade provisioning for a user.
+// S3 storage uses a shared platform bucket with prefix isolation — no per-user
+// bucket creation needed. Harbor project creation is deferred.
 func (s *BillingService) ProvisionUpgradeResources(ctx context.Context, userID string, tier entities.PlanTier) {
 	if tier == entities.PlanFree {
 		return
 	}
 
-	// S3 bucket for user artifacts
-	if s.storage != nil {
-		bucketName := fmt.Sprintf("zenith-user-%s", userID)
-		if err := s.storage.CreateBucket(ctx, bucketName); err != nil {
-			log.Printf("[billing] Warning: failed to create S3 bucket for user %s: %v", userID, err)
-		} else {
-			log.Printf("[billing] Created S3 bucket %s for user %s (tier=%s)", bucketName, userID, tier)
-		}
-	}
+	// S3: No-op. Storage uses a single shared bucket with prefix-based isolation.
+	// User "buckets" are virtual (DB records only), created on-demand via the storage API.
+	log.Printf("[billing] User %s upgraded to %s — storage uses shared platform bucket (prefix isolation)", userID, tier)
 
 	// TODO: Create Harbor project for Pro+ users once Harbor API client is built.
-	// Harbor project would be: zenith-user-<userID> with storage quota based on tier.
 	if tier == entities.PlanPro || tier == entities.PlanTeam {
 		log.Printf("[billing] Harbor project creation deferred for user %s (tier=%s) — Harbor API client not yet implemented", userID, tier)
 	}

@@ -10,6 +10,7 @@ const (
 	AppStatusRunning   AppStatus = "running"
 	AppStatusSleeping  AppStatus = "sleeping"
 	AppStatusFailed    AppStatus = "failed"
+	AppStatusSuspended AppStatus = "suspended"
 	AppStatusStopped   AppStatus = "stopped"
 )
 

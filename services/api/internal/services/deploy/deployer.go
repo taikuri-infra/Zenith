@@ -75,6 +75,13 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 		return fmt.Errorf("failed to apply IngressRoute: %w", err)
 	}
 
+	// Apply NetworkPolicy for tenant isolation
+	if resources.NetworkPolicy != nil {
+		if err := d.applyCRD(ctx, "NetworkPolicy", "zenith-apps", app.Subdomain+"-netpol", resources.NetworkPolicy); err != nil {
+			return fmt.Errorf("failed to apply NetworkPolicy: %w", err)
+		}
+	}
+
 	// Apply KEDA HTTPScaledObject if scale-to-zero is enabled
 	if resources.HTTPScaledObject != nil {
 		if err := d.applyCRD(ctx, "HTTPScaledObject", "zenith-apps", app.Subdomain, resources.HTTPScaledObject); err != nil {
@@ -107,6 +114,10 @@ func (d *Deployer) DeleteApp(ctx context.Context, app *entities.App) error {
 		if err := d.k8sClient.DeleteCRD(ctx, kind, namespace, app.Subdomain); err != nil {
 			log.Printf("[deployer] Warning: failed to delete %s/%s: %v", kind, app.Subdomain, err)
 		}
+	}
+	// Clean up NetworkPolicy (uses -netpol suffix)
+	if err := d.k8sClient.DeleteCRD(ctx, "NetworkPolicy", namespace, app.Subdomain+"-netpol"); err != nil {
+		log.Printf("[deployer] Warning: failed to delete NetworkPolicy/%s-netpol: %v", app.Subdomain, err)
 	}
 
 	return nil

@@ -18,7 +18,7 @@ type AppDeleter interface {
 
 // AppImageDeployer triggers image-based deploys.
 type AppImageDeployer interface {
-	TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string)
+	TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string) error
 }
 
 // AppHandlerV2 handles app CRUD operations using the AppRepository.
@@ -168,7 +168,9 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		if err != nil {
 			log.Printf("[apps_v2] failed to create deployment record: %v", err)
 		} else {
-			go h.pipeline.TriggerImageDeploy(app, deployment, req.ImageURL)
+			if err := h.pipeline.TriggerImageDeploy(app, deployment, req.ImageURL); err != nil {
+				log.Printf("[apps_v2] deploy rejected: %v", err)
+			}
 		}
 	}
 

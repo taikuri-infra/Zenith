@@ -1,7 +1,7 @@
 # Staging values for zenith-api
 namespace: zenith-staging
 replicas: 1
-image: zenith-api:0.7.6
+image: zenith-api:0.7.8
 imageRegistry: ""  # set via Terraform
 imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via Terraform
@@ -26,6 +26,11 @@ env:
   GOOGLE_CLIENT_SECRET: "true"  # actual value stored in zenith-auth-secrets Secret
   GITHUB_CLIENT_ID: "true"  # actual value stored in zenith-auth-secrets Secret
   GITHUB_CLIENT_SECRET: "true"  # actual value stored in zenith-auth-secrets Secret
+  S3_ENDPOINT: "https://fsn1.your-objectstorage.com"
+  S3_ACCESS_KEY: "true"  # actual value stored in zenith-secrets Secret
+  S3_SECRET_KEY: "true"  # actual value stored in zenith-secrets Secret
+  S3_REGION: "fsn1"
+  S3_PLATFORM_BUCKET: "zenith-user-storage"
 
 cnpgAdminSecret: "cnpg-admin-dsn"
 keycloakAdminSecret: "keycloak-admin"

@@ -2,9 +2,6 @@ package handlers_test
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
@@ -16,13 +13,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func setupV2Test() (*fiber.App, *handlers.AppHandlerV2, *handlers.DeployHandler, *handlers.WebhookHandler, ports.AppRepository) {
+func setupV2Test() (*fiber.App, *handlers.AppHandlerV2, *handlers.DeployHandler, ports.AppRepository) {
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	repo := memory.NewMemoryAppRepository()
 	appHandler := handlers.NewAppHandlerV2(repo, "freezenith.com", nil, nil)
 	deployHandler := handlers.NewDeployHandler(repo, nil)
-	webhookHandler := handlers.NewWebhookHandler(repo, nil, "test-secret")
-	return app, appHandler, deployHandler, webhookHandler, repo
+	return app, appHandler, deployHandler, repo
 }
 
 // injectUserID is middleware for tests to simulate auth
@@ -36,7 +32,7 @@ func injectUserID(userID string) fiber.Handler {
 // --- AppHandlerV2 tests ---
 
 func TestV2CreateApp(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 
 	body := `{"name":"web","repo_url":"https://github.com/user/repo"}`
@@ -66,7 +62,7 @@ func TestV2CreateApp(t *testing.T) {
 }
 
 func TestV2CreateAppNoName(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 
 	body := `{"repo_url":"https://github.com/user/repo"}`
@@ -80,7 +76,7 @@ func TestV2CreateAppNoName(t *testing.T) {
 }
 
 func TestV2CreateAppNoRepoURL(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 
 	body := `{"name":"web"}`
@@ -94,7 +90,7 @@ func TestV2CreateAppNoRepoURL(t *testing.T) {
 }
 
 func TestV2CreateAppNoAuth(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	// No injectUserID middleware
 	app.Post("/api/v1/apps", handler.Create)
 
@@ -109,7 +105,7 @@ func TestV2CreateAppNoAuth(t *testing.T) {
 }
 
 func TestV2ListApps(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 	app.Get("/api/v1/apps", injectUserID("user-1"), handler.List)
 
@@ -140,7 +136,7 @@ func TestV2ListApps(t *testing.T) {
 }
 
 func TestV2GetApp(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 	app.Get("/api/v1/apps/:appId", injectUserID("user-1"), handler.Get)
 
@@ -161,7 +157,7 @@ func TestV2GetApp(t *testing.T) {
 }
 
 func TestV2GetAppNotFound(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Get("/api/v1/apps/:appId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/nonexistent", nil)
@@ -173,7 +169,7 @@ func TestV2GetAppNotFound(t *testing.T) {
 }
 
 func TestV2DeleteApp(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 	app.Delete("/api/v1/apps/:appId", injectUserID("user-1"), handler.Delete)
 
@@ -193,97 +189,10 @@ func TestV2DeleteApp(t *testing.T) {
 	}
 }
 
-// --- Webhook tests ---
-
-func TestWebhookPingEvent(t *testing.T) {
-	app, _, _, webhookHandler, _ := setupV2Test()
-	app.Post("/webhooks/github", webhookHandler.HandlePush)
-
-	body := `{"zen":"Keep it logically awesome."}`
-	req := httptest.NewRequest("POST", "/webhooks/github", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-GitHub-Event", "ping")
-
-	// Compute HMAC signature
-	mac := hmac.New(sha256.New, []byte("test-secret"))
-	mac.Write([]byte(body))
-	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	req.Header.Set("X-Hub-Signature-256", sig)
-
-	resp, _ := app.Test(req)
-	if resp.StatusCode != 200 {
-		t.Fatalf("Expected 200, got %d", resp.StatusCode)
-	}
-
-	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
-	if result["message"] != "event ignored" {
-		t.Errorf("Expected 'event ignored', got '%v'", result["message"])
-	}
-}
-
-func TestWebhookInvalidSignature(t *testing.T) {
-	app, _, _, webhookHandler, _ := setupV2Test()
-	app.Post("/webhooks/github", webhookHandler.HandlePush)
-
-	body := `{"ref":"refs/heads/main"}`
-	req := httptest.NewRequest("POST", "/webhooks/github", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-GitHub-Event", "push")
-	req.Header.Set("X-Hub-Signature-256", "sha256=invalidsignature")
-
-	resp, _ := app.Test(req)
-	if resp.StatusCode != 401 {
-		t.Errorf("Expected 401, got %d", resp.StatusCode)
-	}
-}
-
-func TestWebhookMissingSignature(t *testing.T) {
-	app, _, _, webhookHandler, _ := setupV2Test()
-	app.Post("/webhooks/github", webhookHandler.HandlePush)
-
-	body := `{"ref":"refs/heads/main"}`
-	req := httptest.NewRequest("POST", "/webhooks/github", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-GitHub-Event", "push")
-	// No signature header
-
-	resp, _ := app.Test(req)
-	if resp.StatusCode != 401 {
-		t.Errorf("Expected 401, got %d", resp.StatusCode)
-	}
-}
-
-func TestWebhookPushNoMatchingApps(t *testing.T) {
-	app, _, _, webhookHandler, _ := setupV2Test()
-	app.Post("/webhooks/github", webhookHandler.HandlePush)
-
-	body := `{"ref":"refs/heads/main","after":"abc123def456","repository":{"full_name":"user/repo","clone_url":"https://github.com/user/repo.git"},"head_commit":{"id":"abc123","message":"test"}}`
-	req := httptest.NewRequest("POST", "/webhooks/github", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-GitHub-Event", "push")
-
-	mac := hmac.New(sha256.New, []byte("test-secret"))
-	mac.Write([]byte(body))
-	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	req.Header.Set("X-Hub-Signature-256", sig)
-
-	resp, _ := app.Test(req)
-	if resp.StatusCode != 200 {
-		t.Fatalf("Expected 200, got %d", resp.StatusCode)
-	}
-
-	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
-	if result["message"] != "no matching apps" {
-		t.Errorf("Expected 'no matching apps', got '%v'", result["message"])
-	}
-}
-
 // --- Deploy handler tests ---
 
 func TestListDeployments(t *testing.T) {
-	fiberApp, appHandler, deployHandler, _, appRepo := setupV2Test()
+	fiberApp, appHandler, deployHandler, appRepo := setupV2Test()
 	fiberApp.Post("/api/v1/apps", injectUserID("user-1"), appHandler.Create)
 	fiberApp.Get("/api/v1/apps/:appId/deployments", injectUserID("user-1"), deployHandler.ListDeployments)
 
@@ -318,7 +227,7 @@ func TestListDeployments(t *testing.T) {
 }
 
 func TestSetAndGetEnvVars(t *testing.T) {
-	fiberApp, appHandler, deployHandler, _, _ := setupV2Test()
+	fiberApp, appHandler, deployHandler, _ := setupV2Test()
 	fiberApp.Post("/api/v1/apps", injectUserID("user-1"), appHandler.Create)
 	fiberApp.Put("/api/v1/apps/:appId/env", injectUserID("user-1"), deployHandler.SetEnvVars)
 	fiberApp.Get("/api/v1/apps/:appId/env", injectUserID("user-1"), deployHandler.GetEnvVars)
@@ -360,7 +269,7 @@ func TestSetAndGetEnvVars(t *testing.T) {
 }
 
 func TestDeleteEnvVar(t *testing.T) {
-	fiberApp, appHandler, deployHandler, _, _ := setupV2Test()
+	fiberApp, appHandler, deployHandler, _ := setupV2Test()
 	fiberApp.Post("/api/v1/apps", injectUserID("user-1"), appHandler.Create)
 	fiberApp.Put("/api/v1/apps/:appId/env", injectUserID("user-1"), deployHandler.SetEnvVars)
 	fiberApp.Delete("/api/v1/apps/:appId/env/:key", injectUserID("user-1"), deployHandler.DeleteEnvVar)
@@ -395,7 +304,7 @@ func setupDatabaseTest() (*fiber.App, *handlers.DatabaseHandlerV2, ports.AppRepo
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	appRepo := memory.NewMemoryAppRepository()
 	dbRepo := memory.NewMemoryDatabaseRepository()
-	dbHandler := handlers.NewDatabaseHandlerV2(dbRepo, appRepo)
+	dbHandler := handlers.NewDatabaseHandlerV2(nil, dbRepo, appRepo)
 	return app, dbHandler, appRepo, dbRepo
 }
 
@@ -604,7 +513,7 @@ func TestV2ListDatabasesByUser(t *testing.T) {
 // --- Image deploy tests ---
 
 func TestV2CreateImageApp(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 
 	body := `{"name":"my-api","deploy_source":"image","image_url":"docker.io/myuser/myapi:latest","port":3000}`
@@ -639,7 +548,7 @@ func TestV2CreateImageApp(t *testing.T) {
 }
 
 func TestV2CreateImageAppNoImage(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 
 	body := `{"name":"my-api","deploy_source":"image"}`
@@ -653,7 +562,7 @@ func TestV2CreateImageAppNoImage(t *testing.T) {
 }
 
 func TestV2CreateImageAppInvalidSource(t *testing.T) {
-	app, handler, _, _, _ := setupV2Test()
+	app, handler, _, _ := setupV2Test()
 	app.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
 
 	body := `{"name":"my-api","deploy_source":"ftp","image_url":"something"}`

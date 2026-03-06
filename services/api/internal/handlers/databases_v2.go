@@ -1,22 +1,24 @@
 package handlers
 
 import (
+	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
-	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
 
 // DatabaseHandlerV2 manages per-app database provisioning (Phase 3 deploy engine).
 type DatabaseHandlerV2 struct {
+	dbSvc   *services.DatabaseService // nil when CNPG not configured (dev mode)
 	dbRepo  ports.DatabaseRepository
 	appRepo ports.AppRepository
 }
 
 // NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
-func NewDatabaseHandlerV2(dbRepo ports.DatabaseRepository, appRepo ports.AppRepository) *DatabaseHandlerV2 {
-	return &DatabaseHandlerV2{dbRepo: dbRepo, appRepo: appRepo}
+func NewDatabaseHandlerV2(dbSvc *services.DatabaseService, dbRepo ports.DatabaseRepository, appRepo ports.AppRepository) *DatabaseHandlerV2 {
+	return &DatabaseHandlerV2{dbSvc: dbSvc, dbRepo: dbRepo, appRepo: appRepo}
 }
 
 // Create provisions a new database for an app.
@@ -43,12 +45,22 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 		input.Engine = entities.DatabaseEnginePostgres
 	}
 
+	// Use DatabaseService for real provisioning if available
+	if h.dbSvc != nil {
+		db, err := h.dbSvc.ProvisionDatabase(c.Context(), appID, userID, &input)
+		if err != nil {
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, ""))
+	}
+
+	// Fallback: metadata-only (dev mode, no CNPG)
 	db, err := h.dbRepo.CreateDatabase(c.Context(), appID, userID, &input)
 	if err != nil {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	}
 
-	// Auto-inject connection string as env var
+	// Auto-inject connection string from memory repo (dev mode)
 	if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
 		if pw, ok := memRepo.GetPassword(db.ID); ok {
 			connStr := db.ConnectionString(pw)
@@ -89,7 +101,11 @@ func (h *DatabaseHandlerV2) Get(c *fiber.Ctx) error {
 
 	// Include connection string for the owner
 	connStr := ""
-	if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
+	if h.dbSvc != nil {
+		if pw, err := h.dbSvc.GetDatabasePassword(c.Context(), db.ID); err == nil {
+			connStr = db.ConnectionString(pw)
+		}
+	} else if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
 		if pw, ok := memRepo.GetPassword(db.ID); ok {
 			connStr = db.ConnectionString(pw)
 		}
@@ -112,6 +128,15 @@ func (h *DatabaseHandlerV2) Delete(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "not your database")
 	}
 
+	// Use DatabaseService for real cleanup if available
+	if h.dbSvc != nil {
+		if err := h.dbSvc.DeleteDatabase(c.Context(), dbID); err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(fiber.Map{"message": "database deleted"})
+	}
+
+	// Fallback: metadata-only delete (dev mode)
 	if err := h.dbRepo.DeleteDatabase(c.Context(), dbID); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}

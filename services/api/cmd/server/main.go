@@ -329,12 +329,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Phase 2 handlers
 	logHub := deploy.NewLogHub(500)
 	eventHub := deploy.NewEventHub(50)
-	builder := deploy.NewBuilder(appRepo, cfg.BuildWorkDir, cfg.Registry, k8sClient, logHub)
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
-	pipeline := deploy.NewPipeline(builder, deployer, appRepo, logHub, eventHub)
+	pipeline := deploy.NewPipeline(deployer, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
 
 	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, deployer, pipeline)
-	webhookHandler := handlers.NewWebhookHandler(appRepo, pipeline, cfg.GitHubWebhookSecret)
 	deployHandler := handlers.NewDeployHandler(appRepo, pipeline)
 	logHandler := handlers.NewLogHandler(appRepo, logHub)
 
@@ -384,11 +382,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 			log.Printf("[auth] GitHub OAuth enabled (client_id: %s...)", cfg.GitHubClientID[:8])
 		}
 	}
-
-	// Webhook routes (no auth — uses HMAC signature)
-	api.Post("/webhooks/github", webhookHandler.HandlePush)
-	api.Post("/webhooks/gitlab", webhookHandler.HandleGitLabPush)
-	api.Post("/webhooks/bitbucket", webhookHandler.HandleBitbucketPush)
 
 	// Public app auth routes (signup/login — no platform JWT required)
 	// Registered directly on api (not via Group) to avoid Fiber middleware leakage
@@ -453,8 +446,23 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	// Databases (Phase 3 — per-app provisioning under /apps/:appId)
-	dbRepo := memory.NewMemoryDatabaseRepository()
-	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbRepo, appRepo)
+	var dbRepo ports.DatabaseRepository
+	if pool != nil {
+		dbRepo = postgres.NewPostgresDatabaseRepository(pool)
+	} else {
+		dbRepo = memory.NewMemoryDatabaseRepository()
+	}
+
+	// Real CNPG provisioning (opt-in: only when CNPG_ADMIN_DSN is set)
+	var dbSvc *services.DatabaseService
+	if cfg.CNPGAdminDSN != "" {
+		dbSvc = services.NewDatabaseService(dbRepo, appRepo, planRepo, k8sClient, cfg.CNPGAdminDSN, "zenith-apps")
+		log.Println("[db] CNPG database provisioning enabled")
+	} else {
+		log.Println("[db] CNPG not configured — metadata-only mode (dev)")
+	}
+
+	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo)
 	appByID.Post("/databases", handlers.CheckLimit(planRepo, "databases", func(c *fiber.Ctx, userID string) (int, error) {
 		return dbRepo.CountDatabasesByUser(c.Context(), userID)
 	}), dbHandlerV2.Create)
@@ -480,7 +488,16 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	} else {
 		storageRepo = memory.NewMemoryStorageRepository()
 	}
-	storageHandlerV2 := handlers.NewStorageHandlerV2(storageRepo, appRepo)
+	// S3 client + BucketService (real per-customer S3 buckets)
+	var objStorage ports.ObjectStorage
+	if cfg.S3Endpoint != "" {
+		objStorage = s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+	} else {
+		objStorage = s3client.NewMemoryClient()
+	}
+	bucketSvc := services.NewBucketService(objStorage)
+
+	storageHandlerV2 := handlers.NewStorageHandlerV2(storageRepo, appRepo, bucketSvc)
 	appByID.Post("/storage", handlers.CheckLimit(planRepo, "buckets", func(c *fiber.Ctx, userID string) (int, error) {
 		return storageRepo.CountBucketsByUser(c.Context(), userID)
 	}), storageHandlerV2.Create)
@@ -488,10 +505,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Get("/storage/:bucketId", storageHandlerV2.Get)
 	appByID.Delete("/storage/:bucketId", storageHandlerV2.Delete)
 
-	// Wire S3 client for standalone bucket operations
-	if cfg.S3Endpoint != "" {
-		storageHandlerV2.SetObjectStorage(s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region))
-	}
+	tenantStorage := services.NewTenantStorage(objStorage, cfg.S3PlatformBucket)
+	storageHandlerV2.SetTenantStorage(tenantStorage)
 
 	// Standalone storage buckets (not app-scoped)
 	storageBuckets := protected.Group("/storage-buckets")
@@ -506,13 +521,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	storageBucketByID.Delete("/", storageHandlerV2.DeleteStandalone)
 
 	// Object operations within buckets
-	var objStorage ports.ObjectStorage
-	if cfg.S3Endpoint != "" {
-		objStorage = s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
-	} else {
-		objStorage = s3client.NewMemoryClient()
-	}
-	storageObjHandler := handlers.NewStorageObjectHandler(storageRepo, objStorage)
+	quotaSvc := services.NewStorageQuotaService(objStorage, planRepo, storageRepo, cfg.S3PlatformBucket)
+	storageObjHandler := handlers.NewStorageObjectHandler(storageRepo, tenantStorage, quotaSvc)
 	storageBucketByID.Get("/objects", storageObjHandler.ListObjects)
 	storageBucketByID.Post("/objects/upload", storageObjHandler.GetUploadURL)
 	storageBucketByID.Get("/objects/download", storageObjHandler.GetDownloadURL)
@@ -548,10 +558,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		stripeAPI, billingRepo, planRepo, appRepo, dbRepo, storageRepo, appAuthRepo,
 		cfg.StripeProPriceID, cfg.StripeTeamPriceID, cfg.BaseDomain,
 	)
-	// Wire S3 for upgrade provisioning (reuse S3 config if available)
-	if cfg.S3Endpoint != "" {
-		billingSvc.SetStorage(s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region))
-	}
 	billingHandler := handlers.NewBillingHandler(billingSvc)
 	protected.Get("/billing", billingHandler.GetBillingStatus)
 	protected.Post("/billing/checkout", billingHandler.CreateCheckoutSession)
