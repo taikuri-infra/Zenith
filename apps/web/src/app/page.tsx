@@ -10,7 +10,7 @@ import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type App, type AppDatabase, type DeployApp, type Project, type UserPlanResponse } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
-import { ArrowUpRight, Rocket, GitBranch, Box, Database, HardDrive, Activity } from "lucide-react";
+import { ArrowUpRight, Rocket, GitBranch, Box, Database, HardDrive, Activity, Globe, Cog, Clock } from "lucide-react";
 import Link from "next/link";
 
 const engineBadge: Record<string, { label: string; className: string }> = {
@@ -21,7 +21,7 @@ const engineBadge: Record<string, { label: string; className: string }> = {
 
 export default function OverviewPage() {
   const projectId = useProject();
-  const { projects, apps, appsDeploy, userDatabases, userPlan } = getApi();
+  const { projects, apps, appsDeploy, standaloneDatabases, userPlan } = getApi();
 
   const {
     data: projectData,
@@ -55,7 +55,7 @@ export default function OverviewPage() {
     loading: dbsLoading,
     error: dbsError,
     refetch: refetchDbs,
-  } = useApi(() => userDatabases.list(), []);
+  } = useApi(() => standaloneDatabases.list(), []);
 
   const {
     data: planData,
@@ -101,6 +101,10 @@ export default function OverviewPage() {
     (a) => a.status === "building" || a.status === "deploying"
   ).length;
   const readyDbs = dbList.filter((d) => d.status === "ready").length;
+
+  const webCount = deployList.filter((a) => (a.app_type ?? "web") === "web").length;
+  const workerCount = deployList.filter((a) => a.app_type === "worker").length;
+  const cronCount = deployList.filter((a) => a.app_type === "cron").length;
 
   // Total service health: count all healthy services vs total
   const totalServices = deployList.length + dbList.length;
@@ -153,11 +157,7 @@ export default function OverviewPage() {
           <StatCard
             label="Apps"
             value={`${runningDeploys}/${deployList.length}`}
-            sub={
-              buildingDeploys > 0
-                ? `${buildingDeploys} building`
-                : `${runningDeploys} running`
-            }
+            sub={`${webCount} web, ${workerCount} workers, ${cronCount} cron`}
           />
           <StatCard
             label="Databases"
@@ -258,7 +258,9 @@ export default function OverviewPage() {
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <Rocket className="h-3.5 w-3.5 text-neutral-500" />
+                    {(app.app_type ?? "web") === "web" && <Globe className="h-3.5 w-3.5 text-blue-400" />}
+                    {app.app_type === "worker" && <Cog className="h-3.5 w-3.5 text-amber-400" />}
+                    {app.app_type === "cron" && <Clock className="h-3.5 w-3.5 text-purple-400" />}
                     <span className="truncate text-sm font-medium text-white group-hover:text-accent-400 transition-colors">
                       {app.name}
                     </span>

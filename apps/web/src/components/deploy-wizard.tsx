@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Modal } from "@/components/modal";
 import { getApi } from "@/lib/get-api";
-import type { RegistryImage, StorageBucket, Database as DbType } from "@/lib/api";
+import type { RegistryImage, StorageBucket, Database as DbType, AppType } from "@/lib/api";
 import {
   Rocket,
   Container,
@@ -21,6 +21,9 @@ import {
   Tag,
   HardDrive,
   Cpu,
+  Globe,
+  Cog,
+  Clock,
 } from "lucide-react";
 
 // ── Types ──
@@ -48,6 +51,10 @@ const INSTANCE_SIZES: InstancePreset[] = [
 ];
 
 interface WizardState {
+  // Step 0 — Type
+  appType: AppType;
+  command: string;
+  cronSchedule: string;
   // Step 1
   imageSource: "zenith" | "external";
   selectedImage: string;
@@ -71,6 +78,9 @@ interface WizardState {
 }
 
 const initialState: WizardState = {
+  appType: "web",
+  command: "",
+  cronSchedule: "",
   imageSource: "external",
   selectedImage: "",
   externalImage: "",
@@ -90,7 +100,9 @@ const initialState: WizardState = {
   dbEngine: "postgres",
 };
 
-const STEPS = ["Image", "Config", "Resources", "Review"] as const;
+// Steps are dynamic — cron jobs skip the Resources step
+const WEB_STEPS = ["Type", "Image", "Config", "Resources", "Review"] as const;
+const CRON_STEPS = ["Type", "Image", "Config", "Review"] as const;
 
 // ── Helpers ──
 
@@ -100,10 +112,10 @@ function isValidAppName(name: string) {
 
 // ── Stepper ──
 
-function Stepper({ current, completed }: { current: number; completed: number[] }) {
+function Stepper({ current, completed, steps }: { current: number; completed: number[]; steps: readonly string[] }) {
   return (
     <div className="flex items-center justify-center gap-0 mb-6">
-      {STEPS.map((label, i) => {
+      {steps.map((label, i) => {
         const done = completed.includes(i);
         const active = i === current;
         return (
@@ -151,6 +163,10 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
   const [newEnvKey, setNewEnvKey] = useState("");
   const [newEnvValue, setNewEnvValue] = useState("");
 
+  const isCron = state.appType === "cron";
+  const steps = isCron ? CRON_STEPS : WEB_STEPS;
+  const lastStep = steps.length - 1;
+
   // Registry images (lazy-loaded when Zenith source selected)
   const [registryImages, setRegistryImages] = useState<RegistryImage[]>([]);
   const [registryLoading, setRegistryLoading] = useState(false);
@@ -177,9 +193,9 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
     }
   }, [state.imageSource, registry, registryImages.length, registryLoading]);
 
-  // Fetch existing buckets when entering Step 2 as Pro+
+  // Fetch existing buckets when entering Resources step as Pro+
   useEffect(() => {
-    if (step === 2 && isPro && !bucketsFetched && !bucketsLoading && projectId) {
+    if (!isCron && step === 3 && isPro && !bucketsFetched && !bucketsLoading && projectId) {
       setBucketsLoading(true);
       storage.list(projectId).then((res) => {
         setExistingBuckets(res.items);
@@ -190,11 +206,11 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         setBucketsLoading(false);
       });
     }
-  }, [step, isPro, projectId, storage, bucketsFetched, bucketsLoading]);
+  }, [step, isCron, isPro, projectId, storage, bucketsFetched, bucketsLoading]);
 
-  // Fetch existing databases when entering Step 2 (all tiers)
+  // Fetch existing databases when entering Resources step (all tiers)
   useEffect(() => {
-    if (step === 2 && !dbsFetched && !dbsLoading && projectId) {
+    if (!isCron && step === 3 && !dbsFetched && !dbsLoading && projectId) {
       setDbsLoading(true);
       databases.list(projectId).then((res) => {
         setExistingDbs(res.items);
@@ -205,7 +221,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         setDbsLoading(false);
       });
     }
-  }, [step, projectId, databases, dbsFetched, dbsLoading]);
+  }, [step, isCron, projectId, databases, dbsFetched, dbsLoading]);
 
   const update = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
     setState((s) => ({ ...s, [key]: value }));
@@ -220,13 +236,15 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
 
   const completedSteps = (() => {
     const c: number[] = [];
-    // Step 0 done if an image is selected
+    // Step 0 (Type) always passable (has default)
+    if (highestStep > 0) c.push(0);
+    // Step 1 done if an image is selected
     const hasImage = state.imageSource === "zenith" ? !!state.selectedImage : !!state.externalImage.trim();
-    if (hasImage) c.push(0);
-    // Step 1 done if name + port valid
-    if (state.appName.trim() && isValidAppName(state.appName.trim())) c.push(1);
-    // Step 2 only done if user has visited it (it's optional, so passing through = done)
-    if (highestStep > 2) c.push(2);
+    if (hasImage) c.push(1);
+    // Step 2 done if name valid
+    if (state.appName.trim() && isValidAppName(state.appName.trim())) c.push(2);
+    // Step 3: Resources (web/worker only) — optional, passing through = done
+    if (!isCron && highestStep > 3) c.push(3);
     return c;
   })();
 
@@ -234,15 +252,20 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
 
   const canNext = (() => {
     if (step === 0) {
+      // Type step: cron needs a schedule
+      if (state.appType === "cron") return !!state.cronSchedule.trim();
+      return true;
+    }
+    if (step === 1) {
       if (state.imageSource === "zenith") return !!state.selectedImage;
       const hasImg = !!state.externalImage.trim();
       if (state.isPrivateRegistry) return hasImg && !!state.regUser.trim() && !!state.regPass.trim();
       return hasImg;
     }
-    if (step === 1) {
+    if (step === 2) {
       return !!state.appName.trim() && isValidAppName(state.appName.trim());
     }
-    return true; // step 2 (storage) always passable
+    return true; // resources / review always passable
   })();
 
   // ── Deploy handler ──
@@ -262,6 +285,9 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         deploy_source: "image",
         image_url: imageUrl,
         port,
+        app_type: state.appType,
+        ...(state.appType === "worker" && state.command && { command: state.command.trim() }),
+        ...(state.appType === "cron" && state.cronSchedule && { cron_schedule: state.cronSchedule.trim() }),
         ...(state.imageSource === "external" &&
           state.isPrivateRegistry && {
             registry_username: state.regUser.trim(),
@@ -302,6 +328,83 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
     : registryImages;
 
   // ── Step renderers ──
+
+  const renderStepType = () => (
+    <div className="space-y-4">
+      <p className="text-sm text-neutral-400">What type of service are you deploying?</p>
+      <div className="grid gap-3 grid-cols-3">
+        {([
+          { type: "web" as AppType, icon: Globe, label: "Web Service", desc: "HTTP server with a URL" },
+          { type: "worker" as AppType, icon: Cog, label: "Worker", desc: "Background process, no HTTP" },
+          { type: "cron" as AppType, icon: Clock, label: "Cron Job", desc: "Scheduled task on a timer" },
+        ] as const).map(({ type, icon: Icon, label, desc }) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => update("appType", type)}
+            className={`rounded-lg border p-4 text-left transition-colors ${
+              state.appType === type
+                ? "border-accent-500 bg-accent-500/10"
+                : "border-border bg-surface-100 hover:border-neutral-600"
+            }`}
+          >
+            <Icon className={`h-5 w-5 mb-2 ${state.appType === type ? "text-accent-400" : "text-neutral-500"}`} />
+            <div className="text-sm font-medium text-white">{label}</div>
+            <p className="mt-0.5 text-[11px] text-neutral-500">{desc}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Worker: optional command */}
+      {state.appType === "worker" && (
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-neutral-400">
+            Command Override <span className="text-neutral-600">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={state.command}
+            onChange={(e) => update("command", e.target.value)}
+            placeholder="e.g. npm run worker"
+            className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+          />
+        </div>
+      )}
+
+      {/* Cron: required schedule + optional command */}
+      {state.appType === "cron" && (
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-neutral-400">
+              Cron Schedule <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={state.cronSchedule}
+              onChange={(e) => update("cronSchedule", e.target.value)}
+              placeholder="0 6 * * *"
+              className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2.5 text-sm font-mono text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+            />
+            <p className="mt-1 text-[11px] text-neutral-600">
+              Standard cron syntax: minute hour day month weekday
+            </p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-neutral-400">
+              Command Override <span className="text-neutral-600">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={state.command}
+              onChange={(e) => update("command", e.target.value)}
+              placeholder="e.g. python report.py"
+              className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const renderStep0 = () => (
     <div className="space-y-4">
@@ -549,24 +652,26 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         )}
       </div>
 
-      {/* Port */}
-      <div>
-        <label className="mb-1.5 block text-xs font-medium text-neutral-400">
-          Port
-        </label>
-        <input
-          type="number"
-          value={state.port}
-          onChange={(e) => update("port", e.target.value)}
-          placeholder="3000"
-          min={1}
-          max={65535}
-          className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-        />
-        <p className="mt-1 text-[11px] text-neutral-600">
-          The port your application listens on
-        </p>
-      </div>
+      {/* Port (web only) */}
+      {state.appType === "web" && (
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-neutral-400">
+            Port
+          </label>
+          <input
+            type="number"
+            value={state.port}
+            onChange={(e) => update("port", e.target.value)}
+            placeholder="3000"
+            min={1}
+            max={65535}
+            className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+          />
+          <p className="mt-1 text-[11px] text-neutral-600">
+            The port your application listens on
+          </p>
+        </div>
+      )}
 
       {/* Instance Size */}
       <div>
@@ -983,6 +1088,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
   const renderStep3 = () => {
     const imageUrl =
       state.imageSource === "zenith" ? state.selectedImage : state.externalImage.trim();
+    const typeLabels: Record<AppType, string> = { web: "Web Service", worker: "Worker", cron: "Cron Job" };
 
     return (
       <div className="space-y-4">
@@ -1001,10 +1107,28 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         <div className="rounded-lg border border-border bg-surface-100 p-4">
           <h3 className="text-xs font-medium text-neutral-500 mb-2">Configuration</h3>
           <div className="grid grid-cols-2 gap-y-2 text-sm">
+            <span className="text-neutral-400">Type</span>
+            <span className="text-white">{typeLabels[state.appType]}</span>
             <span className="text-neutral-400">Name</span>
             <span className="text-white font-mono">{state.appName}</span>
-            <span className="text-neutral-400">Port</span>
-            <span className="text-white font-mono">{state.port || "3000"}</span>
+            {state.appType === "web" && (
+              <>
+                <span className="text-neutral-400">Port</span>
+                <span className="text-white font-mono">{state.port || "3000"}</span>
+              </>
+            )}
+            {state.appType === "cron" && (
+              <>
+                <span className="text-neutral-400">Schedule</span>
+                <span className="text-white font-mono">{state.cronSchedule}</span>
+              </>
+            )}
+            {state.command && (
+              <>
+                <span className="text-neutral-400">Command</span>
+                <span className="text-white font-mono text-xs">{state.command}</span>
+              </>
+            )}
             <span className="text-neutral-400">Instance</span>
             <span className="text-white">
               {INSTANCE_SIZES.find((s) => s.id === state.instanceSize)?.label}
@@ -1033,8 +1157,8 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
           </div>
         )}
 
-        {/* Resources */}
-        {(state.dbEnabled && state.dbName) || (state.s3Enabled && state.s3Bucket) ? (
+        {/* Resources (web/worker only) */}
+        {!isCron && ((state.dbEnabled && state.dbName) || (state.s3Enabled && state.s3Bucket)) ? (
           <div className="rounded-lg border border-border bg-surface-100 p-4">
             <h3 className="text-xs font-medium text-neutral-500 mb-2">Resources</h3>
             <div className="space-y-2">
@@ -1067,11 +1191,13 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
 
   // ── Render ──
 
-  const stepContent = [renderStep0, renderStep1, renderStep2, renderStep3];
+  const stepContent = isCron
+    ? [renderStepType, renderStep0, renderStep1, renderStep3]
+    : [renderStepType, renderStep0, renderStep1, renderStep2, renderStep3];
 
   return (
     <Modal title="Deploy App" onClose={onClose} size="lg">
-      <Stepper current={step} completed={completedSteps} />
+      <Stepper current={step} completed={completedSteps} steps={steps} />
 
       {stepContent[step]()}
 
@@ -1090,17 +1216,17 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {step === 2 && (
+          {!isCron && step === 3 && (
             <button
               type="button"
-              onClick={() => goToStep(3)}
+              onClick={() => goToStep(step + 1)}
               className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
             >
               Skip
             </button>
           )}
 
-          {step < 3 && (
+          {step < lastStep && (
             <button
               type="button"
               onClick={() => goToStep(step + 1)}
@@ -1111,7 +1237,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
             </button>
           )}
 
-          {step === 3 && (
+          {step === lastStep && (
             <button
               type="button"
               onClick={handleDeploy}

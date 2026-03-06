@@ -18,6 +18,8 @@ import {
   ExternalLink,
   Clock,
   Container,
+  Globe,
+  Cog,
 } from "lucide-react";
 
 export default function AppsPage() {
@@ -271,9 +273,14 @@ export default function AppsPage() {
                   </div>
 
                   <Link href={`/apps/${app.id}`} className="block">
-                    <h3 className="text-base font-semibold text-white group-hover:text-accent-400 transition-colors">
-                      {app.name}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      {(app.app_type ?? "web") === "web" && <Globe className="h-4 w-4 text-blue-400" />}
+                      {app.app_type === "worker" && <Cog className="h-4 w-4 text-amber-400" />}
+                      {app.app_type === "cron" && <Clock className="h-4 w-4 text-purple-400" />}
+                      <h3 className="text-base font-semibold text-white group-hover:text-accent-400 transition-colors">
+                        {app.name}
+                      </h3>
+                    </div>
                   </Link>
 
                   <div className="mt-3 space-y-2">
@@ -281,10 +288,18 @@ export default function AppsPage() {
                       <Box className="h-3.5 w-3.5" />
                       <span>{app.framework || "—"}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-neutral-400">
-                      <Container className="h-3.5 w-3.5" />
-                      <span className="font-mono text-neutral-500">{app.port}</span>
-                    </div>
+                    {(app.app_type ?? "web") === "web" && (
+                      <div className="flex items-center gap-2 text-xs text-neutral-400">
+                        <Container className="h-3.5 w-3.5" />
+                        <span className="font-mono text-neutral-500">{app.port}</span>
+                      </div>
+                    )}
+                    {app.app_type === "cron" && app.cron_schedule && (
+                      <div className="flex items-center gap-2 text-xs text-neutral-400">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span className="font-mono text-neutral-500">{app.cron_schedule}</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 text-xs">
                       <Clock className="h-3.5 w-3.5 text-neutral-500" />
                       <span className={statusColor(app.status)}>
@@ -300,18 +315,24 @@ export default function AppsPage() {
 
                   {/* Footer */}
                   <div className="mt-4 flex items-center border-t border-border pt-3">
-                    {app.url ? (
-                      <a
-                        href={app.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 transition-colors"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        {app.subdomain}
-                      </a>
+                    {(app.app_type ?? "web") === "web" ? (
+                      app.url ? (
+                        <a
+                          href={app.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 transition-colors"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {app.subdomain}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-neutral-600">No URL yet</span>
+                      )
+                    ) : app.app_type === "cron" ? (
+                      <span className="text-xs text-neutral-500">Schedule: {app.cron_schedule}</span>
                     ) : (
-                      <span className="text-xs text-neutral-600">No URL yet</span>
+                      <span className="text-xs text-neutral-500">Background process</span>
                     )}
                   </div>
                 </div>

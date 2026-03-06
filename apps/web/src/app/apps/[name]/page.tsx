@@ -39,6 +39,8 @@ import {
   Archive,
   RotateCw,
   Download,
+  Cog,
+  Heart,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -80,7 +82,10 @@ export default function AppDetailPage() {
     );
   }
 
-  const tabs: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  const appType = app.app_type ?? "web";
+  const isWeb = appType === "web";
+
+  const allTabs: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; webOnly?: boolean }[] = [
     { key: "overview", label: "Overview", icon: Eye },
     { key: "deployments", label: "Deployments", icon: Layers },
     { key: "releases", label: "Releases", icon: Tag },
@@ -88,10 +93,11 @@ export default function AppDetailPage() {
     { key: "databases", label: "Databases", icon: Database },
     { key: "storage", label: "Storage", icon: HardDrive },
     { key: "auth", label: "Auth", icon: Shield },
-    { key: "domains", label: "Domains", icon: Globe },
+    { key: "domains", label: "Domains", icon: Globe, webOnly: true },
     { key: "secrets", label: "Secrets", icon: KeyRound },
     { key: "env", label: "Environment", icon: Settings },
   ];
+  const tabs = allTabs.filter((t) => !t.webOnly || isWeb);
 
   return (
     <Shell>
@@ -107,6 +113,16 @@ export default function AppDetailPage() {
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-lg font-semibold text-white">{app.name}</h1>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                appType === "web" ? "bg-blue-500/15 text-blue-400" :
+                appType === "worker" ? "bg-amber-500/15 text-amber-400" :
+                "bg-purple-500/15 text-purple-400"
+              }`}>
+                {appType === "web" && <Globe className="h-3 w-3" />}
+                {appType === "worker" && <Cog className="h-3 w-3" />}
+                {appType === "cron" && <Clock className="h-3 w-3" />}
+                {appType}
+              </span>
               <StatusBadge status={app.status as "running" | "deploying" | "stopped" | "crashed"} />
             </div>
             <div className="mt-1 flex items-center gap-4 text-xs text-neutral-500">
@@ -114,23 +130,46 @@ export default function AppDetailPage() {
                 <GitBranch className="h-3 w-3" />
                 {app.branch || "main"}
               </span>
-              <span className="flex items-center gap-1">
-                <Globe className="h-3 w-3" />
-                <a
-                  href={app.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent-400 hover:underline"
-                >
-                  {app.subdomain}
-                </a>
-              </span>
+              {isWeb && app.subdomain && (
+                <span className="flex items-center gap-1">
+                  <Globe className="h-3 w-3" />
+                  <a
+                    href={app.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent-400 hover:underline"
+                  >
+                    {app.subdomain}
+                  </a>
+                </span>
+              )}
+              {appType === "cron" && app.cron_schedule && (
+                <span className="flex items-center gap-1 font-mono">
+                  <Clock className="h-3 w-3" />
+                  {app.cron_schedule}
+                </span>
+              )}
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {new Date(app.created_at).toLocaleDateString()}
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Environment selector */}
+        <div className="flex items-center gap-2">
+          <button className="rounded-full bg-accent-500/15 px-3 py-1 text-xs font-medium text-accent-400">
+            production
+          </button>
+          <button disabled className="rounded-full bg-surface-200 px-3 py-1 text-xs font-medium text-neutral-500 cursor-not-allowed">
+            staging
+            <span className="ml-1.5 rounded bg-neutral-500/20 px-1 py-0.5 text-[9px] text-neutral-600">Soon</span>
+          </button>
+          <button disabled className="rounded-full bg-surface-200 px-3 py-1 text-xs font-medium text-neutral-500 cursor-not-allowed">
+            dev
+            <span className="ml-1.5 rounded bg-neutral-500/20 px-1 py-0.5 text-[9px] text-neutral-600">Soon</span>
+          </button>
         </div>
 
         {/* Tabs */}
@@ -168,10 +207,16 @@ export default function AppDetailPage() {
 }
 
 function OverviewTab({ app }: { app: DeployApp }) {
-  const details = [
+  const appType = app.app_type ?? "web";
+  const isWeb = appType === "web";
+
+  const details: { label: string; value: string; isLink?: boolean }[] = [
+    { label: "Type", value: appType === "web" ? "Web Service" : appType === "worker" ? "Worker" : "Cron Job" },
     { label: "Framework", value: app.framework || "detecting..." },
-    { label: "Port", value: String(app.port || 8080) },
-    { label: "Subdomain", value: app.subdomain },
+    ...(isWeb ? [{ label: "Port", value: String(app.port || 8080) }] : []),
+    ...(isWeb ? [{ label: "Subdomain", value: app.subdomain }] : []),
+    ...(appType === "cron" && app.cron_schedule ? [{ label: "Schedule", value: app.cron_schedule }] : []),
+    ...(app.command ? [{ label: "Command", value: app.command }] : []),
     { label: "Repository", value: app.repo_url, isLink: true },
     { label: "Branch", value: app.branch || "main" },
     { label: "Status", value: app.status },
@@ -219,7 +264,7 @@ function OverviewTab({ app }: { app: DeployApp }) {
       <div className="rounded-lg border border-border bg-surface-100 p-5">
         <h3 className="mb-4 text-sm font-medium text-neutral-400">Quick Links</h3>
         <div className="space-y-2">
-          {app.url && (
+          {isWeb && app.url && (
             <a
               href={app.url}
               target="_blank"
@@ -242,6 +287,49 @@ function OverviewTab({ app }: { app: DeployApp }) {
         </div>
       </div>
     </div>
+
+    {/* Health Check (web only) */}
+    {isWeb && app.health_status && (
+      <div className="rounded-lg border border-border bg-surface-100 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Heart className="h-4 w-4 text-neutral-400" />
+          <h3 className="text-sm font-medium text-neutral-400">Health Check</h3>
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">Status</p>
+            <div className="flex items-center gap-2">
+              <span className={`inline-block h-2 w-2 rounded-full ${
+                app.health_status.status === "healthy" ? "bg-emerald-400" :
+                app.health_status.status === "unhealthy" ? "bg-red-400" : "bg-neutral-500"
+              }`} />
+              <span className="text-sm font-medium text-white capitalize">{app.health_status.status}</span>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">Uptime</p>
+            <p className="text-sm font-medium text-white">{app.health_status.uptime_percent}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">Response Time</p>
+            <p className="text-sm font-medium text-white">{app.health_status.response_time_ms}ms</p>
+          </div>
+          <div>
+            <p className="text-xs text-neutral-500 mb-1">Last Check</p>
+            <p className="text-sm font-medium text-white">
+              {new Date(app.health_status.last_check).toLocaleTimeString()}
+            </p>
+          </div>
+        </div>
+        {app.health_check && (
+          <div className="mt-3 rounded-md bg-surface-200 px-3 py-2 text-xs text-neutral-500">
+            <span className="text-neutral-400">Path:</span> {app.health_check.path} &middot;{" "}
+            <span className="text-neutral-400">Interval:</span> {app.health_check.interval_seconds}s &middot;{" "}
+            <span className="text-neutral-400">Timeout:</span> {app.health_check.timeout_seconds}s
+          </div>
+        )}
+      </div>
+    )}
     </div>
   );
 }
