@@ -10,8 +10,9 @@ import { useApi } from "@/hooks/use-api";
 import { getApi } from "@/lib/get-api";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { Copy, Check, Eye, EyeOff, RotateCw, Download, AlertTriangle } from "lucide-react";
+import { Copy, Check, Eye, EyeOff, RotateCw, Download, AlertTriangle, Table2, Info } from "lucide-react";
 import { Modal } from "@/components/modal";
+import { DatabaseExplorer } from "@/components/database-explorer";
 import Link from "next/link";
 
 const engineColors: Record<string, string> = {
@@ -58,6 +59,7 @@ function CopyField({ label, value, masked = false }: { label: string; value: str
 export default function DatabaseDetailPage() {
   const { name: dbId } = useParams<{ name: string }>();
   const { standaloneDatabases } = getApi();
+  const [activeTab, setActiveTab] = useState<"overview" | "explorer">("overview");
   const [showResetModal, setShowResetModal] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -180,70 +182,105 @@ export default function DatabaseDetailPage() {
           </div>
         </div>
 
-        {/* Connection Details */}
-        <div className="rounded-lg border border-border bg-surface-100 p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-white">Connection Details</h3>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleDownloadEnv()}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-surface-200 px-2.5 py-1 text-xs text-neutral-400 hover:bg-surface-300 hover:text-white transition-colors"
-              >
-                <Download className="h-3 w-3" />
-                Download .env
-              </button>
-              <button
-                onClick={() => setShowResetModal(true)}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-surface-200 px-2.5 py-1 text-xs text-neutral-400 hover:bg-surface-300 hover:text-white transition-colors"
-              >
-                <RotateCw className="h-3 w-3" />
-                Reset Password
-              </button>
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-border">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 ${
+              activeTab === "overview"
+                ? "border-accent-500 text-accent-400 font-medium"
+                : "border-transparent text-neutral-500 hover:text-white"
+            }`}
+          >
+            <Info className="h-4 w-4" />
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab("explorer")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 ${
+              activeTab === "explorer"
+                ? "border-accent-500 text-accent-400 font-medium"
+                : "border-transparent text-neutral-500 hover:text-white"
+            }`}
+          >
+            <Table2 className="h-4 w-4" />
+            Explorer
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === "overview" && (
+          <>
+            {/* Connection Details */}
+            <div className="rounded-lg border border-border bg-surface-100 p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-medium text-white">Connection Details</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDownloadEnv()}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface-200 px-2.5 py-1 text-xs text-neutral-400 hover:bg-surface-300 hover:text-white transition-colors"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download .env
+                  </button>
+                  <button
+                    onClick={() => setShowResetModal(true)}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface-200 px-2.5 py-1 text-xs text-neutral-400 hover:bg-surface-300 hover:text-white transition-colors"
+                  >
+                    <RotateCw className="h-3 w-3" />
+                    Reset Password
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <CopyField label="Host" value={db.host} />
+                <CopyField label="Port" value={String(db.port)} />
+                <CopyField label="Database" value={db.db_name} />
+                <CopyField label="Username" value={db.db_user} />
+                <CopyField label="Password" value={db.db_password ?? "••••••••"} masked />
+                {db.connection_string && (
+                  <CopyField label="Connection String" value={db.connection_string} masked />
+                )}
+              </div>
             </div>
-          </div>
-          <div className="space-y-3">
-            <CopyField label="Host" value={db.host} />
-            <CopyField label="Port" value={String(db.port)} />
-            <CopyField label="Database" value={db.db_name} />
-            <CopyField label="Username" value={db.db_user} />
-            <CopyField label="Password" value={db.db_password ?? "••••••••"} masked />
-            {db.connection_string && (
-              <CopyField label="Connection String" value={db.connection_string} masked />
+
+            {/* Stats */}
+            <div className="grid grid-cols-4 gap-4">
+              <StatCard
+                label="Engine"
+                value={db.engine}
+                sub={`Port ${db.port}`}
+              />
+              <StatCard
+                label="Storage Used"
+                value={`${db.size_mb} MB`}
+                sub={`of ${db.max_size_mb} MB`}
+              />
+              <StatCard label="Port" value={db.port} sub="listening" />
+              <StatCard
+                label="Created"
+                value={new Date(db.created_at).toLocaleDateString()}
+              />
+            </div>
+
+            {/* Usage bar */}
+            {db.max_size_mb > 0 && (
+              <div className="rounded-lg border border-border bg-surface-100 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-white">Storage Usage</h3>
+                  <span className="text-xs text-neutral-400">{usagePercent}%</span>
+                </div>
+                <ProgressBar percent={usagePercent} />
+                <p className="mt-2 text-xs text-neutral-500">
+                  {db.size_mb} MB used of {db.max_size_mb} MB allocated
+                </p>
+              </div>
             )}
-          </div>
-        </div>
+          </>
+        )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-4">
-          <StatCard
-            label="Engine"
-            value={db.engine}
-            sub={`Port ${db.port}`}
-          />
-          <StatCard
-            label="Storage Used"
-            value={`${db.size_mb} MB`}
-            sub={`of ${db.max_size_mb} MB`}
-          />
-          <StatCard label="Port" value={db.port} sub="listening" />
-          <StatCard
-            label="Created"
-            value={new Date(db.created_at).toLocaleDateString()}
-          />
-        </div>
-
-        {/* Usage bar */}
-        {db.max_size_mb > 0 && (
-          <div className="rounded-lg border border-border bg-surface-100 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-white">Storage Usage</h3>
-              <span className="text-xs text-neutral-400">{usagePercent}%</span>
-            </div>
-            <ProgressBar percent={usagePercent} />
-            <p className="mt-2 text-xs text-neutral-500">
-              {db.size_mb} MB used of {db.max_size_mb} MB allocated
-            </p>
-          </div>
+        {activeTab === "explorer" && (
+          <DatabaseExplorer dbId={db.id} engine={db.engine} />
         )}
       </div>
 

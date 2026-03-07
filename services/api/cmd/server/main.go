@@ -480,6 +480,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Post("/databases/:dbId/reset-password", dbHandlerV2.ResetPassword)
 	protected.Delete("/databases/:dbId", dbHandlerV2.DeleteStandalone)
 
+	// Database Explorer (pgweb — on-demand database browser)
+	pgwebSvc := services.NewPgwebService(dbRepo, k8sClient, "zenith-staging", cfg.BaseDomain)
+	go pgwebSvc.CleanupExpired(context.Background())
+	pgwebHandler := handlers.NewPgwebHandler(pgwebSvc, dbRepo)
+	protected.Post("/databases/:dbId/explorer", pgwebHandler.Start)
+	protected.Get("/databases/:dbId/explorer", pgwebHandler.Status)
+	protected.Delete("/databases/:dbId/explorer", pgwebHandler.Stop)
+
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
 	backupRepo := memory.NewMemoryBackupRepository()
 	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo, planRepo)

@@ -512,6 +512,19 @@ export const standaloneDatabases = {
       `/api/v1/databases/${id}/reset-password`,
       { method: "POST" }
     ),
+  startExplorer: (id: string, readonly = true) =>
+    apiFetch<{ url: string; status: string; readonly: boolean }>(
+      `/api/v1/databases/${id}/explorer`,
+      { method: "POST", body: JSON.stringify({ readonly }) }
+    ),
+  explorerStatus: (id: string) =>
+    apiFetch<{ active: boolean; url?: string; status?: string; readonly?: boolean }>(
+      `/api/v1/databases/${id}/explorer`
+    ),
+  stopExplorer: (id: string) =>
+    apiFetch<{ message: string }>(`/api/v1/databases/${id}/explorer`, {
+      method: "DELETE",
+    }),
 };
 
 // ---- Standalone Storage Buckets API ----

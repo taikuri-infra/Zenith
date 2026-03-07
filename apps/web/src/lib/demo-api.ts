@@ -808,6 +808,18 @@ export const demoStandaloneDatabases = {
     const pw = Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     return { db_password: pw, connection_string: `postgresql://user:${pw}@localhost:5432/db` };
   },
+  startExplorer: async (_id: string, _readonly = true): Promise<{ url: string; status: string; readonly: boolean }> => {
+    await delay();
+    return { url: "https://pgweb-demo123456.apps.stage.freezenith.com", status: "running", readonly: true };
+  },
+  explorerStatus: async (_id: string): Promise<{ active: boolean; url?: string; status?: string; readonly?: boolean }> => {
+    await delay();
+    return { active: false };
+  },
+  stopExplorer: async (_id: string): Promise<{ message: string }> => {
+    await delay();
+    return { message: "explorer session stopped" };
+  },
 };
 
 export const demoUserPlan = {
