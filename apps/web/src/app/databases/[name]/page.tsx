@@ -62,18 +62,19 @@ export default function DatabaseDetailPage() {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
 
-  const genPassword = () => {
-    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    return Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-  };
+  const [newConnStr, setNewConnStr] = useState<string | null>(null);
 
   const handleResetPassword = async () => {
     setResetting(true);
-    // In demo mode, just generate a new password locally
-    // In production, this would call standaloneDatabases.resetPassword(dbId)
-    await new Promise((r) => setTimeout(r, 800));
-    setNewPassword(genPassword());
-    setResetting(false);
+    try {
+      const result = await standaloneDatabases.resetPassword(dbId);
+      setNewPassword(result.db_password);
+      setNewConnStr(result.connection_string);
+    } catch {
+      // TODO: error toast
+    } finally {
+      setResetting(false);
+    }
   };
 
   const handleDownloadEnv = (password?: string) => {
@@ -156,7 +157,7 @@ export default function DatabaseDetailPage() {
                 >
                   {db.engine}
                 </span>
-                <StatusBadge status={db.status as "ready" | "running" | "creating" | "stopped"} />
+                <StatusBadge status={db.status as "ready" | "provisioning" | "error" | "deleting"} />
                 {!db.app_id && (
                   <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-medium text-purple-400">
                     Standalone
@@ -281,7 +282,7 @@ export default function DatabaseDetailPage() {
 
       {/* New Password Modal — shown after reset */}
       {newPassword && (
-        <Modal title="Password Reset" onClose={() => { setNewPassword(null); setShowResetModal(false); }}>
+        <Modal title="Password Reset" onClose={() => { setNewPassword(null); setNewConnStr(null); setShowResetModal(false); }}>
           <div className="space-y-4">
             <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
               <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
@@ -294,7 +295,7 @@ export default function DatabaseDetailPage() {
             </div>
 
             <CopyField label="New Password" value={newPassword} />
-            <CopyField label="Connection String" value={`${db.engine}://${db.db_user}:${newPassword}@${db.host}:${db.port}/${db.db_name}`} />
+            <CopyField label="Connection String" value={newConnStr || `${db.engine}://${db.db_user}:${newPassword}@${db.host}:${db.port}/${db.db_name}`} />
 
             <div className="flex items-center justify-between pt-2">
               <button

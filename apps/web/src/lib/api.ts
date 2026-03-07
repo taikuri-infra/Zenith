@@ -507,6 +507,11 @@ export const standaloneDatabases = {
     }),
   delete: (id: string) =>
     apiFetch<void>(`/api/v1/databases/${id}`, { method: "DELETE" }),
+  resetPassword: (id: string) =>
+    apiFetch<{ db_password: string; connection_string: string }>(
+      `/api/v1/databases/${id}/reset-password`,
+      { method: "POST" }
+    ),
 };
 
 // ---- Standalone Storage Buckets API ----

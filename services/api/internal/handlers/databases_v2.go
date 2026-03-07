@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -19,6 +21,20 @@ type DatabaseHandlerV2 struct {
 // NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
 func NewDatabaseHandlerV2(dbSvc *services.DatabaseService, dbRepo ports.DatabaseRepository, appRepo ports.AppRepository) *DatabaseHandlerV2 {
 	return &DatabaseHandlerV2{dbSvc: dbSvc, dbRepo: dbRepo, appRepo: appRepo}
+}
+
+// fetchCredentials retrieves the password and connection string for a database.
+func (h *DatabaseHandlerV2) fetchCredentials(ctx context.Context, db *entities.UserDatabase) (string, string) {
+	if h.dbSvc != nil {
+		if pw, err := h.dbSvc.GetDatabasePassword(ctx, db.ID); err == nil {
+			return pw, db.ConnectionString(pw)
+		}
+	} else if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
+		if pw, ok := memRepo.GetPassword(db.ID); ok {
+			return pw, db.ConnectionString(pw)
+		}
+	}
+	return "", ""
 }
 
 // Create provisions a new database for an app.
@@ -51,7 +67,8 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 		if err != nil {
 			return fiber.NewError(fiber.StatusConflict, err.Error())
 		}
-		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
+		pw, connStr := h.fetchCredentials(c.Context(), db)
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, pw, connStr))
 	}
 
 	// Fallback: metadata-only (dev mode, no CNPG)
@@ -61,15 +78,13 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 	}
 
 	// Auto-inject connection string from memory repo (dev mode)
-	if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
-		if pw, ok := memRepo.GetPassword(db.ID); ok {
-			connStr := db.ConnectionString(pw)
-			envKey := envKeyForEngine(db.Engine)
-			h.appRepo.SetEnvVars(c.Context(), appID, map[string]string{envKey: connStr})
-		}
+	pw, connStr := h.fetchCredentials(c.Context(), db)
+	if connStr != "" {
+		envKey := envKeyForEngine(db.Engine)
+		h.appRepo.SetEnvVars(c.Context(), appID, map[string]string{envKey: connStr})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
+	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, pw, connStr))
 }
 
 // List returns all databases for an app.
@@ -99,21 +114,7 @@ func (h *DatabaseHandlerV2) Get(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "database not found")
 	}
 
-	// Include connection string and password for the owner
-	connStr := ""
-	password := ""
-	if h.dbSvc != nil {
-		if pw, err := h.dbSvc.GetDatabasePassword(c.Context(), db.ID); err == nil {
-			password = pw
-			connStr = db.ConnectionString(pw)
-		}
-	} else if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
-		if pw, ok := memRepo.GetPassword(db.ID); ok {
-			password = pw
-			connStr = db.ConnectionString(pw)
-		}
-	}
-
+	password, connStr := h.fetchCredentials(c.Context(), db)
 	return c.JSON(toDatabaseInfoV2(db, password, connStr))
 }
 
@@ -171,7 +172,8 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 		if err != nil {
 			return fiber.NewError(fiber.StatusConflict, err.Error())
 		}
-		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
+		pw, connStr := h.fetchCredentials(c.Context(), db)
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, pw, connStr))
 	}
 
 	// Fallback: metadata-only (dev mode)
@@ -180,7 +182,8 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
+	pw, connStr := h.fetchCredentials(c.Context(), db)
+	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, pw, connStr))
 }
 
 // GetStandalone returns a single standalone database with connection string.
@@ -197,20 +200,7 @@ func (h *DatabaseHandlerV2) GetStandalone(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "not your database")
 	}
 
-	connStr := ""
-	password := ""
-	if h.dbSvc != nil {
-		if pw, err := h.dbSvc.GetDatabasePassword(c.Context(), db.ID); err == nil {
-			password = pw
-			connStr = db.ConnectionString(pw)
-		}
-	} else if memRepo, ok := h.dbRepo.(*memory.MemoryDatabaseRepository); ok {
-		if pw, ok := memRepo.GetPassword(db.ID); ok {
-			password = pw
-			connStr = db.ConnectionString(pw)
-		}
-	}
-
+	password, connStr := h.fetchCredentials(c.Context(), db)
 	return c.JSON(toDatabaseInfoV2(db, password, connStr))
 }
 
@@ -257,6 +247,36 @@ func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 		result[i] = toDatabaseInfoV2(&db, "", "")
 	}
 	return c.JSON(result)
+}
+
+// ResetPassword generates a new password for a database.
+// POST /api/v1/apps/:appId/databases/:dbId/reset-password
+// POST /api/v1/databases/:dbId/reset-password
+func (h *DatabaseHandlerV2) ResetPassword(c *fiber.Ctx) error {
+	dbID := c.Params("dbId")
+	userID, _ := c.Locals("user_id").(string)
+
+	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "database not found")
+	}
+	if db.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your database")
+	}
+
+	if h.dbSvc == nil {
+		return fiber.NewError(fiber.StatusNotImplemented, "database service not configured")
+	}
+
+	newPassword, connStr, err := h.dbSvc.ResetDatabasePassword(c.Context(), dbID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(fiber.Map{
+		"db_password":       newPassword,
+		"connection_string": connStr,
+	})
 }
 
 func envKeyForEngine(engine entities.DatabaseEngine) string {

@@ -802,6 +802,12 @@ export const demoStandaloneDatabases = {
   delete: async (): Promise<void> => {
     await delay();
   },
+  resetPassword: async (): Promise<{ db_password: string; connection_string: string }> => {
+    await delay();
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    const pw = Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    return { db_password: pw, connection_string: `postgresql://user:${pw}@localhost:5432/db` };
+  },
 };
 
 export const demoUserPlan = {

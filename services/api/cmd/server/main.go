@@ -468,6 +468,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}), dbHandlerV2.Create)
 	appByID.Get("/databases", dbHandlerV2.List)
 	appByID.Get("/databases/:dbId", dbHandlerV2.Get)
+	appByID.Post("/databases/:dbId/reset-password", dbHandlerV2.ResetPassword)
 	appByID.Delete("/databases/:dbId", dbHandlerV2.Delete)
 
 	// Standalone databases (not tied to an app)
@@ -476,6 +477,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}), dbHandlerV2.CreateStandalone)
 	protected.Get("/databases", dbHandlerV2.ListByUser)
 	protected.Get("/databases/:dbId", dbHandlerV2.GetStandalone)
+	protected.Post("/databases/:dbId/reset-password", dbHandlerV2.ResetPassword)
 	protected.Delete("/databases/:dbId", dbHandlerV2.DeleteStandalone)
 
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)

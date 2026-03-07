@@ -215,7 +215,7 @@ export default function DatabasesPage() {
                           )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
-                          <StatusBadge status={db.status as "ready" | "running" | "creating" | "stopped"} />
+                          <StatusBadge status={db.status as "ready" | "provisioning" | "error" | "deleting"} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-400">
                           {db.size_mb} / {db.max_size_mb} MB

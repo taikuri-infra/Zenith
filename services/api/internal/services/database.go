@@ -330,6 +330,83 @@ func (s *DatabaseService) GetDatabasePassword(ctx context.Context, id string) (s
 	return string(pw), nil
 }
 
+// ResetDatabasePassword generates a new password, updates it in PostgreSQL,
+// recreates the K8s Secret, and updates the app env var if linked.
+func (s *DatabaseService) ResetDatabasePassword(ctx context.Context, id string) (string, string, error) {
+	db, err := s.dbRepo.GetDatabase(ctx, id)
+	if err != nil {
+		return "", "", fmt.Errorf("database not found: %w", err)
+	}
+
+	// Generate new password
+	newPassword, err := generatePassword(16)
+	if err != nil {
+		return "", "", fmt.Errorf("generate password: %w", err)
+	}
+
+	// ALTER USER on the appropriate cluster
+	switch db.Provisioner {
+	case entities.DBProvisionerDedicated:
+		// Read password from CNPG superuser secret
+		clusterName := "db-" + db.ID[:8]
+		secretName := clusterName + "-superuser"
+		secretData, err := s.k8sClient.GetSecret(ctx, s.namespace, secretName)
+		if err != nil {
+			return "", "", fmt.Errorf("cannot read dedicated cluster superuser secret: %w", err)
+		}
+		adminDSN := fmt.Sprintf("postgres://%s:%s@%s:5432/%s?sslmode=disable",
+			string(secretData["username"]), string(secretData["password"]),
+			clusterName+"-rw."+s.namespace+".svc.cluster.local", db.DBName)
+		conn, err := pgx.Connect(ctx, adminDSN)
+		if err != nil {
+			return "", "", fmt.Errorf("connect to dedicated cluster: %w", err)
+		}
+		defer conn.Close(ctx)
+		_, err = conn.Exec(ctx, fmt.Sprintf(`ALTER USER %q WITH PASSWORD '%s'`, sanitizeIdentifier(db.DBUser), newPassword))
+		if err != nil {
+			return "", "", fmt.Errorf("alter user password: %w", err)
+		}
+	default:
+		// Shared cluster
+		conn, err := pgx.Connect(ctx, s.adminDSN)
+		if err != nil {
+			return "", "", fmt.Errorf("connect to CNPG admin: %w", err)
+		}
+		defer conn.Close(ctx)
+		_, err = conn.Exec(ctx, fmt.Sprintf(`ALTER USER %q WITH PASSWORD '%s'`, sanitizeIdentifier(db.DBUser), newPassword))
+		if err != nil {
+			return "", "", fmt.Errorf("alter user password: %w", err)
+		}
+	}
+
+	// Recreate K8s Secret with new credentials
+	secretName := "db-" + db.ID[:8] + "-credentials"
+	connStr := db.ConnectionString(newPassword)
+	_ = s.k8sClient.DeleteSecret(ctx, s.namespace, secretName)
+	secretData := map[string][]byte{
+		"DATABASE_URL": []byte(connStr),
+		"DB_PASSWORD":  []byte(newPassword),
+		"DB_HOST":      []byte(db.Host),
+		"DB_NAME":      []byte(db.DBName),
+		"DB_USER":      []byte(db.DBUser),
+		"DB_PORT":      []byte("5432"),
+	}
+	if err := s.k8sClient.CreateSecret(ctx, s.namespace, secretName, secretData, map[string]string{
+		"zenith.io/database": db.ID,
+		"zenith.io/user":     db.UserID,
+	}); err != nil {
+		log.Printf("[db] Warning: failed to recreate K8s secret %s: %v", secretName, err)
+	}
+
+	// Update app env var if linked
+	if db.AppID != "" {
+		envKey := envKeyForDBEngine(db.Engine)
+		s.appRepo.SetEnvVars(ctx, db.AppID, map[string]string{envKey: connStr})
+	}
+
+	return newPassword, connStr, nil
+}
+
 func envKeyForDBEngine(engine entities.DatabaseEngine) string {
 	switch engine {
 	case entities.DatabaseEngineRedis:

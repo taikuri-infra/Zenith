@@ -15,6 +15,8 @@ const styles = {
   failed: "bg-red-500/10 text-red-400",
   superseded: "bg-neutral-500/10 text-neutral-400",
   sleeping: "bg-indigo-500/10 text-indigo-400",
+  provisioning: "bg-amber-500/10 text-amber-400",
+  deleting: "bg-neutral-500/10 text-neutral-400",
 } as const;
 
 const dots = {
@@ -34,6 +36,8 @@ const dots = {
   failed: "bg-red-400",
   superseded: "bg-neutral-400",
   sleeping: "bg-indigo-400 animate-pulse",
+  provisioning: "bg-amber-400 animate-pulse",
+  deleting: "bg-neutral-400 animate-pulse",
 } as const;
 
 type Status = keyof typeof styles;
