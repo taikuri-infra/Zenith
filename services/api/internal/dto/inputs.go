@@ -146,8 +146,9 @@ type ApplyUpdateInput struct {
 
 // CreateDatabaseInput is the request body for provisioning a database for an app.
 type CreateDatabaseInput struct {
-	Engine entities.DatabaseEngine `json:"engine" validate:"required"`
-	Name   string                 `json:"name"`
+	Engine    entities.DatabaseEngine `json:"engine" validate:"required"`
+	Name      string                 `json:"name"`
+	MaxSizeMB int                    `json:"max_size_mb,omitempty"` // set by service from plan limits
 }
 
 // DatabaseInfo is the response for a provisioned database (includes connection info).

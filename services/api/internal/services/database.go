@@ -83,17 +83,22 @@ func sanitizeIdentifier(s string) string {
 // ProvisionDatabase creates a real database, either on the shared CNPG cluster
 // (Free/Pro) or as a dedicated CNPG Cluster CRD (Team/Enterprise).
 func (s *DatabaseService) ProvisionDatabase(ctx context.Context, appID, userID string, input *dto.CreateDatabaseInput) (*entities.UserDatabase, error) {
-	// 1. Create metadata record (status: provisioning)
-	db, err := s.dbRepo.CreateDatabase(ctx, appID, userID, input)
-	if err != nil {
-		return nil, err
-	}
-
-	// 2. Determine tier
+	// 1. Determine tier and set max size from plan limits
 	plan, err := s.planRepo.GetUserPlan(ctx, userID)
 	if err != nil {
 		log.Printf("[db] Warning: could not get user plan for %s, defaulting to shared: %v", userID, err)
 		plan = &entities.UserPlan{Tier: entities.PlanFree}
+	}
+
+	limits := entities.DefaultPlanLimits(plan.Tier)
+	if input.MaxSizeMB <= 0 {
+		input.MaxSizeMB = limits.MaxDBSizeMB
+	}
+
+	// 2. Create metadata record (status: provisioning)
+	db, err := s.dbRepo.CreateDatabase(ctx, appID, userID, input)
+	if err != nil {
+		return nil, err
 	}
 
 	var password string

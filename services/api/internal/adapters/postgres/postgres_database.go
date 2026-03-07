@@ -58,10 +58,15 @@ func (r *PostgresDatabaseRepository) CreateDatabase(ctx context.Context, appID, 
 	dbName := "db_" + strings.ReplaceAll(id[:8], "-", "")
 	dbUser := "u_" + strings.ReplaceAll(id[:8], "-", "")
 
+	maxSizeMB := input.MaxSizeMB
+	if maxSizeMB <= 0 {
+		maxSizeMB = 500 // default
+	}
+
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO user_databases (id, app_id, user_id, name, engine, db_name, db_user, host, port, size_mb, max_size_mb, status, provisioner, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-		id, appID, userID, name, string(engine), dbName, dbUser, "", 5432, 0, 100,
+		id, appID, userID, name, string(engine), dbName, dbUser, "", 5432, 0, maxSizeMB,
 		string(entities.DatabaseStatusProvisioning), string(entities.DBProvisionerShared), now, now,
 	)
 	if err != nil {
@@ -85,7 +90,7 @@ func (r *PostgresDatabaseRepository) CreateDatabase(ctx context.Context, appID, 
 		Host:        "",
 		Port:        5432,
 		SizeMB:      0,
-		MaxSizeMB:   100,
+		MaxSizeMB:   maxSizeMB,
 		Status:      entities.DatabaseStatusProvisioning,
 		Provisioner: entities.DBProvisionerShared,
 		Timestamps: entities.Timestamps{
