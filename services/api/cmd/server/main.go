@@ -488,6 +488,39 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/databases/:dbId/explorer", pgwebHandler.Status)
 	protected.Delete("/databases/:dbId/explorer", pgwebHandler.Stop)
 
+	// API Gateways (APISIX-powered customer gateways)
+	var gwRepo ports.GatewayRepository
+	if pool != nil {
+		gwRepo = postgres.NewPostgresGatewayRepository(pool)
+	} else {
+		gwRepo = memory.NewMemoryGatewayRepository()
+	}
+	gwSvc := services.NewGatewayService(gwRepo, appRepo, planRepo, k8sClient, cfg.GatewayDomain, "zenith-apps")
+	gwHandler := handlers.NewGatewayHandler(gwSvc, gwRepo)
+	appHandlerV2.SetOnAppDeleted(func(ctx context.Context, appID string) {
+		gwSvc.HandleAppDeleted(ctx, appID)
+	})
+	go gwSvc.ReconcileAll(context.Background())
+
+	gateways := protected.Group("/gateways")
+	gateways.Post("/", handlers.CheckLimit(planRepo, "gateways", func(c *fiber.Ctx, userID string) (int, error) {
+		return gwRepo.CountGatewaysByUser(c.Context(), userID)
+	}), gwHandler.CreateGateway)
+	gateways.Get("/", gwHandler.ListGateways)
+
+	gwByID := gateways.Group("/:gwId")
+	gwByID.Get("/", gwHandler.GetGateway)
+	gwByID.Put("/", gwHandler.UpdateGateway)
+	gwByID.Delete("/", gwHandler.DeleteGateway)
+	gwByID.Post("/sync", gwHandler.SyncGateway)
+
+	gwByID.Post("/routes", handlers.CheckLimit(planRepo, "gateway_routes", func(c *fiber.Ctx, userID string) (int, error) {
+		return gwRepo.CountRoutesByUser(c.Context(), userID)
+	}), gwHandler.CreateRoute)
+	gwByID.Get("/routes", gwHandler.ListRoutes)
+	gwByID.Put("/routes/:routeId", gwHandler.UpdateRoute)
+	gwByID.Delete("/routes/:routeId", gwHandler.DeleteRoute)
+
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
 	backupRepo := memory.NewMemoryBackupRepository()
 	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo, planRepo)
@@ -556,6 +589,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Delete("/auth/users/:userId", appAuthHandler.DeleteUser)
 
 	planSvc := services.NewPlanService(planRepo, appRepo, dbRepo, storageRepo, appAuthRepo)
+	planSvc.SetGatewayRepo(gwRepo)
 	planHandler := handlers.NewPlanHandler(planSvc)
 	protected.Get("/plan", planHandler.GetMyPlan)
 	protected.Post("/plan/upgrade", planHandler.UpgradePlan)

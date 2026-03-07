@@ -22,7 +22,9 @@ type PlanLimits struct {
 	MaxBuckets      int `json:"max_buckets"`
 	MaxCPUMillis    int `json:"max_cpu_millis"`    // millicores
 	MaxRAMMB        int `json:"max_ram_mb"`
-	MaxTeamMembers  int `json:"max_team_members"`
+	MaxTeamMembers    int `json:"max_team_members"`
+	MaxGateways       int `json:"max_gateways"`
+	MaxGatewayRoutes  int `json:"max_gateway_routes"`
 	BackupsEnabled  bool `json:"backups_enabled"`
 	CustomDomain    bool `json:"custom_domain"`
 	AlwaysOn        bool `json:"always_on"` // false = scale-to-zero after idle
@@ -37,6 +39,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxApps: 5, MaxDatabases: 3, MaxDBSizeMB: 5120,
 			MaxAuthUsers: 10000, MaxStorageMB: 10240, MaxBuckets: 5,
 			MaxCPUMillis: 2000, MaxRAMMB: 2048, MaxTeamMembers: 3,
+			MaxGateways: 5, MaxGatewayRoutes: 50,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
 		}
 	case PlanTeam:
@@ -44,6 +47,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxApps: 20, MaxDatabases: 10, MaxDBSizeMB: 20480,
 			MaxAuthUsers: 100000, MaxStorageMB: 102400, MaxBuckets: 20,
 			MaxCPUMillis: 4000, MaxRAMMB: 4096, MaxTeamMembers: 10,
+			MaxGateways: 20, MaxGatewayRoutes: 200,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
 		}
 	case PlanEnterprise:
@@ -51,6 +55,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxApps: 1000, MaxDatabases: 1000, MaxDBSizeMB: 1048576,
 			MaxAuthUsers: 10000000, MaxStorageMB: 10485760, MaxBuckets: 1000,
 			MaxCPUMillis: 64000, MaxRAMMB: 65536, MaxTeamMembers: 1000,
+			MaxGateways: 1000, MaxGatewayRoutes: 10000,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
 		}
 	default: // Free
@@ -58,6 +63,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxApps: 1, MaxDatabases: 1, MaxDBSizeMB: 100,
 			MaxAuthUsers: 1000, MaxStorageMB: 1024, MaxBuckets: 0,
 			MaxCPUMillis: 500, MaxRAMMB: 512, MaxTeamMembers: 1,
+			MaxGateways: 1, MaxGatewayRoutes: 3,
 			BackupsEnabled: false, CustomDomain: false, AlwaysOn: false, SleepAfterMins: 15,
 		}
 	}

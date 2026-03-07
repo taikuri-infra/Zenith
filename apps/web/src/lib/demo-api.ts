@@ -1234,6 +1234,87 @@ export const demoAggregatedLogs = [
   { timestamp: "2026-03-03T22:00:00Z", level: "error", message: "[email-worker] Process crashed: OOM killed, restarting..." },
 ];
 
+// ---- API Gateways Demo ----
+
+const demoGateway = {
+  id: "gw-demo-001",
+  user_id: "demo",
+  name: "Production API",
+  slug: "production-api",
+  status: "active" as const,
+  endpoint: "https://production-api.gw.stage.freezenith.com",
+  route_count: 3,
+  created_at: "2026-03-01T10:00:00Z",
+  updated_at: "2026-03-04T12:00:00Z",
+};
+
+const demoGatewayRoutes = [
+  {
+    id: "rt-demo-001",
+    gateway_id: "gw-demo-001",
+    name: "users-api",
+    path: "/api/v1/users/*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    app_id: "app-demo-1",
+    app_subdomain: "my-next-app",
+    strip_prefix: false,
+    auth: "none" as const,
+    plugins: [{ name: "cors", enable: true, config: { allow_origins: "**" } }, { name: "limit-count", enable: true, config: { count: 100, time_window: 60 } }],
+    priority: 10,
+    status: "active" as const,
+    created_at: "2026-03-01T10:05:00Z",
+    updated_at: "2026-03-04T12:00:00Z",
+  },
+  {
+    id: "rt-demo-002",
+    gateway_id: "gw-demo-001",
+    name: "auth-api",
+    path: "/api/v1/auth/*",
+    methods: ["GET", "POST"],
+    app_id: "app-demo-1",
+    app_subdomain: "my-next-app",
+    strip_prefix: false,
+    auth: "none" as const,
+    plugins: [{ name: "limit-count", enable: true, config: { count: 30, time_window: 60 } }],
+    priority: 20,
+    status: "active" as const,
+    created_at: "2026-03-01T10:10:00Z",
+    updated_at: "2026-03-04T12:00:00Z",
+  },
+  {
+    id: "rt-demo-003",
+    gateway_id: "gw-demo-001",
+    name: "webhooks",
+    path: "/webhooks/*",
+    methods: ["POST"],
+    app_id: "app-demo-2",
+    app_subdomain: "go-api",
+    strip_prefix: true,
+    auth: "key-auth" as const,
+    plugins: [{ name: "ip-restriction", enable: true, config: { whitelist: ["104.18.0.0/16"] } }],
+    priority: 5,
+    status: "active" as const,
+    created_at: "2026-03-02T08:00:00Z",
+    updated_at: "2026-03-04T12:00:00Z",
+  },
+];
+
+export const demoGateways = {
+  list: async () => { await delay(300); return [demoGateway]; },
+  get: async (id: string) => { await delay(300); return { gateway: { ...demoGateway, id }, routes: demoGatewayRoutes }; },
+  create: async (name: string) => { await delay(500); return { ...demoGateway, id: "gw-new-" + Date.now(), name, slug: name.toLowerCase().replace(/\s+/g, "-"), route_count: 0 }; },
+  update: async (id: string, name: string) => { await delay(300); return { ...demoGateway, id, name }; },
+  delete: async () => { await delay(300); },
+  sync: async () => { await delay(300); },
+  listRoutes: async () => { await delay(300); return demoGatewayRoutes; },
+  createRoute: async (_gwId: string, data: { name: string; path: string; methods: string[]; app_id: string }) => {
+    await delay(500);
+    return { ...demoGatewayRoutes[0], id: "rt-new-" + Date.now(), ...data, app_subdomain: "my-next-app", plugins: [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  },
+  updateRoute: async (_gwId: string, routeId: string, data: Record<string, unknown>) => { await delay(300); return { ...demoGatewayRoutes[0], id: routeId, ...data }; },
+  deleteRoute: async () => { await delay(300); },
+};
+
 // Re-export as a unified object matching the real API import pattern
 export const demoApi = {
   auth: demoAuth,
@@ -1262,4 +1343,5 @@ export const demoApi = {
   autoscaler: demoAutoscaler,
   billing: demoBilling,
   registry: demoRegistry,
+  gateways: demoGateways,
 };

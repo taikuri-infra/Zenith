@@ -44,6 +44,7 @@ certificate:
     - cloud.stage.freezenith.com
     - embermind-ms.stage.freezenith.com
     - embermind.stage.freezenith.com
+    - gw.stage.freezenith.com
 
 keycloak:
   enabled: true

@@ -74,6 +74,10 @@ spec:
             - name: BASE_DOMAIN
               value: {{ .Values.env.BASE_DOMAIN | quote }}
             {{- end }}
+            {{- if .Values.env.GATEWAY_DOMAIN }}
+            - name: GATEWAY_DOMAIN
+              value: {{ .Values.env.GATEWAY_DOMAIN | quote }}
+            {{- end }}
             {{- if .Values.env.TEMPORAL_ENABLED }}
             - name: TEMPORAL_ENABLED
               value: {{ .Values.env.TEMPORAL_ENABLED | quote }}

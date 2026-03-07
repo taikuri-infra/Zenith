@@ -1,0 +1,77 @@
+package entities
+
+import "encoding/json"
+
+// GatewayStatus represents the lifecycle state of a gateway.
+type GatewayStatus string
+
+const (
+	GatewayStatusProvisioning GatewayStatus = "provisioning"
+	GatewayStatusActive       GatewayStatus = "active"
+	GatewayStatusError        GatewayStatus = "error"
+	GatewayStatusDeleting     GatewayStatus = "deleting"
+)
+
+// GatewayRouteStatus represents the state of a gateway route.
+type GatewayRouteStatus string
+
+const (
+	GatewayRouteStatusActive  GatewayRouteStatus = "active"
+	GatewayRouteStatusStopped GatewayRouteStatus = "stopped"
+)
+
+// GatewayRouteAuth represents the authentication type for a route.
+type GatewayRouteAuth string
+
+const (
+	GatewayRouteAuthNone   GatewayRouteAuth = "none"
+	GatewayRouteAuthJWT    GatewayRouteAuth = "jwt"
+	GatewayRouteAuthKeyAuth GatewayRouteAuth = "key-auth"
+)
+
+// GatewayRoutePlugin represents an inline APISIX plugin on a route.
+type GatewayRoutePlugin struct {
+	Name   string          `json:"name"`
+	Enable bool            `json:"enable"`
+	Config json.RawMessage `json:"config"`
+}
+
+// AllowedPlugins is the allowlist for Phase 1 (validated server-side).
+var AllowedPlugins = map[string]bool{
+	"cors":           true,
+	"limit-count":    true,
+	"jwt-auth":       true,
+	"key-auth":       true,
+	"ip-restriction": true,
+	"proxy-rewrite":  true,
+	"request-id":     true,
+}
+
+// Gateway represents a customer API gateway backed by APISIX.
+type Gateway struct {
+	ID         string        `json:"id"`
+	UserID     string        `json:"user_id"`
+	Name       string        `json:"name"`
+	Slug       string        `json:"slug"`
+	Status     GatewayStatus `json:"status"`
+	Endpoint   string        `json:"endpoint"`
+	RouteCount int           `json:"route_count"`
+	Timestamps
+}
+
+// GatewayRoute represents a single route within a gateway.
+type GatewayRoute struct {
+	ID           string               `json:"id"`
+	GatewayID    string               `json:"gateway_id"`
+	Name         string               `json:"name"`
+	Path         string               `json:"path"`
+	Methods      []string             `json:"methods"`
+	AppID        string               `json:"app_id"`
+	AppSubdomain string               `json:"app_subdomain"`
+	StripPrefix  bool                 `json:"strip_prefix"`
+	Auth         GatewayRouteAuth     `json:"auth"`
+	Plugins      []GatewayRoutePlugin `json:"plugins"`
+	Priority     int                  `json:"priority"`
+	Status       GatewayRouteStatus   `json:"status"`
+	Timestamps
+}

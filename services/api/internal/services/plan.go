@@ -18,6 +18,7 @@ type PlanService struct {
 	dbRepo        ports.DatabaseRepository
 	storageRepo   ports.StorageRepository
 	authRepo      ports.AppAuthRepository
+	gwRepo        ports.GatewayRepository
 	stripeEnabled bool
 }
 
@@ -36,6 +37,11 @@ func NewPlanService(
 		storageRepo: storageRepo,
 		authRepo:    authRepo,
 	}
+}
+
+// SetGatewayRepo injects the gateway repository for usage tracking.
+func (s *PlanService) SetGatewayRepo(repo ports.GatewayRepository) {
+	s.gwRepo = repo
 }
 
 // SetStripeEnabled marks whether Stripe billing is active.
@@ -138,11 +144,18 @@ func (s *PlanService) CalculateUsage(ctx context.Context, userID string) dto.Pla
 	dbCount, _ := s.dbRepo.CountDatabasesByUser(ctx, userID)
 	bucketCount, _ := s.storageRepo.CountBucketsByUser(ctx, userID)
 
-	return dto.PlanUsage{
+	usage := dto.PlanUsage{
 		Apps:      appCount,
 		Databases: dbCount,
 		Buckets:   bucketCount,
 	}
+
+	if s.gwRepo != nil {
+		usage.Gateways, _ = s.gwRepo.CountGatewaysByUser(ctx, userID)
+		usage.GatewayRoutes, _ = s.gwRepo.CountRoutesByUser(ctx, userID)
+	}
+
+	return usage
 }
 
 // CheckLimit verifies that the user hasn't exceeded their plan limit for a resource.
@@ -161,6 +174,10 @@ func (s *PlanService) CheckLimit(ctx context.Context, userID, resource string, c
 		limit = plan.Limits.MaxDatabases
 	case "buckets":
 		limit = plan.Limits.MaxBuckets
+	case "gateways":
+		limit = plan.Limits.MaxGateways
+	case "gateway_routes":
+		limit = plan.Limits.MaxGatewayRoutes
 	default:
 		return nil
 	}

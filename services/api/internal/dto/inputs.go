@@ -306,11 +306,13 @@ type UserPlanResponse struct {
 
 // PlanUsage shows current resource usage against plan limits.
 type PlanUsage struct {
-	Apps       int `json:"apps"`
-	Databases  int `json:"databases"`
-	StorageMB  int `json:"storage_mb"`
-	AuthUsers  int `json:"auth_users"`
-	Buckets    int `json:"buckets"`
+	Apps          int `json:"apps"`
+	Databases     int `json:"databases"`
+	StorageMB     int `json:"storage_mb"`
+	AuthUsers     int `json:"auth_users"`
+	Buckets       int `json:"buckets"`
+	Gateways      int `json:"gateways"`
+	GatewayRoutes int `json:"gateway_routes"`
 }
 
 // --- Domain DTOs ---

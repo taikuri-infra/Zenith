@@ -76,6 +76,10 @@ func CheckLimit(planRepo ports.UserPlanRepository, resource string, countFn func
 			limit = plan.Limits.MaxDatabases
 		case "buckets":
 			limit = plan.Limits.MaxBuckets
+		case "gateways":
+			limit = plan.Limits.MaxGateways
+		case "gateway_routes":
+			limit = plan.Limits.MaxGatewayRoutes
 		default:
 			return c.Next()
 		}

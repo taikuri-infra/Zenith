@@ -37,8 +37,9 @@ type Config struct {
 	InternalSecret string
 
 	// Deploy
-	BaseDomain string
-	Registry   string // container registry for user images
+	BaseDomain    string
+	GatewayDomain string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
+	Registry      string // container registry for user images
 
 	// Deploy concurrency
 	MaxConcurrentDeploys int
@@ -120,8 +121,9 @@ func Load() *Config {
 		AppURL:         getEnv("APP_URL", ""),
 		EmailFrom:      getEnv("EMAIL_FROM", "Zenith <noreply@freezenith.com>"),
 		InternalSecret: getEnv("INTERNAL_SECRET", ""),
-		BaseDomain: getEnv("BASE_DOMAIN", "freezenith.com"),
-		Registry:   getEnv("REGISTRY", "registry.freezenith.com"),
+		BaseDomain:    getEnv("BASE_DOMAIN", "freezenith.com"),
+		GatewayDomain: getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
+		Registry:      getEnv("REGISTRY", "registry.freezenith.com"),
 		MaxConcurrentDeploys: getEnvInt("MAX_CONCURRENT_DEPLOYS", 5),
 		SecretsKey:          getEnv("SECRETS_ENCRYPTION_KEY", ""),
 		OTELEndpoint:        getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),

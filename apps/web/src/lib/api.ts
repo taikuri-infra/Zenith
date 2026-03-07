@@ -1374,6 +1374,104 @@ export const registry = {
     apiFetch<{ items: RegistryImage[] }>("/api/v1/registry/images"),
 };
 
+// ---- API Gateways ----
+
+export interface ApiGateway {
+  id: string;
+  user_id: string;
+  name: string;
+  slug: string;
+  status: "provisioning" | "active" | "error" | "deleting";
+  endpoint: string;
+  route_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GatewayRoutePlugin {
+  name: string;
+  enable: boolean;
+  config: Record<string, unknown>;
+}
+
+export interface GatewayRouteInfo {
+  id: string;
+  gateway_id: string;
+  name: string;
+  path: string;
+  methods: string[];
+  app_id: string;
+  app_subdomain: string;
+  strip_prefix: boolean;
+  auth: "none" | "jwt" | "key-auth";
+  plugins: GatewayRoutePlugin[];
+  priority: number;
+  status: "active" | "stopped";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRouteInput {
+  name: string;
+  path: string;
+  methods: string[];
+  app_id: string;
+  strip_prefix?: boolean;
+  auth?: string;
+  plugins?: GatewayRoutePlugin[];
+  priority?: number;
+}
+
+export interface UpdateRouteInput {
+  name?: string;
+  path?: string;
+  methods?: string[];
+  app_id?: string;
+  strip_prefix?: boolean;
+  auth?: string;
+  plugins?: GatewayRoutePlugin[];
+  priority?: number;
+  status?: string;
+}
+
+export const gateways = {
+  list: () => apiFetch<ApiGateway[]>("/api/v1/gateways"),
+  get: (id: string) =>
+    apiFetch<{ gateway: ApiGateway; routes: GatewayRouteInfo[] }>(
+      `/api/v1/gateways/${id}`
+    ),
+  create: (name: string) =>
+    apiFetch<ApiGateway>("/api/v1/gateways", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  update: (id: string, name: string) =>
+    apiFetch<ApiGateway>(`/api/v1/gateways/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    }),
+  delete: (id: string) =>
+    apiFetch<void>(`/api/v1/gateways/${id}`, { method: "DELETE" }),
+  sync: (id: string) =>
+    apiFetch<void>(`/api/v1/gateways/${id}/sync`, { method: "POST" }),
+  listRoutes: (gwId: string) =>
+    apiFetch<GatewayRouteInfo[]>(`/api/v1/gateways/${gwId}/routes`),
+  createRoute: (gwId: string, data: CreateRouteInput) =>
+    apiFetch<GatewayRouteInfo>(`/api/v1/gateways/${gwId}/routes`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateRoute: (gwId: string, routeId: string, data: UpdateRouteInput) =>
+    apiFetch<GatewayRouteInfo>(`/api/v1/gateways/${gwId}/routes/${routeId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteRoute: (gwId: string, routeId: string) =>
+    apiFetch<void>(`/api/v1/gateways/${gwId}/routes/${routeId}`, {
+      method: "DELETE",
+    }),
+};
+
 // ---- WebSocket for real-time updates ----
 
 export type WebSocketEvent =

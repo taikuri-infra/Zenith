@@ -24,15 +24,21 @@ type AppImageDeployer interface {
 // AppHandlerV2 handles app CRUD operations using the AppRepository.
 // This replaces the original CRD-based AppHandler for Phase 2.
 type AppHandlerV2 struct {
-	appRepo    ports.AppRepository
-	baseDomain string
-	deployer   AppDeleter
-	pipeline   AppImageDeployer
+	appRepo      ports.AppRepository
+	baseDomain   string
+	deployer     AppDeleter
+	pipeline     AppImageDeployer
+	onAppDeleted func(ctx context.Context, appID string) // callback for cascade (e.g. stop gateway routes)
 }
 
 // NewAppHandlerV2 creates a new AppHandlerV2.
 func NewAppHandlerV2(appRepo ports.AppRepository, baseDomain string, deployer AppDeleter, pipeline AppImageDeployer) *AppHandlerV2 {
 	return &AppHandlerV2{appRepo: appRepo, baseDomain: baseDomain, deployer: deployer, pipeline: pipeline}
+}
+
+// SetOnAppDeleted sets a callback invoked after an app is deleted (e.g. to stop gateway routes).
+func (h *AppHandlerV2) SetOnAppDeleted(fn func(ctx context.Context, appID string)) {
+	h.onAppDeleted = fn
 }
 
 // --- Request/Response types ---
@@ -237,6 +243,11 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 
 	if err := h.appRepo.DeleteApp(c.Context(), appID); err != nil {
 		return NewNotFound("app not found")
+	}
+
+	// Cascade: stop gateway routes pointing to this app
+	if h.onAppDeleted != nil {
+		go h.onAppDeleted(context.Background(), appID)
 	}
 
 	return c.JSON(fiber.Map{"message": "app deleted"})

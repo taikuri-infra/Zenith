@@ -256,6 +256,30 @@ type BrandingRepository interface {
 	SetDashboardDomain(ctx context.Context, userID, domain string) (*entities.BrandingConfig, error)
 }
 
+// GatewayRepository defines gateway and gateway route persistence operations.
+type GatewayRepository interface {
+	// Gateways
+	CreateGateway(ctx context.Context, userID, name, slug string) (*entities.Gateway, error)
+	GetGateway(ctx context.Context, id string) (*entities.Gateway, error)
+	GetGatewayBySlug(ctx context.Context, slug string) (*entities.Gateway, error)
+	ListGatewaysByUser(ctx context.Context, userID string) ([]entities.Gateway, error)
+	UpdateGateway(ctx context.Context, id, name string) (*entities.Gateway, error)
+	DeleteGateway(ctx context.Context, id string) error
+	CountGatewaysByUser(ctx context.Context, userID string) (int, error)
+	UpdateGatewayStatus(ctx context.Context, id string, status entities.GatewayStatus) error
+
+	// Routes
+	CreateRoute(ctx context.Context, route *entities.GatewayRoute) (*entities.GatewayRoute, error)
+	GetRoute(ctx context.Context, id string) (*entities.GatewayRoute, error)
+	ListRoutesByGateway(ctx context.Context, gatewayID string) ([]entities.GatewayRoute, error)
+	ListActiveRoutesByGateway(ctx context.Context, gatewayID string) ([]entities.GatewayRoute, error)
+	UpdateRoute(ctx context.Context, route *entities.GatewayRoute) (*entities.GatewayRoute, error)
+	DeleteRoute(ctx context.Context, id string) error
+	CountRoutesByGateway(ctx context.Context, gatewayID string) (int, error)
+	CountRoutesByUser(ctx context.Context, userID string) (int, error)
+	StopRoutesByApp(ctx context.Context, appID string) ([]string, error) // returns affected gateway IDs
+}
+
 // AutoscaleRepository defines autoscaler node and event persistence operations.
 type AutoscaleRepository interface {
 	SaveNode(ctx context.Context, node *entities.HetznerNode) error

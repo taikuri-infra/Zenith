@@ -76,10 +76,10 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
     verbs: ["get", "create", "delete"]
-  # Tenant provisioning: APISIX routes
+  # APISIX routes (tenant provisioning + customer API gateways)
   - apiGroups: ["apisix.apache.org"]
     resources: ["apisixroutes"]
-    verbs: ["get", "create", "delete"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
   # Tenant provisioning: cert-manager certificates
   - apiGroups: ["cert-manager.io"]
     resources: ["certificates"]
