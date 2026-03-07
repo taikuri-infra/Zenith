@@ -306,7 +306,9 @@ func (s *PgwebService) createIngressRoute(ctx context.Context, name string, labe
 				},
 			},
 		},
-		"tls": map[string]interface{}{},
+		"tls": map[string]interface{}{
+			"secretName": "apps-wildcard-tls",
+		},
 	}
 
 	specJSON, err := json.Marshal(spec)
