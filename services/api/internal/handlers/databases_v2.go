@@ -237,7 +237,14 @@ func (h *DatabaseHandlerV2) DeleteStandalone(c *fiber.Ctx) error {
 func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
-	dbs, err := h.dbRepo.ListDatabasesByUser(c.Context(), userID)
+	var dbs []entities.UserDatabase
+	var err error
+	projectID := c.Query("project_id")
+	if projectID != "" {
+		dbs, err = h.dbRepo.ListDatabasesByProject(c.Context(), projectID)
+	} else {
+		dbs, err = h.dbRepo.ListDatabasesByUser(c.Context(), userID)
+	}
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}

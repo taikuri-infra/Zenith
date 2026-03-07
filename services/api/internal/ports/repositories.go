@@ -66,6 +66,17 @@ type MeteringRepository interface {
 	GetPlatformUsageSummary(ctx context.Context) (*dto.PlatformUsageSummary, error)
 }
 
+// ProjectRepository defines project persistence operations.
+type ProjectRepository interface {
+	CreateProject(ctx context.Context, userID, name, slug, description string) (*entities.Project, error)
+	GetProject(ctx context.Context, id string) (*entities.Project, error)
+	ListProjectsByUser(ctx context.Context, userID string) ([]entities.Project, error)
+	UpdateProject(ctx context.Context, id string, name, description *string) (*entities.Project, error)
+	DeleteProject(ctx context.Context, id string) error
+	CountProjectsByUser(ctx context.Context, userID string) (int, error)
+	GetDefaultProject(ctx context.Context, userID string) (*entities.Project, error)
+}
+
 // AppRepository defines app, deployment, and env var persistence operations.
 type AppRepository interface {
 	// Apps
@@ -73,6 +84,7 @@ type AppRepository interface {
 	GetApp(ctx context.Context, id string) (*entities.App, error)
 	GetAppBySubdomain(ctx context.Context, subdomain string) (*entities.App, error)
 	ListAppsByUser(ctx context.Context, userID string) ([]entities.App, error)
+	ListAppsByProject(ctx context.Context, projectID string) ([]entities.App, error)
 	UpdateApp(ctx context.Context, id string, input *dto.UpdateAppInput) (*entities.App, error)
 	DeleteApp(ctx context.Context, id string) error
 	CountAppsByUser(ctx context.Context, userID string) (int, error)
@@ -107,6 +119,7 @@ type DatabaseRepository interface {
 	GetDatabase(ctx context.Context, id string) (*entities.UserDatabase, error)
 	ListDatabasesByApp(ctx context.Context, appID string) ([]entities.UserDatabase, error)
 	ListDatabasesByUser(ctx context.Context, userID string) ([]entities.UserDatabase, error)
+	ListDatabasesByProject(ctx context.Context, projectID string) ([]entities.UserDatabase, error)
 	DeleteDatabase(ctx context.Context, id string) error
 	UpdateDatabaseStatus(ctx context.Context, id string, status entities.DatabaseStatus) error
 	CountDatabasesByUser(ctx context.Context, userID string) (int, error)
@@ -119,6 +132,7 @@ type StorageRepository interface {
 	GetBucketByName(ctx context.Context, userID, name string) (*entities.UserBucket, error)
 	ListBucketsByApp(ctx context.Context, appID string) ([]entities.UserBucket, error)
 	ListBucketsByUser(ctx context.Context, userID string) ([]entities.UserBucket, error)
+	ListBucketsByProject(ctx context.Context, projectID string) ([]entities.UserBucket, error)
 	UpdateBucket(ctx context.Context, id string, access entities.BucketAccess) (*entities.UserBucket, error)
 	DeleteBucket(ctx context.Context, id string) error
 	CountBucketsByUser(ctx context.Context, userID string) (int, error)
@@ -263,6 +277,7 @@ type GatewayRepository interface {
 	GetGateway(ctx context.Context, id string) (*entities.Gateway, error)
 	GetGatewayBySlug(ctx context.Context, slug string) (*entities.Gateway, error)
 	ListGatewaysByUser(ctx context.Context, userID string) ([]entities.Gateway, error)
+	ListGatewaysByProject(ctx context.Context, projectID string) ([]entities.Gateway, error)
 	UpdateGateway(ctx context.Context, id, name string) (*entities.Gateway, error)
 	DeleteGateway(ctx context.Context, id string) error
 	CountGatewaysByUser(ctx context.Context, userID string) (int, error)

@@ -63,10 +63,10 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 		return nil, fmt.Errorf("image_url is required for image deploys")
 	}
 
-	// Check for duplicate name under same user
+	// Check for duplicate name under same project
 	for _, a := range r.apps {
-		if a.UserID == input.UserID && a.Name == input.Name {
-			return nil, fmt.Errorf("app '%s' already exists for this user", input.Name)
+		if a.ProjectID == input.ProjectID && a.Name == input.Name {
+			return nil, fmt.Errorf("app '%s' already exists in this project", input.Name)
 		}
 	}
 
@@ -93,6 +93,7 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 	app := &entities.App{
 		ID:               uuid.New().String(),
 		UserID:           input.UserID,
+		ProjectID:        input.ProjectID,
 		Name:             input.Name,
 		DeploySource:     deploySource,
 		RepoURL:          input.RepoURL,
@@ -156,6 +157,22 @@ func (r *MemoryAppRepository) ListAppsByUser(ctx context.Context, userID string)
 		return result[i].CreatedAt.After(result[j].CreatedAt)
 	})
 
+	return result, nil
+}
+
+func (r *MemoryAppRepository) ListAppsByProject(ctx context.Context, projectID string) ([]entities.App, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []entities.App
+	for _, a := range r.apps {
+		if a.ProjectID == projectID {
+			result = append(result, *a)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
 	return result, nil
 }
 

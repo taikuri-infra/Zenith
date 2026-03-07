@@ -22,12 +22,12 @@ func NewPostgresGatewayRepository(pool *pgxpool.Pool) *PostgresGatewayRepository
 	return &PostgresGatewayRepository{pool: pool}
 }
 
-const gwSelectCols = `id, user_id, name, slug, status, route_count, created_at, updated_at`
+const gwSelectCols = `id, user_id, project_id, name, slug, status, route_count, created_at, updated_at`
 
 func scanGateway(scanner interface{ Scan(dest ...any) error }) (*entities.Gateway, error) {
 	var g entities.Gateway
 	err := scanner.Scan(
-		&g.ID, &g.UserID, &g.Name, &g.Slug, &g.Status,
+		&g.ID, &g.UserID, &g.ProjectID, &g.Name, &g.Slug, &g.Status,
 		&g.RouteCount, &g.CreatedAt, &g.UpdatedAt,
 	)
 	if err != nil {
@@ -116,6 +116,26 @@ func (r *PostgresGatewayRepository) ListGatewaysByUser(ctx context.Context, user
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list gateways: %w", err)
+	}
+	defer rows.Close()
+
+	var gws []entities.Gateway
+	for rows.Next() {
+		g, err := scanGateway(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan gateway: %w", err)
+		}
+		gws = append(gws, *g)
+	}
+	return gws, nil
+}
+
+func (r *PostgresGatewayRepository) ListGatewaysByProject(ctx context.Context, projectID string) ([]entities.Gateway, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+gwSelectCols+` FROM gateways WHERE project_id = $1 ORDER BY created_at DESC`, projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list gateways by project: %w", err)
 	}
 	defer rows.Close()
 

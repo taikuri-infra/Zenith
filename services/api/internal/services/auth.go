@@ -62,7 +62,8 @@ type oauthCodeEntry struct {
 // AuthService handles authentication business logic.
 type AuthService struct {
 	users       ports.UserRepository
-	planRepo    ports.UserPlanRepository // nil-safe — skips plan assignment when nil
+	planRepo    ports.UserPlanRepository    // nil-safe — skips plan assignment when nil
+	projectRepo ports.ProjectRepository     // nil-safe — skips default project creation when nil
 	jwtSecret   string
 	emailSender ports.EmailSender // nil = skip sending emails (dev mode)
 	appURL      string            // frontend URL for verification links
@@ -80,6 +81,11 @@ func NewAuthService(users ports.UserRepository, jwtSecret string, planRepo ports
 		planRepo:   planRepo,
 		oauthCodes: make(map[string]*oauthCodeEntry),
 	}
+}
+
+// SetProjectRepo configures the project repository for default project creation on registration.
+func (s *AuthService) SetProjectRepo(repo ports.ProjectRepository) {
+	s.projectRepo = repo
 }
 
 // SetOAuthConfig configures OAuth provider credentials.
@@ -125,6 +131,11 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 	// Auto-assign free plan for new customers
 	if s.planRepo != nil {
 		_, _ = s.planRepo.SetUserPlan(ctx, user.ID, entities.PlanFree)
+	}
+
+	// Create default project
+	if s.projectRepo != nil {
+		_, _ = s.projectRepo.CreateProject(ctx, user.ID, "Default", "default", "")
 	}
 
 	// Generate verification token
@@ -587,6 +598,11 @@ func (s *AuthService) findOrCreateOAuthUser(ctx context.Context, email, name, pr
 	// Auto-assign free plan for new customers
 	if s.planRepo != nil {
 		_, _ = s.planRepo.SetUserPlan(ctx, user.ID, entities.PlanFree)
+	}
+
+	// Create default project
+	if s.projectRepo != nil {
+		_, _ = s.projectRepo.CreateProject(ctx, user.ID, "Default", "default", "")
 	}
 
 	// OAuth-verified users are auto-verified

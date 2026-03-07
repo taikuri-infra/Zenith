@@ -7,6 +7,7 @@ import "github.com/dotechhq/zenith/services/api/internal/entities"
 // CreateAppInput is the request body for creating a new app.
 type CreateAppInput struct {
 	UserID           string                `json:"user_id" validate:"required"`
+	ProjectID        string                `json:"project_id"`
 	Name             string                `json:"name" validate:"required"`
 	DeploySource     entities.DeploySource `json:"deploy_source"`
 	RepoURL          string                `json:"repo_url"`

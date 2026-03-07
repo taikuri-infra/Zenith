@@ -139,6 +139,19 @@ func (r *MemoryDatabaseRepository) ListDatabasesByUser(_ context.Context, userID
 	return result, nil
 }
 
+func (r *MemoryDatabaseRepository) ListDatabasesByProject(_ context.Context, projectID string) ([]entities.UserDatabase, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []entities.UserDatabase
+	for _, db := range r.databases {
+		if db.ProjectID == projectID {
+			result = append(result, *db)
+		}
+	}
+	return result, nil
+}
+
 func (r *MemoryDatabaseRepository) DeleteDatabase(_ context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

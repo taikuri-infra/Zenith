@@ -48,14 +48,14 @@ export default function OverviewPage() {
     loading: deployLoading,
     error: deployError,
     refetch: refetchDeploy,
-  } = useApi(() => appsDeploy.list(), []);
+  } = useApi(() => appsDeploy.list(projectId || undefined), [projectId]);
 
   const {
     data: dbsData,
     loading: dbsLoading,
     error: dbsError,
     refetch: refetchDbs,
-  } = useApi(() => standaloneDatabases.list(), []);
+  } = useApi(() => standaloneDatabases.list(projectId || undefined), [projectId]);
 
   const {
     data: planData,
@@ -147,7 +147,7 @@ export default function OverviewPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-lg font-semibold text-white">
-            {project?.display_name || project?.name || "Project"}
+            {project?.name || "Project"}
           </h1>
           <p className="text-sm text-neutral-500">Project overview</p>
         </div>
@@ -170,9 +170,9 @@ export default function OverviewPage() {
             sub={totalServices > 0 ? `${healthyServices}/${totalServices} healthy` : "no services"}
           />
           <StatCard
-            label="Region"
-            value={project?.region || "--"}
-            sub={project?.plan || ""}
+            label="Plan"
+            value={planData?.tier || "--"}
+            sub={project?.slug || ""}
           />
           <StatCard
             label="Legacy Apps"

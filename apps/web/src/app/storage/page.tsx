@@ -6,6 +6,7 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
+import { useProject } from "@/hooks/use-project";
 import { type StorageBucketV2 } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import Link from "next/link";
@@ -20,13 +21,14 @@ function formatBytes(mb: number): string {
 
 export default function StoragePage() {
   const { storageBuckets, userPlan } = getApi();
+  const projectId = useProject();
 
   const {
     data: bucketList,
     loading,
     error,
     refetch,
-  } = useApi(() => storageBuckets.list(), []);
+  } = useApi(() => storageBuckets.list(projectId || undefined), [projectId]);
 
   const { data: planData, loading: planLoading } = useApi(
     () => userPlan.get(),

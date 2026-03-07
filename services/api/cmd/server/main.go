@@ -308,8 +308,18 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		}
 	}
 
+	// Project repository (DB-backed project CRUD)
+	var projectRepo ports.ProjectRepository
+	if pool != nil {
+		projectRepo = postgres.NewPostgresProjectRepository(pool)
+	} else {
+		projectRepo = memory.NewMemoryProjectRepository()
+	}
+
+	// Wire project repo into auth service (auto-create default project on registration)
+	authSvc.SetProjectRepo(projectRepo)
+
 	// Handlers
-	projectHandler := handlers.NewProjectHandler(k8sClient)
 	appHandler := handlers.NewAppHandler(k8sClient)
 	dbHandler := handlers.NewDatabaseHandler(k8sClient)
 	storageHandler := handlers.NewStorageHandler(k8sClient)
@@ -333,6 +343,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	pipeline := deploy.NewPipeline(deployer, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
 
 	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, deployer, pipeline)
+	appHandlerV2.SetProjectRepo(projectRepo)
+	projectHandlerV2 := handlers.NewProjectHandlerV2(projectRepo, appRepo, deployer)
 	deployHandler := handlers.NewDeployHandler(appRepo, pipeline)
 	logHandler := handlers.NewLogHandler(appRepo, logHub)
 
@@ -398,13 +410,13 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Protected routes
 	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret))
 
-	// Projects (legacy CRD-based)
+	// Projects (DB-backed)
 	projects := protected.Group("/projects")
-	projects.Post("/", projectHandler.Create)
-	projects.Get("/", projectHandler.List)
-	projects.Get("/:id", projectHandler.Get)
-	projects.Put("/:id", projectHandler.Update)
-	projects.Delete("/:id", middleware.RequireRole(entities.RoleOwner), projectHandler.Delete)
+	projects.Post("/", projectHandlerV2.Create)
+	projects.Get("/", projectHandlerV2.List)
+	projects.Get("/:projectId", projectHandlerV2.Get)
+	projects.Put("/:projectId", projectHandlerV2.Update)
+	projects.Delete("/:projectId", projectHandlerV2.Delete)
 
 	// Apps — legacy CRD-based (under /projects/:id/apps)
 	legacyApps := protected.Group("/projects/:id/apps")
@@ -497,9 +509,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 	gwSvc := services.NewGatewayService(gwRepo, appRepo, planRepo, k8sClient, cfg.GatewayDomain, "zenith-apps")
 	gwHandler := handlers.NewGatewayHandler(gwSvc, gwRepo)
-	appHandlerV2.SetOnAppDeleted(func(ctx context.Context, appID string) {
+	onAppDeleted := func(ctx context.Context, appID string) {
 		gwSvc.HandleAppDeleted(ctx, appID)
-	})
+	}
+	appHandlerV2.SetOnAppDeleted(onAppDeleted)
+	projectHandlerV2.SetOnAppDeleted(onAppDeleted)
 	go gwSvc.ReconcileAll(context.Background())
 
 	gateways := protected.Group("/gateways")

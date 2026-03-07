@@ -3,6 +3,7 @@
 import { Shell } from "@/components/shell";
 import { BuildLogViewer } from "@/components/build-log-viewer";
 import { useApi } from "@/hooks/use-api";
+import { useProject } from "@/hooks/use-project";
 import { getApi, isDemoMode } from "@/lib/get-api";
 import { demoAggregatedLogs } from "@/lib/demo-api";
 import { useState, useMemo } from "react";
@@ -20,11 +21,12 @@ const LOG_LEVELS = [
 
 export default function LogsPage() {
   const { appsDeploy } = getApi();
+  const projectId = useProject();
   const [appFilter, setAppFilter] = useState<string>("all");
   const [levelFilter, setLevelFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: deployData, loading } = useApi(() => appsDeploy.list(), []);
+  const { data: deployData, loading } = useApi(() => appsDeploy.list(projectId || undefined), [projectId]);
   const apps = deployData?.items ?? [];
 
   const allLogs = isDemoMode() ? demoAggregatedLogs : [];

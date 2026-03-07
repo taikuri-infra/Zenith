@@ -224,30 +224,26 @@ export const auth = {
 export interface Project {
   id: string;
   name: string;
-  display_name: string;
-  owner: string;
-  plan: string;
-  region: string;
-  status: string;
+  slug: string;
+  description: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface CreateProjectRequest {
   name: string;
-  display_name: string;
-  plan: string;
-  region: string;
+  description?: string;
 }
 
 export const projects = {
-  list: () => apiFetch<{ items: Project[] }>("/api/v1/projects"),
+  list: () => apiFetch<{ items: Project[]; total: number }>("/api/v1/projects"),
   get: (id: string) => apiFetch<Project>(`/api/v1/projects/${id}`),
   create: (data: CreateProjectRequest) =>
     apiFetch<Project>("/api/v1/projects", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: Partial<CreateProjectRequest>) =>
+  update: (id: string, data: { name?: string; description?: string }) =>
     apiFetch<Project>(`/api/v1/projects/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
@@ -393,6 +389,7 @@ export interface HealthCheckStatus {
 
 export interface DeployApp {
   id: string;
+  project_id: string;
   user_id: string;
   name: string;
   repo_url: string;
@@ -412,6 +409,7 @@ export interface DeployApp {
 }
 
 export interface CreateDeployAppRequest {
+  project_id?: string;
   name: string;
   deploy_source: "git" | "image";
   port?: number;
@@ -487,7 +485,10 @@ export interface CreateAppDatabaseRequest {
 // ---- User-level databases (all databases across apps) ----
 
 export const userDatabases = {
-  list: () => apiFetch<AppDatabase[]>("/api/v1/databases"),
+  list: (projectId?: string) =>
+    apiFetch<AppDatabase[]>(
+      projectId ? `/api/v1/databases?project_id=${projectId}` : "/api/v1/databases"
+    ),
 };
 
 // ---- Standalone databases (not tied to an app) ----
@@ -498,7 +499,10 @@ export interface CreateStandaloneDatabaseRequest {
 }
 
 export const standaloneDatabases = {
-  list: () => apiFetch<AppDatabase[]>("/api/v1/databases"),
+  list: (projectId?: string) =>
+    apiFetch<AppDatabase[]>(
+      projectId ? `/api/v1/databases?project_id=${projectId}` : "/api/v1/databases"
+    ),
   get: (id: string) => apiFetch<AppDatabase>(`/api/v1/databases/${id}`),
   create: (data: CreateStandaloneDatabaseRequest) =>
     apiFetch<AppDatabase>("/api/v1/databases", {
@@ -565,7 +569,10 @@ export interface PresignedURLResponse {
 }
 
 export const storageBuckets = {
-  list: () => apiFetch<StorageBucketV2[]>("/api/v1/storage-buckets"),
+  list: (projectId?: string) =>
+    apiFetch<StorageBucketV2[]>(
+      projectId ? `/api/v1/storage-buckets?project_id=${projectId}` : "/api/v1/storage-buckets"
+    ),
   get: (id: string) =>
     apiFetch<StorageBucketV2>(`/api/v1/storage-buckets/${id}`),
   create: (data: { name: string; access?: string }) =>
@@ -1113,8 +1120,10 @@ export const sessions = {
 };
 
 export const appsDeploy = {
-  list: () =>
-    apiFetch<{ items: DeployApp[]; total: number }>("/api/v1/apps"),
+  list: (projectId?: string) =>
+    apiFetch<{ items: DeployApp[]; total: number }>(
+      projectId ? `/api/v1/apps?project_id=${projectId}` : "/api/v1/apps"
+    ),
   get: (id: string) =>
     apiFetch<DeployApp>(`/api/v1/apps/${id}`),
   create: (data: CreateDeployAppRequest) =>
@@ -1435,7 +1444,10 @@ export interface UpdateRouteInput {
 }
 
 export const gateways = {
-  list: () => apiFetch<ApiGateway[]>("/api/v1/gateways"),
+  list: (projectId?: string) =>
+    apiFetch<ApiGateway[]>(
+      projectId ? `/api/v1/gateways?project_id=${projectId}` : "/api/v1/gateways"
+    ),
   get: (id: string) =>
     apiFetch<{ gateway: ApiGateway; routes: GatewayRouteInfo[] }>(
       `/api/v1/gateways/${id}`

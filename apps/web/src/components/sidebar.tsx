@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -20,7 +21,10 @@ import {
   ScrollText,
   History,
   ListOrdered,
+  Plus,
+  Check,
 } from "lucide-react";
+import { useProjectContext } from "@/hooks/use-project";
 
 const isStandalone = process.env.NEXT_PUBLIC_ZENITH_MODE !== "saas";
 
@@ -93,6 +97,36 @@ const bottomNav: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { currentProject, projects, setCurrentProject, createProject } = useProjectContext();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+        setCreating(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    try {
+      const p = await createProject(newName.trim());
+      setCurrentProject(p);
+      setNewName("");
+      setCreating(false);
+      setDropdownOpen(false);
+    } catch {
+      // ignore
+    }
+  };
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -108,13 +142,57 @@ export function Sidebar() {
       </div>
 
       {/* Project selector */}
-      <div className="border-b border-border px-3 py-2.5">
-        <button className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-neutral-300 transition-colors hover:bg-surface-300">
-          <span className="truncate font-medium">my-startup</span>
+      <div className="relative border-b border-border px-3 py-2.5" ref={dropdownRef}>
+        <button
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-neutral-300 transition-colors hover:bg-surface-300"
+        >
+          <span className="truncate font-medium">{currentProject?.name || "Select project"}</span>
           <svg className="h-4 w-4 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
           </svg>
         </button>
+
+        {dropdownOpen && (
+          <div className="absolute left-2 right-2 top-full z-50 mt-1 rounded-md border border-border bg-surface-100 py-1 shadow-lg">
+            {projects.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => {
+                  setCurrentProject(p);
+                  setDropdownOpen(false);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-neutral-300 hover:bg-surface-300"
+              >
+                {p.id === currentProject?.id && <Check className="h-3 w-3 text-accent-400" />}
+                {p.id !== currentProject?.id && <span className="w-3" />}
+                <span className="truncate">{p.name}</span>
+              </button>
+            ))}
+            <div className="border-t border-border mt-1 pt-1">
+              {creating ? (
+                <div className="px-3 py-1.5">
+                  <input
+                    autoFocus
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                    placeholder="Project name"
+                    className="w-full rounded bg-surface-300 px-2 py-1 text-sm text-white placeholder-neutral-500 outline-none focus:ring-1 focus:ring-accent-500"
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setCreating(true)}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-neutral-400 hover:bg-surface-300 hover:text-white"
+                >
+                  <Plus className="h-3 w-3" />
+                  Create Project
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main nav with sections */}

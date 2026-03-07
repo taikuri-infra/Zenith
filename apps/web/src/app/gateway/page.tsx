@@ -8,6 +8,7 @@ import { PageWithTableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
+import { useProject } from "@/hooks/use-project";
 import { getApi } from "@/lib/get-api";
 import { type ApiGateway, type GatewayRouteInfo, type DeployApp } from "@/lib/api";
 import { useState, useCallback } from "react";
@@ -21,6 +22,7 @@ const methodColors: Record<string, string> = {
 
 export default function GatewayPage() {
   const { gateways, appsDeploy } = getApi();
+  const projectId = useProject();
 
   // Gateways list
   const {
@@ -28,10 +30,10 @@ export default function GatewayPage() {
     loading: gwLoading,
     error: gwError,
     refetch: gwRefetch,
-  } = useApi(() => gateways.list(), []);
+  } = useApi(() => gateways.list(projectId || undefined), [projectId]);
 
   // User's apps (for route target dropdown)
-  const { data: appsData } = useApi(() => appsDeploy.list(), []);
+  const { data: appsData } = useApi(() => appsDeploy.list(projectId || undefined), [projectId]);
   const userApps: DeployApp[] = appsData?.items ?? [];
 
   // Selected gateway

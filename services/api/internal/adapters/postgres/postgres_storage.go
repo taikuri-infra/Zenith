@@ -55,9 +55,9 @@ func (r *PostgresStorageRepository) CreateBucket(ctx context.Context, appID, use
 	s3BucketName := "zenith-" + strings.ToLower(uid) + "-" + input.Name
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO user_buckets (id, app_id, user_id, name, s3_prefix, s3_bucket_name, access, region, size_mb, max_size_mb, objects, status, endpoint, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-		id, appID, userID, input.Name, s3Prefix, s3BucketName, string(access), "fsn1", 0, 1024, 0, string(entities.BucketStatusActive), endpoint, now, now,
+		`INSERT INTO user_buckets (id, app_id, user_id, project_id, name, s3_prefix, s3_bucket_name, access, region, size_mb, max_size_mb, objects, status, endpoint, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		id, appID, userID, "", input.Name, s3Prefix, s3BucketName, string(access), "fsn1", 0, 1024, 0, string(entities.BucketStatusActive), endpoint, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_user_buckets_user_name") {
@@ -87,11 +87,11 @@ func (r *PostgresStorageRepository) CreateBucket(ctx context.Context, appID, use
 	}, nil
 }
 
-const bucketSelectCols = `id, app_id, user_id, name, s3_prefix, s3_bucket_name, access, region, size_mb, max_size_mb, objects, status, endpoint, created_at, updated_at`
+const bucketSelectCols = `id, app_id, user_id, project_id, name, s3_prefix, s3_bucket_name, access, region, size_mb, max_size_mb, objects, status, endpoint, created_at, updated_at`
 
 func scanBucket(scanner interface{ Scan(dest ...any) error }) (*entities.UserBucket, error) {
 	var b entities.UserBucket
-	err := scanner.Scan(&b.ID, &b.AppID, &b.UserID, &b.Name, &b.S3Prefix, &b.S3BucketName, &b.Access, &b.Region, &b.SizeMB, &b.MaxSizeMB, &b.Objects, &b.Status, &b.Endpoint, &b.CreatedAt, &b.UpdatedAt)
+	err := scanner.Scan(&b.ID, &b.AppID, &b.UserID, &b.ProjectID, &b.Name, &b.S3Prefix, &b.S3BucketName, &b.Access, &b.Region, &b.SizeMB, &b.MaxSizeMB, &b.Objects, &b.Status, &b.Endpoint, &b.CreatedAt, &b.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +144,26 @@ func (r *PostgresStorageRepository) ListBucketsByUser(ctx context.Context, userI
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list buckets by user: %w", err)
+	}
+	defer rows.Close()
+
+	var buckets []entities.UserBucket
+	for rows.Next() {
+		b, err := scanBucket(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan bucket: %w", err)
+		}
+		buckets = append(buckets, *b)
+	}
+	return buckets, nil
+}
+
+func (r *PostgresStorageRepository) ListBucketsByProject(ctx context.Context, projectID string) ([]entities.UserBucket, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+bucketSelectCols+` FROM user_buckets WHERE project_id = $1 ORDER BY created_at DESC`, projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list buckets by project: %w", err)
 	}
 	defer rows.Close()
 

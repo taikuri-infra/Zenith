@@ -146,6 +146,19 @@ func (r *MemoryStorageRepository) ListBucketsByUser(_ context.Context, userID st
 	return result, nil
 }
 
+func (r *MemoryStorageRepository) ListBucketsByProject(_ context.Context, projectID string) ([]entities.UserBucket, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []entities.UserBucket
+	for _, b := range r.buckets {
+		if b.ProjectID == projectID {
+			result = append(result, *b)
+		}
+	}
+	return result, nil
+}
+
 func (r *MemoryStorageRepository) DeleteBucket(_ context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

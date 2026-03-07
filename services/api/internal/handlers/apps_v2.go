@@ -25,6 +25,7 @@ type AppImageDeployer interface {
 // This replaces the original CRD-based AppHandler for Phase 2.
 type AppHandlerV2 struct {
 	appRepo      ports.AppRepository
+	projectRepo  ports.ProjectRepository
 	baseDomain   string
 	deployer     AppDeleter
 	pipeline     AppImageDeployer
@@ -36,6 +37,11 @@ func NewAppHandlerV2(appRepo ports.AppRepository, baseDomain string, deployer Ap
 	return &AppHandlerV2{appRepo: appRepo, baseDomain: baseDomain, deployer: deployer, pipeline: pipeline}
 }
 
+// SetProjectRepo configures the project repository for default project resolution.
+func (h *AppHandlerV2) SetProjectRepo(repo ports.ProjectRepository) {
+	h.projectRepo = repo
+}
+
 // SetOnAppDeleted sets a callback invoked after an app is deleted (e.g. to stop gateway routes).
 func (h *AppHandlerV2) SetOnAppDeleted(fn func(ctx context.Context, appID string)) {
 	h.onAppDeleted = fn
@@ -45,6 +51,7 @@ func (h *AppHandlerV2) SetOnAppDeleted(fn func(ctx context.Context, appID string
 
 // CreateAppV2Request is the request body for creating a new app.
 type CreateAppV2Request struct {
+	ProjectID        string `json:"project_id,omitempty"`
 	Name             string `json:"name"`
 	DeploySource     string `json:"deploy_source"`
 	RepoURL          string `json:"repo_url,omitempty"`
@@ -61,6 +68,7 @@ type CreateAppV2Request struct {
 // AppV2Response is the API response for an app.
 type AppV2Response struct {
 	ID           string    `json:"id"`
+	ProjectID    string    `json:"project_id"`
 	Name         string    `json:"name"`
 	DeploySource string    `json:"deploy_source"`
 	RepoURL      string    `json:"repo_url,omitempty"`
@@ -89,6 +97,7 @@ func (h *AppHandlerV2) appToResponse(app *entities.App) AppV2Response {
 	}
 	return AppV2Response{
 		ID:           app.ID,
+		ProjectID:    app.ProjectID,
 		Name:         app.Name,
 		DeploySource: string(app.DeploySource),
 		RepoURL:      app.RepoURL,
@@ -146,8 +155,17 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		return NewBadRequest("app_type must be 'web', 'worker', or 'cron'")
 	}
 
+	// Resolve project_id: use provided or fall back to default project
+	projectID := req.ProjectID
+	if projectID == "" && h.projectRepo != nil {
+		if dp, err := h.projectRepo.GetDefaultProject(c.Context(), userID.(string)); err == nil {
+			projectID = dp.ID
+		}
+	}
+
 	app, err := h.appRepo.CreateApp(c.Context(), &dto.CreateAppInput{
 		UserID:           userID.(string),
+		ProjectID:        projectID,
 		Name:             req.Name,
 		DeploySource:     deploySource,
 		RepoURL:          req.RepoURL,
@@ -183,14 +201,21 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(h.appToResponse(app))
 }
 
-// List handles GET /api/v1/apps
+// List handles GET /api/v1/apps?project_id=xxx
 func (h *AppHandlerV2) List(c *fiber.Ctx) error {
 	userID := c.Locals("user_id")
 	if userID == nil {
 		return NewUnauthorized("authentication required")
 	}
 
-	apps, err := h.appRepo.ListAppsByUser(c.Context(), userID.(string))
+	var apps []entities.App
+	var err error
+	projectID := c.Query("project_id")
+	if projectID != "" {
+		apps, err = h.appRepo.ListAppsByProject(c.Context(), projectID)
+	} else {
+		apps, err = h.appRepo.ListAppsByUser(c.Context(), userID.(string))
+	}
 	if err != nil {
 		return NewInternal("failed to list apps")
 	}

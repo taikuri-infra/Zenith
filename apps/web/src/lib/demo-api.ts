@@ -105,13 +105,11 @@ function toApiStorage(m: (typeof mockStorage)[number]): StorageBucket {
 
 const demoProject: Project = {
   id: "demo-project",
-  name: "demo-project",
-  display_name: "My Startup",
-  owner: "demo@zenith.dev",
-  plan: "Starter",
-  region: "fsn1",
-  status: "active",
+  name: "My Startup",
+  slug: "my-startup",
+  description: "Demo project for the Zenith platform",
   created_at: "2026-01-15T00:00:00Z",
+  updated_at: "2026-01-15T00:00:00Z",
 };
 
 export const demoAuth = {
@@ -139,9 +137,9 @@ export const demoAuth = {
 };
 
 export const demoProjects = {
-  list: async (): Promise<{ items: Project[] }> => {
+  list: async (): Promise<{ items: Project[]; total: number }> => {
     await delay();
-    return { items: [demoProject] };
+    return { items: [demoProject], total: 1 };
   },
   get: async (): Promise<Project> => {
     await delay();
@@ -243,7 +241,7 @@ const mockObjects: StorageObject[] = [
 ];
 
 export const demoStorageBuckets = {
-  list: async (): Promise<StorageBucketV2[]> => {
+  list: async (_projectId?: string): Promise<StorageBucketV2[]> => {
     await delay();
     return mockStandaloneBuckets;
   },
@@ -311,6 +309,7 @@ export const demoStorageBuckets = {
 const mockDeployApps: DeployApp[] = [
   {
     id: "da-1",
+    project_id: "demo-project",
     user_id: "demo-user",
     name: "my-next-app",
     repo_url: "https://github.com/demo/my-next-app",
@@ -328,6 +327,7 @@ const mockDeployApps: DeployApp[] = [
   },
   {
     id: "da-2",
+    project_id: "demo-project",
     user_id: "demo-user",
     name: "go-api",
     repo_url: "https://github.com/demo/go-api",
@@ -345,6 +345,7 @@ const mockDeployApps: DeployApp[] = [
   },
   {
     id: "da-3",
+    project_id: "demo-project",
     user_id: "demo-user",
     name: "flask-ml",
     repo_url: "https://github.com/demo/flask-ml",
@@ -360,6 +361,7 @@ const mockDeployApps: DeployApp[] = [
   },
   {
     id: "da-4",
+    project_id: "demo-project",
     user_id: "demo-user",
     name: "email-worker",
     repo_url: "https://github.com/demo/email-worker",
@@ -376,6 +378,7 @@ const mockDeployApps: DeployApp[] = [
   },
   {
     id: "da-5",
+    project_id: "demo-project",
     user_id: "demo-user",
     name: "daily-report",
     repo_url: "https://github.com/demo/daily-report",
@@ -394,7 +397,7 @@ const mockDeployApps: DeployApp[] = [
 ];
 
 export const demoAppsDeploy = {
-  list: async (): Promise<{ items: DeployApp[]; total: number }> => {
+  list: async (_projectId?: string): Promise<{ items: DeployApp[]; total: number }> => {
     await delay();
     return { items: mockDeployApps, total: mockDeployApps.length };
   },
@@ -756,14 +759,14 @@ const allDemoDatabases: AppDatabase[] = [
 ];
 
 export const demoUserDatabases = {
-  list: async (): Promise<AppDatabase[]> => {
+  list: async (_projectId?: string): Promise<AppDatabase[]> => {
     await delay();
     return allDemoDatabases;
   },
 };
 
 export const demoStandaloneDatabases = {
-  list: async (): Promise<AppDatabase[]> => {
+  list: async (_projectId?: string): Promise<AppDatabase[]> => {
     await delay();
     return allDemoDatabases;
   },
@@ -1300,7 +1303,7 @@ const demoGatewayRoutes = [
 ];
 
 export const demoGateways = {
-  list: async () => { await delay(300); return [demoGateway]; },
+  list: async (_projectId?: string) => { await delay(300); return [demoGateway]; },
   get: async (id: string) => { await delay(300); return { gateway: { ...demoGateway, id }, routes: demoGatewayRoutes }; },
   create: async (name: string) => { await delay(500); return { ...demoGateway, id: "gw-new-" + Date.now(), name, slug: name.toLowerCase().replace(/\s+/g, "-"), route_count: 0 }; },
   update: async (id: string, name: string) => { await delay(300); return { ...demoGateway, id, name }; },

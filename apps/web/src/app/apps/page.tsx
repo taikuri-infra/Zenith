@@ -42,7 +42,7 @@ export default function AppsPage() {
     data: deployData,
     loading: deployLoading,
     error: deployError,
-  } = useApi(() => appsDeploy.list(), []);
+  } = useApi(() => appsDeploy.list(projectId || undefined), [projectId]);
 
   // User plan (for showing Zenith registry hint)
   const { data: planData } = useApi(() => userPlan.get(), []);

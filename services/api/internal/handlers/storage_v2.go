@@ -137,11 +137,18 @@ func (h *StorageHandlerV2) Delete(c *fiber.Ctx) error {
 }
 
 // ListByUser returns all storage buckets for the authenticated user.
-// GET /api/v1/storage
+// GET /api/v1/storage-buckets?project_id=xxx
 func (h *StorageHandlerV2) ListByUser(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
-	buckets, err := h.storageRepo.ListBucketsByUser(c.Context(), userID)
+	var buckets []entities.UserBucket
+	var err error
+	projectID := c.Query("project_id")
+	if projectID != "" {
+		buckets, err = h.storageRepo.ListBucketsByProject(c.Context(), projectID)
+	} else {
+		buckets, err = h.storageRepo.ListBucketsByUser(c.Context(), userID)
+	}
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}

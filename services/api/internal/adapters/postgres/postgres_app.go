@@ -66,16 +66,16 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 	}
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO apps (id, user_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
-		id, input.UserID, input.Name, string(deploySource), input.RepoURL, branch,
+		`INSERT INTO apps (id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+		id, input.UserID, input.ProjectID, input.Name, string(deploySource), input.RepoURL, branch,
 		input.ImageURL, input.RegistryUsername, input.RegistryPassword,
 		string(entities.FrameworkUnknown), string(entities.AppStatusPending), subdomain, port,
 		string(appType), input.Command, input.CronSchedule, now, now,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "idx_apps_user_name") {
-			return nil, fmt.Errorf("app '%s' already exists for this user", input.Name)
+		if strings.Contains(err.Error(), "idx_apps_project_name") {
+			return nil, fmt.Errorf("app '%s' already exists in this project", input.Name)
 		}
 		if strings.Contains(err.Error(), "idx_apps_subdomain") {
 			return nil, fmt.Errorf("subdomain '%s' is already taken", subdomain)
@@ -86,6 +86,7 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 	return &entities.App{
 		ID:               id,
 		UserID:           input.UserID,
+		ProjectID:        input.ProjectID,
 		Name:             input.Name,
 		DeploySource:     deploySource,
 		RepoURL:          input.RepoURL,
@@ -111,7 +112,7 @@ func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	var app entities.App
 	var framework, status, deploySource, appType string
 
-	err := scan(&app.ID, &app.UserID, &app.Name, &deploySource, &app.RepoURL, &app.Branch,
+	err := scan(&app.ID, &app.UserID, &app.ProjectID, &app.Name, &deploySource, &app.RepoURL, &app.Branch,
 		&app.ImageURL, &app.RegistryUser, &app.RegistryPassword,
 		&framework, &status, &app.Subdomain, &app.Port,
 		&appType, &app.Command, &app.CronSchedule,
@@ -130,7 +131,7 @@ func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	return &app, nil
 }
 
-const appColumns = `id, user_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, created_at, updated_at`
+const appColumns = `id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, created_at, updated_at`
 
 func (r *PostgresAppRepository) GetApp(ctx context.Context, id string) (*entities.App, error) {
 	row := r.pool.QueryRow(ctx,
@@ -175,6 +176,26 @@ func (r *PostgresAppRepository) ListAppsByUser(ctx context.Context, userID strin
 		apps = append(apps, *app)
 	}
 
+	return apps, nil
+}
+
+func (r *PostgresAppRepository) ListAppsByProject(ctx context.Context, projectID string) ([]entities.App, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+appColumns+` FROM apps WHERE project_id = $1 ORDER BY created_at DESC`, projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list apps by project: %w", err)
+	}
+	defer rows.Close()
+
+	var apps []entities.App
+	for rows.Next() {
+		app, err := scanApp(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan app: %w", err)
+		}
+		apps = append(apps, *app)
+	}
 	return apps, nil
 }
 

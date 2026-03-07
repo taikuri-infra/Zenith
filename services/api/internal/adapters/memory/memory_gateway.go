@@ -91,6 +91,22 @@ func (r *MemoryGatewayRepository) ListGatewaysByUser(_ context.Context, userID s
 	return gws, nil
 }
 
+func (r *MemoryGatewayRepository) ListGatewaysByProject(_ context.Context, projectID string) ([]entities.Gateway, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var gws []entities.Gateway
+	for _, g := range r.gateways {
+		if g.ProjectID == projectID {
+			gws = append(gws, *g)
+		}
+	}
+	sort.Slice(gws, func(i, j int) bool {
+		return gws[i].CreatedAt.After(gws[j].CreatedAt)
+	})
+	return gws, nil
+}
+
 func (r *MemoryGatewayRepository) UpdateGateway(_ context.Context, id, name string) (*entities.Gateway, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

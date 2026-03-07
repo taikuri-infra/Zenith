@@ -42,11 +42,18 @@ func (h *GatewayHandler) CreateGateway(c *fiber.Ctx) error {
 }
 
 // ListGateways lists the user's gateways.
-// GET /api/v1/gateways
+// GET /api/v1/gateways?project_id=xxx
 func (h *GatewayHandler) ListGateways(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
-	gws, err := h.gwSvc.ListGateways(c.Context(), userID)
+	var gws []entities.Gateway
+	var err error
+	projectID := c.Query("project_id")
+	if projectID != "" {
+		gws, err = h.gwRepo.ListGatewaysByProject(c.Context(), projectID)
+	} else {
+		gws, err = h.gwSvc.ListGateways(c.Context(), userID)
+	}
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}

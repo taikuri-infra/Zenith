@@ -32,6 +32,7 @@ type UserDatabase struct {
 	ID          string              `json:"id"`
 	AppID       string              `json:"app_id"`
 	UserID      string              `json:"user_id"`
+	ProjectID   string              `json:"project_id"`
 	Name        string              `json:"name"`
 	Engine      DatabaseEngine      `json:"engine"`
 	DBName      string              `json:"db_name"`

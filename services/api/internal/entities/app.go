@@ -51,6 +51,7 @@ const (
 type App struct {
 	ID               string       `json:"id"`
 	UserID           string       `json:"user_id"`
+	ProjectID        string       `json:"project_id"`
 	Name             string       `json:"name"`
 	DeploySource     DeploySource `json:"deploy_source"`
 	RepoURL          string       `json:"repo_url"`

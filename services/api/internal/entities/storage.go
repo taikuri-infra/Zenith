@@ -25,6 +25,7 @@ type UserBucket struct {
 	ID           string       `json:"id"`
 	AppID        string       `json:"app_id"`
 	UserID       string       `json:"user_id"`
+	ProjectID    string       `json:"project_id"`
 	Name         string       `json:"name"`
 	S3Prefix     string       `json:"s3_prefix"`      // e.g. "u/{userID}/{name}/" (legacy fallback)
 	S3BucketName string       `json:"s3_bucket_name"` // real S3 bucket name (when non-empty, uses real bucket)

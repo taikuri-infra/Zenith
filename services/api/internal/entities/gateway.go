@@ -51,6 +51,7 @@ var AllowedPlugins = map[string]bool{
 type Gateway struct {
 	ID         string        `json:"id"`
 	UserID     string        `json:"user_id"`
+	ProjectID  string        `json:"project_id"`
 	Name       string        `json:"name"`
 	Slug       string        `json:"slug"`
 	Status     GatewayStatus `json:"status"`

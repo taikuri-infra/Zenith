@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
+import { useProject } from "@/hooks/use-project";
 import { getApi } from "@/lib/get-api";
 import { type AppDatabase } from "@/lib/api";
 import Link from "next/link";
@@ -53,6 +54,7 @@ function CopyField({ label, value, mono = true }: { label: string; value: string
 
 export default function DatabasesPage() {
   const { standaloneDatabases } = getApi();
+  const projectId = useProject();
   const [showCreate, setShowCreate] = useState(false);
   const [createEngine, setCreateEngine] = useState("postgresql");
   const [createName, setCreateName] = useState("");
@@ -64,7 +66,7 @@ export default function DatabasesPage() {
     loading,
     error,
     refetch,
-  } = useApi(() => standaloneDatabases.list(), []);
+  } = useApi(() => standaloneDatabases.list(projectId || undefined), [projectId]);
 
   const handleCreate = async () => {
     if (!createName.trim()) return;

@@ -22,12 +22,12 @@ func NewPostgresDatabaseRepository(pool *pgxpool.Pool) *PostgresDatabaseReposito
 	return &PostgresDatabaseRepository{pool: pool}
 }
 
-const dbSelectCols = `id, app_id, user_id, name, engine, db_name, db_user, host, port, size_mb, max_size_mb, status, provisioner, created_at, updated_at`
+const dbSelectCols = `id, app_id, user_id, project_id, name, engine, db_name, db_user, host, port, size_mb, max_size_mb, status, provisioner, created_at, updated_at`
 
 func scanDatabase(scanner interface{ Scan(dest ...any) error }) (*entities.UserDatabase, error) {
 	var d entities.UserDatabase
 	err := scanner.Scan(
-		&d.ID, &d.AppID, &d.UserID, &d.Name, &d.Engine,
+		&d.ID, &d.AppID, &d.UserID, &d.ProjectID, &d.Name, &d.Engine,
 		&d.DBName, &d.DBUser, &d.Host, &d.Port,
 		&d.SizeMB, &d.MaxSizeMB, &d.Status, &d.Provisioner,
 		&d.CreatedAt, &d.UpdatedAt,
@@ -64,9 +64,9 @@ func (r *PostgresDatabaseRepository) CreateDatabase(ctx context.Context, appID, 
 	}
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO user_databases (id, app_id, user_id, name, engine, db_name, db_user, host, port, size_mb, max_size_mb, status, provisioner, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-		id, appID, userID, name, string(engine), dbName, dbUser, "", 5432, 0, maxSizeMB,
+		`INSERT INTO user_databases (id, app_id, user_id, project_id, name, engine, db_name, db_user, host, port, size_mb, max_size_mb, status, provisioner, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		id, appID, userID, "", name, string(engine), dbName, dbUser, "", 5432, 0, maxSizeMB,
 		string(entities.DatabaseStatusProvisioning), string(entities.DBProvisionerShared), now, now,
 	)
 	if err != nil {
@@ -136,6 +136,26 @@ func (r *PostgresDatabaseRepository) ListDatabasesByUser(ctx context.Context, us
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list databases by user: %w", err)
+	}
+	defer rows.Close()
+
+	var dbs []entities.UserDatabase
+	for rows.Next() {
+		d, err := scanDatabase(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan database: %w", err)
+		}
+		dbs = append(dbs, *d)
+	}
+	return dbs, nil
+}
+
+func (r *PostgresDatabaseRepository) ListDatabasesByProject(ctx context.Context, projectID string) ([]entities.UserDatabase, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+dbSelectCols+` FROM user_databases WHERE project_id = $1 ORDER BY created_at DESC`, projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list databases by project: %w", err)
 	}
 	defer rows.Close()
 
