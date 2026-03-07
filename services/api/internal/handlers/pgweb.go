@@ -43,7 +43,7 @@ func (h *PgwebHandler) Start(c *fiber.Ctx) error {
 	}
 	c.BodyParser(&body)
 
-	readOnly := true
+	readOnly := false // default: full access for owner
 	if body.ReadOnly != nil {
 		readOnly = *body.ReadOnly
 	}

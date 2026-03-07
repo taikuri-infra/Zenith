@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { getApi } from "@/lib/get-api";
-import { Play, Square, Shield, ShieldOff, Loader2, AlertTriangle } from "lucide-react";
+import { Play, Square, Loader2, AlertTriangle } from "lucide-react";
 
 interface DatabaseExplorerProps {
   dbId: string;
@@ -18,7 +18,6 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
     status: string;
     readonly: boolean;
   } | null>(null);
-  const [readOnly, setReadOnly] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -32,7 +31,7 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
           setSession({
             url: status.url,
             status: status.status || "running",
-            readonly: status.readonly ?? true,
+            readonly: status.readonly ?? false,
           });
         }
       } catch {
@@ -59,7 +58,7 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
         <AlertTriangle className="h-10 w-10 text-neutral-500 mb-3" />
         <h3 className="text-sm font-medium text-white mb-1">Not Supported</h3>
         <p className="text-xs text-neutral-500 max-w-sm">
-          Database Explorer is only available for PostgreSQL databases. This
+          Database Admin Panel is only available for PostgreSQL databases. This
           database uses {engine}.
         </p>
       </div>
@@ -78,9 +77,8 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
     setLoading(true);
     setError(null);
     try {
-      const result = await standaloneDatabases.startExplorer(dbId, readOnly);
+      const result = await standaloneDatabases.startExplorer(dbId, false);
       if (result.status === "starting") {
-        // Poll for readiness
         setSession({ ...result, status: "starting" });
         pollRef.current = setInterval(async () => {
           try {
@@ -89,7 +87,7 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
               setSession({
                 url: status.url!,
                 status: "running",
-                readonly: status.readonly ?? true,
+                readonly: status.readonly ?? false,
               });
               if (pollRef.current) clearInterval(pollRef.current);
             }
@@ -101,7 +99,7 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
         setSession(result);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start explorer");
+      setError(err instanceof Error ? err.message : "Failed to start admin panel");
     } finally {
       setLoading(false);
     }
@@ -114,7 +112,7 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
       setSession(null);
       if (pollRef.current) clearInterval(pollRef.current);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to stop explorer");
+      setError(err instanceof Error ? err.message : "Failed to stop admin panel");
     } finally {
       setLoading(false);
     }
@@ -129,22 +127,13 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
             {session.status === "starting" ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
-                <span className="text-xs text-amber-400">Starting explorer...</span>
+                <span className="text-xs text-amber-400">Starting admin panel...</span>
               </>
             ) : (
               <>
                 <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs text-neutral-400">Explorer running</span>
+                <span className="text-xs text-neutral-400">Admin panel running</span>
               </>
-            )}
-            {session.readonly ? (
-              <span className="flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-medium text-blue-400">
-                <Shield className="h-3 w-3" /> Read-only
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-                <ShieldOff className="h-3 w-3" /> Read-write
-              </span>
             )}
           </div>
           <button
@@ -153,21 +142,21 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
             className="flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
           >
             <Square className="h-3 w-3" />
-            Stop Explorer
+            Stop
           </button>
         </div>
         {session.status === "running" ? (
           <iframe
             src={session.url}
             className="flex-1 w-full rounded-lg border border-border bg-white"
-            title="Database Explorer"
+            title="Database Admin Panel"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           />
         ) : (
           <div className="flex-1 flex items-center justify-center rounded-lg border border-border bg-surface-100">
             <div className="text-center">
               <Loader2 className="h-8 w-8 animate-spin text-accent-400 mx-auto mb-3" />
-              <p className="text-sm text-neutral-400">Starting pgweb pod...</p>
+              <p className="text-sm text-neutral-400">Starting admin panel...</p>
               <p className="text-xs text-neutral-500 mt-1">This usually takes 10-20 seconds</p>
             </div>
           </div>
@@ -182,7 +171,7 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
       <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-500/10">
         <Play className="h-7 w-7 text-accent-400" />
       </div>
-      <h3 className="text-sm font-medium text-white mb-1">Database Explorer</h3>
+      <h3 className="text-sm font-medium text-white mb-1">Database Admin Panel</h3>
       <p className="text-xs text-neutral-500 max-w-sm mb-6">
         Browse tables, inspect data, and run queries directly in your browser.
         Powered by pgweb. Sessions auto-expire after 30 minutes.
@@ -194,18 +183,6 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
         </div>
       )}
 
-      <div className="flex items-center gap-3 mb-6">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={readOnly}
-            onChange={(e) => setReadOnly(e.target.checked)}
-            className="rounded border-border bg-surface-200 text-accent-500 focus:ring-accent-500"
-          />
-          <span className="text-xs text-neutral-400">Read-only mode</span>
-        </label>
-      </div>
-
       <button
         onClick={handleStart}
         disabled={loading}
@@ -216,7 +193,7 @@ export function DatabaseExplorer({ dbId, engine }: DatabaseExplorerProps) {
         ) : (
           <Play className="h-4 w-4" />
         )}
-        {loading ? "Starting..." : "Start Explorer"}
+        {loading ? "Starting..." : "Start Admin Panel"}
       </button>
     </div>
   );

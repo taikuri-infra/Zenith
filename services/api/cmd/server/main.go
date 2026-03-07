@@ -481,7 +481,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Delete("/databases/:dbId", dbHandlerV2.DeleteStandalone)
 
 	// Database Explorer (pgweb — on-demand database browser)
-	pgwebSvc := services.NewPgwebService(dbRepo, k8sClient, "zenith-staging", cfg.BaseDomain)
+	pgwebSvc := services.NewPgwebService(dbRepo, k8sClient, "zenith-apps", cfg.BaseDomain)
 	go pgwebSvc.CleanupExpired(context.Background())
 	pgwebHandler := handlers.NewPgwebHandler(pgwebSvc, dbRepo)
 	protected.Post("/databases/:dbId/explorer", pgwebHandler.Start)

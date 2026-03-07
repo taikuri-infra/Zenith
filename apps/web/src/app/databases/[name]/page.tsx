@@ -204,7 +204,7 @@ export default function DatabaseDetailPage() {
             }`}
           >
             <Table2 className="h-4 w-4" />
-            Explorer
+            Admin Panel
           </button>
         </div>
 

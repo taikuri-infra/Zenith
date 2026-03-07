@@ -512,7 +512,7 @@ export const standaloneDatabases = {
       `/api/v1/databases/${id}/reset-password`,
       { method: "POST" }
     ),
-  startExplorer: (id: string, readonly = true) =>
+  startExplorer: (id: string, readonly = false) =>
     apiFetch<{ url: string; status: string; readonly: boolean }>(
       `/api/v1/databases/${id}/explorer`,
       { method: "POST", body: JSON.stringify({ readonly }) }
