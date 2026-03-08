@@ -34,6 +34,20 @@ func RunMigrations(dsn string, migrations fs.FS) error {
 	}
 	defer m.Close()
 
+	// Log source version info
+	srcV, srcErr := source.First()
+	if srcErr == nil {
+		slog.Info("migration source available", "first_version", srcV)
+	}
+
+	// Check current DB version
+	curV, dirty, verErr := m.Version()
+	if verErr != nil {
+		slog.Info("no migration version found, will run all migrations", "error", verErr)
+	} else {
+		slog.Info("current migration version", "version", curV, "dirty", dirty)
+	}
+
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
 			v, dirty, _ := m.Version()
