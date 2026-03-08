@@ -64,6 +64,7 @@ type AuthService struct {
 	users       ports.UserRepository
 	planRepo    ports.UserPlanRepository    // nil-safe — skips plan assignment when nil
 	projectRepo ports.ProjectRepository     // nil-safe — skips default project creation when nil
+	teamRepo    ports.TeamMemberRepository  // nil-safe — skips team member lookup when nil
 	jwtSecret   string
 	emailSender ports.EmailSender // nil = skip sending emails (dev mode)
 	appURL      string            // frontend URL for verification links
@@ -86,6 +87,11 @@ func NewAuthService(users ports.UserRepository, jwtSecret string, planRepo ports
 // SetProjectRepo configures the project repository for default project creation on registration.
 func (s *AuthService) SetProjectRepo(repo ports.ProjectRepository) {
 	s.projectRepo = repo
+}
+
+// SetTeamRepo configures the team member repository for team login enrichment.
+func (s *AuthService) SetTeamRepo(repo ports.TeamMemberRepository) {
+	s.teamRepo = repo
 }
 
 // SetOAuthConfig configures OAuth provider credentials.
@@ -616,12 +622,44 @@ func (s *AuthService) findOrCreateOAuthUser(ctx context.Context, email, name, pr
 }
 
 func (s *AuthService) issueTokens(user *entities.User) (*TokenPair, error) {
+	// Check if user is a team member — issue tokens with AccountID if so
+	if s.teamRepo != nil {
+		member, err := s.teamRepo.GetMemberByUserID(context.Background(), user.ID)
+		if err == nil && member != nil {
+			return s.issueTeamTokens(user, member)
+		}
+	}
+
 	accessToken, err := zenithJWT.GenerateToken(s.jwtSecret, user, AccessTokenExpiry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token")
 	}
 
 	refreshToken, err := zenithJWT.GenerateToken(s.jwtSecret, user, RefreshTokenExpiry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token")
+	}
+
+	return &TokenPair{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    int(AccessTokenExpiry.Seconds()),
+	}, nil
+}
+
+func (s *AuthService) issueTeamTokens(user *entities.User, member *entities.TeamMember) (*TokenPair, error) {
+	overrides := zenithJWT.TeamMemberOverrides{
+		AccountID: member.AccountID,
+		MemberID:  member.ID,
+		Role:      member.Role,
+	}
+
+	accessToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, AccessTokenExpiry, overrides)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate access token")
+	}
+
+	refreshToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, RefreshTokenExpiry, overrides)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token")
 	}

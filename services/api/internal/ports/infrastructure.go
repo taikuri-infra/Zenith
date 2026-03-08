@@ -295,6 +295,7 @@ type DeprovisionInput struct {
 // Implemented by: adapters/resendclient/client.go
 type EmailSender interface {
 	SendVerificationEmail(ctx context.Context, to, name, verificationURL string) error
+	SendTeamInviteEmail(ctx context.Context, to, inviterName, teamName, inviteURL string) error
 }
 
 // ---------------------------------------------------------------------------

@@ -2,71 +2,16 @@
 
 import { Shell } from "@/components/shell";
 import { Modal } from "@/components/modal";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { getApi } from "@/lib/get-api";
+import type { TeamMember, APIKey } from "@/lib/api";
 
-interface ApiKey {
-  name: string;
-  prefix: string;
-  scopes: string[];
-  created: string;
-  lastUsed: string;
-  status: "active";
-}
+const api = getApi();
 
-interface TeamMember {
-  name: string;
-  email: string;
-  role: string;
-  lastActive: string;
-  joined: string;
-}
-
-const initialApiKeys: ApiKey[] = [
-  {
-    name: "Production API",
-    prefix: "zen_prod_a8f2...x91k",
-    scopes: ["read", "write", "deploy"],
-    created: "Jan 15, 2026",
-    lastUsed: "2 hours ago",
-    status: "active",
-  },
-  {
-    name: "CI/CD Pipeline",
-    prefix: "zen_ci_d4e7...m32n",
-    scopes: ["deploy", "registry:push"],
-    created: "Feb 1, 2026",
-    lastUsed: "35 min ago",
-    status: "active",
-  },
-  {
-    name: "Monitoring",
-    prefix: "zen_mon_b1c9...k47p",
-    scopes: ["read"],
-    created: "Feb 10, 2026",
-    lastUsed: "5 min ago",
-    status: "active",
-  },
-];
-
-const initialTeamMembers: TeamMember[] = [
-  { name: "Babak Dorani", email: "babak@startup.com", role: "Owner", lastActive: "5 min ago", joined: "Nov 1, 2025" },
-  { name: "Sarah Chen", email: "sarah@startup.com", role: "Admin", lastActive: "2 hours ago", joined: "Nov 15, 2025" },
-  { name: "Mike Johnson", email: "mike@startup.com", role: "Developer", lastActive: "1 day ago", joined: "Jan 20, 2026" },
-  { name: "Intern", email: "intern@startup.com", role: "Viewer", lastActive: "1 week ago", joined: "Feb 5, 2026" },
-];
-
-const mockRoles = [
-  { name: "Owner", description: "Full platform access, billing, danger zone", members: 1, color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
-  { name: "Admin", description: "Manage services, deployments, team", members: 1, color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
-  { name: "Developer", description: "Deploy, view logs, manage apps", members: 1, color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
-  { name: "Viewer", description: "Read-only access to all resources", members: 1, color: "bg-neutral-500/10 text-neutral-400 border-neutral-500/20" },
-];
-
-const roleBadgeStyles: Record<string, string> = {
-  Owner: "bg-purple-500/10 text-purple-400",
-  Admin: "bg-blue-500/10 text-blue-400",
-  Developer: "bg-emerald-500/10 text-emerald-400",
-  Viewer: "bg-neutral-500/10 text-neutral-400",
+const statusBadge: Record<string, { color: string; label: string }> = {
+  active: { color: "bg-emerald-500/10 text-emerald-400", label: "Active" },
+  pending: { color: "bg-amber-500/10 text-amber-400", label: "Pending" },
+  suspended: { color: "bg-red-500/10 text-red-400", label: "Suspended" },
 };
 
 const scopeColors: Record<string, string> = {
@@ -74,72 +19,141 @@ const scopeColors: Record<string, string> = {
   write: "bg-blue-500/10 text-blue-400",
   deploy: "bg-accent-500/10 text-accent-400",
   "registry:push": "bg-amber-500/10 text-amber-400",
-  "read-write": "bg-blue-500/10 text-blue-400",
-  admin: "bg-purple-500/10 text-purple-400",
+  "terraform:read": "bg-cyan-500/10 text-cyan-400",
+  "terraform:write": "bg-cyan-500/10 text-cyan-400",
+  "s3:read": "bg-violet-500/10 text-violet-400",
+  "s3:write": "bg-violet-500/10 text-violet-400",
+  "*": "bg-red-500/10 text-red-400",
 };
 
+const roleCards = [
+  { name: "Owner", description: "Full platform access, billing, danger zone", color: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
+  { name: "Admin", description: "Manage services, deployments, team", color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+  { name: "Developer", description: "Deploy, view logs, manage apps", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+  { name: "Viewer", description: "Read-only access to all resources", color: "bg-neutral-500/10 text-neutral-400 border-neutral-500/20" },
+];
+
 export default function IAMPage() {
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>(initialApiKeys);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(initialTeamMembers);
+  const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [planLimit, setPlanLimit] = useState<number>(1);
 
   // API Key modal
   const [showCreateKey, setShowCreateKey] = useState(false);
   const [keyName, setKeyName] = useState("");
-  const [keyPermissions, setKeyPermissions] = useState("read");
+  const [keyScopes, setKeyScopes] = useState<string[]>(["read"]);
+  const [keyType, setKeyType] = useState("personal");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
 
   // Invite modal
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("developer");
+  const [inviteError, setInviteError] = useState("");
 
-  const handleCreateKey = () => {
+  const loadData = useCallback(async () => {
+    try {
+      const [keysRes, membersRes, planRes] = await Promise.all([
+        api.apiKeys.list(),
+        api.team.list(),
+        api.userPlan.get(),
+      ]);
+      setApiKeys(keysRes.items || []);
+      setTeamMembers(membersRes.items || []);
+      if (planRes?.limits?.max_team_members) {
+        setPlanLimit(planRes.limits.max_team_members);
+      }
+    } catch {
+      // silently handle — page will show empty states
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleCreateKey = async () => {
     if (!keyName.trim()) return;
-    const randomSuffix = Math.random().toString(36).substring(2, 14);
-    const fullKey = `zn_demo_${randomSuffix}`;
-    const scopeMap: Record<string, string[]> = {
-      read: ["read"],
-      "read-write": ["read", "write"],
-      admin: ["read", "write", "deploy", "registry:push"],
-    };
-    const newKey: ApiKey = {
-      name: keyName.trim(),
-      prefix: `zn_demo_${randomSuffix.substring(0, 4)}...${randomSuffix.substring(randomSuffix.length - 4)}`,
-      scopes: scopeMap[keyPermissions] || ["read"],
-      created: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      lastUsed: "never",
-      status: "active",
-    };
-    setApiKeys((prev) => [...prev, newKey]);
-    setGeneratedKey(fullKey);
+    try {
+      const key = await api.apiKeys.create(keyName.trim(), keyScopes, keyType);
+      if (key.key) {
+        setGeneratedKey(key.key);
+      }
+      setApiKeys((prev) => [...prev, key]);
+    } catch {
+      // handled silently
+    }
+  };
+
+  const handleDeleteKey = async (id: string) => {
+    try {
+      await api.apiKeys.delete(id);
+      setApiKeys((prev) => prev.filter((k) => k.id !== id));
+    } catch {
+      // handled silently
+    }
   };
 
   const handleCloseKeyModal = () => {
     setShowCreateKey(false);
     setKeyName("");
-    setKeyPermissions("read");
+    setKeyScopes(["read"]);
+    setKeyType("personal");
     setGeneratedKey(null);
   };
 
-  const handleInvite = () => {
+  const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
-    const roleMap: Record<string, string> = {
-      admin: "Admin",
-      developer: "Developer",
-      viewer: "Viewer",
-    };
-    const newMember: TeamMember = {
-      name: inviteEmail.trim().split("@")[0],
-      email: inviteEmail.trim(),
-      role: roleMap[inviteRole] || "Developer",
-      lastActive: "never",
-      joined: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    };
-    setTeamMembers((prev) => [...prev, newMember]);
-    setShowInvite(false);
-    setInviteEmail("");
-    setInviteRole("developer");
+    setInviteError("");
+    try {
+      const member = await api.team.invite(inviteEmail.trim(), inviteRole);
+      setTeamMembers((prev) => [...prev, member]);
+      setShowInvite(false);
+      setInviteEmail("");
+      setInviteRole("developer");
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Failed to send invite");
+    }
   };
+
+  const handleRemoveMember = async (id: string) => {
+    try {
+      await api.team.remove(id);
+      setTeamMembers((prev) => prev.filter((m) => m.id !== id));
+    } catch {
+      // handled silently
+    }
+  };
+
+  const handleUpdateRole = async (id: string, role: string) => {
+    try {
+      await api.team.updateRole(id, role);
+      setTeamMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role } : m)));
+    } catch {
+      // handled silently
+    }
+  };
+
+  const toggleScope = (scope: string) => {
+    setKeyScopes((prev) =>
+      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
+    );
+  };
+
+  const memberCount = teamMembers.length + 1; // +1 for owner
+
+  if (loading) {
+    return (
+      <Shell>
+        <div className="flex items-center justify-center py-20">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
+        </div>
+      </Shell>
+    );
+  }
 
   return (
     <Shell>
@@ -148,6 +162,78 @@ export default function IAMPage() {
           <h1 className="text-lg font-semibold text-white">IAM</h1>
           <p className="text-sm text-neutral-500">Platform identity &amp; access management</p>
         </div>
+
+        {/* Team Members */}
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-medium text-white">Team Members</h2>
+              <span className="text-xs text-neutral-500">{memberCount}/{planLimit}</span>
+            </div>
+            <button
+              onClick={() => setShowInvite(true)}
+              disabled={memberCount >= planLimit}
+              className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm text-white hover:bg-accent-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              + Invite Member
+            </button>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-surface-100">
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Email</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Role</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Joined</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-neutral-500">
+                      No team members yet. Invite someone to get started.
+                    </td>
+                  </tr>
+                ) : (
+                  teamMembers.map((member) => (
+                    <tr key={member.id} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
+                      <td className="px-4 py-3 text-neutral-300">{member.email}</td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={member.role}
+                          onChange={(e) => handleUpdateRole(member.id, e.target.value)}
+                          className="rounded-md border border-border bg-surface-200 px-2 py-0.5 text-xs text-white focus:border-accent-500 focus:outline-none"
+                        >
+                          <option value="admin">Admin</option>
+                          <option value="developer">Developer</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[member.status]?.color || "bg-neutral-500/10 text-neutral-400"}`}>
+                          {statusBadge[member.status]?.label || member.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-neutral-500">
+                        {new Date(member.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleRemoveMember(member.id)}
+                          className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {/* API Keys */}
         <section>
@@ -166,80 +252,55 @@ export default function IAMPage() {
                 <tr className="border-b border-border bg-surface-100">
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Name</th>
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Key Prefix</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Type</th>
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Scopes</th>
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Created</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Last Used</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500"></th>
                 </tr>
               </thead>
               <tbody>
-                {apiKeys.map((key) => (
-                  <tr key={key.name} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
-                    <td className="px-4 py-3 font-medium text-white">{key.name}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-neutral-400">{key.prefix}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {key.scopes.map((scope) => (
-                          <span
-                            key={scope}
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${scopeColors[scope] ?? "bg-surface-300 text-neutral-400"}`}
-                          >
-                            {scope}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">{key.created}</td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">{key.lastUsed}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        Active
-                      </span>
+                {apiKeys.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-neutral-500">
+                      No API keys yet. Create one for CI/CD or programmatic access.
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Team Members */}
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-white">Team Members</h2>
-            <button
-              onClick={() => setShowInvite(true)}
-              className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm text-white hover:bg-accent-600 transition-colors"
-            >
-              + Invite Member
-            </button>
-          </div>
-          <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-surface-100">
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Name</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Email</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Role</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Last Active</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teamMembers.map((member) => (
-                  <tr key={member.email} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
-                    <td className="px-4 py-3 font-medium text-white">{member.name}</td>
-                    <td className="px-4 py-3 text-neutral-300">{member.email}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${roleBadgeStyles[member.role] || "bg-neutral-500/10 text-neutral-400"}`}>
-                        {member.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">{member.lastActive}</td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">{member.joined}</td>
-                  </tr>
-                ))}
+                ) : (
+                  apiKeys.map((key) => (
+                    <tr key={key.id} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
+                      <td className="px-4 py-3 font-medium text-white">{key.name}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-neutral-400">{key.key_prefix}...</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${key.type === "service" ? "bg-cyan-500/10 text-cyan-400" : "bg-neutral-500/10 text-neutral-400"}`}>
+                          {key.type || "personal"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {key.scopes.map((scope) => (
+                            <span
+                              key={scope}
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${scopeColors[scope] ?? "bg-surface-300 text-neutral-400"}`}
+                            >
+                              {scope}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-neutral-500">
+                        {new Date(key.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleDeleteKey(key.id)}
+                          className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                        >
+                          Revoke
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -251,11 +312,10 @@ export default function IAMPage() {
             <h2 className="text-sm font-medium text-white">Roles</h2>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {mockRoles.map((role) => (
+            {roleCards.map((role) => (
               <div key={role.name} className={`rounded-lg border p-4 ${role.color}`}>
                 <p className="text-sm font-medium">{role.name}</p>
                 <p className="mt-1 text-xs opacity-70">{role.description}</p>
-                <p className="mt-3 text-xs opacity-50">{role.members} member{role.members !== 1 ? "s" : ""}</p>
               </div>
             ))}
           </div>
@@ -267,7 +327,7 @@ export default function IAMPage() {
           {generatedKey ? (
             <div className="space-y-3">
               <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
-                <p className="text-xs text-emerald-400 mb-2">API key created successfully. Copy it now -- you will not be able to see it again.</p>
+                <p className="text-xs text-emerald-400 mb-2">API key created successfully. Copy it now — you will not be able to see it again.</p>
                 <code className="block rounded bg-surface-200 p-2 font-mono text-sm text-white break-all">{generatedKey}</code>
               </div>
               <div className="flex justify-end pt-4">
@@ -288,16 +348,34 @@ export default function IAMPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-neutral-400">Permissions</label>
+                <label className="mb-1 block text-xs font-medium text-neutral-400">Type</label>
                 <select
-                  value={keyPermissions}
-                  onChange={(e) => setKeyPermissions(e.target.value)}
-                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                  value={keyType}
+                  onChange={(e) => setKeyType(e.target.value)}
+                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none"
                 >
-                  <option value="read">read</option>
-                  <option value="read-write">read-write</option>
-                  <option value="admin">admin</option>
+                  <option value="personal">Personal</option>
+                  <option value="service">Service Token</option>
                 </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-neutral-400">Scopes</label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {["read", "write", "deploy", "registry:push", "terraform:read", "terraform:write", "s3:read", "s3:write"].map((scope) => (
+                    <button
+                      key={scope}
+                      type="button"
+                      onClick={() => toggleScope(scope)}
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+                        keyScopes.includes(scope)
+                          ? "border-accent-500 bg-accent-500/20 text-accent-400"
+                          : "border-border bg-surface-200 text-neutral-500 hover:text-neutral-300"
+                      }`}
+                    >
+                      {scope}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-4">
                 <button type="button" onClick={handleCloseKeyModal} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
@@ -309,7 +387,7 @@ export default function IAMPage() {
       )}
 
       {showInvite && (
-        <Modal title="Invite Member" onClose={() => setShowInvite(false)}>
+        <Modal title="Invite Member" onClose={() => { setShowInvite(false); setInviteError(""); }}>
           <form onSubmit={(e) => { e.preventDefault(); handleInvite(); }} className="space-y-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-neutral-400">Email</label>
@@ -327,15 +405,18 @@ export default function IAMPage() {
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none"
               >
                 <option value="admin">Admin</option>
                 <option value="developer">Developer</option>
                 <option value="viewer">Viewer</option>
               </select>
             </div>
+            {inviteError && (
+              <p className="text-xs text-red-400">{inviteError}</p>
+            )}
             <div className="flex justify-end gap-2 pt-4">
-              <button type="button" onClick={() => setShowInvite(false)} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button type="button" onClick={() => { setShowInvite(false); setInviteError(""); }} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
               <button type="submit" className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors">Send Invite</button>
             </div>
           </form>

@@ -24,12 +24,16 @@ func (h *APIKeyHandler) Create(c *fiber.Ctx) error {
 	var input struct {
 		Name   string   `json:"name"`
 		Scopes []string `json:"scopes"`
+		Type   string   `json:"type"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 	if input.Name == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "name is required")
+	}
+	if input.Type == "" {
+		input.Type = "personal"
 	}
 
 	// Check plan limit

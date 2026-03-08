@@ -1325,6 +1325,16 @@ const demoAuthPools = {
   get: async (id: string) => { await delay(300); return { id, user_id: "demo", project_id: "proj-1", name: "My Pool", realm_name: "zp-" + id, client_id: "zenith-pool-" + id, client_secret: "secret", issuer_url: "https://auth.example.com/realms/zp-" + id, status: "active" as const, user_count: 0, max_users: 1000, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" }; },
 };
 
+// ---- Team Demo ----
+
+const demoTeam = {
+  list: async () => { await delay(300); return { items: [], total: 0 }; },
+  invite: async (email: string, role: string) => { await delay(500); return { id: "tm-" + Date.now(), account_id: "demo", email, role, status: "pending" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }; },
+  updateRole: async () => { await delay(300); return { message: "role updated" }; },
+  remove: async () => { await delay(300); return { message: "member removed" }; },
+  acceptInvite: async () => { await delay(500); return { access_token: "demo", refresh_token: "demo", expires_in: 3600 }; },
+};
+
 // Re-export as a unified object matching the real API import pattern
 export const demoApi = {
   auth: demoAuth,
@@ -1355,4 +1365,5 @@ export const demoApi = {
   registry: demoRegistry,
   gateways: demoGateways,
   authPools: demoAuthPools,
+  team: demoTeam,
 };

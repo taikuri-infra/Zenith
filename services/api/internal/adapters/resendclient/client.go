@@ -63,3 +63,42 @@ func (c *Client) SendVerificationEmail(_ context.Context, to, name, verification
 	}
 	return nil
 }
+
+// SendTeamInviteEmail sends a team invitation email.
+func (c *Client) SendTeamInviteEmail(_ context.Context, to, inviterName, teamName, inviteURL string) error {
+	subject := fmt.Sprintf("%s invited you to %s on Zenith", inviterName, teamName)
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #e5e5e5; background-color: #0a0a0a;">
+  <div style="text-align: center; margin-bottom: 32px;">
+    <h1 style="color: #10b981; font-size: 24px; margin: 0;">Zenith</h1>
+  </div>
+  <div style="background-color: #171717; border: 1px solid #262626; border-radius: 12px; padding: 32px;">
+    <h2 style="color: #fafafa; font-size: 20px; margin: 0 0 16px;">You're invited!</h2>
+    <p style="color: #a3a3a3; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+      <strong style="color: #fafafa;">%s</strong> has invited you to join <strong style="color: #fafafa;">%s</strong> on Zenith. Click the button below to accept.
+    </p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="%s" style="display: inline-block; background-color: #10b981; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 32px; border-radius: 8px;">
+        Accept Invite
+      </a>
+    </div>
+    <p style="color: #737373; font-size: 12px; line-height: 1.5; margin: 24px 0 0;">
+      If you didn't expect this invite, you can safely ignore this email. This link expires in 7 days.
+    </p>
+  </div>
+</body>
+</html>`, inviterName, teamName, inviteURL)
+
+	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    c.from,
+		To:      []string{to},
+		Subject: subject,
+		Html:    html,
+	})
+	if err != nil {
+		return fmt.Errorf("send team invite email: %w", err)
+	}
+	return nil
+}

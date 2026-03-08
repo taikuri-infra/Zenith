@@ -248,7 +248,16 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		planRepo = memory.NewMemoryUserPlanRepository()
 	}
 
+	// Team members (IAM)
+	var teamRepo ports.TeamMemberRepository
+	if pool != nil {
+		teamRepo = postgres.NewPostgresTeamMemberRepository(pool)
+	} else {
+		teamRepo = memory.NewMemoryTeamMemberRepository()
+	}
+
 	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret, planRepo)
+	teamSvc := services.NewTeamMemberService(teamRepo, userRepo, planRepo, cfg.JWTSecret)
 
 	// Email verification (opt-in: only when RESEND_API_KEY is set)
 	if cfg.ResendAPIKey != "" {
@@ -258,6 +267,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		}
 		emailSender := resendclient.NewClient(cfg.ResendAPIKey, emailFrom)
 		authSvc.SetEmailSender(emailSender, cfg.AppURL)
+		teamSvc.SetEmailSender(emailSender, cfg.AppURL)
 		log.Println("[auth] Email verification enabled (Resend)")
 	} else {
 		log.Println("[auth] Email verification disabled (no RESEND_API_KEY)")
@@ -318,6 +328,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Wire project repo into auth service (auto-create default project on registration)
 	authSvc.SetProjectRepo(projectRepo)
+
+	// Wire team repo into auth service (team member login enrichment)
+	authSvc.SetTeamRepo(teamRepo)
 
 	// Handlers
 	appHandler := handlers.NewAppHandler(k8sClient)
@@ -401,6 +414,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	api.Post("/apps/:appId/auth/signup", appAuthHandler.Signup)
 	api.Post("/apps/:appId/auth/login", appAuthHandler.Login)
 
+	// Public team invite accept (no auth required)
+	teamHandler := handlers.NewTeamMemberHandler(teamSvc)
+	api.Post("/team/accept-invite", teamHandler.AcceptInvite)
+
 	// Internal routes (metering agent — SaaS only)
 	if cfg.Mode == "saas" && cfg.InternalSecret != "" {
 		internal := api.Group("/internal", middleware.RequireInternalSecret(cfg.InternalSecret))
@@ -409,6 +426,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Protected routes
 	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret))
+
+	// Team members (IAM)
+	protected.Post("/team/invite", teamHandler.InviteMember)
+	protected.Get("/team/members", teamHandler.ListMembers)
+	protected.Put("/team/members/:id/role", teamHandler.UpdateRole)
+	protected.Delete("/team/members/:id", teamHandler.RemoveMember)
 
 	// Projects (DB-backed)
 	projects := protected.Group("/projects")

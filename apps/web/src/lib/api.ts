@@ -1081,6 +1081,7 @@ export interface APIKey {
   key_prefix: string;
   key?: string; // Only returned on creation
   scopes: string[];
+  type?: string; // personal | service
   user_id: string;
   last_used_at?: string;
   created_at: string;
@@ -1088,13 +1089,50 @@ export interface APIKey {
 
 export const apiKeys = {
   list: () => apiFetch<{ items: APIKey[]; total: number }>("/api/v1/api-keys"),
-  create: (name: string, scopes: string[]) =>
+  create: (name: string, scopes: string[], type?: string) =>
     apiFetch<APIKey>("/api/v1/api-keys", {
       method: "POST",
-      body: JSON.stringify({ name, scopes }),
+      body: JSON.stringify({ name, scopes, type: type || "personal" }),
     }),
   delete: (id: string) =>
     apiFetch<{ message: string }>(`/api/v1/api-keys/${id}`, { method: "DELETE" }),
+};
+
+// ---- Team Member types (IAM) ----
+
+export interface TeamMember {
+  id: string;
+  account_id: string;
+  user_id?: string;
+  email: string;
+  role: string;
+  status: "pending" | "active" | "suspended";
+  created_at: string;
+  updated_at: string;
+}
+
+export const team = {
+  list: () => apiFetch<{ items: TeamMember[]; total: number }>("/api/v1/team/members"),
+  invite: (email: string, role: string) =>
+    apiFetch<TeamMember>("/api/v1/team/invite", {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    }),
+  updateRole: (id: string, role: string) =>
+    apiFetch<{ message: string }>(`/api/v1/team/members/${id}/role`, {
+      method: "PUT",
+      body: JSON.stringify({ role }),
+    }),
+  remove: (id: string) =>
+    apiFetch<{ message: string }>(`/api/v1/team/members/${id}`, { method: "DELETE" }),
+  acceptInvite: (token: string, email: string, password: string, name: string) =>
+    apiFetch<{ access_token: string; refresh_token: string; expires_in: number }>(
+      "/api/v1/team/accept-invite",
+      {
+        method: "POST",
+        body: JSON.stringify({ token, email, password, name }),
+      }
+    ),
 };
 
 // ---- Session types (Phase 6.5) ----

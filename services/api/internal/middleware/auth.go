@@ -32,7 +32,13 @@ func JWTAuth(secret string) fiber.Handler {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
 		}
 
-		c.Locals("user_id", claims.Subject)
+		// AccountID trick: team members use the owner's ID for resource lookups
+		if claims.AccountID != "" {
+			c.Locals("user_id", claims.AccountID)
+			c.Locals("member_id", claims.MemberID)
+		} else {
+			c.Locals("user_id", claims.Subject)
+		}
 		c.Locals("email", claims.Email)
 		c.Locals("name", claims.Name)
 		c.Locals("role", claims.Role)

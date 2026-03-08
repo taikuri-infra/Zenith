@@ -181,6 +181,19 @@ type DomainRepository interface {
 	DeleteDomain(ctx context.Context, id string) error
 }
 
+// TeamMemberRepository defines team member persistence operations.
+type TeamMemberRepository interface {
+	CreateMember(ctx context.Context, member *entities.TeamMember) error
+	GetMember(ctx context.Context, id string) (*entities.TeamMember, error)
+	GetMemberByEmail(ctx context.Context, accountID, email string) (*entities.TeamMember, error)
+	GetMemberByUserID(ctx context.Context, userID string) (*entities.TeamMember, error)
+	GetMemberByInviteHash(ctx context.Context, hash string) (*entities.TeamMember, error)
+	ListMembers(ctx context.Context, accountID string) ([]entities.TeamMember, error)
+	UpdateMember(ctx context.Context, member *entities.TeamMember) error
+	DeleteMember(ctx context.Context, id string) error
+	CountMembers(ctx context.Context, accountID string) (int, error)
+}
+
 // APIKeyRepository defines API key management operations.
 type APIKeyRepository interface {
 	CreateAPIKey(ctx context.Context, userID, name string, scopes []string) (*entities.APIKey, error)

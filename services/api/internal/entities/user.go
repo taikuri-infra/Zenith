@@ -71,6 +71,37 @@ type User struct {
 	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
+// TeamMemberStatus represents the status of a team member invite.
+type TeamMemberStatus string
+
+const (
+	TeamMemberPending   TeamMemberStatus = "pending"
+	TeamMemberActive    TeamMemberStatus = "active"
+	TeamMemberSuspended TeamMemberStatus = "suspended"
+)
+
+// TeamMember represents an invited team member sharing the owner's resources.
+type TeamMember struct {
+	ID              string           `json:"id"`
+	AccountID       string           `json:"account_id"`
+	UserID          string           `json:"user_id,omitempty"`
+	Email           string           `json:"email"`
+	Role            Role             `json:"role"`
+	Status          TeamMemberStatus `json:"status"`
+	InviteTokenHash string           `json:"-"`
+	InviteExpiresAt *time.Time       `json:"-"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+}
+
+// APIKeyType represents the type of API key.
+type APIKeyType string
+
+const (
+	APIKeyPersonal APIKeyType = "personal"
+	APIKeyService  APIKeyType = "service"
+)
+
 // APIKey represents an API key for CI/CD access.
 type APIKey struct {
 	ID         string     `json:"id"`
@@ -79,6 +110,7 @@ type APIKey struct {
 	KeyHash    string     `json:"-"`
 	Key        string     `json:"key,omitempty"`
 	Scopes     []string   `json:"scopes"`
+	Type       APIKeyType `json:"type"`
 	UserID     string     `json:"user_id"`
 	ProjectID  string     `json:"project_id"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`

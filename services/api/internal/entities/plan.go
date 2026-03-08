@@ -40,7 +40,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 		return PlanLimits{
 			MaxApps: 5, MaxDatabases: 3, MaxDBSizeMB: 5120,
 			MaxAuthUsers: 10000, MaxStorageMB: 10240, MaxBuckets: 5,
-			MaxCPUMillis: 2000, MaxRAMMB: 2048, MaxTeamMembers: 3,
+			MaxCPUMillis: 2000, MaxRAMMB: 2048, MaxTeamMembers: 2,
 			MaxGateways: 5, MaxGatewayRoutes: 50,
 			MaxAuthPools: 3, MaxAuthPoolUsers: 50000,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
@@ -49,7 +49,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 		return PlanLimits{
 			MaxApps: 20, MaxDatabases: 10, MaxDBSizeMB: 20480,
 			MaxAuthUsers: 100000, MaxStorageMB: 102400, MaxBuckets: 20,
-			MaxCPUMillis: 4000, MaxRAMMB: 4096, MaxTeamMembers: 10,
+			MaxCPUMillis: 4000, MaxRAMMB: 4096, MaxTeamMembers: 8,
 			MaxGateways: 20, MaxGatewayRoutes: 200,
 			MaxAuthPools: 10, MaxAuthPoolUsers: 500000,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
