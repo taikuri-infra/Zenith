@@ -1,0 +1,143 @@
+name: Promote to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to promote (e.g., 0.7.17). Must exist in staging registry.'
+        required: true
+      skip_smoke_test:
+        description: 'Skip staging smoke test (emergency only)'
+        type: boolean
+        default: false
+      components:
+        description: 'Components to promote'
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - api-only
+          - web-only
+          - admin-only
+
+env:
+  STAGING_REGISTRY: ${{ secrets.HARBOR_HOST }}
+  STAGING_PROJECT: zenith-stage
+  PROD_REGISTRY: ${{ secrets.HARBOR_HOST }}
+  PROD_PROJECT: zenith-prod
+
+jobs:
+  # Step 1: Verify staging is healthy
+  staging-smoke-test:
+    name: "Pre-flight: Staging Smoke Test"
+    if: ${{ !inputs.skip_smoke_test }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run customer smoke test on staging
+        env:
+          ZENITH_API_URL: https://api.stage.freezenith.com
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+        run: ./infra/scripts/smoke-test-customer.sh --verbose
+
+      - name: Verify version exists in staging registry
+        run: |
+          echo "Checking version ${{ inputs.version }} in staging registry..."
+          # Verify the image exists
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -u "${{ secrets.HARBOR_ROBOT_USER }}:${{ secrets.HARBOR_ROBOT_TOKEN }}" \
+            "https://${{ env.STAGING_REGISTRY }}/api/v2.0/projects/${{ env.STAGING_PROJECT }}/repositories/zenith-api/artifacts/${{ inputs.version }}")
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: zenith-api:${{ inputs.version }} not found in staging registry (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "Version ${{ inputs.version }} verified in staging registry"
+
+  # Step 2: Promote images (retag from staging → prod project)
+  promote-images:
+    name: "Promote Images to Production"
+    needs: [staging-smoke-test]
+    if: always() && (needs.staging-smoke-test.result == 'success' || needs.staging-smoke-test.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.STAGING_REGISTRY }}
+          username: ${{ secrets.HARBOR_ROBOT_USER }}
+          password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+
+      - name: Promote API image
+        if: inputs.components == 'all' || inputs.components == 'api-only'
+        run: |
+          docker pull ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-api:${{ inputs.version }}
+          docker tag ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-api:${{ inputs.version }} \
+                     ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-api:${{ inputs.version }}
+          docker push ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-api:${{ inputs.version }}
+          echo "Promoted zenith-api:${{ inputs.version }} to production"
+
+      - name: Promote Web image
+        if: inputs.components == 'all' || inputs.components == 'web-only'
+        run: |
+          docker pull ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-web:${{ inputs.version }}
+          docker tag ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-web:${{ inputs.version }} \
+                     ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-web:${{ inputs.version }}
+          docker push ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-web:${{ inputs.version }}
+          echo "Promoted zenith-web:${{ inputs.version }} to production"
+
+      - name: Promote Admin image
+        if: inputs.components == 'all' || inputs.components == 'admin-only'
+        run: |
+          docker pull ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-admin:${{ inputs.version }}
+          docker tag ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-admin:${{ inputs.version }} \
+                     ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-admin:${{ inputs.version }}
+          docker push ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-admin:${{ inputs.version }}
+          echo "Promoted zenith-admin:${{ inputs.version }} to production"
+
+  # Step 3: Update Helm chart version and deploy
+  deploy:
+    name: "Deploy to Production"
+    needs: [promote-images]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update Helm chart appVersion
+        run: |
+          cd deploy/charts/zenith-platform
+          sed -i "s/^appVersion:.*/appVersion: \"${{ inputs.version }}\"/" Chart.yaml
+          echo "Updated Chart.yaml appVersion to ${{ inputs.version }}"
+          cat Chart.yaml | head -10
+
+      - name: Create production deployment commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/charts/zenith-platform/Chart.yaml
+          git commit -m "chore(prod): promote v${{ inputs.version }} to production
+
+          Components: ${{ inputs.components }}
+          Smoke test: ${{ inputs.skip_smoke_test && 'skipped' || 'passed' }}
+          Triggered by: ${{ github.actor }}"
+          git push origin main
+
+      - name: Create release tag
+        run: |
+          git tag -a "v${{ inputs.version }}" -m "Production release v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+
+      - name: Summary
+        run: |
+          echo "## Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | v${{ inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Components | ${{ inputs.components }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Smoke Test | ${{ inputs.skip_smoke_test && 'Skipped' || 'Passed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered By | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY

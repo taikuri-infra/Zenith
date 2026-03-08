@@ -22,7 +22,7 @@ func (h *RoleHandler) Create(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	if plan.Tier != entities.PlanEnterprise && plan.Tier != entities.PlanTeam {
+	if plan.Tier != entities.PlanTeam && plan.Tier != entities.PlanBusiness && plan.Tier != entities.PlanEnterprise {
 		return fiber.NewError(fiber.StatusForbidden, "custom roles require Team plan or higher")
 	}
 
@@ -136,7 +136,15 @@ func (h *RoleHandler) AssignRole(c *fiber.Ctx) error {
 }
 
 func (h *RoleHandler) ListAssignments(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
 	roleID := c.Params("roleId")
+
+	// Verify the role belongs to the authenticated user
+	role, err := h.roleRepo.GetRole(c.Context(), roleID)
+	if err != nil || role.UserID != userID {
+		return fiber.NewError(fiber.StatusNotFound, "role not found")
+	}
+
 	assignments, err := h.roleRepo.ListAssignmentsByRole(c.Context(), roleID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
@@ -148,7 +156,16 @@ func (h *RoleHandler) ListAssignments(c *fiber.Ctx) error {
 }
 
 func (h *RoleHandler) RemoveAssignment(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	roleID := c.Params("roleId")
 	assignmentID := c.Params("assignmentId")
+
+	// Verify the role belongs to the authenticated user
+	role, err := h.roleRepo.GetRole(c.Context(), roleID)
+	if err != nil || role.UserID != userID {
+		return fiber.NewError(fiber.StatusNotFound, "role not found")
+	}
+
 	if err := h.roleRepo.RemoveAssignment(c.Context(), assignmentID); err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "assignment not found")
 	}

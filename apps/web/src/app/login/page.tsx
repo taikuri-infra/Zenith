@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LogIn, UserPlus, Github, Loader2, Mail, RefreshCw } from "lucide-react";
+import { LogIn, UserPlus, Github, Loader2, Mail, RefreshCw, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { auth } from "@/lib/api";
 import { isDemoMode } from "@/lib/get-api";
@@ -18,8 +18,8 @@ export default function LoginPage() {
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, register } = useAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const { login, mfaLogin, register, mfaToken } = useAuth();
+  const [mode, setMode] = useState<"login" | "register" | "mfa">("login");
   const [verifyEmailSent, setVerifyEmailSent] = useState(false);
 
   // In demo mode, skip login entirely
@@ -31,6 +31,7 @@ function LoginPageInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -56,13 +57,16 @@ function LoginPageInner() {
 
     try {
       if (mode === "login") {
-        const success = await login(email, password);
-        if (success) {
+        const result = await login(email, password);
+        if (result === "mfa_required") {
+          setMode("mfa");
+          setMfaCode("");
+        } else if (result === true) {
           router.push("/");
         } else {
           setError("Invalid email or password");
         }
-      } else {
+      } else if (mode === "register") {
         if (!name.trim()) {
           setError("Name is required");
           setLoading(false);
@@ -83,6 +87,30 @@ function LoginPageInner() {
       } else {
         setError("An error occurred. Please try again.");
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMFASubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (!mfaToken) {
+        setError("MFA session expired. Please sign in again.");
+        setMode("login");
+        return;
+      }
+      const success = await mfaLogin(mfaToken, mfaCode);
+      if (success) {
+        router.push("/");
+      } else {
+        setError("Invalid MFA code. Please try again.");
+      }
+    } catch {
+      setError("Invalid MFA code. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -145,6 +173,90 @@ function LoginPageInner() {
                 onClick={() => {
                   setVerifyEmailSent(false);
                   setMode("login");
+                  setError(null);
+                }}
+                className="text-sm text-emerald-500 hover:text-emerald-400 font-medium"
+              >
+                Back to sign in
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MFA verification screen
+  if (mode === "mfa") {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="w-6 h-6 text-emerald-500" fill="currentColor">
+                  <polygon points="12,2 22,8.5 22,15.5 12,22 2,15.5 2,8.5" />
+                </svg>
+              </div>
+              <span className="text-2xl font-bold text-white">Zenith</span>
+            </div>
+          </div>
+
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-8">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Shield className="w-8 h-8 text-emerald-500" />
+              </div>
+              <h2 className="text-xl font-semibold text-white mb-2">Two-Factor Authentication</h2>
+              <p className="text-neutral-400 text-sm">
+                Enter the 6-digit code from your authenticator app, or use a backup code.
+              </p>
+            </div>
+
+            <form onSubmit={handleMFASubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+                  Authentication Code
+                </label>
+                <input
+                  type="text"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                  autoFocus
+                  className="w-full px-3 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-center text-2xl font-mono tracking-widest placeholder-neutral-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  placeholder="000000"
+                  maxLength={8}
+                />
+                <p className="mt-1.5 text-xs text-neutral-500">
+                  Enter a 6-digit TOTP code or an 8-digit backup code
+                </p>
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading || mfaCode.length < 6}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 rounded-lg text-white font-medium transition-colors"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Shield className="w-4 h-4" />
+                )}
+                Verify
+              </button>
+            </form>
+
+            <div className="mt-6 pt-6 border-t border-neutral-800 text-center">
+              <button
+                onClick={() => {
+                  setMode("login");
+                  setMfaCode("");
                   setError(null);
                 }}
                 className="text-sm text-emerald-500 hover:text-emerald-400 font-medium"

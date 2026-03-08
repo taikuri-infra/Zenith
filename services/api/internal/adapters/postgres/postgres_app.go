@@ -260,6 +260,15 @@ func (r *PostgresAppRepository) CountAppsByUser(ctx context.Context, userID stri
 	return count, nil
 }
 
+func (r *PostgresAppRepository) CountApps(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM apps").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count apps: %w", err)
+	}
+	return count, nil
+}
+
 // --- Deployments ---
 
 func (r *PostgresAppRepository) CreateDeployment(ctx context.Context, appID, gitSHA string) (*entities.Deployment, error) {

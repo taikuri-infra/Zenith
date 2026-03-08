@@ -24,14 +24,12 @@ import type {
   UsageHistoryEntry,
   PlatformUsageSummary,
 } from "./api";
+import { DEMO_MODE } from "./runtime-env";
 
 // ---------------------------------------------------------------------------
 // Helper: whether we are in demo mode
 // ---------------------------------------------------------------------------
-export const isDemoMode = (): boolean =>
-  typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_DEMO_MODE === "true"
-    : process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+export const isDemoMode = (): boolean => DEMO_MODE;
 
 // ---------------------------------------------------------------------------
 // Clusters (3)

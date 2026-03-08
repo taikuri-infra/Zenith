@@ -63,12 +63,12 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/apps/mission-control/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/mission-control/.next/static ./apps/mission-control/.next/static
 
-# Copy public assets if they exist (using a no-fail pattern)
-# If your app has a public/ directory, uncomment the next line:
-# COPY --from=builder --chown=nextjs:nodejs /app/apps/mission-control/public ./apps/mission-control/public
+# Copy entrypoint script for runtime env injection
+COPY --chown=nextjs:nodejs apps/mission-control/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 USER nextjs
 
 EXPOSE 3100
 
-CMD ["node", "apps/mission-control/server.js"]
+ENTRYPOINT ["./entrypoint.sh"]

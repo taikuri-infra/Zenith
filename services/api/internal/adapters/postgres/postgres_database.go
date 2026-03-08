@@ -205,6 +205,15 @@ func (r *PostgresDatabaseRepository) CountDatabasesByUser(ctx context.Context, u
 	return count, nil
 }
 
+func (r *PostgresDatabaseRepository) CountDatabases(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM user_databases`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count databases: %w", err)
+	}
+	return count, nil
+}
+
 // UpdateDatabaseHost sets the host and status after provisioning.
 func (r *PostgresDatabaseRepository) UpdateDatabaseHost(ctx context.Context, id, host string, provisioner entities.DatabaseProvisioner) error {
 	now := time.Now()

@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
@@ -139,10 +141,11 @@ func (h *BackupHandlerV2) Restore(c *fiber.Ctx) error {
 	// For now, we simulate by marking the database as provisioning briefly.
 	h.dbRepo.UpdateDatabaseStatus(c.Context(), dbID, entities.DatabaseStatusProvisioning)
 
-	// Simulate restore completion asynchronously
+	// Simulate restore completion asynchronously.
+	// Use context.Background() — fiber context is invalidated after handler returns.
 	go func() {
 		// In production: run pg_restore from S3 backup
-		h.dbRepo.UpdateDatabaseStatus(c.Context(), dbID, entities.DatabaseStatusReady)
+		h.dbRepo.UpdateDatabaseStatus(context.Background(), dbID, entities.DatabaseStatusReady)
 	}()
 
 	return c.JSON(fiber.Map{

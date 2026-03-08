@@ -41,6 +41,11 @@ type Config struct {
 	GatewayDomain string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
 	Registry      string // container registry for user images
 
+	// Harbor Registry API
+	HarborURL      string // e.g. "https://hub.stage.freezenith.com"
+	HarborUser     string // robot account username
+	HarborPassword string // robot account token
+
 	// Deploy concurrency
 	MaxConcurrentDeploys int
 
@@ -59,8 +64,9 @@ type Config struct {
 	StripeBillingEnabled bool
 	StripeSecretKey      string
 	StripeWebhookSecret  string
-	StripeProPriceID     string
-	StripeTeamPriceID    string
+	StripeProPriceID      string
+	StripeTeamPriceID     string
+	StripeBusinessPriceID string
 
 	// Temporal (customer provisioning workflows)
 	TemporalEnabled   bool
@@ -82,6 +88,18 @@ type Config struct {
 	// CNPG Admin DSN (for CREATE DATABASE in shared cluster)
 	CNPGAdminDSN string
 
+	// Monitoring (Prometheus + Loki)
+	PrometheusURL string
+	LokiURL       string
+
+	// Redis (rate limiting + token blacklist)
+	RedisURL string // REDIS_URL: "redis://host:6379/0" (empty = in-memory fallback)
+
+	// NATS JetStream (event bus)
+	NATSEnabled    bool
+	NATSServers    string // comma-separated NATS URLs
+	NATSStreamName string // JetStream stream name
+
 	// Hetzner Autoscaler (Phase 5)
 	HetznerToken        string
 	AutoscalerEnabled   bool
@@ -95,10 +113,9 @@ type Config struct {
 
 func Load() *Config {
 	mode := getEnv("ZENITH_MODE", "standalone")
-	corsDefault := "*"
-	if mode == "standalone" {
-		corsDefault = "http://localhost:3000"
-	}
+	// Never default to wildcard CORS — require explicit origin allowlist.
+	// In standalone mode use localhost; in saas mode require CORS_ORIGINS env var.
+	corsDefault := "http://localhost:3000"
 
 	return &Config{
 		Port:        getEnvInt("PORT", 8080),
@@ -123,7 +140,10 @@ func Load() *Config {
 		InternalSecret: getEnv("INTERNAL_SECRET", ""),
 		BaseDomain:    getEnv("BASE_DOMAIN", "freezenith.com"),
 		GatewayDomain: getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
-		Registry:      getEnv("REGISTRY", "registry.freezenith.com"),
+		Registry:       getEnv("REGISTRY", "registry.freezenith.com"),
+		HarborURL:      getEnv("HARBOR_URL", ""),
+		HarborUser:     getEnv("HARBOR_USER", ""),
+		HarborPassword: getEnv("HARBOR_PASSWORD", ""),
 		MaxConcurrentDeploys: getEnvInt("MAX_CONCURRENT_DEPLOYS", 5),
 		SecretsKey:          getEnv("SECRETS_ENCRYPTION_KEY", ""),
 		OTELEndpoint:        getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
@@ -133,8 +153,9 @@ func Load() *Config {
 		StripeBillingEnabled: getEnvBool("STRIPE_BILLING_ENABLED", false),
 		StripeSecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret:  getEnv("STRIPE_WEBHOOK_SECRET", ""),
-		StripeProPriceID:     getEnv("STRIPE_PRO_PRICE_ID", ""),
+		StripeProPriceID:      getEnv("STRIPE_PRO_PRICE_ID", ""),
 		StripeTeamPriceID:    getEnv("STRIPE_TEAM_PRICE_ID", ""),
+		StripeBusinessPriceID: getEnv("STRIPE_BUSINESS_PRICE_ID", ""),
 		TemporalEnabled:       getEnvBool("TEMPORAL_ENABLED", false),
 		TemporalHost:          getEnv("TEMPORAL_HOST", "temporal.temporal.svc.cluster.local:7233"),
 		TemporalNamespace:     getEnv("TEMPORAL_NAMESPACE", "default"),
@@ -147,6 +168,12 @@ func Load() *Config {
 		S3Region:              getEnv("S3_REGION", "fsn1"),
 		S3PlatformBucket:      getEnv("S3_PLATFORM_BUCKET", "zenith-platform-storage"),
 		CNPGAdminDSN:          getEnv("CNPG_ADMIN_DSN", ""),
+		PrometheusURL:         getEnv("PROMETHEUS_URL", "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"),
+		LokiURL:              getEnv("LOKI_URL", "http://loki.monitoring.svc.cluster.local:3100"),
+		RedisURL:              getEnv("REDIS_URL", ""),
+		NATSEnabled:           getEnvBool("NATS_ENABLED", false),
+		NATSServers:           getEnv("NATS_SERVERS", "nats://nats.nats.svc.cluster.local:4222"),
+		NATSStreamName:        getEnv("NATS_STREAM_NAME", "zenith_events"),
 		HetznerToken:          getEnv("HCLOUD_TOKEN", ""),
 		AutoscalerEnabled:   getEnvBool("AUTOSCALER_ENABLED", false),
 		AutoscalerMinNodes:  getEnvInt("AUTOSCALER_MIN_NODES", 2),
@@ -189,7 +216,7 @@ func buildDatabaseURL() string {
 	user := getEnv("DB_USER", "zenith")
 	pass := os.Getenv("DB_PASSWORD")
 	name := getEnv("DB_NAME", "zenith")
-	sslmode := getEnv("DB_SSLMODE", "disable")
+	sslmode := getEnv("DB_SSLMODE", "require")
 	return "postgres://" + user + ":" + pass + "@" + host + ":" + port + "/" + name + "?sslmode=" + sslmode
 }
 

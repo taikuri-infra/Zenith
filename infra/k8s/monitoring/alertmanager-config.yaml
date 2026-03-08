@@ -1,0 +1,266 @@
+# Alertmanager routing configuration for Zenith platform.
+# Applied via kube-prometheus-stack Helm values or as a Secret.
+#
+# Routing: Critical → PagerDuty, Warning → Slack, Business → Telegram
+#
+# Secrets required:
+#   PAGERDUTY_SERVICE_KEY  — PagerDuty Events API v1 service key
+#   SLACK_WEBHOOK_URL      — Slack incoming webhook URL
+#   TELEGRAM_BOT_TOKEN     — Telegram Bot API token
+#   TELEGRAM_CHAT_ID       — Telegram chat/group ID
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/part-of: kube-prometheus-stack
+stringData:
+  alertmanager.yaml: |
+    global:
+      resolve_timeout: 5m
+      slack_api_url: "REPLACE_WITH_SLACK_WEBHOOK_URL"
+
+    inhibit_rules:
+      # If a critical alert fires, suppress warnings for the same alert name
+      - source_matchers:
+          - severity = critical
+        target_matchers:
+          - severity = warning
+        equal: [alertname, namespace]
+
+    route:
+      receiver: default-slack
+      group_by: [alertname, namespace, severity]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+
+      routes:
+        # Critical alerts → PagerDuty (immediate page)
+        - matchers:
+            - severity = critical
+          receiver: pagerduty-critical
+          group_wait: 10s
+          repeat_interval: 1h
+          continue: true  # Also notify Slack
+
+        # Warning alerts → Slack
+        - matchers:
+            - severity = warning
+          receiver: default-slack
+          repeat_interval: 4h
+
+        # Business/info alerts → Telegram
+        - matchers:
+            - severity = info
+          receiver: telegram-business
+          repeat_interval: 24h
+
+        # Watchdog (heartbeat) — don't alert
+        - matchers:
+            - alertname = Watchdog
+          receiver: "null"
+
+    receivers:
+      - name: "null"
+
+      - name: default-slack
+        slack_configs:
+          - channel: "#zenith-alerts"
+            send_resolved: true
+            title: >-
+              [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}]
+              {{ .CommonLabels.alertname }}
+            text: >-
+              {{ range .Alerts }}
+              *Alert:* {{ .Annotations.summary }}
+              *Severity:* {{ .Labels.severity }}
+              *Namespace:* {{ .Labels.namespace }}
+              *Description:* {{ .Annotations.description }}
+              {{ end }}
+            icon_emoji: ":rotating_light:"
+            color: >-
+              {{ if eq .Status "firing" }}{{ if eq .CommonLabels.severity "critical" }}danger{{ else }}warning{{ end }}{{ else }}good{{ end }}
+
+      - name: pagerduty-critical
+        pagerduty_configs:
+          - service_key: "REPLACE_WITH_PAGERDUTY_SERVICE_KEY"
+            severity: critical
+            description: >-
+              {{ .CommonLabels.alertname }}: {{ .CommonAnnotations.summary }}
+            details:
+              firing: >-
+                {{ template "__text_alert_list" .Alerts.Firing }}
+              num_firing: "{{ .Alerts.Firing | len }}"
+              num_resolved: "{{ .Alerts.Resolved | len }}"
+
+      - name: telegram-business
+        telegram_configs:
+          - bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+            chat_id: REPLACE_WITH_TELEGRAM_CHAT_ID
+            parse_mode: HTML
+            message: >-
+              <b>{{ .Status | toUpper }}</b> {{ .CommonLabels.alertname }}
+
+              {{ range .Alerts }}
+              <b>Severity:</b> {{ .Labels.severity }}
+              <b>Summary:</b> {{ .Annotations.summary }}
+              <b>Description:</b> {{ .Annotations.description }}
+              {{ end }}
+---
+# PrometheusRule for Zenith platform alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: zenith-platform-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    prometheus: kube-prometheus-stack-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: zenith.api
+      rules:
+        - alert: ZenithAPIDown
+          expr: up{job="zenith-api"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Zenith API is down"
+            description: "The Zenith API pod has been unreachable for more than 2 minutes."
+
+        - alert: ZenithAPIHighErrorRate
+          expr: >-
+            sum(rate(http_requests_total{namespace="zenith-platform",status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_requests_total{namespace="zenith-platform"}[5m])), 0.001) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High API error rate (>5%)"
+            description: "API 5xx error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+        - alert: ZenithAPIHighLatency
+          expr: >-
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{namespace="zenith-platform"}[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High API P95 latency (>2s)"
+            description: "API P95 latency is {{ $value | humanizeDuration }}."
+
+    - name: zenith.builds
+      rules:
+        - alert: ZenithBuildQueueBacklog
+          expr: count(kube_job_status_active{namespace="zenith-builds"}) > 10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Build queue backlog (>10 active)"
+            description: "{{ $value }} builds are active in the queue."
+
+        - alert: ZenithBuildFailureSpike
+          expr: >-
+            increase(kube_job_status_failed{namespace="zenith-builds"}[1h]) > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Build failure spike (>5 failures/hour)"
+            description: "{{ $value }} build failures in the last hour."
+
+    - name: zenith.pods
+      rules:
+        - alert: ZenithAppCrashLooping
+          expr: >-
+            rate(kube_pod_container_status_restarts_total{namespace="zenith-apps"}[15m]) * 60 * 15 > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App pod crash-looping"
+            description: "Pod {{ $labels.pod }} has restarted {{ $value | humanize }} times in 15 minutes."
+
+        - alert: ZenithAppHighMemory
+          expr: >-
+            container_memory_working_set_bytes{namespace="zenith-apps",container!=""}
+            / on(pod,namespace,container) kube_pod_container_resource_limits{resource="memory",namespace="zenith-apps"}
+            > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "App pod high memory usage (>90%)"
+            description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of its memory limit."
+
+        - alert: ZenithAppOOMKilled
+          expr: >-
+            kube_pod_container_status_last_terminated_reason{namespace="zenith-apps",reason="OOMKilled"} == 1
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "App pod OOM killed"
+            description: "Pod {{ $labels.pod }} container {{ $labels.container }} was OOM killed."
+
+    - name: zenith.database
+      rules:
+        - alert: ZenithDatabaseHighConnections
+          expr: >-
+            cnpg_pg_stat_activity_count{namespace="zenith-platform"}
+            / cnpg_pg_settings_setting{name="max_connections",namespace="zenith-platform"} > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Database connection pool >80% utilized"
+            description: "{{ $value | humanizePercentage }} of max_connections in use."
+
+        - alert: ZenithDatabaseReplicationLag
+          expr: cnpg_pg_replication_lag{namespace="zenith-platform"} > 30
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Database replication lag >30s"
+            description: "Replication lag is {{ $value }}s for {{ $labels.pod }}."
+
+    - name: zenith.business
+      rules:
+        - alert: ZenithMRRDrop
+          expr: >-
+            delta(zenith_mrr_euros[1d]) < -100
+          for: 1h
+          labels:
+            severity: info
+          annotations:
+            summary: "MRR dropped by more than 100 EUR in 24h"
+            description: "MRR changed by {{ $value | humanize }} EUR."
+
+        - alert: ZenithNewSignupSpike
+          expr: >-
+            increase(zenith_total_users[1h]) > 50
+          for: 5m
+          labels:
+            severity: info
+          annotations:
+            summary: "Signup spike detected (>50/hour)"
+            description: "{{ $value | humanize }} new signups in the last hour."
+
+        - alert: ZenithStripePaymentFailures
+          expr: >-
+            increase(zenith_stripe_payment_failed_total[1h]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Multiple Stripe payment failures (>3/hour)"
+            description: "{{ $value | humanize }} payment failures in the last hour."

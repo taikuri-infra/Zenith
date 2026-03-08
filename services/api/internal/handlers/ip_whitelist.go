@@ -22,8 +22,8 @@ func (h *IPWhitelistHandler) Add(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	if plan.Tier != entities.PlanEnterprise {
-		return fiber.NewError(fiber.StatusForbidden, "IP whitelisting requires Enterprise plan")
+	if plan.Tier != entities.PlanBusiness && plan.Tier != entities.PlanEnterprise {
+		return fiber.NewError(fiber.StatusForbidden, "IP whitelisting requires Business plan or higher")
 	}
 
 	var body struct {
@@ -58,6 +58,14 @@ func (h *IPWhitelistHandler) List(c *fiber.Ctx) error {
 
 func (h *IPWhitelistHandler) Delete(c *fiber.Ctx) error {
 	entryID := c.Params("entryId")
+	userID, _ := c.Locals("user_id").(string)
+
+	// Verify ownership before deleting
+	entry, err := h.ipRepo.GetEntry(c.Context(), entryID)
+	if err != nil || entry.UserID != userID {
+		return fiber.NewError(fiber.StatusNotFound, "entry not found")
+	}
+
 	if err := h.ipRepo.DeleteEntry(c.Context(), entryID); err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "entry not found")
 	}

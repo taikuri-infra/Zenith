@@ -22,7 +22,7 @@ func (h *SSOHandler) ConfigureSAML(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	if plan.Tier != entities.PlanTeam && plan.Tier != entities.PlanEnterprise {
+	if plan.Tier != entities.PlanTeam && plan.Tier != entities.PlanBusiness && plan.Tier != entities.PlanEnterprise {
 		return fiber.NewError(fiber.StatusForbidden, "SSO requires Team plan or higher")
 	}
 
@@ -57,7 +57,7 @@ func (h *SSOHandler) ConfigureOIDC(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	if plan.Tier != entities.PlanTeam && plan.Tier != entities.PlanEnterprise {
+	if plan.Tier != entities.PlanTeam && plan.Tier != entities.PlanBusiness && plan.Tier != entities.PlanEnterprise {
 		return fiber.NewError(fiber.StatusForbidden, "SSO requires Team plan or higher")
 	}
 
@@ -99,6 +99,14 @@ func (h *SSOHandler) ListConfigs(c *fiber.Ctx) error {
 
 func (h *SSOHandler) DeleteConfig(c *fiber.Ctx) error {
 	configID := c.Params("configId")
+	userID, _ := c.Locals("user_id").(string)
+
+	// Verify ownership before deleting
+	config, err := h.ssoRepo.GetConfig(c.Context(), configID)
+	if err != nil || config.UserID != userID {
+		return fiber.NewError(fiber.StatusNotFound, "SSO config not found")
+	}
+
 	if err := h.ssoRepo.DeleteConfig(c.Context(), configID); err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "SSO config not found")
 	}

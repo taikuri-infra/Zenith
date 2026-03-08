@@ -6,6 +6,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
+	"github.com/pquerna/otp/totp"
 )
 
 // MFAHandler handles MFA endpoints.
@@ -28,13 +29,14 @@ func (h *MFAHandler) GetStatus(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":       enrollment.Status,
 		"enabled_at":   enrollment.EnabledAt,
-		"backup_codes": len(enrollment.BackupCodes),
+		"backup_codes": len(enrollment.BackupCodes) - len(enrollment.UsedCodes),
 	})
 }
 
 // Enable begins MFA enrollment — returns TOTP secret + provisioning URI + backup codes.
 func (h *MFAHandler) Enable(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
+	email, _ := c.Locals("email").(string)
 
 	// Check plan allows MFA (Pro+)
 	plan, err := h.planRepo.GetUserPlan(c.Context(), userID)
@@ -50,8 +52,12 @@ func (h *MFAHandler) Enable(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	// Build otpauth URI for QR code generation
-	otpauthURI := fmt.Sprintf("otpauth://totp/Zenith:%s?secret=%s&issuer=Zenith&digits=6&period=30", userID, enrollment.Secret)
+	// Build otpauth URI for QR code generation using the user's email
+	label := email
+	if label == "" {
+		label = userID
+	}
+	otpauthURI := fmt.Sprintf("otpauth://totp/Zenith:%s?secret=%s&issuer=Zenith&digits=6&period=30", label, enrollment.Secret)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"secret":       enrollment.Secret,
@@ -74,20 +80,32 @@ func (h *MFAHandler) Verify(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "code must be 6 digits")
 	}
 
-	// In a real implementation, validate the TOTP code against the secret.
-	// For now, accept any 6-digit code during enrollment verification.
-	enrollment, err := h.mfaRepo.ConfirmEnrollment(c.Context(), userID)
+	// Get the pending enrollment to access the secret
+	enrollment, err := h.mfaRepo.GetEnrollment(c.Context(), userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "no pending MFA enrollment")
+	}
+	if enrollment.Status != entities.MFAStatusPending {
+		return fiber.NewError(fiber.StatusBadRequest, "no pending MFA enrollment")
+	}
+
+	// Validate TOTP code against the secret
+	if !totp.Validate(body.Code, enrollment.Secret) {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid TOTP code")
+	}
+
+	confirmed, err := h.mfaRepo.ConfirmEnrollment(c.Context(), userID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
 	return c.JSON(fiber.Map{
-		"status":     enrollment.Status,
-		"enabled_at": enrollment.EnabledAt,
+		"status":     confirmed.Status,
+		"enabled_at": confirmed.EnabledAt,
 	})
 }
 
-// Disable turns off MFA for the authenticated user.
+// Disable turns off MFA for the authenticated user after validating TOTP or backup code.
 func (h *MFAHandler) Disable(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
@@ -101,7 +119,24 @@ func (h *MFAHandler) Disable(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "TOTP code or backup code required")
 	}
 
-	// In production, validate TOTP or backup code here before disabling.
+	enrollment, err := h.mfaRepo.GetEnrollment(c.Context(), userID)
+	if err != nil || enrollment.Status != entities.MFAStatusEnabled {
+		return fiber.NewError(fiber.StatusBadRequest, "MFA is not enabled")
+	}
+
+	// Try TOTP validation first (6-digit code)
+	if len(body.Code) == 6 {
+		if !totp.Validate(body.Code, enrollment.Secret) {
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid TOTP code")
+		}
+	} else {
+		// Try backup code
+		used, err := h.mfaRepo.UseBackupCode(c.Context(), userID, body.Code)
+		if err != nil || !used {
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid backup code")
+		}
+	}
+
 	if err := h.mfaRepo.DisableEnrollment(c.Context(), userID); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -119,4 +154,9 @@ func (h *MFAHandler) RegenerateBackupCodes(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"backup_codes": codes})
+}
+
+// ValidateTOTP validates a TOTP code against the user's secret. Used by login MFA challenge.
+func ValidateTOTP(code, secret string) bool {
+	return totp.Validate(code, secret)
 }

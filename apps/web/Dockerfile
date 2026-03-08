@@ -21,7 +21,7 @@ RUN pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 
-# NEXT_PUBLIC_* must be set at build time for client components
+# NEXT_PUBLIC_* set at build time as defaults; overridden at runtime by entrypoint.sh
 ARG NEXT_PUBLIC_DEMO_MODE=false
 ARG NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com
 ARG NEXT_PUBLIC_ZENITH_MODE=standalone
@@ -65,12 +65,12 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 
-# Copy public assets if they exist (using a no-fail pattern)
-# If your app has a public/ directory, uncomment the next line:
-# COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+# Copy entrypoint script for runtime env injection
+COPY --chown=nextjs:nodejs apps/web/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "apps/web/server.js"]
+ENTRYPOINT ["./entrypoint.sh"]

@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -143,7 +143,7 @@ func (h *DomainHandler) refreshIngress(ctx context.Context, app *entities.App) {
 	// Get the latest deployment to find the current image tag
 	deployments, err := h.appRepo.ListDeployments(ctx, app.ID, 1)
 	if err != nil || len(deployments) == 0 {
-		log.Printf("[domain] Warning: no deployments found for app %s, skipping IngressRoute refresh", app.ID)
+		slog.Warn("no deployments found, skipping IngressRoute refresh", "app_id", app.ID)
 		return
 	}
 	imageTag := deployments[0].ImageTag
@@ -152,7 +152,7 @@ func (h *DomainHandler) refreshIngress(ctx context.Context, app *entities.App) {
 	}
 
 	if err := h.deployer.DeployApp(ctx, app, imageTag); err != nil {
-		log.Printf("[domain] Warning: failed to refresh IngressRoute for app %s: %v", app.ID, err)
+		slog.Warn("failed to refresh IngressRoute", "app_id", app.ID, "error", err)
 	}
 }
 

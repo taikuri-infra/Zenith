@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -71,7 +71,7 @@ func (p *Provisioner) TeardownCluster(ctx context.Context, customer *entities.Cu
 	_ = p.customers.UpdateClusterStatus(ctx, customer.ID, entities.ClusterStatusDeleting)
 
 	if err := p.capi.DeleteCluster(ctx, customer.CAPIClusterName); err != nil {
-		log.Printf("Warning: failed to delete CAPI cluster %s: %v", customer.CAPIClusterName, err)
+		slog.Error("failed to delete CAPI cluster", "cluster_name", customer.CAPIClusterName, "error", err)
 	}
 
 	_ = p.admin.AddAuditEntry(ctx, entities.AuditEntry{
@@ -154,7 +154,7 @@ func (p *Provisioner) syncOnce() {
 
 	customers, err := p.customers.ListProvisioningCustomers(ctx)
 	if err != nil {
-		log.Printf("cluster sync: failed to list provisioning customers: %v", err)
+		slog.Error("cluster sync: failed to list provisioning customers", "error", err)
 		return
 	}
 
@@ -181,7 +181,7 @@ func (p *Provisioner) syncOnce() {
 
 		if newStatus != cust.ClusterStatus {
 			if err := p.customers.UpdateClusterStatus(ctx, cust.ID, newStatus); err != nil {
-				log.Printf("cluster sync: failed to update status for %s: %v", cust.CAPIClusterName, err)
+				slog.Error("cluster sync: failed to update status", "cluster_name", cust.CAPIClusterName, "error", err)
 			}
 		}
 	}

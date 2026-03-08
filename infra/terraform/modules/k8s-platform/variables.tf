@@ -532,3 +532,65 @@ variable "otel_collector_version" {
   type        = string
   default     = "0.96.0"
 }
+
+# --- V3 Operator Migration ---
+
+variable "enable_v3_operators" {
+  description = "Enable V3 operator-managed deployments (Loki/OTel/Tempo/Keycloak/Redis/MongoDB/NATS/RabbitMQ/Kafka operators)"
+  type        = bool
+  default     = false
+}
+
+variable "loki_operator_version" {
+  description = "Loki Operator Helm chart version"
+  type        = string
+  default     = "0.6.2"
+}
+
+variable "otel_operator_version" {
+  description = "OpenTelemetry Operator Helm chart version"
+  type        = string
+  default     = "0.72.0"
+}
+
+variable "tempo_operator_version" {
+  description = "Tempo Operator Helm chart version"
+  type        = string
+  default     = "0.12.0"
+}
+
+variable "keycloak_operator_version" {
+  description = "Keycloak Operator Helm chart version"
+  type        = string
+  default     = "26.0.7"
+}
+
+variable "redis_operator_version" {
+  description = "Redis Operator (Spotahome) Helm chart version"
+  type        = string
+  default     = "3.3.1"
+}
+
+variable "mongodb_operator_version" {
+  description = "Percona MongoDB Operator Helm chart version"
+  type        = string
+  default     = "1.17.0"
+}
+
+variable "nats_version" {
+  description = "NATS Helm chart version"
+  type        = string
+  default     = "1.2.6"
+}
+
+variable "rabbitmq_operator_version" {
+  description = "RabbitMQ Cluster Operator Helm chart version"
+  type        = string
+  default     = "4.3.24"
+}
+
+variable "strimzi_version" {
+  description = "Strimzi Kafka Operator Helm chart version"
+  type        = string
+  default     = "0.44.0"
+}

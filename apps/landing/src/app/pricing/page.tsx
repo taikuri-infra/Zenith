@@ -9,20 +9,23 @@ import { ArrowRight, Check, ChevronDown, ChevronUp, HelpCircle } from "lucide-re
 import { registerUrl } from "@/lib/urls";
 
 const cloudFeatures = [
-  { feature: "Apps", free: "1", pro: "5", team: "20", enterprise: "Unlimited" },
-  { feature: "Databases", free: "1 (500MB)", pro: "3 (5GB)", team: "10 (20GB)", enterprise: "Unlimited" },
-  { feature: "Storage", free: "1GB", pro: "10GB", team: "100GB", enterprise: "Custom" },
-  { feature: "Custom Domains", free: false, pro: true, team: true, enterprise: true },
-  { feature: "Always On", free: false, pro: true, team: true, enterprise: true },
-  { feature: "Auto-scaling", free: false, pro: true, team: true, enterprise: true },
-  { feature: "Automated Backups", free: false, pro: true, team: true, enterprise: true },
-  { feature: "Team Members", free: "1", pro: "1", team: "10", enterprise: "Unlimited" },
-  { feature: "RBAC + SSO", free: false, pro: false, team: true, enterprise: true },
-  { feature: "Dedicated Infrastructure", free: false, pro: false, team: false, enterprise: true },
-  { feature: "Compliance (SOC 2, GDPR)", free: false, pro: false, team: false, enterprise: true },
-  { feature: "Custom SLAs", free: false, pro: false, team: false, enterprise: true },
-  { feature: "Priority Support", free: false, pro: false, team: true, enterprise: true },
-  { feature: "Dedicated Support Engineer", free: false, pro: false, team: false, enterprise: true },
+  { feature: "Apps", free: "1", pro: "5", team: "20", business: "Unlimited", enterprise: "Unlimited" },
+  { feature: "Databases", free: "1 (500MB)", pro: "3 (5GB)", team: "10 (20GB)", business: "Unlimited", enterprise: "Unlimited" },
+  { feature: "Storage", free: "1GB", pro: "10GB", team: "100GB", business: "500GB", enterprise: "Custom" },
+  { feature: "Custom Domains", free: false, pro: true, team: true, business: true, enterprise: true },
+  { feature: "Always On", free: false, pro: true, team: true, business: true, enterprise: true },
+  { feature: "Auto-scaling", free: false, pro: true, team: true, business: true, enterprise: true },
+  { feature: "Automated Backups", free: false, pro: true, team: true, business: true, enterprise: true },
+  { feature: "Team Members", free: "1", pro: "1", team: "10", business: "50", enterprise: "Unlimited" },
+  { feature: "RBAC + SSO", free: false, pro: false, team: true, business: true, enterprise: true },
+  { feature: "Audit Log", free: false, pro: false, team: false, business: true, enterprise: true },
+  { feature: "Dedicated Infrastructure", free: false, pro: false, team: false, business: true, enterprise: true },
+  { feature: "IP Whitelisting", free: false, pro: false, team: false, business: true, enterprise: true },
+  { feature: "White-label Branding", free: false, pro: false, team: false, business: true, enterprise: true },
+  { feature: "Compliance (SOC 2, GDPR)", free: false, pro: false, team: false, business: true, enterprise: true },
+  { feature: "Custom SLAs", free: false, pro: false, team: false, business: false, enterprise: true },
+  { feature: "Priority Support", free: false, pro: false, team: true, business: true, enterprise: true },
+  { feature: "Dedicated Support Engineer", free: false, pro: false, team: false, business: false, enterprise: true },
 ];
 
 const faqs = [
@@ -48,7 +51,7 @@ const faqs = [
   },
   {
     q: "How does Zenith Cloud compare to AWS/GCP cost-wise?",
-    a: "For a typical setup with 5 apps and 3 databases, Zenith Pro costs €29/month. A comparable setup on AWS would cost $200-300/month. Even self-hosting on Hetzner brings similar savings.",
+    a: "For a typical setup with 5 apps and 3 databases, Zenith Pro costs €29/month. Teams start at €99/seat and Business at €149/seat. A comparable setup on AWS would cost $200-300/month. Even self-hosting on Hetzner brings similar savings.",
   },
   {
     q: "Do you offer Enterprise on-premise?",
@@ -160,7 +163,7 @@ export default function PricingPage() {
           transition={{ duration: 0.6 }}
           className="overflow-x-auto rounded-2xl border border-border"
         >
-          <table className="w-full min-w-[700px] text-sm">
+          <table className="w-full min-w-[800px] text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-50/50">
                 <th className="p-4 text-left font-medium text-neutral-400">Feature</th>
@@ -174,6 +177,9 @@ export default function PricingPage() {
                   <span className="font-semibold text-white">Team</span>
                 </th>
                 <th className="p-4 text-center">
+                  <span className="font-semibold text-amber-400">Business</span>
+                </th>
+                <th className="p-4 text-center">
                   <span className="font-semibold text-white">Enterprise</span>
                 </th>
               </tr>
@@ -185,6 +191,7 @@ export default function PricingPage() {
                   <td className="p-4 text-center"><FeatureCell value={row.free} /></td>
                   <td className="p-4 text-center"><FeatureCell value={row.pro} /></td>
                   <td className="p-4 text-center"><FeatureCell value={row.team} /></td>
+                  <td className="p-4 text-center"><FeatureCell value={row.business} /></td>
                   <td className="p-4 text-center"><FeatureCell value={row.enterprise} /></td>
                 </tr>
               ))}

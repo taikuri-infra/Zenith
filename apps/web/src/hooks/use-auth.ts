@@ -19,13 +19,16 @@ interface AuthState {
 /**
  * Hook for managing authentication state.
  *
+ * login() returns "mfa_required" when MFA verification is needed.
  * register() returns "verify_email" when email verification is required,
  * or true when the user is auto-logged in (e.g. demo mode).
  */
 export function useAuth(): AuthState & {
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean | "mfa_required">;
+  mfaLogin: (mfaToken: string, code: string) => Promise<boolean>;
   register: (email: string, password: string, name: string) => Promise<boolean | "verify_email">;
   logout: () => void;
+  mfaToken: string | null;
 } {
   const demo = isDemoMode();
 
@@ -36,6 +39,8 @@ export function useAuth(): AuthState & {
     isAuthenticated: demo,
     loading: !demo,
   });
+
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
 
   useEffect(() => {
     if (demo) return;
@@ -67,10 +72,17 @@ export function useAuth(): AuthState & {
     setState({ user: null, isAuthenticated: false, loading: false });
   }, [demo]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<boolean | "mfa_required"> => {
     if (demo) return true;
     try {
       const response = await auth.login({ email, password });
+
+      // MFA required — store MFA token for the second step
+      if (response.mfa_required && response.mfa_token) {
+        setMfaToken(response.mfa_token);
+        return "mfa_required";
+      }
+
       const payload = JSON.parse(atob(response.access_token.split(".")[1]));
       setState({
         user: {
@@ -81,6 +93,27 @@ export function useAuth(): AuthState & {
         isAuthenticated: true,
         loading: false,
       });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [demo]);
+
+  const mfaLoginFn = useCallback(async (token: string, code: string): Promise<boolean> => {
+    if (demo) return true;
+    try {
+      const response = await auth.mfaLogin({ mfa_token: token, code });
+      const payload = JSON.parse(atob(response.access_token.split(".")[1]));
+      setState({
+        user: {
+          email: payload.email || "",
+          name: payload.name || "",
+          role: payload.role || "viewer",
+        },
+        isAuthenticated: true,
+        loading: false,
+      });
+      setMfaToken(null);
       return true;
     } catch {
       return false;
@@ -125,7 +158,8 @@ export function useAuth(): AuthState & {
     if (demo) return;
     auth.logout();
     setState({ user: null, isAuthenticated: false, loading: false });
+    setMfaToken(null);
   }, [demo]);
 
-  return { ...state, login, register, logout };
+  return { ...state, login, mfaLogin: mfaLoginFn, register, logout, mfaToken };
 }

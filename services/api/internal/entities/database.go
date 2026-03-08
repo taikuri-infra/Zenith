@@ -4,9 +4,12 @@ package entities
 type DatabaseEngine string
 
 const (
-	DatabaseEnginePostgres DatabaseEngine = "postgresql"
-	DatabaseEngineMySQL    DatabaseEngine = "mysql"
-	DatabaseEngineRedis    DatabaseEngine = "redis"
+	DatabaseEnginePostgres  DatabaseEngine = "postgresql"
+	DatabaseEngineMySQL     DatabaseEngine = "mysql"
+	DatabaseEngineRedis     DatabaseEngine = "redis"
+	DatabaseEngineMongoDB   DatabaseEngine = "mongodb"
+	DatabaseEngineRabbitMQ  DatabaseEngine = "rabbitmq"
+	DatabaseEngineKafka     DatabaseEngine = "kafka"
 )
 
 // DatabaseProvisioner indicates how the database was provisioned.
@@ -55,6 +58,12 @@ func (d *UserDatabase) ConnectionString(password string) string {
 		return d.DBUser + ":" + password + "@tcp(" + d.Host + ":" + itoa(d.Port) + ")/" + d.DBName
 	case DatabaseEngineRedis:
 		return "redis://:" + password + "@" + d.Host + ":" + itoa(d.Port) + "/0"
+	case DatabaseEngineMongoDB:
+		return "mongodb://" + d.DBUser + ":" + password + "@" + d.Host + ":" + itoa(d.Port) + "/" + d.DBName + "?authSource=admin"
+	case DatabaseEngineRabbitMQ:
+		return "amqp://" + d.DBUser + ":" + password + "@" + d.Host + ":" + itoa(d.Port) + "/" + d.DBName
+	case DatabaseEngineKafka:
+		return d.Host + ":" + itoa(d.Port)
 	default:
 		return ""
 	}

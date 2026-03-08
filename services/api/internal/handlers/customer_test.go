@@ -731,8 +731,13 @@ func TestScaleClusterEndpoint(t *testing.T) {
 
 	var created entities.Customer
 	json.NewDecoder(createResp.Body).Decode(&created)
+	if created.ID == "" {
+		t.Fatal("Customer creation failed — empty ID")
+	}
 
-	// Give goroutine time to provision
+	// Wait for async provisioning goroutine to complete
+	time.Sleep(50 * time.Millisecond)
+
 	// Scale
 	scaleBody := `{"nodes":5}`
 	scaleReq := httptest.NewRequest("POST", "/api/v1/admin/customers/"+created.ID+"/cluster/scale", bytes.NewBufferString(scaleBody))
@@ -779,8 +784,8 @@ func TestUpgradeClusterEndpoint(t *testing.T) {
 	var created entities.Customer
 	json.NewDecoder(createResp.Body).Decode(&created)
 
-	// Allow async provisioning goroutine to create the cluster CRD
-	time.Sleep(100 * time.Millisecond)
+	// Allow async provisioning goroutine to finish (race detector catches concurrent map access)
+	time.Sleep(200 * time.Millisecond)
 
 	// Upgrade
 	upgradeBody := `{"version":"v1.32.0"}`

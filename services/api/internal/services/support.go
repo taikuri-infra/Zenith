@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -95,7 +95,7 @@ func (s *SupportService) CreateTicket(ctx context.Context, userID, subject, cate
 	if s.emailSender != nil && s.adminEmail != "" {
 		ticketURL := fmt.Sprintf("%s/support/%s", s.appURL, ticketID)
 		if err := s.emailSender.SendSupportTicketNotification(ctx, s.adminEmail, subject, ticketURL); err != nil {
-			log.Printf("[support] Failed to send admin notification: %v", err)
+			slog.Error("failed to send admin notification for support ticket", "error", err)
 		}
 	}
 
@@ -219,7 +219,7 @@ func (s *SupportService) AdminReply(ctx context.Context, adminUserID, ticketID, 
 		if err == nil && user != nil {
 			ticketURL := fmt.Sprintf("%s/support/%s", s.appURL, ticketID)
 			if err := s.emailSender.SendSupportReplyNotification(ctx, user.Email, user.Name, ticket.Subject, ticketURL); err != nil {
-				log.Printf("[support] Failed to send reply notification: %v", err)
+				slog.Error("failed to send reply notification for support ticket", "error", err)
 			}
 		}
 	}

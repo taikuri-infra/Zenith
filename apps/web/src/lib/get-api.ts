@@ -3,18 +3,19 @@
  * the NEXT_PUBLIC_DEMO_MODE environment variable.
  */
 
-import { auth, projects, apps, databases, storage, storageBuckets, appsDeploy, userDatabases, standaloneDatabases, notifications, activity, userPlan, apiKeys, sessions, mfa, webhooks, roles, ipWhitelist, compliance, dpa, branding, sso, previews, autoscaler, billing, registry, gateways, authPools, team, support } from "./api";
+import { auth, projects, apps, databases, storage, storageBuckets, appsDeploy, userDatabases, standaloneDatabases, notifications, activity, userPlan, apiKeys, sessions, mfa, webhooks, roles, ipWhitelist, compliance, dpa, branding, sso, previews, autoscaler, billing, registry, gateways, authPools, team, support, monitoring, audit, addons, podSessions, waf, networkPolicies, alerts } from "./api";
 import { demoApi } from "./demo-api";
+import { DEMO_MODE } from "./runtime-env";
 
-const realApi = { auth, projects, apps, databases, storage, storageBuckets, appsDeploy, userDatabases, standaloneDatabases, notifications, activity, userPlan, apiKeys, sessions, mfa, webhooks, roles, ipWhitelist, compliance, dpa, branding, sso, previews, autoscaler, billing, registry, gateways, authPools, team, support };
+const realApi = { auth, projects, apps, databases, storage, storageBuckets, appsDeploy, userDatabases, standaloneDatabases, notifications, activity, userPlan, apiKeys, sessions, mfa, webhooks, roles, ipWhitelist, compliance, dpa, branding, sso, previews, autoscaler, billing, registry, gateways, authPools, team, support, monitoring, audit, addons, podSessions, waf, networkPolicies, alerts };
 
 export function getApi() {
-  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+  if (DEMO_MODE) {
     return demoApi;
   }
   return realApi;
 }
 
 export function isDemoMode(): boolean {
-  return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  return DEMO_MODE;
 }

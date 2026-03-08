@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -42,7 +42,7 @@ func (d *Deployer) SetDomainRepo(repo ports.DomainRepository) {
 // It creates or updates the Deployment, Service, IngressRoute, and
 // optionally the KEDA HTTPScaledObject for free-tier scale-to-zero.
 func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag string) error {
-	log.Printf("[deployer] Deploying app=%s image=%s", app.Name, imageTag)
+	slog.Info("deploying app", "app", app.Name, "image", imageTag)
 
 	// Get env vars for the app
 	envVars, err := d.appRepo.GetEnvVars(ctx, app.ID)
@@ -59,7 +59,7 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 			planLimits = &plan.Limits
 			tier = plan.Tier
 		} else {
-			log.Printf("[deployer] Warning: failed to get user plan for %s: %v (defaulting to free tier)", app.UserID, err)
+			slog.Error("failed to get user plan, defaulting to free tier", "user_id", app.UserID, "error", err)
 		}
 	}
 
@@ -68,7 +68,7 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 	if d.domainRepo != nil {
 		domains, err := d.domainRepo.ListDomainsByApp(ctx, app.ID)
 		if err != nil {
-			log.Printf("[deployer] Warning: failed to fetch custom domains for %s: %v", app.ID, err)
+			slog.Error("failed to fetch custom domains", "app_id", app.ID, "error", err)
 		} else {
 			for _, dom := range domains {
 				if dom.Status == entities.DomainStatusActive {
@@ -120,14 +120,14 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 		d.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{
 			Status: &status,
 		})
-		log.Printf("[deployer] App deployed (sleeping): %s → https://%s.%s", app.Name, app.Subdomain, d.baseDomain)
+		slog.Info("app deployed (sleeping)", "app", app.Name, "subdomain", app.Subdomain, "base_domain", d.baseDomain)
 	} else {
 		// Always-on: set status to running
 		status := entities.AppStatusRunning
 		d.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{
 			Status: &status,
 		})
-		log.Printf("[deployer] App deployed: %s → https://%s.%s", app.Name, app.Subdomain, d.baseDomain)
+		slog.Info("app deployed", "app", app.Name, "subdomain", app.Subdomain, "base_domain", d.baseDomain)
 	}
 
 	return nil
@@ -135,21 +135,21 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 
 // DeleteApp removes all K8s resources for an app, including KEDA CRDs.
 func (d *Deployer) DeleteApp(ctx context.Context, app *entities.App) error {
-	log.Printf("[deployer] Deleting K8s resources for app=%s", app.Name)
+	slog.Info("deleting K8s resources for app", "app", app.Name)
 
 	namespace := "zenith-apps"
 	for _, kind := range []string{"HTTPScaledObject", "Deployment", "Service", "IngressRoute"} {
 		if err := d.k8sClient.DeleteCRD(ctx, kind, namespace, app.Subdomain); err != nil {
-			log.Printf("[deployer] Warning: failed to delete %s/%s: %v", kind, app.Subdomain, err)
+			slog.Error("failed to delete K8s resource", "kind", kind, "subdomain", app.Subdomain, "error", err)
 		}
 	}
 	// Clean up NetworkPolicy (uses -netpol suffix)
 	if err := d.k8sClient.DeleteCRD(ctx, "NetworkPolicy", namespace, app.Subdomain+"-netpol"); err != nil {
-		log.Printf("[deployer] Warning: failed to delete NetworkPolicy/%s-netpol: %v", app.Subdomain, err)
+		slog.Error("failed to delete NetworkPolicy", "subdomain", app.Subdomain, "error", err)
 	}
 	// Clean up Certificate CRD for custom domains
 	if err := d.k8sClient.DeleteCRD(ctx, "Certificate", namespace, app.Subdomain+"-custom-tls"); err != nil {
-		log.Printf("[deployer] Warning: failed to delete Certificate/%s-custom-tls: %v", app.Subdomain, err)
+		slog.Error("failed to delete Certificate", "subdomain", app.Subdomain, "error", err)
 	}
 
 	return nil

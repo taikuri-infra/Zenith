@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -19,7 +20,13 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	zenithJWT "github.com/dotechhq/zenith/services/api/pkg/jwt"
+	"github.com/pquerna/otp/totp"
 )
+
+// ValidateTOTP validates a TOTP code against a secret.
+func ValidateTOTP(code, secret string) bool {
+	return totp.Validate(code, secret)
+}
 
 const (
 	AccessTokenExpiry       = 1 * time.Hour
@@ -59,12 +66,35 @@ type oauthCodeEntry struct {
 	expiresAt time.Time
 }
 
+// mfaCodeEntry stores a pending MFA login challenge.
+type mfaCodeEntry struct {
+	userID    string
+	expiresAt time.Time
+	attempts  int // brute-force protection
+}
+
+const mfaTokenTTL = 5 * time.Minute
+const mfaMaxAttempts = 5
+
+// oauthHTTPClient is a dedicated HTTP client for OAuth provider requests
+// with a 10-second timeout to prevent indefinite hangs.
+var oauthHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+// LoginResult represents the outcome of a login attempt.
+// If MFARequired is true, the client must call MFALogin with the MFAToken and TOTP code.
+type LoginResult struct {
+	Tokens      *TokenPair // nil when MFA is required
+	MFARequired bool
+	MFAToken    string // short-lived token for MFA verification
+}
+
 // AuthService handles authentication business logic.
 type AuthService struct {
 	users       ports.UserRepository
 	planRepo    ports.UserPlanRepository    // nil-safe — skips plan assignment when nil
 	projectRepo ports.ProjectRepository     // nil-safe — skips default project creation when nil
 	teamRepo    ports.TeamMemberRepository  // nil-safe — skips team member lookup when nil
+	mfaRepo     ports.MFARepository         // nil-safe — skips MFA check when nil
 	jwtSecret   string
 	emailSender ports.EmailSender // nil = skip sending emails (dev mode)
 	appURL      string            // frontend URL for verification links
@@ -72,6 +102,9 @@ type AuthService struct {
 
 	oauthCodesMu sync.Mutex
 	oauthCodes   map[string]*oauthCodeEntry
+
+	mfaCodesMu sync.Mutex
+	mfaCodes   map[string]*mfaCodeEntry // mfaToken → userID mapping
 }
 
 // NewAuthService creates a new AuthService.
@@ -81,12 +114,18 @@ func NewAuthService(users ports.UserRepository, jwtSecret string, planRepo ports
 		jwtSecret:  jwtSecret,
 		planRepo:   planRepo,
 		oauthCodes: make(map[string]*oauthCodeEntry),
+		mfaCodes:   make(map[string]*mfaCodeEntry),
 	}
 }
 
 // SetProjectRepo configures the project repository for default project creation on registration.
 func (s *AuthService) SetProjectRepo(repo ports.ProjectRepository) {
 	s.projectRepo = repo
+}
+
+// SetMFARepo configures the MFA repository for login MFA challenge.
+func (s *AuthService) SetMFARepo(repo ports.MFARepository) {
+	s.mfaRepo = repo
 }
 
 // SetTeamRepo configures the team member repository for team login enrichment.
@@ -105,8 +144,9 @@ func (s *AuthService) SetEmailSender(sender ports.EmailSender, appURL string) {
 	s.appURL = appURL
 }
 
-// Login validates credentials and returns a token pair.
-func (s *AuthService) Login(ctx context.Context, email, password string) (*TokenPair, error) {
+// Login validates credentials and returns a LoginResult.
+// If MFA is enabled, MFARequired=true and MFAToken is set. Client must call MFALogin next.
+func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResult, error) {
 	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil || !s.users.CheckPassword(user, password) {
 		return nil, fmt.Errorf("invalid email or password")
@@ -117,7 +157,89 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Token
 		return nil, fmt.Errorf("please verify your email before logging in")
 	}
 
-	return s.issueTokens(&user.User)
+	// Check if MFA is enabled for this user
+	if s.mfaRepo != nil {
+		enrollment, err := s.mfaRepo.GetEnrollment(ctx, user.ID)
+		if err == nil && enrollment.Status == entities.MFAStatusEnabled {
+			// MFA required — issue a short-lived MFA token
+			mfaToken, err := generateRandomToken()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate MFA token")
+			}
+
+			s.mfaCodesMu.Lock()
+			s.mfaCodes[mfaToken] = &mfaCodeEntry{
+				userID:    user.ID,
+				expiresAt: time.Now().Add(mfaTokenTTL),
+			}
+			s.mfaCodesMu.Unlock()
+
+			return &LoginResult{MFARequired: true, MFAToken: mfaToken}, nil
+		}
+	}
+
+	tokens, err := s.issueTokens(ctx, &user.User)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginResult{Tokens: tokens}, nil
+}
+
+// MFALogin completes a login that requires MFA verification.
+func (s *AuthService) MFALogin(ctx context.Context, mfaToken, code string) (*TokenPair, error) {
+	s.mfaCodesMu.Lock()
+	entry, exists := s.mfaCodes[mfaToken]
+	if !exists || time.Now().After(entry.expiresAt) {
+		if exists {
+			delete(s.mfaCodes, mfaToken)
+		}
+		s.mfaCodesMu.Unlock()
+		return nil, fmt.Errorf("invalid or expired MFA token")
+	}
+
+	// Brute-force protection: max attempts per token
+	entry.attempts++
+	if entry.attempts > mfaMaxAttempts {
+		delete(s.mfaCodes, mfaToken)
+		s.mfaCodesMu.Unlock()
+		return nil, fmt.Errorf("too many MFA attempts, please login again")
+	}
+	s.mfaCodesMu.Unlock()
+
+	// Get user
+	user, err := s.users.GetByID(ctx, entry.userID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	// Get MFA enrollment
+	enrollment, err := s.mfaRepo.GetEnrollment(ctx, entry.userID)
+	if err != nil || enrollment.Status != entities.MFAStatusEnabled {
+		return nil, fmt.Errorf("MFA is not enabled")
+	}
+
+	// Try TOTP code first (6-digit)
+	valid := false
+	if len(code) == 6 {
+		valid = ValidateTOTP(code, enrollment.Secret)
+	}
+	// Try backup code if TOTP failed
+	if !valid {
+		used, err := s.mfaRepo.UseBackupCode(ctx, entry.userID, code)
+		if err == nil && used {
+			valid = true
+		}
+	}
+	if !valid {
+		return nil, fmt.Errorf("invalid MFA code")
+	}
+
+	// Success — remove the token
+	s.mfaCodesMu.Lock()
+	delete(s.mfaCodes, mfaToken)
+	s.mfaCodesMu.Unlock()
+
+	return s.issueTokens(ctx, &user.User)
 }
 
 // Register creates a new user and sends a verification email.
@@ -160,7 +282,7 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 		verificationURL := s.appURL + "/verify-email?token=" + rawToken
 		if err := s.emailSender.SendVerificationEmail(ctx, email, name, verificationURL); err != nil {
 			// Log but don't fail — user can resend
-			fmt.Printf("[auth] failed to send verification email to %s: %v\n", email, err)
+			slog.Warn("failed to send verification email", "email", email, "error", err)
 		}
 	}
 
@@ -190,7 +312,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, token string) (*TokenPair
 		return nil, fmt.Errorf("user not found")
 	}
 
-	return s.issueTokens(&user.User)
+	return s.issueTokens(ctx, &user.User)
 }
 
 // ResendVerification generates a new verification token and sends the email.
@@ -231,7 +353,7 @@ func (s *AuthService) ResendVerification(ctx context.Context, email string) erro
 
 // Refresh validates a refresh token and returns a new token pair.
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenPair, error) {
-	claims, err := zenithJWT.ParseToken(s.jwtSecret, refreshToken)
+	claims, err := zenithJWT.ParseTokenWithType(s.jwtSecret, refreshToken, zenithJWT.TokenTypeRefresh)
 	if err != nil {
 		return nil, fmt.Errorf("invalid or expired refresh token")
 	}
@@ -241,7 +363,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenP
 		return nil, fmt.Errorf("user not found")
 	}
 
-	return s.issueTokens(&user.User)
+	return s.issueTokens(ctx, &user.User)
 }
 
 // GetOAuthRedirectURL builds the provider authorization URL and returns a random state.
@@ -442,7 +564,7 @@ func (s *AuthService) fetchGoogleUserInfo(accessToken string) (string, string, e
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to fetch Google user info: %w", err)
 	}
@@ -482,7 +604,7 @@ func (s *AuthService) fetchGitHubUserInfo(accessToken string) (string, string, e
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to fetch GitHub user info: %w", err)
 	}
@@ -531,7 +653,7 @@ func (s *AuthService) fetchGitHubPrimaryEmail(accessToken string) (string, error
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch GitHub emails: %w", err)
 	}
@@ -576,7 +698,7 @@ func (s *AuthService) findOrCreateOAuthUser(ctx context.Context, email, name, pr
 		if !existing.EmailVerified {
 			_ = s.users.SetEmailVerified(ctx, existing.ID)
 		}
-		return s.issueTokens(&existing.User)
+		return s.issueTokens(ctx, &existing.User)
 	}
 
 	// Create new user with random password (OAuth users don't use passwords)
@@ -618,24 +740,24 @@ func (s *AuthService) findOrCreateOAuthUser(ctx context.Context, email, name, pr
 	user.EmailVerified = true
 	user.AuthProvider = provider
 
-	return s.issueTokens(user)
+	return s.issueTokens(ctx, user)
 }
 
-func (s *AuthService) issueTokens(user *entities.User) (*TokenPair, error) {
+func (s *AuthService) issueTokens(ctx context.Context, user *entities.User) (*TokenPair, error) {
 	// Check if user is a team member — issue tokens with AccountID if so
 	if s.teamRepo != nil {
-		member, err := s.teamRepo.GetMemberByUserID(context.Background(), user.ID)
+		member, err := s.teamRepo.GetMemberByUserID(ctx, user.ID)
 		if err == nil && member != nil {
 			return s.issueTeamTokens(user, member)
 		}
 	}
 
-	accessToken, err := zenithJWT.GenerateToken(s.jwtSecret, user, AccessTokenExpiry)
+	accessToken, err := zenithJWT.GenerateToken(s.jwtSecret, user, AccessTokenExpiry, zenithJWT.TokenTypeAccess)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token")
 	}
 
-	refreshToken, err := zenithJWT.GenerateToken(s.jwtSecret, user, RefreshTokenExpiry)
+	refreshToken, err := zenithJWT.GenerateToken(s.jwtSecret, user, RefreshTokenExpiry, zenithJWT.TokenTypeRefresh)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token")
 	}
@@ -654,12 +776,12 @@ func (s *AuthService) issueTeamTokens(user *entities.User, member *entities.Team
 		Role:      member.Role,
 	}
 
-	accessToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, AccessTokenExpiry, overrides)
+	accessToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, AccessTokenExpiry, overrides, zenithJWT.TokenTypeAccess)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token")
 	}
 
-	refreshToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, RefreshTokenExpiry, overrides)
+	refreshToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, RefreshTokenExpiry, overrides, zenithJWT.TokenTypeRefresh)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token")
 	}

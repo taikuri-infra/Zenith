@@ -15,6 +15,7 @@ func TestShouldScaleToZero(t *testing.T) {
 		{"free tier scales to zero", entities.PlanFree, true},
 		{"pro tier always on", entities.PlanPro, false},
 		{"team tier always on", entities.PlanTeam, false},
+		{"business tier always on", entities.PlanBusiness, false},
 		{"enterprise tier always on", entities.PlanEnterprise, false},
 	}
 

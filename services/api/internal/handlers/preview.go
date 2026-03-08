@@ -26,7 +26,7 @@ func (h *PreviewHandler) Create(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	if plan.Tier != entities.PlanTeam && plan.Tier != entities.PlanEnterprise {
+	if plan.Tier != entities.PlanTeam && plan.Tier != entities.PlanBusiness && plan.Tier != entities.PlanEnterprise {
 		return fiber.NewError(fiber.StatusForbidden, "preview deployments require Team plan or higher")
 	}
 

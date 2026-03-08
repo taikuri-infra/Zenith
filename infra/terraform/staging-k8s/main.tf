@@ -161,7 +161,7 @@ module "platform" {
 
   # --- V2 Feature flags ---
   enable_cnpg           = true
-  enable_apisix         = true    # V2: replaces Kong
+  enable_apisix         = true # V2: replaces Kong
   enable_keycloak       = true
   enable_external_dns   = true
   enable_argocd         = true
@@ -174,5 +174,5 @@ module "platform" {
   enable_monitoring     = true
   enable_keda           = true
   enable_demo           = true
-  enable_tenants        = false  # Tenants provisioned dynamically via purchase flow
+  enable_tenants        = false # Tenants provisioned dynamically via purchase flow
 }

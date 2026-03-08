@@ -3,8 +3,9 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -23,6 +24,7 @@ type Pipeline struct {
 	appRepo       ports.AppRepository
 	logHub        *LogHub
 	eventHub      *EventHub
+	eventBus      ports.EventBus // NATS JetStream (optional)
 	mu            sync.Mutex
 	running       map[string]*runningBuild // deploymentID -> build info
 	maxConcurrent int
@@ -76,7 +78,7 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 			cancel()
 		}()
 
-		log.Printf("[pipeline] Deploying image=%s app=%s deploy=%s", image, app.Name, deployment.ID[:min(8, len(deployment.ID))])
+		slog.Info("deploying image", "image", image, "app", app.Name, "deploy_id", deployment.ID[:min(8, len(deployment.ID))])
 		p.emitLog(deployment.ID, "info", fmt.Sprintf("Deploying %s → %s...", app.Name, image))
 		p.emitEvent(EventDeploymentStarted, app, deployment, image, fmt.Sprintf("Deploying %s", image))
 
@@ -155,6 +157,11 @@ func (p *Pipeline) emitLog(deploymentID, level, message string) {
 	}
 }
 
+// SetEventBus configures the NATS event bus for durable event publishing.
+func (p *Pipeline) SetEventBus(bus ports.EventBus) {
+	p.eventBus = bus
+}
+
 // emitEvent publishes a deployment event if an EventHub is configured.
 func (p *Pipeline) emitEvent(eventType EventType, app *entities.App, deployment *entities.Deployment, image, message string) {
 	if p.eventHub != nil {
@@ -167,5 +174,36 @@ func (p *Pipeline) emitEvent(eventType EventType, app *entities.App, deployment 
 			Image:        image,
 			Message:      message,
 		})
+	}
+
+	// Also publish to NATS event bus for durable processing
+	if p.eventBus != nil {
+		var subject entities.EventSubject
+		switch eventType {
+		case EventDeploymentStarted:
+			subject = entities.EventDeployStarted
+		case EventDeployComplete:
+			subject = entities.EventDeployCompleted
+		case EventDeployFailed:
+			subject = entities.EventDeployFailed
+		default:
+			return
+		}
+
+		evt := &entities.PlatformEvent{
+			Subject:   subject,
+			UserID:    app.UserID,
+			Timestamp: time.Now(),
+			Data: map[string]interface{}{
+				"app_id":        app.ID,
+				"app_name":      app.Name,
+				"deployment_id": deployment.ID,
+				"image":         image,
+				"message":       message,
+			},
+		}
+		if err := p.eventBus.Publish(context.Background(), evt); err != nil {
+			slog.Error("failed to publish event to bus", "error", err)
+		}
 	}
 }

@@ -1,0 +1,16 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-operator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-operator
+    app.kubernetes.io/name: zenith-operator
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: operator
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zenith-operator

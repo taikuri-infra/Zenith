@@ -59,12 +59,12 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/apps/landing/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/landing/.next/static ./apps/landing/.next/static
 
-# Copy public assets if they exist (using a no-fail pattern)
-# If your app has a public/ directory, uncomment the next line:
-# COPY --from=builder --chown=nextjs:nodejs /app/apps/landing/public ./apps/landing/public
+# Copy entrypoint script for runtime env injection
+COPY --chown=nextjs:nodejs apps/landing/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "apps/landing/server.js"]
+ENTRYPOINT ["./entrypoint.sh"]

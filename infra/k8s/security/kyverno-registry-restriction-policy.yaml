@@ -1,0 +1,105 @@
+# Kyverno ClusterPolicy: Deny pods in zenith-apps namespace that use images
+# not from our Harbor registry. Prevents supply chain attacks.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registry
+  annotations:
+    policies.kyverno.io/title: Restrict Image Registries
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      All container images in zenith-apps must come from the
+      Zenith Harbor registry. This prevents users from deploying
+      arbitrary images from Docker Hub or other registries.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: validate-image-registry
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - zenith-apps
+      validate:
+        message: >-
+          Image "{{request.object.spec.containers[0].image}}" is not from an
+          allowed registry. Only images from the Zenith Harbor registry are permitted.
+        pattern:
+          spec:
+            containers:
+              - image: "registry.*.freezenith.com/* | hub.*.freezenith.com/*"
+            =(initContainers):
+              - image: "registry.*.freezenith.com/* | hub.*.freezenith.com/*"
+
+    # Allow nginx cold-start page image (platform-managed)
+    - name: allow-cold-start-nginx
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - zenith-apps
+              selector:
+                matchLabels:
+                  zenith.dev/cold-start: "true"
+      validate:
+        message: "Cold-start pods may use nginx image"
+        pattern:
+          spec:
+            containers:
+              - image: "nginx:*"
+---
+# Additional policy: Deny privileged containers in all zenith namespaces
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: deny-privileged-containers
+  annotations:
+    policies.kyverno.io/title: Deny Privileged Containers
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: deny-privileged
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - zenith-apps
+                - zenith-builds
+      validate:
+        message: "Privileged containers are not allowed in tenant namespaces."
+        pattern:
+          spec:
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+
+    - name: deny-host-namespaces
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - zenith-apps
+                - zenith-builds
+      validate:
+        message: "Host namespaces (hostNetwork, hostPID, hostIPC) are not allowed."
+        pattern:
+          spec:
+            =(hostNetwork): "false"
+            =(hostPID): "false"
+            =(hostIPC): "false"

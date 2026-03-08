@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -65,7 +65,7 @@ func (h *ProjectHandlerV2) Create(c *fiber.Ctx) error {
 		if isAlreadyExists(err) || strings.Contains(err.Error(), "already exists") {
 			return NewConflict(err.Error())
 		}
-		log.Printf("[project_v2] failed to create project: %v", err)
+		slog.Error("failed to create project", "error", err)
 		return NewInternal("failed to create project")
 	}
 
@@ -196,7 +196,7 @@ func (h *ProjectHandlerV2) Delete(c *fiber.Ctx) error {
 		if err == nil {
 			for i := range apps {
 				if err := h.deployer.DeleteApp(context.Background(), &apps[i]); err != nil {
-					log.Printf("[project_v2] Warning: failed to delete K8s resources for app %s: %v", apps[i].Name, err)
+					slog.Warn("failed to delete K8s resources for app", "app_id", apps[i].Name, "error", err)
 				}
 				if h.onAppDeleted != nil {
 					go h.onAppDeleted(context.Background(), apps[i].ID)

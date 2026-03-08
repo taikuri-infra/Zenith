@@ -111,10 +111,29 @@ spec:
       imagePullSecrets:
         - name: {{ $.Values.registry.secretName }}
       {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: zenith-mc
+                topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: mission-control
           image: {{ include "zenith.image" (dict "registry" $.Values.imageRegistry "image" $tenant.mc.image) }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: http
               containerPort: {{ $tenant.mc.port | default 3100 }}
@@ -189,10 +208,29 @@ spec:
       imagePullSecrets:
         - name: {{ $.Values.registry.secretName }}
       {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: zenith-web
+                topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: web
           image: {{ include "zenith.image" (dict "registry" $.Values.imageRegistry "image" $tenant.web.image) }}
           imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: http
               containerPort: {{ $tenant.web.port | default 3000 }}

@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -58,7 +58,7 @@ func (h *StorageHandlerV2) Create(c *fiber.Ctx) error {
 	// Create real S3 bucket
 	if h.bucketSvc != nil && bucket.S3BucketName != "" {
 		if err := h.bucketSvc.CreateRealBucket(c.Context(), bucket.S3BucketName); err != nil {
-			log.Printf("[storage] Warning: failed to create real S3 bucket %s: %v", bucket.S3BucketName, err)
+			slog.Warn("failed to create real S3 bucket", "bucket", bucket.S3BucketName, "error", err)
 			// Clean up DB record on S3 failure
 			h.storageRepo.DeleteBucket(c.Context(), bucket.ID)
 			return fiber.NewError(fiber.StatusInternalServerError, "failed to create storage bucket")
@@ -121,7 +121,7 @@ func (h *StorageHandlerV2) Delete(c *fiber.Ctx) error {
 	// Clean up real S3 bucket (empty + delete)
 	if h.bucketSvc != nil && bucket.S3BucketName != "" {
 		if err := h.bucketSvc.DeleteRealBucket(c.Context(), bucket.S3BucketName); err != nil {
-			log.Printf("[storage] Warning: failed to delete real S3 bucket %s: %v", bucket.S3BucketName, err)
+			slog.Warn("failed to delete real S3 bucket", "bucket", bucket.S3BucketName, "error", err)
 		}
 	}
 
@@ -182,7 +182,7 @@ func (h *StorageHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 	// Create real S3 bucket
 	if h.bucketSvc != nil && bucket.S3BucketName != "" {
 		if err := h.bucketSvc.CreateRealBucket(c.Context(), bucket.S3BucketName); err != nil {
-			log.Printf("[storage] Warning: failed to create real S3 bucket %s: %v", bucket.S3BucketName, err)
+			slog.Warn("failed to create real S3 bucket", "bucket", bucket.S3BucketName, "error", err)
 			h.storageRepo.DeleteBucket(c.Context(), bucket.ID)
 			return fiber.NewError(fiber.StatusInternalServerError, "failed to create storage bucket")
 		}
@@ -226,11 +226,11 @@ func (h *StorageHandlerV2) DeleteStandalone(c *fiber.Ctx) error {
 	// Clean up S3 objects and real bucket
 	if h.bucketSvc != nil && bucket.S3BucketName != "" {
 		if err := h.bucketSvc.DeleteRealBucket(c.Context(), bucket.S3BucketName); err != nil {
-			log.Printf("[storage] Warning: failed to delete real S3 bucket %s: %v", bucket.S3BucketName, err)
+			slog.Warn("failed to delete real S3 bucket", "bucket", bucket.S3BucketName, "error", err)
 		}
 	} else if h.tenantStorage != nil {
 		if err := h.tenantStorage.DeleteAllForBucket(c.Context(), bucket); err != nil {
-			log.Printf("[storage] Warning: failed to clean up S3 objects for bucket %s: %v", bucketID, err)
+			slog.Warn("failed to clean up S3 objects for bucket", "bucket_id", bucketID, "error", err)
 		}
 	}
 

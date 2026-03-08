@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
@@ -16,6 +17,9 @@ type CRDObject = ports.K8sCRDObject
 type ObjectMeta = ports.K8sObjectMeta
 type JobObject = ports.K8sJobObject
 type LimitRangeSpec = ports.K8sLimitRangeSpec
+type PodInfo = ports.K8sPodInfo
+type PodMetrics = ports.K8sPodMetrics
+type NodeMetrics = ports.K8sNodeMetrics
 
 // Client provides an interface for Kubernetes operations.
 // In production, this wraps a real K8s client. For testing, use MemoryClient.
@@ -59,6 +63,13 @@ type Client interface {
 	// Generic CRD operations with explicit apiVersion (for non-Zenith CRDs)
 	GetCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) (*CRDObject, error)
 	DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error
+
+	// Pod monitoring operations
+	ListPods(ctx context.Context, namespace, labelSelector string) ([]PodInfo, error)
+	GetPodMetrics(ctx context.Context, namespace, labelSelector string) ([]PodMetrics, error)
+
+	// Node monitoring (for autoscaler cluster metrics)
+	GetNodeMetrics(ctx context.Context) ([]NodeMetrics, error)
 }
 
 // MemoryClient is an in-memory K8s client for testing and development.
@@ -112,7 +123,15 @@ func (c *MemoryClient) GetCRD(ctx context.Context, kind, namespace, name string)
 		return nil, fmt.Errorf("object %s not found", key)
 	}
 
-	return obj, nil
+	// Return a deep copy to prevent data races between goroutines.
+	cp := *obj
+	cp.Metadata.Labels = copyStringMap(obj.Metadata.Labels)
+	cp.Metadata.Annotations = copyStringMap(obj.Metadata.Annotations)
+	if obj.Spec != nil {
+		cp.Spec = make([]byte, len(obj.Spec))
+		copy(cp.Spec, obj.Spec)
+	}
+	return &cp, nil
 }
 
 func (c *MemoryClient) UpdateCRD(ctx context.Context, obj *CRDObject) error {
@@ -298,6 +317,28 @@ func (c *MemoryClient) DeleteCRDWithVersion(ctx context.Context, apiVersion, kin
 	return c.DeleteCRD(ctx, kind, namespace, name)
 }
 
+// ListPods returns fake pods (dev/test mode).
+func (c *MemoryClient) ListPods(ctx context.Context, namespace, labelSelector string) ([]PodInfo, error) {
+	return []PodInfo{
+		{Name: "demo-app-6d4f5b-abc12", Status: "Running", Restarts: 0, StartedAt: time.Now().Add(-2 * time.Hour), Ready: true, MemoryLimitBytes: 512 * 1024 * 1024},
+	}, nil
+}
+
+// GetPodMetrics returns fake metrics (dev/test mode).
+func (c *MemoryClient) GetPodMetrics(ctx context.Context, namespace, labelSelector string) ([]PodMetrics, error) {
+	return []PodMetrics{
+		{Name: "demo-app-6d4f5b-abc12", CPUMillicores: 25, MemoryBytes: 64 * 1024 * 1024},
+	}, nil
+}
+
+// GetNodeMetrics returns fake node metrics (dev/test mode).
+// Returns 50% utilization to avoid triggering autoscaler scaling.
+func (c *MemoryClient) GetNodeMetrics(ctx context.Context) ([]NodeMetrics, error) {
+	return []NodeMetrics{
+		{Name: "dev-node-1", CPUCapacityMillis: 4000, CPUUsageMillis: 2000, MemCapacityBytes: 8 * 1024 * 1024 * 1024, MemUsageBytes: 4 * 1024 * 1024 * 1024},
+	}, nil
+}
+
 // GetPodLogs sends fake build output lines (dev/test mode).
 func (c *MemoryClient) GetPodLogs(ctx context.Context, namespace, podSelector string, logCh chan<- string) error {
 	defer close(logCh)
@@ -323,4 +364,15 @@ func (c *MemoryClient) GetPodLogs(ctx context.Context, namespace, podSelector st
 	}
 
 	return nil
+}
+
+func copyStringMap(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	cp := make(map[string]string, len(m))
+	for k, v := range m {
+		cp[k] = v
+	}
+	return cp
 }

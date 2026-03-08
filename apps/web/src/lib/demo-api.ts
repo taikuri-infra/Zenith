@@ -34,6 +34,11 @@ import type {
   CustomRole,
   IPWhitelistEntry,
   ComplianceResponse,
+  AuditEntry,
+  AuditListResponse,
+  AddOn,
+  RegistryRepo,
+  RegistryArtifact,
   DPARecord,
   BrandingConfig,
   SSOConfig,
@@ -43,6 +48,11 @@ import type {
   RegistryImage,
   Notification,
   ActivityEvent,
+  PodExecSession,
+  WAFRule,
+  NetworkPolicyRule,
+  AlertRule,
+  CustomMetric,
 } from "./api";
 
 import {
@@ -77,6 +87,7 @@ function toApiDatabase(m: (typeof mockDatabases)[number]): Database {
     mysql: 3306,
     mongodb: 27017,
     redis: 6379,
+    kafka: 9092,
   };
   return {
     name: m.name,
@@ -756,6 +767,51 @@ const allDemoDatabases: AppDatabase[] = [
     status: "ready",
     created_at: "2026-01-20T09:00:00Z",
   },
+  {
+    id: "db-5",
+    name: "events-queue",
+    engine: "rabbitmq",
+    host: "rmq-db5.zenith-apps.svc.cluster.local",
+    port: 5672,
+    db_name: "events",
+    db_user: "u_events",
+    db_password: "Jm8xTr3nWpKv6qLs9hBfYcAe",
+    connection_string: "amqp://u_events:Jm8xTr3nWpKv6qLs9hBfYcAe@rmq-db5.zenith-apps.svc.cluster.local:5672/events",
+    size_mb: 0,
+    max_size_mb: 1024,
+    status: "ready",
+    created_at: "2026-02-25T14:00:00Z",
+  },
+  {
+    id: "db-6",
+    name: "app-data",
+    engine: "mongodb",
+    host: "mongo-db6-rs0.zenith-apps.svc.cluster.local",
+    port: 27017,
+    db_name: "app_data",
+    db_user: "u_appdata",
+    db_password: "Hn4wLq7mPvCx9kRjTs2yBfAe",
+    connection_string: "mongodb://u_appdata:Hn4wLq7mPvCx9kRjTs2yBfAe@mongo-db6-rs0.zenith-apps.svc.cluster.local:27017/app_data?authSource=admin",
+    size_mb: 85,
+    max_size_mb: 5120,
+    status: "ready",
+    created_at: "2026-02-28T11:00:00Z",
+  },
+  {
+    id: "db-7",
+    name: "event-stream",
+    engine: "kafka",
+    host: "kafka-db7-bootstrap.zenith-apps.svc.cluster.local",
+    port: 9092,
+    db_name: "event_stream",
+    db_user: "u_eventstream",
+    db_password: "Xr5nKp8mTvCw3qLj9sBfYcAe",
+    connection_string: "kafka://u_eventstream:Xr5nKp8mTvCw3qLj9sBfYcAe@kafka-db7-bootstrap.zenith-apps.svc.cluster.local:9092",
+    size_mb: 0,
+    max_size_mb: 10240,
+    status: "ready",
+    created_at: "2026-03-01T09:00:00Z",
+  },
 ];
 
 export const demoUserDatabases = {
@@ -785,7 +841,7 @@ export const demoStandaloneDatabases = {
     const password = Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const user = `u_${data.name.replace(/-/g, "_")}`;
     const dbName = `z_${data.name.replace(/-/g, "_")}`;
-    const port = data.engine === "redis" ? 6379 : 5432;
+    const port = data.engine === "redis" ? 6379 : data.engine === "mongodb" ? 27017 : data.engine === "rabbitmq" ? 5672 : data.engine === "kafka" ? 9092 : 5432;
     return {
       id: `db-new-${Date.now()}`,
       name: data.name,
@@ -1172,6 +1228,31 @@ export const demoBilling = {
 
 // ---- Registry Demo ----
 
+function mapRegistryTags(
+  tags: { tag: string; digest: string; size: string; pushed: string; scanStatus: string }[]
+): RegistryArtifact[] {
+  return tags.map((t) => ({
+    tag: t.tag,
+    digest: t.digest,
+    size: t.size,
+    pushed: t.pushed,
+    status: t.scanStatus as RegistryArtifact["status"],
+    critical: t.scanStatus === "failed" ? 2 : 0,
+    high: t.scanStatus === "failed" ? 5 : 0,
+    medium: t.scanStatus === "warning" ? 3 : 0,
+  }));
+}
+
+function computeScanInfo(artifacts: RegistryArtifact[]) {
+  const scan = { passed: 0, warning: 0, failed: 0, total: artifacts.length };
+  for (const a of artifacts) {
+    if (a.status === "passed") scan.passed++;
+    else if (a.status === "warning") scan.warning++;
+    else if (a.status === "failed") scan.failed++;
+  }
+  return scan;
+}
+
 export const demoRegistry = {
   listImages: async (): Promise<{ items: RegistryImage[] }> => {
     await delay();
@@ -1182,6 +1263,32 @@ export const demoRegistry = {
         size: repo.totalSize,
         lastPushed: repo.lastPushed,
       })),
+    };
+  },
+  listRepos: async (): Promise<RegistryRepo[]> => {
+    await delay();
+    return mockRegistryRepos.map((repo) => {
+      const artifacts = mapRegistryTags(repo.tags);
+      return {
+        name: repo.name,
+        artifact_count: repo.tags.length,
+        last_pushed: repo.lastPushed,
+        artifacts,
+        scan: computeScanInfo(artifacts),
+      };
+    });
+  },
+  getRepo: async (name: string): Promise<RegistryRepo> => {
+    await delay();
+    const repo = mockRegistryRepos.find((r) => r.name === name);
+    if (!repo) throw new Error("Not found");
+    const artifacts = mapRegistryTags(repo.tags);
+    return {
+      name: repo.name,
+      artifact_count: repo.tags.length,
+      last_pushed: repo.lastPushed,
+      artifacts,
+      scan: computeScanInfo(artifacts),
     };
   },
 };
@@ -1342,6 +1449,202 @@ const demoSupport = {
   reply: async (ticketId: string, body: string) => { await delay(300); return { id: "msg-" + Date.now(), ticket_id: ticketId, sender_id: "demo", sender_role: "user" as const, body, created_at: new Date().toISOString() }; },
 };
 
+// ---- Monitoring Demo ----
+
+const demoMonitoring = {
+  getOverview: async (_appId: string) => {
+    await delay();
+    return {
+      cpu_percent: 12.5,
+      memory_mb: 128.3,
+      memory_percent: 25.1,
+      request_rate: 42.7,
+      error_rate: 0.3,
+      p95_latency_ms: 89.2,
+      pod_count: 2,
+    };
+  },
+  getTimeSeries: async (_appId: string, metric: string, range: string) => {
+    await delay();
+    const now = Date.now();
+    const points = Array.from({ length: 30 }, (_, i) => ({
+      timestamp: new Date(now - (30 - i) * 60000).toISOString(),
+      value: Math.random() * (metric === "cpu" ? 50 : metric === "memory" ? 256 : metric === "requests" ? 100 : 200) + 10,
+    }));
+    return { metric, range, points };
+  },
+  getLogs: async (_appId: string, _params?: { level?: string; search?: string; limit?: number; since?: string }) => {
+    await delay();
+    return {
+      entries: [
+        { timestamp: "2026-03-08T10:30:05Z", line: "Server started on port 8080", level: "info", labels: {} },
+        { timestamp: "2026-03-08T10:30:10Z", line: "Connected to database", level: "info", labels: {} },
+        { timestamp: "2026-03-08T10:31:00Z", line: "GET /api/health 200 2ms", level: "info", labels: {} },
+        { timestamp: "2026-03-08T10:31:05Z", line: "Slow query detected: 342ms", level: "warn", labels: {} },
+        { timestamp: "2026-03-08T10:31:10Z", line: "Connection timeout to redis", level: "error", labels: {} },
+      ],
+      total: 5,
+    };
+  },
+  getPods: async (_appId: string) => {
+    await delay();
+    return {
+      pods: [
+        { name: "my-next-app-6d4f5b-abc12", status: "Running", ready: true, restarts: 0, cpu_millicores: 45, memory_mb: 128.3, started_at: "2026-03-08T08:00:00Z" },
+        { name: "my-next-app-6d4f5b-def34", status: "Running", ready: true, restarts: 1, cpu_millicores: 38, memory_mb: 115.7, started_at: "2026-03-08T09:00:00Z" },
+      ],
+    };
+  },
+  streamLogsURL: (_appId: string) => "",
+};
+
+const demoAuditEntries: AuditEntry[] = [
+  { time: "2026-03-08T14:32:00Z", actor: "demo-user", action: "app.deploy", cluster: "production" },
+  { time: "2026-03-08T13:15:00Z", actor: "demo-user", action: "database.create", cluster: "production" },
+  { time: "2026-03-08T11:45:00Z", actor: "demo-user", action: "app.scale", cluster: "production" },
+  { time: "2026-03-07T16:20:00Z", actor: "demo-user", action: "sso.configure", cluster: "" },
+  { time: "2026-03-07T10:00:00Z", actor: "demo-user", action: "api_key.create", cluster: "" },
+  { time: "2026-03-06T09:30:00Z", actor: "demo-user", action: "domain.add", cluster: "production" },
+  { time: "2026-03-05T15:45:00Z", actor: "demo-user", action: "app.create", cluster: "production" },
+  { time: "2026-03-05T14:00:00Z", actor: "demo-user", action: "team.invite", cluster: "" },
+  { time: "2026-03-04T11:30:00Z", actor: "demo-user", action: "database.backup", cluster: "production" },
+  { time: "2026-03-03T09:15:00Z", actor: "demo-user", action: "plan.upgrade", cluster: "" },
+];
+
+export const demoAudit = {
+  list: async (params?: { limit?: number; offset?: number; action?: string; search?: string }): Promise<AuditListResponse> => {
+    await delay();
+    let filtered = demoAuditEntries;
+    if (params?.action) filtered = filtered.filter(e => e.action === params.action);
+    if (params?.search) filtered = filtered.filter(e => e.action.toLowerCase().includes(params.search!.toLowerCase()));
+    const offset = params?.offset ?? 0;
+    const limit = params?.limit ?? 50;
+    return { items: filtered.slice(offset, offset + limit), total: filtered.length };
+  },
+  exportCSV: async (): Promise<string> => {
+    await delay();
+    return "time,actor,action,cluster\n" + demoAuditEntries.map(e => `${e.time},${e.actor},${e.action},${e.cluster || ""}`).join("\n");
+  },
+  exportJSON: async (): Promise<AuditListResponse> => {
+    await delay();
+    return { items: demoAuditEntries, total: demoAuditEntries.length };
+  },
+};
+
+const demoAddOnCatalog: AddOn[] = [
+  { id: "gold-support", name: "Gold Support", category: "support", description: "Priority email & chat support with 4-hour response SLA", price_cents: 4900, min_tier: "pro", features: ["4-hour response SLA", "Priority email support", "Dedicated chat channel", "Monthly health check"], popular: true, available: true },
+  { id: "platinum-support", name: "Platinum Support", category: "support", description: "24/7 phone & video support with 1-hour response SLA and dedicated engineer", price_cents: 19900, min_tier: "team", features: ["1-hour response SLA", "24/7 phone support", "Dedicated support engineer", "Weekly review calls", "Custom runbooks"], popular: false, available: false },
+  { id: "extra-compute-small", name: "Extra Compute (Small)", category: "compute", description: "Add 2 vCPU and 4GB RAM capacity across your apps", price_cents: 2900, min_tier: "pro", features: ["+2 vCPU capacity", "+4 GB RAM", "Shared across all apps", "Instant activation"], popular: false, available: true },
+  { id: "extra-compute-large", name: "Extra Compute (Large)", category: "compute", description: "Add 8 vCPU and 16GB RAM capacity across your apps", price_cents: 9900, min_tier: "team", features: ["+8 vCPU capacity", "+16 GB RAM", "Shared across all apps", "Instant activation"], popular: true, available: false },
+  { id: "extra-storage-50gb", name: "Extra Storage (50GB)", category: "storage", description: "Add 50GB S3-compatible object storage", price_cents: 990, min_tier: "pro", features: ["+50 GB S3 storage", "S3-compatible API", "Automatic backups"], popular: false, available: true },
+  { id: "extra-storage-500gb", name: "Extra Storage (500GB)", category: "storage", description: "Add 500GB S3-compatible object storage", price_cents: 4900, min_tier: "pro", features: ["+500 GB S3 storage", "S3-compatible API", "Automatic backups", "CDN integration"], popular: false, available: true },
+  { id: "waf-advanced", name: "Advanced WAF", category: "security", description: "Custom WAF rules, rate limiting, and DDoS protection for your apps", price_cents: 4900, min_tier: "team", features: ["Custom WAF rules", "Advanced rate limiting", "DDoS protection", "IP reputation filtering", "Bot detection"], popular: false, available: false },
+  { id: "private-networking", name: "Private Networking", category: "network", description: "Dedicated VLAN with private IPs between your services", price_cents: 2900, min_tier: "team", features: ["Private VLAN", "Internal DNS", "No egress charges", "Encrypted links"], popular: false, available: false },
+  { id: "managed-ssl", name: "Managed SSL Certificates", category: "security", description: "Automated SSL certificate management with custom CA support", price_cents: 990, min_tier: "pro", features: ["Auto-renewal", "Custom CA support", "Wildcard certificates", "Certificate monitoring"], popular: false, available: true },
+];
+
+export const demoAddons = {
+  list: async (): Promise<AddOn[]> => { await delay(); return demoAddOnCatalog; },
+  get: async (id: string): Promise<AddOn> => { await delay(); const a = demoAddOnCatalog.find((x) => x.id === id); if (!a) throw new Error("Not found"); return a; },
+};
+
+// ---- Pod Sessions Demo ----
+
+const demoPodSessionEntries: PodExecSession[] = [
+  { id: "ps-1", user_id: "demo-user", user_email: "admin@freezenith.com", app_id: "da-1", app_name: "my-next-app", pod_name: "my-next-app-6d4f5b-abc12", container: "app", command: "/bin/sh", status: "completed", ip_address: "192.168.1.42", recording_key: "recordings/ps-1.cast", started_at: "2026-03-08T10:15:00Z", ended_at: "2026-03-08T10:32:00Z", duration_secs: 1020 },
+  { id: "ps-2", user_id: "demo-user", user_email: "dev@freezenith.com", app_id: "da-2", app_name: "go-api", pod_name: "go-api-7c8e9f-xyz45", container: "app", command: "/bin/bash", status: "active", ip_address: "10.0.0.5", recording_key: "", started_at: "2026-03-08T14:05:00Z", ended_at: null, duration_secs: 0 },
+  { id: "ps-3", user_id: "demo-user", user_email: "admin@freezenith.com", app_id: "da-1", app_name: "my-next-app", pod_name: "my-next-app-6d4f5b-def34", container: "app", command: "/bin/sh -c 'cat /var/log/app.log'", status: "completed", ip_address: "192.168.1.42", recording_key: "recordings/ps-3.cast", started_at: "2026-03-07T09:00:00Z", ended_at: "2026-03-07T09:05:30Z", duration_secs: 330 },
+  { id: "ps-4", user_id: "demo-user", user_email: "ops@freezenith.com", app_id: "da-3", app_name: "flask-ml", pod_name: "flask-ml-3a2b1c-ghi67", container: "worker", command: "/bin/sh", status: "completed", ip_address: "172.16.0.10", recording_key: "recordings/ps-4.cast", started_at: "2026-03-06T16:20:00Z", ended_at: "2026-03-06T16:45:00Z", duration_secs: 1500 },
+];
+
+export const demoPodSessions = {
+  list: async (limit?: number, offset?: number): Promise<{ sessions: PodExecSession[]; total: number }> => {
+    await delay();
+    const start = offset ?? 0;
+    const end = start + (limit ?? 50);
+    return { sessions: demoPodSessionEntries.slice(start, end), total: demoPodSessionEntries.length };
+  },
+  getRecordingURL: async (_sessionId: string): Promise<{ url: string; expires_in: number }> => {
+    await delay();
+    return { url: "https://s3.example.com/recordings/demo-session.cast?token=demo", expires_in: 3600 };
+  },
+};
+
+// ---- WAF Configuration demo data ----
+
+const demoWAFRules: WAFRule[] = [
+  { id: "waf-1", user_id: "demo-user", app_id: "da-1", name: "Rate Limit API", type: "rate_limit", enabled: true, priority: 1, config: { rate_per_second: 100, burst_size: 200 }, created_at: "2026-03-05T10:00:00Z", updated_at: "2026-03-05T10:00:00Z" },
+  { id: "waf-2", user_id: "demo-user", app_id: "da-1", name: "Block Known Bad IPs", type: "ip_block", enabled: true, priority: 2, config: { ip_addresses: ["203.0.113.0/24", "198.51.100.42"] }, created_at: "2026-03-04T08:30:00Z", updated_at: "2026-03-06T14:20:00Z" },
+  { id: "waf-3", user_id: "demo-user", app_id: "da-1", name: "Office IP Allow", type: "ip_allow", enabled: true, priority: 0, config: { ip_addresses: ["10.0.0.0/8", "192.168.1.0/24"] }, created_at: "2026-03-03T12:00:00Z", updated_at: "2026-03-03T12:00:00Z" },
+  { id: "waf-4", user_id: "demo-user", app_id: "da-1", name: "Limit Body Size", type: "body_limit", enabled: false, priority: 5, config: { max_body_size_kb: 1024 }, created_at: "2026-03-02T09:00:00Z", updated_at: "2026-03-02T09:00:00Z" },
+  { id: "waf-5", user_id: "demo-user", app_id: "da-1", name: "Block CN/RU Traffic", type: "geo_block", enabled: true, priority: 3, config: { countries: ["CN", "RU"] }, created_at: "2026-03-01T07:00:00Z", updated_at: "2026-03-01T07:00:00Z" },
+  { id: "waf-6", user_id: "demo-user", app_id: "da-1", name: "Block Missing User-Agent", type: "header_rule", enabled: true, priority: 4, config: { header_name: "User-Agent", header_match: "^$", action: "block" }, created_at: "2026-02-28T15:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
+];
+
+export const demoWaf = {
+  listRules: async (appId: string): Promise<{ rules: WAFRule[]; total: number }> => {
+    await delay();
+    const rules = demoWAFRules.filter((r) => r.app_id === appId || appId === "da-1");
+    return { rules, total: rules.length };
+  },
+  createRule: async (): Promise<WAFRule> => { throw new Error("Not available in demo mode"); },
+  updateRule: async (): Promise<WAFRule> => { throw new Error("Not available in demo mode"); },
+  deleteRule: async (): Promise<{ message: string }> => { throw new Error("Not available in demo mode"); },
+};
+
+// ---- Network Policy demo data ----
+
+const demoNetworkPolicyRules: NetworkPolicyRule[] = [
+  { id: "np-1", user_id: "demo-user", app_id: "da-1", name: "Allow internal traffic", direction: "ingress", action: "allow", enabled: true, priority: 0, config: { cidrs: ["10.0.0.0/8", "172.16.0.0/12"] }, created_at: "2026-03-05T10:00:00Z", updated_at: "2026-03-05T10:00:00Z" },
+  { id: "np-2", user_id: "demo-user", app_id: "da-1", name: "Deny external ingress", direction: "ingress", action: "deny", enabled: true, priority: 10, config: { cidrs: ["0.0.0.0/0"] }, created_at: "2026-03-04T09:00:00Z", updated_at: "2026-03-04T09:00:00Z" },
+  { id: "np-3", user_id: "demo-user", app_id: "da-1", name: "Allow DNS egress", direction: "egress", action: "allow", enabled: true, priority: 0, config: { ports: [{ protocol: "UDP", port: 53 }] }, created_at: "2026-03-03T12:00:00Z", updated_at: "2026-03-03T12:00:00Z" },
+  { id: "np-4", user_id: "demo-user", app_id: "da-1", name: "Allow Stripe API", direction: "egress", action: "allow", enabled: true, priority: 1, config: { fqdns: ["api.stripe.com", "hooks.stripe.com"] }, created_at: "2026-03-02T08:00:00Z", updated_at: "2026-03-02T08:00:00Z" },
+  { id: "np-5", user_id: "demo-user", app_id: "da-1", name: "Allow DB namespace", direction: "egress", action: "allow", enabled: false, priority: 2, config: { namespaces: ["zenith-databases"], ports: [{ protocol: "TCP", port: 5432 }] }, created_at: "2026-03-01T07:00:00Z", updated_at: "2026-03-01T07:00:00Z" },
+];
+
+export const demoNetworkPolicies = {
+  listRules: async (appId: string): Promise<{ rules: NetworkPolicyRule[]; total: number }> => {
+    await delay();
+    const rules = demoNetworkPolicyRules.filter((r) => r.app_id === appId || appId === "da-1");
+    return { rules, total: rules.length };
+  },
+  createRule: async (): Promise<NetworkPolicyRule> => { throw new Error("Not available in demo mode"); },
+  updateRule: async (): Promise<NetworkPolicyRule> => { throw new Error("Not available in demo mode"); },
+  deleteRule: async (): Promise<{ message: string }> => { throw new Error("Not available in demo mode"); },
+};
+
+// ---- Alerts + Custom Metrics demo data ----
+
+const demoAlertRules: AlertRule[] = [
+  { id: "ar-1", user_id: "demo-user", app_id: "da-1", name: "High CPU Usage", enabled: true, metric: "container_cpu_usage_seconds_total", condition: "> 0.8", duration: "5m", severity: "warning", description: "CPU usage exceeds 80% for 5 minutes", notify_email: true, notify_slack: false, created_at: "2026-03-05T10:00:00Z", updated_at: "2026-03-05T10:00:00Z" },
+  { id: "ar-2", user_id: "demo-user", app_id: "da-1", name: "High Memory", enabled: true, metric: "container_memory_working_set_bytes", condition: "> 500000000", duration: "10m", severity: "critical", description: "Memory usage exceeds 500MB for 10 minutes", notify_email: true, notify_slack: true, created_at: "2026-03-04T09:00:00Z", updated_at: "2026-03-04T09:00:00Z" },
+  { id: "ar-3", user_id: "demo-user", app_id: "da-1", name: "Pod Restarts", enabled: true, metric: "kube_pod_container_status_restarts_total", condition: "> 3", duration: "15m", severity: "critical", description: "Pod restarted more than 3 times in 15 minutes", notify_email: true, notify_slack: true, created_at: "2026-03-03T12:00:00Z", updated_at: "2026-03-03T12:00:00Z" },
+  { id: "ar-4", user_id: "demo-user", app_id: "da-1", name: "Error Rate", enabled: false, metric: "http_requests_total{status=~\"5..\"}", condition: "> 10", duration: "5m", severity: "warning", description: "More than 10 HTTP 5xx errors in 5 minutes", notify_email: false, notify_slack: true, created_at: "2026-03-02T08:00:00Z", updated_at: "2026-03-02T08:00:00Z" },
+];
+
+const demoCustomMetrics: CustomMetric[] = [
+  { id: "cm-1", user_id: "demo-user", app_id: "da-1", name: "app:request_rate:5m", expression: "rate(http_requests_total{app=\"my-next-app\"}[5m])", labels: { app: "my-next-app" }, created_at: "2026-03-05T10:00:00Z", updated_at: "2026-03-05T10:00:00Z" },
+  { id: "cm-2", user_id: "demo-user", app_id: "da-1", name: "app:p95_latency:5m", expression: "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{app=\"my-next-app\"}[5m]))", created_at: "2026-03-04T09:00:00Z", updated_at: "2026-03-04T09:00:00Z" },
+];
+
+export const demoAlerts = {
+  listRules: async (appId: string): Promise<{ rules: AlertRule[]; total: number }> => {
+    await delay();
+    const rules = demoAlertRules.filter((r) => r.app_id === appId || appId === "da-1");
+    return { rules, total: rules.length };
+  },
+  createRule: async (): Promise<AlertRule> => { throw new Error("Not available in demo mode"); },
+  updateRule: async (): Promise<AlertRule> => { throw new Error("Not available in demo mode"); },
+  deleteRule: async (): Promise<{ message: string }> => { throw new Error("Not available in demo mode"); },
+  listMetrics: async (appId: string): Promise<{ metrics: CustomMetric[]; total: number }> => {
+    await delay();
+    const metrics = demoCustomMetrics.filter((m) => m.app_id === appId || appId === "da-1");
+    return { metrics, total: metrics.length };
+  },
+  createMetric: async (): Promise<CustomMetric> => { throw new Error("Not available in demo mode"); },
+  deleteMetric: async (): Promise<{ message: string }> => { throw new Error("Not available in demo mode"); },
+};
+
 // Re-export as a unified object matching the real API import pattern
 export const demoApi = {
   auth: demoAuth,
@@ -1374,4 +1677,11 @@ export const demoApi = {
   authPools: demoAuthPools,
   team: demoTeam,
   support: demoSupport,
+  monitoring: demoMonitoring,
+  audit: demoAudit,
+  addons: demoAddons,
+  podSessions: demoPodSessions,
+  waf: demoWaf,
+  networkPolicies: demoNetworkPolicies,
+  alerts: demoAlerts,
 };

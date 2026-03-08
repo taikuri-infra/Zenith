@@ -26,6 +26,7 @@ import (
 type RealClient struct {
 	clientset     *kubernetes.Clientset
 	dynamicClient dynamic.Interface
+	restConfig    *rest.Config
 }
 
 // NewRealClient creates a RealClient, auto-detecting in-cluster or local kubeconfig.
@@ -60,8 +61,15 @@ func NewRealClient() (*RealClient, error) {
 	return &RealClient{
 		clientset:     clientset,
 		dynamicClient: dynClient,
+		restConfig:    cfg,
 	}, nil
 }
+
+// Clientset returns the underlying kubernetes.Clientset (for pod exec).
+func (c *RealClient) Clientset() *kubernetes.Clientset { return c.clientset }
+
+// RESTConfig returns the underlying REST config (for SPDY exec).
+func (c *RealClient) RESTConfig() *rest.Config { return c.restConfig }
 
 // gvrFromCRD maps a CRD Kind to a GroupVersionResource.
 // Zenith CRDs use apiVersion "zenith.dev/v1alpha1".
@@ -401,6 +409,166 @@ func (c *RealClient) GetCRDWithVersion(ctx context.Context, apiVersion, kind, na
 func (c *RealClient) DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error {
 	gvr := gvrFromAPIVersionKind(apiVersion, kind)
 	return c.dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// --- Pod monitoring methods ---
+
+// ListPods returns pods matching the label selector.
+func (c *RealClient) ListPods(ctx context.Context, namespace, labelSelector string) ([]PodInfo, error) {
+	pods, err := c.clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list pods: %w", err)
+	}
+
+	result := make([]PodInfo, 0, len(pods.Items))
+	for _, p := range pods.Items {
+		var restarts int32
+		ready := true
+		for _, cs := range p.Status.ContainerStatuses {
+			restarts += cs.RestartCount
+			if !cs.Ready {
+				ready = false
+			}
+		}
+		startedAt := p.CreationTimestamp.Time
+		if p.Status.StartTime != nil {
+			startedAt = p.Status.StartTime.Time
+		}
+		// Sum memory limits from all containers
+		var memLimit int64
+		for _, cont := range p.Spec.Containers {
+			if lim, ok := cont.Resources.Limits[corev1.ResourceMemory]; ok {
+				memLimit += lim.Value()
+			}
+		}
+		result = append(result, PodInfo{
+			Name:             p.Name,
+			Status:           string(p.Status.Phase),
+			Restarts:         restarts,
+			StartedAt:        startedAt,
+			Ready:            ready,
+			MemoryLimitBytes: memLimit,
+		})
+	}
+
+	return result, nil
+}
+
+// GetPodMetrics fetches resource usage from metrics-server for pods matching the label selector.
+func (c *RealClient) GetPodMetrics(ctx context.Context, namespace, labelSelector string) ([]PodMetrics, error) {
+	// Use the metrics.k8s.io API via raw REST request
+	path := fmt.Sprintf("/apis/metrics.k8s.io/v1beta1/namespaces/%s/pods", namespace)
+	if labelSelector != "" {
+		path += "?labelSelector=" + labelSelector
+	}
+
+	data, err := c.clientset.RESTClient().Get().AbsPath(path).DoRaw(ctx)
+	if err != nil {
+		// Metrics-server may not be available — return empty rather than error
+		return nil, nil
+	}
+
+	var metricsResp struct {
+		Items []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+			Containers []struct {
+				Usage struct {
+					CPU    string `json:"cpu"`
+					Memory string `json:"memory"`
+				} `json:"usage"`
+			} `json:"containers"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(data, &metricsResp); err != nil {
+		return nil, nil
+	}
+
+	result := make([]PodMetrics, 0, len(metricsResp.Items))
+	for _, item := range metricsResp.Items {
+		var cpuMillis int64
+		var memBytes int64
+		for _, cont := range item.Containers {
+			cpu := resource.MustParse(cont.Usage.CPU)
+			mem := resource.MustParse(cont.Usage.Memory)
+			cpuMillis += cpu.MilliValue()
+			memBytes += mem.Value()
+		}
+		result = append(result, PodMetrics{
+			Name:          item.Metadata.Name,
+			CPUMillicores: cpuMillis,
+			MemoryBytes:   memBytes,
+		})
+	}
+
+	return result, nil
+}
+
+// GetNodeMetrics fetches node-level resource usage from metrics-server and
+// combines it with node capacity from the core API.
+func (c *RealClient) GetNodeMetrics(ctx context.Context) ([]NodeMetrics, error) {
+	// Get node capacity from core API
+	nodes, err := c.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, nil
+	}
+
+	capacityMap := make(map[string]NodeMetrics, len(nodes.Items))
+	for _, node := range nodes.Items {
+		cpuCap := node.Status.Capacity[corev1.ResourceCPU]
+		memCap := node.Status.Capacity[corev1.ResourceMemory]
+		capacityMap[node.Name] = NodeMetrics{
+			Name:              node.Name,
+			CPUCapacityMillis: cpuCap.MilliValue(),
+			MemCapacityBytes:  memCap.Value(),
+		}
+	}
+
+	// Get node usage from metrics-server
+	data, err := c.clientset.RESTClient().Get().AbsPath("/apis/metrics.k8s.io/v1beta1/nodes").DoRaw(ctx)
+	if err != nil {
+		// Metrics-server may not be available — return capacity with zero usage
+		result := make([]NodeMetrics, 0, len(capacityMap))
+		for _, nm := range capacityMap {
+			result = append(result, nm)
+		}
+		return result, nil
+	}
+
+	var metricsResp struct {
+		Items []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+			Usage struct {
+				CPU    string `json:"cpu"`
+				Memory string `json:"memory"`
+			} `json:"usage"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(data, &metricsResp); err != nil {
+		return nil, nil
+	}
+
+	// Merge usage into capacity
+	for _, item := range metricsResp.Items {
+		if nm, ok := capacityMap[item.Metadata.Name]; ok {
+			cpu := resource.MustParse(item.Usage.CPU)
+			mem := resource.MustParse(item.Usage.Memory)
+			nm.CPUUsageMillis = cpu.MilliValue()
+			nm.MemUsageBytes = mem.Value()
+			capacityMap[item.Metadata.Name] = nm
+		}
+	}
+
+	result := make([]NodeMetrics, 0, len(capacityMap))
+	for _, nm := range capacityMap {
+		result = append(result, nm)
+	}
+	return result, nil
 }
 
 // --- Conversion helpers ---

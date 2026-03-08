@@ -173,7 +173,7 @@ func TestMemoryBillingRepository_Overview(t *testing.T) {
 	if overview.ActiveSubscriptions != 2 {
 		t.Errorf("expected 2 active, got %d", overview.ActiveSubscriptions)
 	}
-	expectedMRR := 2900 + 19900
+	expectedMRR := 2900 + 9900 // Pro (2900) + Team (9900)
 	if overview.MRRCents != expectedMRR {
 		t.Errorf("expected MRR %d, got %d", expectedMRR, overview.MRRCents)
 	}

@@ -3,6 +3,7 @@ package temporal
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"go.temporal.io/sdk/client"
@@ -62,6 +63,15 @@ func (w *WorkflowClient) StartProvision(ctx context.Context, input ports.Provisi
 		PlanTier:     input.PlanTier,
 		ContactEmail: input.ContactEmail,
 	})
+	return err
+}
+
+func (w *WorkflowClient) StartPlanChange(ctx context.Context, input PlanChangeInput) error {
+	opts := client.StartWorkflowOptions{
+		ID:        fmt.Sprintf("plan-change-%s-%d", input.UserID, time.Now().UnixMilli()),
+		TaskQueue: TaskQueue,
+	}
+	_, err := w.tc.ExecuteWorkflow(ctx, opts, WorkflowPlanOrchestrator, input)
 	return err
 }
 

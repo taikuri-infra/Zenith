@@ -51,12 +51,12 @@ provider "aws" {
 module "management" {
   source = "../modules/k3s-server"
 
-  name           = "zenith-prod-management"
-  server_type    = var.management_server_type
-  location       = var.hetzner_location
-  environment    = "production"
-  role           = "management"
-  ssh_public_key = var.ssh_public_key
+  name            = "zenith-prod-management"
+  server_type     = var.management_server_type
+  location        = var.hetzner_location
+  environment     = "production"
+  role            = "management"
+  ssh_public_key  = var.ssh_public_key
   ssh_allowed_ips = var.ssh_allowed_ips
 
   extra_labels = {
@@ -72,12 +72,12 @@ module "management" {
 module "cluster" {
   source = "../modules/k3s-server"
 
-  name           = "zenith-prod-cluster"
-  server_type    = var.cluster_server_type
-  location       = var.hetzner_location
-  environment    = "production"
-  role           = "cluster"
-  ssh_public_key = var.ssh_public_key
+  name            = "zenith-prod-cluster"
+  server_type     = var.cluster_server_type
+  location        = var.hetzner_location
+  environment     = "production"
+  role            = "cluster"
+  ssh_public_key  = var.ssh_public_key
   ssh_allowed_ips = var.ssh_allowed_ips
 
   extra_labels = {

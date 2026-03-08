@@ -1,0 +1,219 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-business-metrics
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  business-metrics.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Monthly Recurring Revenue (MRR)",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+          "targets": [{
+            "expr": "zenith_mrr_euros",
+            "legendFormat": "MRR"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyEUR",
+              "thresholds": {
+                "steps": [
+                  { "color": "yellow", "value": null },
+                  { "color": "green", "value": 1000 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Total Customers",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+          "targets": [{
+            "expr": "zenith_total_users",
+            "legendFormat": "users"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "blue", "value": null }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Paying Customers",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+          "targets": [{
+            "expr": "zenith_paying_users",
+            "legendFormat": "paying"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Free-to-Paid Conversion",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+          "targets": [{
+            "expr": "zenith_paying_users / clamp_min(zenith_total_users, 1) * 100",
+            "legendFormat": "conversion %"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 2 },
+                  { "color": "green", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Users by Plan Tier",
+          "type": "piechart",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 5 },
+          "targets": [{
+            "expr": "zenith_users_by_plan",
+            "legendFormat": "{{plan}}"
+          }]
+        },
+        {
+          "title": "MRR Growth",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 16, "x": 8, "y": 5 },
+          "targets": [{
+            "expr": "zenith_mrr_euros",
+            "legendFormat": "MRR (EUR)"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyEUR",
+              "color": { "fixedColor": "green", "mode": "fixed" }
+            }
+          }
+        },
+        {
+          "title": "New Signups (24h)",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 13 },
+          "targets": [{
+            "expr": "increase(zenith_total_users[24h])",
+            "legendFormat": "new users"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "blue", "value": null }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Total Apps Deployed",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 13 },
+          "targets": [{
+            "expr": "zenith_total_apps",
+            "legendFormat": "apps"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "purple", "value": null }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Total Databases",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 13 },
+          "targets": [{
+            "expr": "zenith_total_databases",
+            "legendFormat": "databases"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "orange", "value": null }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Churn Rate (30d)",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 13 },
+          "targets": [{
+            "expr": "zenith_churn_rate_30d * 100",
+            "legendFormat": "churn %"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 3 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Stripe Revenue Events",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
+          "targets": [
+            {
+              "expr": "increase(zenith_stripe_payment_succeeded_total[1h])",
+              "legendFormat": "successful payments"
+            },
+            {
+              "expr": "increase(zenith_stripe_payment_failed_total[1h])",
+              "legendFormat": "failed payments"
+            }
+          ]
+        }
+      ],
+      "refresh": "5m",
+      "schemaVersion": 39,
+      "tags": ["zenith", "business"],
+      "templating": { "list": [] },
+      "time": { "from": "now-30d", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Zenith Business Metrics",
+      "uid": "zenith-business-metrics"
+    }

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +13,11 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/adapters/capiclient"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/keycloakclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/lokiclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/harborclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/natsclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/promclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/redisclient"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/postgres/migrations"
@@ -35,7 +40,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	temporalWorker "go.temporal.io/sdk/worker"
@@ -44,11 +48,17 @@ import (
 var (
 	Version   = "dev"
 	BuildTime = "unknown"
-	GitCommit = "unknown"
 )
 
 func main() {
 	cfg := config.Load()
+
+	// Initialize structured JSON logging
+	logHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	slog.SetDefault(slog.New(logHandler))
+
 	ctx := context.Background()
 
 	// Database (optional — falls back to in-memory stores when DATABASE_URL is empty)
@@ -60,18 +70,20 @@ func main() {
 	var appRepo ports.AppRepository
 
 	if cfg.DatabaseURL != "" {
-		log.Println("Connecting to PostgreSQL...")
+		slog.Info("connecting to PostgreSQL")
 		if err := postgres.RunMigrations(cfg.DatabaseURL, migrations.FS); err != nil {
-			log.Fatalf("Database migrations failed: %v", err)
+			slog.Error("database migrations failed", "error", err)
+			os.Exit(1)
 		}
-		log.Println("Migrations applied")
+		slog.Info("migrations applied")
 
 		var err error
 		pool, err = postgres.NewPostgresPool(ctx, cfg.DatabaseURL)
 		if err != nil {
-			log.Fatalf("Database connection failed: %v", err)
+			slog.Error("database connection failed", "error", err)
+			os.Exit(1)
 		}
-		log.Println("Connected to PostgreSQL")
+		slog.Info("connected to PostgreSQL")
 
 		userRepo = postgres.NewPostgresUserRepository(pool)
 		adminRepo = postgres.NewPostgresAdminRepository(pool)
@@ -79,7 +91,7 @@ func main() {
 		meteringRepo = postgres.NewPostgresMeteringRepository(pool)
 		appRepo = postgres.NewPostgresAppRepository(pool)
 	} else {
-		log.Println("No DATABASE_URL set — using in-memory stores")
+		slog.Info("no DATABASE_URL set, using in-memory stores")
 		userRepo = memory.NewMemoryUserRepository()
 		adminRepo = memory.NewMemoryAdminRepository()
 		customerRepo = memory.NewMemoryCustomerRepository()
@@ -90,15 +102,15 @@ func main() {
 	// Seed admin user
 	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
 		if _, err := userRepo.Create(ctx, cfg.AdminEmail, cfg.AdminPassword, "Admin", entities.RoleOwner); err != nil {
-			log.Printf("Admin seed skipped: %v", err)
+			slog.Info("admin seed skipped", "error", err)
 		} else {
-			log.Printf("Admin user seeded: %s", cfg.AdminEmail)
+			slog.Info("admin user seeded", "email", cfg.AdminEmail)
 		}
 	}
 
-	log.Printf("Zenith mode: %s", cfg.Mode)
+	slog.Info("zenith mode", "mode", cfg.Mode)
 	if cfg.Mode == "standalone" {
-		log.Println("Running in standalone mode — multi-tenant and billing features disabled")
+		slog.Info("running in standalone mode, multi-tenant and billing features disabled")
 	}
 
 	// OpenTelemetry (opt-in: only when OTEL_EXPORTER_OTLP_ENDPOINT is set)
@@ -112,35 +124,39 @@ func main() {
 			SampleRate:     cfg.OTELSampleRate,
 		})
 		if err != nil {
-			log.Printf("[WARN] OpenTelemetry init failed: %v (continuing without tracing)", err)
+			slog.Warn("OpenTelemetry init failed, continuing without tracing", "error", err)
 		} else {
 			defer func() {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := otelShutdown(shutdownCtx); err != nil {
-					log.Printf("[WARN] OpenTelemetry shutdown error: %v", err)
+					slog.Warn("OpenTelemetry shutdown error", "error", err)
 				}
 			}()
-			log.Printf("OpenTelemetry enabled → %s", cfg.OTELEndpoint)
+			slog.Info("OpenTelemetry enabled", "endpoint", cfg.OTELEndpoint)
 		}
 	}
 
 	app := fiber.New(fiber.Config{
 		AppName:      "Zenith API",
-		ServerHeader: "Zenith",
+		ServerHeader: "",
 		ErrorHandler: handlers.ErrorHandler,
-		BodyLimit:    100 * 1024 * 1024, // 100 MB for file uploads
+		BodyLimit:    50 * 1024 * 1024, // 50 MB (covers file uploads, auth requests are small)
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	})
 
 	app.Use(recover.New())
 	app.Use(requestid.New())
-	app.Use(logger.New(logger.Config{
-		Format: "${time} | ${status} | ${latency} | ${method} | ${path}\n",
-	}))
+	app.Use(middleware.SecurityHeaders())
+	app.Use(middleware.StructuredLogger())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: cfg.CORSOrigins,
-		AllowMethods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-Request-ID",
+		AllowOrigins:     cfg.CORSOrigins,
+		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Request-ID,X-API-Key",
+		AllowCredentials: true,
+		MaxAge:           3600,
 	}))
 	app.Use(middleware.RequestContext())
 
@@ -149,38 +165,39 @@ func main() {
 		app.Use(telemetry.Middleware(telemetry.MiddlewareConfig{
 			SkipPaths: []string{"/health", "/ready"},
 		}))
-		log.Println("OpenTelemetry tracing middleware active")
+		slog.Info("OpenTelemetry tracing middleware active")
 	}
 
 	docs.RegisterRoutes(app)
-	provisioner, autoscaler, temporalW := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, appRepo, pool)
+	provisioner, autoscaler, temporalW, tokenBlacklist, eventBus, redisClient := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, appRepo, pool)
 
 	// Start cluster sync if provisioner is available
 	if provisioner != nil {
 		provisioner.StartSync(30 * time.Second)
-		log.Println("Cluster provisioner sync started (30s interval)")
+		slog.Info("cluster provisioner sync started", "interval", "30s")
 	}
 
 	// Start Temporal worker if configured
 	if temporalW != nil {
 		if err := temporalW.Start(); err != nil {
-			log.Fatalf("Failed to start Temporal worker: %v", err)
+			slog.Error("failed to start Temporal worker", "error", err)
+			os.Exit(1)
 		}
-		log.Println("[temporal] Worker started on queue: " + zenithTemporal.TaskQueue)
+		slog.Info("temporal worker started", "queue", zenithTemporal.TaskQueue)
 	}
 
 	// Start autoscaler if enabled
 	if autoscaler != nil {
 		autoscaler.Start(time.Duration(cfg.AutoscalerInterval) * time.Second)
-		log.Printf("Hetzner autoscaler started (%ds interval, min=%d, max=%d)",
-			cfg.AutoscalerInterval, cfg.AutoscalerMinNodes, cfg.AutoscalerMaxNodes)
+		slog.Info("hetzner autoscaler started", "interval_s", cfg.AutoscalerInterval, "min_nodes", cfg.AutoscalerMinNodes, "max_nodes", cfg.AutoscalerMaxNodes)
 	}
 
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.Port)
-		log.Printf("Zenith API %s starting on %s", Version, addr)
+		slog.Info("zenith API starting", "version", Version, "addr", addr)
 		if err := app.Listen(addr); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
+			slog.Error("failed to start server", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -188,31 +205,61 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	slog.Info("shutting down server", "grace_period", "30s")
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// Stop background workers first
 	if temporalW != nil {
 		temporalW.Stop()
-		log.Println("Temporal worker stopped")
+		slog.Info("temporal worker stopped")
 	}
 	if autoscaler != nil {
 		autoscaler.Stop()
-		log.Println("Hetzner autoscaler stopped")
+		slog.Info("hetzner autoscaler stopped")
 	}
 	if provisioner != nil {
 		provisioner.Stop()
-		log.Println("Cluster provisioner stopped")
+		slog.Info("cluster provisioner stopped")
 	}
-	if err := app.Shutdown(); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+	if tokenBlacklist != nil {
+		tokenBlacklist.Stop()
+		slog.Info("token blacklist stopped")
+	}
+
+	// Shutdown HTTP server with timeout
+	done := make(chan struct{})
+	go func() {
+		if err := app.Shutdown(); err != nil {
+			slog.Error("server shutdown error", "error", err)
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		slog.Info("HTTP server stopped gracefully")
+	case <-shutdownCtx.Done():
+		slog.Warn("shutdown timeout reached, forcing exit")
+	}
+
+	if eventBus != nil {
+		eventBus.Close()
+		slog.Info("event bus closed")
+	}
+	if redisClient != nil {
+		redisClient.Close()
+		slog.Info("redis closed")
 	}
 	if pool != nil {
 		pool.Close()
-		log.Println("Database pool closed")
+		slog.Info("database pool closed")
 	}
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 }
 
-func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserRepository, adminRepo ports.AdminRepository, customerRepo ports.CustomerRepository, meteringRepo ports.MeteringRepository, appRepo ports.AppRepository, pool *pgxpool.Pool) (*cluster.Provisioner, *autoscale.Autoscaler, temporalWorker.Worker) {
-	app.Get("/health", handlers.HealthCheck(Version, BuildTime, GitCommit))
+func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserRepository, adminRepo ports.AdminRepository, customerRepo ports.CustomerRepository, meteringRepo ports.MeteringRepository, appRepo ports.AppRepository, pool *pgxpool.Pool) (*cluster.Provisioner, *autoscale.Autoscaler, temporalWorker.Worker, *middleware.TokenBlacklist, ports.EventBus, *redisclient.Client) {
+	app.Get("/health", handlers.HealthCheck(Version))
 	app.Get("/ready", handlers.ReadinessCheck(pool))
 
 	// K8s client (in-memory for dev, real client-go for production)
@@ -220,13 +267,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	if cfg.K8sMode == "real" {
 		realClient, err := k8sclient.NewRealClient()
 		if err != nil {
-			log.Fatalf("failed to create real K8s client: %v", err)
+			slog.Error("failed to create real K8s client", "error", err)
+			os.Exit(1)
 		}
 		k8sClient = realClient
-		log.Println("[k8s] using real client-go connection")
+		slog.Info("k8s using real client-go connection")
 	} else {
 		k8sClient = k8sclient.NewMemoryClient()
-		log.Println("[k8s] using in-memory client (dev mode)")
+		slog.Info("k8s using in-memory client (dev mode)")
 	}
 
 	// CAPI client + provisioner (SaaS mode only)
@@ -278,13 +326,35 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		authSvc.SetEmailSender(emailSender, cfg.AppURL)
 		teamSvc.SetEmailSender(emailSender, cfg.AppURL)
 		supportSvc.SetEmailSender(emailSender, cfg.AppURL, cfg.AdminEmail)
-		log.Println("[auth] Email verification enabled (Resend)")
+		slog.Info("email verification enabled (Resend)")
 	} else {
-		log.Println("[auth] Email verification disabled (no RESEND_API_KEY)")
+		slog.Info("email verification disabled (no RESEND_API_KEY)")
+	}
+
+	// NATS JetStream event bus (opt-in: only when NATS_ENABLED=true)
+	var eventBus ports.EventBus
+	if cfg.NATSEnabled {
+		natsClient, err := natsclient.New(cfg.NATSServers, cfg.NATSStreamName)
+		if err != nil {
+			slog.Warn("NATS failed to connect, falling back to memory", "error", err)
+			eventBus = memory.NewMemoryEventBus()
+		} else {
+			eventBus = natsClient
+		}
+	} else {
+		eventBus = memory.NewMemoryEventBus()
+		slog.Info("NATS disabled, using in-memory event bus")
+	}
+
+	// Notification subscriber — consumes platform events and sends emails
+	notifSvc := services.NewNotificationService(eventBus, nil, userRepo, cfg.AppURL)
+	if err := notifSvc.Start(); err != nil {
+		slog.Warn("notification service failed to start", "error", err)
 	}
 
 	var customerSvc *services.CustomerService
 	var tw temporalWorker.Worker
+	var temporalWfClient *zenithTemporal.WorkflowClient
 	if cfg.Mode == "saas" {
 		customerSvc = services.NewCustomerService(customerRepo, adminRepo, provisioner)
 
@@ -292,7 +362,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		if cfg.TemporalEnabled {
 			tc, err := zenithTemporal.NewClient(cfg.TemporalHost, cfg.TemporalNamespace)
 			if err != nil {
-				log.Printf("[temporal] WARN: failed to connect: %v (provisioning falls back to goroutine)", err)
+				slog.Warn("temporal failed to connect, provisioning falls back to goroutine", "error", err)
 			} else {
 				// Build adapters for activities
 				var keycloakAPI keycloakclient.KeycloakAPI
@@ -319,12 +389,19 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 					BaseDomain: cfg.BaseDomain,
 				}
 
-				tw = zenithTemporal.NewWorker(tc, activities)
-				customerSvc.SetWorkflows(zenithTemporal.NewWorkflowClient(tc))
-				log.Printf("[temporal] Connected to %s (namespace: %s)", cfg.TemporalHost, cfg.TemporalNamespace)
+				// PlanActivities repos are set later after repo creation (fields are pointer-safe)
+				planActivities := &zenithTemporal.PlanActivities{
+					PlanRepo: planRepo,
+					Admin:    adminRepo,
+				}
+
+				tw = zenithTemporal.NewWorker(tc, activities, planActivities)
+				temporalWfClient = zenithTemporal.NewWorkflowClient(tc)
+				customerSvc.SetWorkflows(temporalWfClient)
+				slog.Info("temporal connected", "host", cfg.TemporalHost, "namespace", cfg.TemporalNamespace)
 			}
 		} else {
-			log.Println("[temporal] Disabled (TEMPORAL_ENABLED=false)")
+			slog.Info("temporal disabled")
 		}
 	}
 
@@ -353,10 +430,32 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		customerHandler = handlers.NewCustomerHandler(customerSvc)
 		meteringHandler = handlers.NewMeteringHandler(meteringRepo, customerRepo)
 	}
-	authHandler := handlers.NewAuthHandler(authSvc)
+	tokenBlacklist := middleware.NewTokenBlacklist()
+
+	// Redis (rate limiting + token blacklist) — optional, falls back to in-memory
+	var redisClient *redisclient.Client
+	var rateLimiterStorage fiber.Storage
+	if cfg.RedisURL != "" {
+		rc, err := redisclient.New(cfg.RedisURL)
+		if err != nil {
+			slog.Warn("redis unavailable, falling back to in-memory", "error", err)
+		} else {
+			redisClient = rc
+			rateLimiterStorage = rc.NewRateLimiterStorage("zenith:ratelimit:")
+			tokenBlacklist.SetRedisBackend(rc.NewTokenBlacklist())
+			slog.Info("redis-backed rate limiter and token blacklist enabled")
+		}
+	}
+
+	authHandler := handlers.NewAuthHandler(authSvc, tokenBlacklist)
 
 	// App Auth (created early so public routes can be registered before protected group)
-	appAuthRepo := memory.NewMemoryAppAuthRepository()
+	var appAuthRepo ports.AppAuthRepository
+	if pool != nil {
+		appAuthRepo = postgres.NewPostgresAppAuthRepository(pool)
+	} else {
+		appAuthRepo = memory.NewMemoryAppAuthRepository()
+	}
 	appAuthHandler := handlers.NewAppAuthHandler(appAuthRepo, appRepo)
 
 	// Phase 2 handlers
@@ -364,6 +463,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	eventHub := deploy.NewEventHub(50)
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
 	pipeline := deploy.NewPipeline(deployer, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
+	pipeline.SetEventBus(eventBus)
 
 	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, deployer, pipeline)
 	appHandlerV2.SetProjectRepo(projectRepo)
@@ -373,17 +473,18 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	secretHandler, err := handlers.NewSecretHandler(appRepo, cfg.SecretsKey)
 	if err != nil {
-		log.Fatalf("invalid SECRETS_ENCRYPTION_KEY: %v", err)
+		slog.Error("invalid SECRETS_ENCRYPTION_KEY", "error", err)
+		os.Exit(1)
 	}
 
 	eventHandler := handlers.NewEventHandler(eventHub)
 	backstageHandler := handlers.NewBackstageHandler(k8sClient)
 
 	api := app.Group("/api/v1")
-	api.Get("/version", handlers.VersionInfo(Version, BuildTime, GitCommit))
+	api.Get("/version", handlers.VersionInfo(Version, BuildTime))
 
 	// Public auth routes (no token required) — rate limited
-	authLimiter := limiter.New(limiter.Config{
+	authLimiterConfig := limiter.Config{
 		Max:        10,
 		Expiration: 60 * time.Second,
 		LimitReached: func(c *fiber.Ctx) error {
@@ -391,11 +492,24 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 				"error": "Too many requests. Please try again later.",
 			})
 		},
-	})
-	authRoutes := api.Group("/auth", authLimiter)
+	}
+	if rateLimiterStorage != nil {
+		authLimiterConfig.Storage = rateLimiterStorage
+	}
+	authLimiter := limiter.New(authLimiterConfig)
+	// Auth body limiter — auth payloads are small JSON (< 10 KB), reject oversized requests
+	authBodyLimit := func(c *fiber.Ctx) error {
+		if len(c.Body()) > 10*1024 {
+			return fiber.NewError(fiber.StatusRequestEntityTooLarge, "request body too large")
+		}
+		return c.Next()
+	}
+	authRoutes := api.Group("/auth", authLimiter, authBodyLimit)
 	authRoutes.Post("/login", authHandler.Login)
+	authRoutes.Post("/login/mfa", authHandler.MFALogin)
 	authRoutes.Post("/register", authHandler.Register)
 	authRoutes.Post("/refresh", authHandler.Refresh)
+	authRoutes.Post("/logout", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist), authHandler.Logout)
 	authRoutes.Post("/verify-email", authHandler.VerifyEmail)
 	authRoutes.Post("/resend-verification", authHandler.ResendVerification)
 	if cfg.GoogleClientID != "" || cfg.GitHubClientID != "" {
@@ -411,10 +525,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		authRoutes.Get("/oauth/:provider/callback", authHandler.OAuthCallback)
 		authRoutes.Post("/exchange", authHandler.ExchangeOAuthCode)
 		if cfg.GoogleClientID != "" {
-			log.Printf("[auth] Google OAuth enabled (client_id: %s...)", cfg.GoogleClientID[:8])
+			slog.Info("Google OAuth enabled", "client_id_prefix", cfg.GoogleClientID[:8])
 		}
 		if cfg.GitHubClientID != "" {
-			log.Printf("[auth] GitHub OAuth enabled (client_id: %s...)", cfg.GitHubClientID[:8])
+			slog.Info("GitHub OAuth enabled", "client_id_prefix", cfg.GitHubClientID[:8])
 		}
 	}
 
@@ -435,7 +549,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	// Protected routes
-	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret))
+	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist))
 
 	// Team members (IAM)
 	protected.Post("/team/invite", teamHandler.InviteMember)
@@ -502,9 +616,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	var dbSvc *services.DatabaseService
 	if cfg.CNPGAdminDSN != "" {
 		dbSvc = services.NewDatabaseService(dbRepo, appRepo, planRepo, k8sClient, cfg.CNPGAdminDSN, "zenith-apps")
-		log.Println("[db] CNPG database provisioning enabled")
+		slog.Info("CNPG database provisioning enabled")
 	} else {
-		log.Println("[db] CNPG not configured — metadata-only mode (dev)")
+		slog.Info("CNPG not configured, metadata-only mode (dev)")
 	}
 
 	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo)
@@ -569,7 +683,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	gwByID.Delete("/routes/:routeId", gwHandler.DeleteRoute)
 
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
-	backupRepo := memory.NewMemoryBackupRepository()
+	var backupRepo ports.BackupRepository
+	if pool != nil {
+		backupRepo = postgres.NewPostgresBackupRepository(pool)
+	} else {
+		backupRepo = memory.NewMemoryBackupRepository()
+	}
 	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo, planRepo)
 	appByID.Post("/databases/:dbId/backups", backupHandler.Create)
 	appByID.Get("/databases/:dbId/backups", backupHandler.List)
@@ -671,6 +790,30 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	poolByID.Post("/users/:userId/disable", authPoolHandler.DisableUser)
 	poolByID.Post("/users/:userId/enable", authPoolHandler.EnableUser)
 
+	// Monitoring (Prometheus + Loki + k8s pod metrics)
+	var promClient *promclient.Client
+	var lokiClient *lokiclient.Client
+	if cfg.PrometheusURL != "" {
+		promClient = promclient.New(cfg.PrometheusURL)
+		slog.Info("Prometheus client configured", "url", cfg.PrometheusURL)
+	}
+	if cfg.LokiURL != "" {
+		lokiClient = lokiclient.New(cfg.LokiURL)
+		slog.Info("Loki client configured", "url", cfg.LokiURL)
+	}
+	monitoringSvc := services.NewMonitoringService(promClient, lokiClient, k8sClient, appRepo)
+	monitoringHandler := handlers.NewMonitoringHandler(monitoringSvc)
+	appByID.Get("/metrics/overview", monitoringHandler.GetOverview)
+	appByID.Get("/metrics/timeseries", monitoringHandler.GetTimeSeries)
+	appByID.Get("/logs", monitoringHandler.GetLogs)
+	appByID.Get("/logs/stream", monitoringHandler.StreamLogs)
+	appByID.Get("/pods", monitoringHandler.GetPods)
+
+	// Business metrics (Prometheus exporter for Grafana dashboards)
+	bizMetrics := handlers.NewBusinessMetrics(userRepo, appRepo, dbRepo, planRepo)
+	bizMetrics.StartCollector(context.Background())
+	app.Get("/metrics", bizMetrics.Handler())
+
 	supportHandler := handlers.NewSupportHandler(supportSvc)
 
 	supportRoutes := protected.Group("/support/tickets")
@@ -687,19 +830,24 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Post("/plan/upgrade", planHandler.UpgradePlan)
 
 	// Stripe Billing (Phase 6)
-	billingRepo := memory.NewMemoryBillingRepository()
+	var billingRepo ports.BillingRepository
+	if pool != nil {
+		billingRepo = postgres.NewPostgresBillingRepository(pool)
+	} else {
+		billingRepo = memory.NewMemoryBillingRepository()
+	}
 	var stripeAPI stripeClient.StripeAPI
 	if cfg.StripeBillingEnabled && cfg.StripeSecretKey != "" {
 		stripeAPI = stripeClient.NewClient(cfg.StripeSecretKey, cfg.StripeWebhookSecret)
 		planSvc.SetStripeEnabled(true)
-		log.Println("[billing] Stripe billing enabled")
+		slog.Info("Stripe billing enabled")
 	} else {
-		log.Println("[billing] Stripe billing disabled (direct plan changes allowed)")
+		slog.Info("Stripe billing disabled, direct plan changes allowed")
 	}
 
 	billingSvc := services.NewBillingService(
 		stripeAPI, billingRepo, planRepo, appRepo, dbRepo, storageRepo, appAuthRepo,
-		cfg.StripeProPriceID, cfg.StripeTeamPriceID, cfg.BaseDomain,
+		cfg.StripeProPriceID, cfg.StripeTeamPriceID, cfg.StripeBusinessPriceID, cfg.BaseDomain,
 	)
 	billingHandler := handlers.NewBillingHandler(billingSvc)
 	protected.Get("/billing", billingHandler.GetBillingStatus)
@@ -711,6 +859,21 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Stripe webhook (unauthenticated — uses Stripe signature verification)
 	if stripeAPI != nil {
 		webhookHandlerStripe := handlers.NewStripeWebhookHandler(billingSvc, stripeAPI)
+		webhookHandlerStripe.SetEventBus(eventBus)
+		if temporalWfClient != nil {
+			webhookHandlerStripe.SetOnPlanChange(func(ctx context.Context, userID, email string, oldTier, newTier entities.PlanTier, stripeSub, stripeCust string) {
+				if err := temporalWfClient.StartPlanChange(ctx, zenithTemporal.PlanChangeInput{
+					UserID:             userID,
+					UserEmail:          email,
+					OldTier:            oldTier,
+					NewTier:            newTier,
+					StripeSubscription: stripeSub,
+					StripeCustomer:     stripeCust,
+				}); err != nil {
+					slog.Error("failed to start PlanOrchestrator", "error", err)
+				}
+			})
+		}
 		api.Post("/webhooks/stripe", webhookHandlerStripe.HandleEvent)
 	}
 
@@ -730,21 +893,37 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/domains", domainHandler.ListByUser)
 
 	// API Keys (Phase 6.5)
-	apiKeyRepo := memory.NewMemoryAPIKeyRepository()
+	var apiKeyRepo ports.APIKeyRepository
+	if pool != nil {
+		apiKeyRepo = postgres.NewPostgresAPIKeyRepository(pool)
+	} else {
+		apiKeyRepo = memory.NewMemoryAPIKeyRepository()
+	}
 	apiKeyHandler := handlers.NewAPIKeyHandler(apiKeyRepo, planRepo)
 	protected.Post("/api-keys", apiKeyHandler.Create)
 	protected.Get("/api-keys", apiKeyHandler.List)
 	protected.Delete("/api-keys/:keyId", apiKeyHandler.Delete)
 
 	// Sessions (Phase 6.5)
-	sessionRepo := memory.NewMemorySessionRepository()
+	var sessionRepo ports.SessionRepository
+	if pool != nil {
+		sessionRepo = postgres.NewPostgresSessionRepository(pool)
+	} else {
+		sessionRepo = memory.NewMemorySessionRepository()
+	}
 	sessionHandler := handlers.NewSessionHandler(sessionRepo)
 	protected.Get("/auth/sessions", sessionHandler.List)
 	protected.Delete("/auth/sessions/:sessionId", sessionHandler.Revoke)
 	protected.Delete("/auth/sessions", sessionHandler.RevokeAll)
 
 	// MFA (Phase 6.5 — Pro+ only)
-	mfaRepo := memory.NewMemoryMFARepository()
+	var mfaRepo ports.MFARepository
+	if pool != nil {
+		mfaRepo = postgres.NewPostgresMFARepository(pool)
+	} else {
+		mfaRepo = memory.NewMemoryMFARepository()
+	}
+	authSvc.SetMFARepo(mfaRepo)
 	mfaHandler := handlers.NewMFAHandler(mfaRepo, planRepo)
 	protected.Get("/auth/mfa", mfaHandler.GetStatus)
 	protected.Post("/auth/mfa/enable", mfaHandler.Enable)
@@ -753,7 +932,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Post("/auth/mfa/backup-codes", mfaHandler.RegenerateBackupCodes)
 
 	// User Webhooks (Phase 6.5 — Pro+ only)
-	userWebhookRepo := memory.NewMemoryUserWebhookRepository()
+	var userWebhookRepo ports.UserWebhookRepository
+	if pool != nil {
+		userWebhookRepo = postgres.NewPostgresUserWebhookRepository(pool)
+	} else {
+		userWebhookRepo = memory.NewMemoryUserWebhookRepository()
+	}
 	userWebhookHandler := handlers.NewUserWebhookHandler(userWebhookRepo, planRepo)
 	protected.Post("/webhooks", userWebhookHandler.Create)
 	protected.Get("/webhooks", userWebhookHandler.List)
@@ -762,7 +946,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/webhooks/:webhookId/deliveries", userWebhookHandler.ListDeliveries)
 
 	// Custom Roles / RBAC (Phase 6.5 — Team+ only)
-	roleRepo := memory.NewMemoryRoleRepository()
+	var roleRepo ports.RoleRepository
+	if pool != nil {
+		roleRepo = postgres.NewPostgresRoleRepository(pool)
+	} else {
+		roleRepo = memory.NewMemoryRoleRepository()
+	}
 	roleHandler := handlers.NewRoleHandler(roleRepo, planRepo)
 	protected.Post("/roles", roleHandler.Create)
 	protected.Get("/roles", roleHandler.List)
@@ -774,7 +963,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Delete("/roles/:roleId/assignments/:assignmentId", roleHandler.RemoveAssignment)
 
 	// IP Whitelisting (Phase 6.5 — Enterprise only)
-	ipRepo := memory.NewMemoryIPWhitelistRepository()
+	var ipRepo ports.IPWhitelistRepository
+	if pool != nil {
+		ipRepo = postgres.NewPostgresIPWhitelistRepository(pool)
+	} else {
+		ipRepo = memory.NewMemoryIPWhitelistRepository()
+	}
 	ipHandler := handlers.NewIPWhitelistHandler(ipRepo, planRepo)
 	protected.Post("/settings/ip-whitelist", ipHandler.Add)
 	protected.Get("/settings/ip-whitelist", ipHandler.List)
@@ -784,8 +978,66 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	complianceHandler := handlers.NewComplianceHandler(mfaRepo, ipRepo, planRepo, adminRepo)
 	protected.Get("/compliance", complianceHandler.GetStatus)
 
+	// User Audit Log (Business+)
+	userAuditHandler := handlers.NewUserAuditHandler(adminRepo, planRepo)
+	protected.Get("/audit", userAuditHandler.List)
+	protected.Get("/audit/export/csv", userAuditHandler.ExportCSV)
+	protected.Get("/audit/export/json", userAuditHandler.ExportJSON)
+
+	// Add-on Marketplace
+	addonHandler := handlers.NewAddOnHandler(planRepo)
+	protected.Get("/addons", addonHandler.ListCatalog)
+	protected.Get("/addons/:addonId", addonHandler.GetAddOn)
+
+	// Registry (Harbor) — scan status + browse
+	var harborClient *harborclient.Client
+	if cfg.HarborURL != "" && cfg.HarborUser != "" {
+		harborClient = harborclient.New(cfg.HarborURL, cfg.HarborUser, cfg.HarborPassword)
+		billingSvc.SetHarborClient(harborClient)
+	}
+	registryHandler := handlers.NewRegistryHandler(harborClient, "zenith-stage")
+	protected.Get("/registry/repos", registryHandler.ListRepositories)
+	protected.Get("/registry/repos/:name", registryHandler.GetRepository)
+
+	// Pod Exec — SSH-to-pod terminal access (Business+ only)
+	podSessionRepo := memory.NewMemoryPodExecSessionRepository()
+	podExecHandler := handlers.NewPodExecHandler(k8sClient, appRepo, planRepo, userRepo, podSessionRepo, objStorage, cfg.S3PlatformBucket, "zenith-apps")
+	appByID.Use("/pods/:podName/exec", podExecHandler.UpgradeCheck)
+	appByID.Get("/pods/:podName/exec", podExecHandler.HandleExec())
+	protected.Get("/pod-sessions", podExecHandler.ListSessions)
+	protected.Get("/pod-sessions/:sessionId/recording", podExecHandler.GetRecordingURL)
+
+	// WAF Configuration (Business+ only)
+	wafHandler := handlers.NewWAFHandler(appRepo, planRepo)
+	appByID.Get("/waf/rules", wafHandler.ListRules)
+	appByID.Post("/waf/rules", wafHandler.CreateRule)
+	appByID.Put("/waf/rules/:ruleId", wafHandler.UpdateRule)
+	appByID.Delete("/waf/rules/:ruleId", wafHandler.DeleteRule)
+
+	// Cilium Network Policies (Business+ only)
+	netpolHandler := handlers.NewNetworkPolicyHandler(appRepo, planRepo)
+	appByID.Get("/network-policies", netpolHandler.ListRules)
+	appByID.Post("/network-policies", netpolHandler.CreateRule)
+	appByID.Put("/network-policies/:ruleId", netpolHandler.UpdateRule)
+	appByID.Delete("/network-policies/:ruleId", netpolHandler.DeleteRule)
+
+	// Custom Alert Rules + Metrics (Business+ only)
+	alertsHandler := handlers.NewAlertsHandler(appRepo, planRepo)
+	appByID.Get("/alerts", alertsHandler.ListAlertRules)
+	appByID.Post("/alerts", alertsHandler.CreateAlertRule)
+	appByID.Put("/alerts/:ruleId", alertsHandler.UpdateAlertRule)
+	appByID.Delete("/alerts/:ruleId", alertsHandler.DeleteAlertRule)
+	appByID.Get("/custom-metrics", alertsHandler.ListMetrics)
+	appByID.Post("/custom-metrics", alertsHandler.CreateMetric)
+	appByID.Delete("/custom-metrics/:metricId", alertsHandler.DeleteMetric)
+
 	// DPA + White-label Branding (Phase 6.5)
-	brandingRepo := memory.NewMemoryBrandingRepository()
+	var brandingRepo ports.BrandingRepository
+	if pool != nil {
+		brandingRepo = postgres.NewPostgresBrandingRepository(pool)
+	} else {
+		brandingRepo = memory.NewMemoryBrandingRepository()
+	}
 	brandingHandler := handlers.NewBrandingHandler(brandingRepo, planRepo)
 	protected.Get("/settings/dpa", brandingHandler.GetDPA)
 	protected.Post("/settings/dpa/sign", brandingHandler.SignDPA)
@@ -794,7 +1046,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Post("/settings/domain", brandingHandler.SetDashboardDomain)
 
 	// SSO (Phase 6.5 — Team+ only)
-	ssoRepo := memory.NewMemorySSORepository()
+	var ssoRepo ports.SSORepository
+	if pool != nil {
+		ssoRepo = postgres.NewPostgresSSORepository(pool)
+	} else {
+		ssoRepo = memory.NewMemorySSORepository()
+	}
 	ssoHandler := handlers.NewSSOHandler(ssoRepo, planRepo)
 	protected.Post("/settings/sso/saml", ssoHandler.ConfigureSAML)
 	protected.Post("/settings/sso/oidc", ssoHandler.ConfigureOIDC)
@@ -802,7 +1059,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Delete("/settings/sso/:configId", ssoHandler.DeleteConfig)
 
 	// Preview Deployments (Phase 6.5 — Team+ only)
-	previewRepo := memory.NewMemoryPreviewRepository()
+	var previewRepo ports.PreviewRepository
+	if pool != nil {
+		previewRepo = postgres.NewPostgresPreviewRepository(pool)
+	} else {
+		previewRepo = memory.NewMemoryPreviewRepository()
+	}
 	previewHandler := handlers.NewPreviewHandler(previewRepo, appRepo, planRepo)
 	appByID.Post("/previews", previewHandler.Create)
 	appByID.Get("/previews", previewHandler.List)
@@ -812,7 +1074,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Protected with admin auth — in production, replace with SCIM bearer token validation
 	if cfg.Mode == "saas" {
 		scimHandler := handlers.NewSCIMHandler(userRepo, planRepo)
-		scim := api.Group("/scim/v2", middleware.RequireAuth(cfg.JWTSecret), middleware.RequireRole(entities.RoleAdmin))
+		scim := api.Group("/scim/v2", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist), middleware.RequireRole(entities.RoleAdmin))
 		scim.Get("/Users", scimHandler.ListUsers)
 		scim.Get("/Users/:userId", scimHandler.GetUser)
 		scim.Post("/Users", scimHandler.CreateUser)
@@ -833,18 +1095,18 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/events", eventHandler.StreamEvents)
 	protected.Get("/events/history", eventHandler.GetRecentEvents)
 
-	// Notifications (stub — returns empty list until full implementation)
-	protected.Get("/notifications", func(c *fiber.Ctx) error {
-		return c.JSON([]interface{}{})
-	})
-	protected.Post("/notifications/read", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "ok"})
-	})
-
-	// Activity log (stub — returns empty list until full implementation)
-	protected.Get("/activity", func(c *fiber.Ctx) error {
-		return c.JSON([]interface{}{})
-	})
+	// Notifications + Activity Log
+	var notifRepo ports.NotificationRepository
+	if pool != nil {
+		notifRepo = postgres.NewPostgresNotificationRepository(pool)
+	} else {
+		notifRepo = memory.NewMemoryNotificationRepository()
+	}
+	notifHandler := handlers.NewNotificationHandler(notifRepo)
+	notifSvc.SetNotificationRepo(notifRepo)
+	protected.Get("/notifications", notifHandler.List)
+	protected.Post("/notifications/read", notifHandler.MarkRead)
+	protected.Get("/activity", notifHandler.ListActivity)
 
 	// Backstage catalog integration
 	protected.Get("/backstage/catalog", backstageHandler.GetCatalog)
@@ -961,7 +1223,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Hetzner Autoscaler (Phase 5 — SaaS only)
 	var as *autoscale.Autoscaler
 	if cfg.Mode == "saas" {
-		autoscaleRepo := memory.NewMemoryAutoscaleRepository()
+		var autoscaleRepo ports.AutoscaleRepository
+		if pool != nil {
+			autoscaleRepo = postgres.NewPostgresAutoscaleRepository(pool)
+		} else {
+			autoscaleRepo = memory.NewMemoryAutoscaleRepository()
+		}
 		autoscaleHandler := handlers.NewAutoscaleHandler(autoscaleRepo)
 		admin.Get("/autoscaler/status", autoscaleHandler.GetStatus)
 		admin.Get("/autoscaler/nodes", autoscaleHandler.ListNodes)
@@ -985,11 +1252,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 				Location:     cfg.HetznerLocation,
 			}
 			as = autoscale.NewAutoscaler(hetznerClient, metricsProvider, autoscaleRepo, adminRepo, asCfg, cfg.K3sToken, "https://"+cfg.BaseDomain+":6443")
-			log.Println("[autoscaler] Hetzner autoscaler configured")
+			slog.Info("hetzner autoscaler configured")
 		} else {
-			log.Println("[autoscaler] disabled (AUTOSCALER_ENABLED=false or HCLOUD_TOKEN not set)")
+			slog.Info("autoscaler disabled")
 		}
 	}
 
-	return provisioner, as, tw
+	return provisioner, as, tw, tokenBlacklist, eventBus, redisClient
 }

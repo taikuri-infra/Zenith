@@ -72,8 +72,8 @@ func (h *BrandingHandler) UpdateBranding(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	if plan.Tier != entities.PlanEnterprise {
-		return fiber.NewError(fiber.StatusForbidden, "white-label branding requires Enterprise plan")
+	if plan.Tier != entities.PlanBusiness && plan.Tier != entities.PlanEnterprise {
+		return fiber.NewError(fiber.StatusForbidden, "white-label branding requires Business plan or higher")
 	}
 
 	var body struct {

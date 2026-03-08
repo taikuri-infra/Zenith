@@ -1,0 +1,36 @@
+{{- if .Values.mc.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-mc-demo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-mc-demo
+    app.kubernetes.io/name: zenith-mc-demo
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mission-control-demo
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zenith-mc-demo
+{{- end }}
+{{- if .Values.web.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-web-demo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-web-demo
+    app.kubernetes.io/name: zenith-web-demo
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: web-demo
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zenith-web-demo
+{{- end }}

@@ -24,10 +24,19 @@ import {
   ListOrdered,
   Plus,
   Check,
+  ShieldCheck,
+  FileText,
+  Lock,
+  Package,
+  Terminal,
+  ShieldAlert,
+  Wifi,
+  Bell,
 } from "lucide-react";
 import { useProjectContext } from "@/hooks/use-project";
+import { IS_STANDALONE } from "@/lib/runtime-env";
 
-const isStandalone = process.env.NEXT_PUBLIC_ZENITH_MODE !== "saas";
+const isStandalone = IS_STANDALONE;
 
 interface NavItem {
   name: string;
@@ -70,6 +79,12 @@ const navSections: NavSection[] = [
     items: [
       { name: "Auth", href: "/auth", icon: Shield },
       { name: "IAM", href: "/iam", icon: KeyRound },
+      { name: "SSO", href: "/sso", icon: Lock, saasOnly: true },
+      { name: "Compliance", href: "/compliance", icon: ShieldCheck, saasOnly: true },
+      { name: "Audit Log", href: "/audit", icon: FileText, saasOnly: true },
+      { name: "SSH Sessions", href: "/ssh-sessions", icon: Terminal, saasOnly: true },
+      { name: "WAF Rules", href: "/waf", icon: ShieldAlert, saasOnly: true },
+      { name: "Firewall", href: "/firewall", icon: Wifi, saasOnly: true },
     ],
   },
   {
@@ -78,6 +93,7 @@ const navSections: NavSection[] = [
       { name: "Logs", href: "/logs", icon: ScrollText },
       { name: "Activity", href: "/activity", icon: History },
       { name: "Monitoring", href: "/monitoring", icon: Activity },
+      { name: "Alerts", href: "/alerts", icon: Bell, saasOnly: true },
       { name: "Registry", href: "/registry", icon: Container },
     ],
   },
@@ -91,6 +107,7 @@ const navSections: NavSection[] = [
 ];
 
 const bottomNav: NavItem[] = [
+  { name: "Marketplace", href: "/marketplace", icon: Package, saasOnly: true },
   { name: "Support", href: "/support", icon: LifeBuoy, saasOnly: true },
   { name: "Docs", href: "/docs", icon: BookOpen },
   { name: "Billing", href: "/billing", icon: CreditCard, saasOnly: true },

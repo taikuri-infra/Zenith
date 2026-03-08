@@ -17,11 +17,29 @@ func NewK8sMetricsProvider(client k8sclient.Client) *K8sMetricsProvider {
 	return &K8sMetricsProvider{client: client}
 }
 
-// GetClusterMetrics returns aggregate CPU and RAM utilization percentages.
-// For now, this queries the k8s API for node conditions / metrics-server.
-// In memory mode, returns 50%/50% so the autoscaler doesn't trigger.
-func (p *K8sMetricsProvider) GetClusterMetrics(_ context.Context) (cpuPercent, ramPercent float64, err error) {
-	// TODO: implement real metrics-server query using p.client when K8S_MODE=real
-	// For now, return safe defaults that won't trigger scaling.
-	return 50.0, 50.0, nil
+// GetClusterMetrics returns aggregate CPU and RAM utilization percentages
+// by querying node metrics from the k8s client (which in turn uses metrics-server).
+func (p *K8sMetricsProvider) GetClusterMetrics(ctx context.Context) (cpuPercent, ramPercent float64, err error) {
+	nodes, err := p.client.GetNodeMetrics(ctx)
+	if err != nil || len(nodes) == 0 {
+		// Fail safe: return mid-range values that won't trigger scaling
+		return 50.0, 50.0, nil
+	}
+
+	var totalCPUCap, totalCPUUse, totalMemCap, totalMemUse int64
+	for _, n := range nodes {
+		totalCPUCap += n.CPUCapacityMillis
+		totalCPUUse += n.CPUUsageMillis
+		totalMemCap += n.MemCapacityBytes
+		totalMemUse += n.MemUsageBytes
+	}
+
+	if totalCPUCap > 0 {
+		cpuPercent = float64(totalCPUUse) / float64(totalCPUCap) * 100.0
+	}
+	if totalMemCap > 0 {
+		ramPercent = float64(totalMemUse) / float64(totalMemCap) * 100.0
+	}
+
+	return cpuPercent, ramPercent, nil
 }

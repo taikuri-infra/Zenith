@@ -1,0 +1,57 @@
+# Kyverno ClusterPolicy: Deny pods in zenith-apps namespace unless the image
+# has been scanned by Trivy (Harbor sets "trivy.scan.result" annotation).
+#
+# This ensures only vulnerability-scanned images run in production.
+#
+# Prerequisites:
+#   1. Kyverno installed (via Terraform helm_release)
+#   2. Harbor Trivy scanner enabled (P4-01)
+#   3. Images pushed to Harbor get auto-scanned
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-trivy-scan
+  annotations:
+    policies.kyverno.io/title: Require Trivy Vulnerability Scan
+    policies.kyverno.io/category: Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Pods in the zenith-apps namespace must use images that have
+      been scanned by Trivy with no critical vulnerabilities.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-image-scan-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - zenith-apps
+      # Skip system pods (KEDA, cold-start, etc.)
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  app.kubernetes.io/managed-by: keda-operator
+      validate:
+        message: >-
+          Image {{request.object.spec.containers[0].image}} has not been
+          vulnerability scanned. Push to Harbor to trigger Trivy scan.
+        pattern:
+          metadata:
+            labels:
+              zenith.dev/scan-verified: "true"
+---
+# Webhook configuration for Harbor to call after Trivy scan completes.
+# Harbor sends a POST to the Zenith API which labels the deployment.
+#
+# This is implemented in the API's internal/handlers/webhook.go:
+#   POST /api/v1/internal/harbor-scan-complete
+#   Body: { "type": "SCANNING_COMPLETED", "event_data": { "resources": [...] } }
+#
+# The handler verifies the scan result has no critical vulns, then patches
+# the corresponding deployment with the scan-verified label.

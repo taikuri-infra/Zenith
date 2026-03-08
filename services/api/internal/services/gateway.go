@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -87,11 +87,11 @@ func (s *GatewayService) CreateGateway(ctx context.Context, userID, projectID, n
 
 	// Create K8s resources
 	if err := s.ensureExternalNameBridge(ctx); err != nil {
-		log.Printf("[gateway] Warning: failed to ensure ExternalName bridge: %v", err)
+		slog.Warn("failed to ensure ExternalName bridge", "error", err)
 	}
 
 	if err := s.createIngressRoute(ctx, gw); err != nil {
-		log.Printf("[gateway] Warning: failed to create IngressRoute for %s: %v", slug, err)
+		slog.Warn("failed to create IngressRoute", "slug", slug, "error", err)
 		s.gwRepo.UpdateGatewayStatus(ctx, gw.ID, entities.GatewayStatusError)
 		gw.Status = entities.GatewayStatusError
 		return gw, nil
@@ -99,7 +99,7 @@ func (s *GatewayService) CreateGateway(ctx context.Context, userID, projectID, n
 
 	// Create empty ApisixRoute
 	if err := s.syncApisixRoute(ctx, gw, nil); err != nil {
-		log.Printf("[gateway] Warning: failed to create ApisixRoute for %s: %v", slug, err)
+		slog.Warn("failed to create ApisixRoute", "slug", slug, "error", err)
 	}
 
 	s.gwRepo.UpdateGatewayStatus(ctx, gw.ID, entities.GatewayStatusActive)
@@ -151,13 +151,13 @@ func (s *GatewayService) DeleteGateway(ctx context.Context, id string) error {
 	// Delete ApisixRoute
 	apisixName := "gw-" + gw.Slug
 	if err := s.k8sClient.DeleteCRDWithVersion(ctx, "apisix.apache.org/v2", "ApisixRoute", s.namespace, apisixName); err != nil {
-		log.Printf("[gateway] Warning: failed to delete ApisixRoute %s: %v", apisixName, err)
+		slog.Warn("failed to delete ApisixRoute", "name", apisixName, "error", err)
 	}
 
 	// Delete IngressRoute
 	ingressName := "gw-" + gw.Slug
 	if err := s.k8sClient.DeleteCRD(ctx, "IngressRoute", s.namespace, ingressName); err != nil {
-		log.Printf("[gateway] Warning: failed to delete IngressRoute %s: %v", ingressName, err)
+		slog.Warn("failed to delete IngressRoute", "name", ingressName, "error", err)
 	}
 
 	return s.gwRepo.DeleteGateway(ctx, id)
@@ -313,7 +313,7 @@ func (s *GatewayService) SyncGateway(ctx context.Context, id string) error {
 
 	// Recreate IngressRoute
 	if err := s.createIngressRoute(ctx, gw); err != nil {
-		log.Printf("[gateway] Sync: failed to recreate IngressRoute for %s: %v", gw.Slug, err)
+		slog.Warn("gateway sync: failed to recreate IngressRoute", "slug", gw.Slug, "error", err)
 	}
 
 	s.rebuildApisixRoute(ctx, gw)
@@ -324,14 +324,14 @@ func (s *GatewayService) SyncGateway(ctx context.Context, id string) error {
 func (s *GatewayService) ReconcileAll(ctx context.Context) {
 	// We need to list all gateways across all users - just log for now
 	// In production, add a ListAllActive method to the repo
-	log.Println("[gateway] Reconcile: gateway reconciliation available via /sync endpoint")
+	slog.Info("gateway reconciliation available via /sync endpoint")
 }
 
 // HandleAppDeleted stops all routes pointing to the deleted app and rebuilds CRDs.
 func (s *GatewayService) HandleAppDeleted(ctx context.Context, appID string) {
 	gwIDs, err := s.gwRepo.StopRoutesByApp(ctx, appID)
 	if err != nil {
-		log.Printf("[gateway] HandleAppDeleted: failed to stop routes for app %s: %v", appID, err)
+		slog.Error("failed to stop routes for deleted app", "app_id", appID, "error", err)
 		return
 	}
 
@@ -344,7 +344,7 @@ func (s *GatewayService) HandleAppDeleted(ctx context.Context, appID string) {
 	}
 
 	if len(gwIDs) > 0 {
-		log.Printf("[gateway] HandleAppDeleted: stopped routes in %d gateways for deleted app %s", len(gwIDs), appID)
+		slog.Info("stopped routes for deleted app", "gateway_count", len(gwIDs), "app_id", appID)
 	}
 }
 
@@ -425,12 +425,12 @@ func (s *GatewayService) createIngressRoute(ctx context.Context, gw *entities.Ga
 func (s *GatewayService) rebuildApisixRoute(ctx context.Context, gw *entities.Gateway) {
 	routes, err := s.gwRepo.ListActiveRoutesByGateway(ctx, gw.ID)
 	if err != nil {
-		log.Printf("[gateway] rebuildApisixRoute: failed to list routes for %s: %v", gw.Slug, err)
+		slog.Error("failed to list routes for ApisixRoute rebuild", "slug", gw.Slug, "error", err)
 		return
 	}
 
 	if err := s.syncApisixRoute(ctx, gw, routes); err != nil {
-		log.Printf("[gateway] rebuildApisixRoute: failed to sync ApisixRoute for %s: %v", gw.Slug, err)
+		slog.Error("failed to sync ApisixRoute", "slug", gw.Slug, "error", err)
 	}
 }
 
@@ -544,7 +544,7 @@ func (s *GatewayService) HandleAuthPoolDeleted(ctx context.Context, gwIDs []stri
 		s.rebuildApisixRoute(ctx, gw)
 	}
 	if len(gwIDs) > 0 {
-		log.Printf("[gateway] HandleAuthPoolDeleted: rebuilt CRDs for %d gateways", len(gwIDs))
+		slog.Info("rebuilt CRDs after auth pool deletion", "gateway_count", len(gwIDs))
 	}
 }
 

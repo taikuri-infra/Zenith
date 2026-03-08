@@ -1,0 +1,170 @@
+name: Smoke Tests
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'API URL to test against'
+        required: false
+        default: 'https://api.stage.freezenith.com'
+
+  # Run after successful image build
+  workflow_run:
+    workflows: ["Build & Push Docker Images"]
+    types: [completed]
+    branches: [main]
+
+  # Scheduled: every 6 hours
+  schedule:
+    - cron: '0 */6 * * *'
+
+env:
+  API_URL: ${{ github.event.inputs.api_url || 'https://api.stage.freezenith.com' }}
+
+jobs:
+  customer-smoke-test:
+    name: Customer Userflow
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run customer smoke test
+        env:
+          ZENITH_API_URL: ${{ env.API_URL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+        run: ./infra/scripts/smoke-test-customer.sh --verbose
+
+  owner-smoke-test:
+    name: Owner Userflow (Admin)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run owner smoke test
+        env:
+          ZENITH_API_URL: ${{ env.API_URL }}
+          ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.STAGING_ADMIN_PASSWORD }}
+        run: ./infra/scripts/smoke-test-owner.sh --verbose
+
+  infrastructure-e2e:
+    name: Infrastructure E2E
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run infrastructure E2E test
+        run: ./infra/scripts/e2e-test-staging.sh --verbose
+
+  notify:
+    name: DR Test Report
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [customer-smoke-test, owner-smoke-test, infrastructure-e2e]
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          CUSTOMER="${{ needs.customer-smoke-test.result }}"
+          OWNER="${{ needs.owner-smoke-test.result }}"
+          INFRA="${{ needs.infrastructure-e2e.result }}"
+
+          if [ "$CUSTOMER" = "success" ] && [ "$OWNER" = "success" ] && [ "$INFRA" = "success" ]; then
+            echo "overall=success" >> "$GITHUB_OUTPUT"
+            echo "emoji=✅" >> "$GITHUB_OUTPUT"
+            echo "color=good" >> "$GITHUB_OUTPUT"
+            echo "text=All DR smoke tests passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "overall=failure" >> "$GITHUB_OUTPUT"
+            echo "emoji=🚨" >> "$GITHUB_OUTPUT"
+            echo "color=danger" >> "$GITHUB_OUTPUT"
+            echo "text=DR smoke test failures detected" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "customer=$CUSTOMER" >> "$GITHUB_OUTPUT"
+          echo "owner=$OWNER" >> "$GITHUB_OUTPUT"
+          echo "infra=$INFRA" >> "$GITHUB_OUTPUT"
+
+      - name: Send Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS_ICON() {
+            case "$1" in
+              success) echo "✅" ;;
+              failure) echo "❌" ;;
+              skipped) echo "⏭️" ;;
+              *) echo "❓" ;;
+            esac
+          }
+
+          curl -sS -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d "$(cat <<EOF
+          {
+            "attachments": [{
+              "color": "${{ steps.status.outputs.color }}",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {"type": "plain_text", "text": "${{ steps.status.outputs.emoji }} Zenith DR Smoke Test Report"}
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {"type": "mrkdwn", "text": "*Customer Userflow:*\n$(STATUS_ICON ${{ steps.status.outputs.customer }}) ${{ steps.status.outputs.customer }}"},
+                    {"type": "mrkdwn", "text": "*Owner Userflow:*\n$(STATUS_ICON ${{ steps.status.outputs.owner }}) ${{ steps.status.outputs.owner }}"},
+                    {"type": "mrkdwn", "text": "*Infrastructure E2E:*\n$(STATUS_ICON ${{ steps.status.outputs.infra }}) ${{ steps.status.outputs.infra }}"},
+                    {"type": "mrkdwn", "text": "*Target:*\n${{ env.API_URL }}"}
+                  ]
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {"type": "mrkdwn", "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run> | Trigger: ${{ github.event_name }} | $(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+                  ]
+                }
+              ]
+            }]
+          }
+          EOF
+          )"
+
+      - name: Send Telegram notification
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          STATUS_ICON() {
+            case "$1" in
+              success) echo "✅" ;;
+              failure) echo "❌" ;;
+              skipped) echo "⏭️" ;;
+              *) echo "❓" ;;
+            esac
+          }
+
+          CUSTOMER_ICON=$(STATUS_ICON "${{ steps.status.outputs.customer }}")
+          OWNER_ICON=$(STATUS_ICON "${{ steps.status.outputs.owner }}")
+          INFRA_ICON=$(STATUS_ICON "${{ steps.status.outputs.infra }}")
+
+          MESSAGE="${{ steps.status.outputs.emoji }} *Zenith DR Smoke Test Report*
+
+${CUSTOMER_ICON} Customer Userflow: ${{ steps.status.outputs.customer }}
+${OWNER_ICON} Owner Userflow: ${{ steps.status.outputs.owner }}
+${INFRA_ICON} Infrastructure E2E: ${{ steps.status.outputs.infra }}
+
+Target: \`${{ env.API_URL }}\`
+Trigger: ${{ github.event_name }}
+[View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode=Markdown \
+            -d text="${MESSAGE}"

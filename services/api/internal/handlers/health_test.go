@@ -19,7 +19,7 @@ func setupApp() *fiber.App {
 
 func TestHealthCheck(t *testing.T) {
 	app := setupApp()
-	app.Get("/health", handlers.HealthCheck("1.0.0", "2026-01-01", "abc123"))
+	app.Get("/health", handlers.HealthCheck("1.0.0"))
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	resp, err := app.Test(req)
@@ -80,7 +80,7 @@ func TestReadinessCheck(t *testing.T) {
 
 func TestVersionInfo(t *testing.T) {
 	app := setupApp()
-	app.Get("/version", handlers.VersionInfo("1.0.0", "2026-01-01", "abc123"))
+	app.Get("/version", handlers.VersionInfo("1.0.0", "2026-01-01"))
 
 	req := httptest.NewRequest("GET", "/version", nil)
 	resp, err := app.Test(req)

@@ -188,7 +188,9 @@ func (r *MemoryBillingRepository) GetBillingOverview(_ context.Context) (*entiti
 			case entities.PlanPro:
 				overview.MRRCents += 2900
 			case entities.PlanTeam:
-				overview.MRRCents += 19900
+				overview.MRRCents += 9900
+			case entities.PlanBusiness:
+				overview.MRRCents += 14900
 			}
 		case entities.SubscriptionPastDue:
 			overview.PastDueCount++

@@ -249,6 +249,12 @@ func (r *MemoryAppRepository) CountAppsByUser(ctx context.Context, userID string
 	return count, nil
 }
 
+func (r *MemoryAppRepository) CountApps(ctx context.Context) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.apps), nil
+}
+
 // --- Deployments ---
 
 func (r *MemoryAppRepository) CreateDeployment(ctx context.Context, appID, gitSHA string) (*entities.Deployment, error) {

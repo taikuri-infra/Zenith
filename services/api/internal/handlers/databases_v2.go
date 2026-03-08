@@ -61,6 +61,16 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 		input.Engine = entities.DatabaseEnginePostgres
 	}
 
+	// Validate engine
+	switch input.Engine {
+	case entities.DatabaseEnginePostgres, entities.DatabaseEngineMySQL, entities.DatabaseEngineRedis,
+		entities.DatabaseEngineMongoDB, entities.DatabaseEngineRabbitMQ,
+		entities.DatabaseEngineKafka:
+		// valid
+	default:
+		return fiber.NewError(fiber.StatusBadRequest, "unsupported engine: "+string(input.Engine))
+	}
+
 	// Use DatabaseService for real provisioning if available
 	if h.dbSvc != nil {
 		db, err := h.dbSvc.ProvisionDatabase(c.Context(), appID, userID, &input)
@@ -164,6 +174,12 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 
 	if input.Engine == "" {
 		input.Engine = entities.DatabaseEnginePostgres
+	}
+
+	switch input.Engine {
+	case entities.DatabaseEnginePostgres, entities.DatabaseEngineMySQL, entities.DatabaseEngineRedis:
+	default:
+		return fiber.NewError(fiber.StatusBadRequest, "unsupported engine: "+string(input.Engine))
 	}
 
 	// Use DatabaseService for real provisioning if available
@@ -292,6 +308,12 @@ func envKeyForEngine(engine entities.DatabaseEngine) string {
 		return "REDIS_URL"
 	case entities.DatabaseEngineMySQL:
 		return "MYSQL_URL"
+	case entities.DatabaseEngineMongoDB:
+		return "MONGODB_URL"
+	case entities.DatabaseEngineRabbitMQ:
+		return "RABBITMQ_URL"
+	case entities.DatabaseEngineKafka:
+		return "KAFKA_BROKERS"
 	default:
 		return "DATABASE_URL"
 	}

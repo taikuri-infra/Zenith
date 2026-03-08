@@ -118,7 +118,7 @@ func TestCreateDatabaseUnsupportedEngine(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := repo.CreateDatabase(ctx, "app-1", "user-1", &dto.CreateDatabaseInput{
-		Engine: "mongodb",
+		Engine: "cockroachdb",
 	})
 	if err == nil {
 		t.Error("Expected unsupported engine error, got nil")

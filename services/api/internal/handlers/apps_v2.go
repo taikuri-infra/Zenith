@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -182,7 +182,7 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		if isAlreadyExists(err) {
 			return NewConflict(err.Error())
 		}
-		log.Printf("[apps_v2] failed to create app: %v", err)
+		slog.Error("failed to create app", "error", err)
 		return NewInternal("failed to create app")
 	}
 
@@ -190,10 +190,10 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 	if deploySource == entities.DeploySourceImage && h.pipeline != nil {
 		deployment, err := h.appRepo.CreateDeployment(c.Context(), app.ID, req.ImageURL)
 		if err != nil {
-			log.Printf("[apps_v2] failed to create deployment record: %v", err)
+			slog.Error("failed to create deployment record", "error", err)
 		} else {
 			if err := h.pipeline.TriggerImageDeploy(app, deployment, req.ImageURL); err != nil {
-				log.Printf("[apps_v2] deploy rejected: %v", err)
+				slog.Warn("deploy rejected", "error", err)
 			}
 		}
 	}
@@ -262,7 +262,7 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 	// Clean up K8s resources (Deployment, Service, IngressRoute, HTTPScaledObject)
 	if h.deployer != nil && app.Status != entities.AppStatusPending {
 		if err := h.deployer.DeleteApp(context.Background(), app); err != nil {
-			log.Printf("[apps_v2] Warning: failed to delete K8s resources for app %s: %v", app.Name, err)
+			slog.Warn("failed to delete K8s resources for app", "app_id", app.Name, "error", err)
 		}
 	}
 

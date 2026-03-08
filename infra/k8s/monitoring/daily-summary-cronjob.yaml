@@ -1,0 +1,46 @@
+# CronJob that posts a daily business summary to Telegram at 08:00 UTC.
+# Requires: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID secrets.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: zenith-daily-summary
+  namespace: zenith-platform
+spec:
+  schedule: "0 8 * * *"  # 08:00 UTC daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            app: zenith-daily-summary
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: daily-summary
+              image: registry.stage.freezenith.com/zenith/zenith-api:latest
+              command: ["/app/daily-summary"]
+              env:
+                - name: PROMETHEUS_URL
+                  value: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+                - name: TELEGRAM_BOT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: telegram-bot
+                      key: token
+                - name: TELEGRAM_CHAT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: telegram-bot
+                      key: chat_id
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi

@@ -3,7 +3,7 @@ package autoscale
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -82,7 +82,7 @@ func (a *Autoscaler) CheckOnce() {
 	// 1. List current managed nodes
 	servers, err := a.hetznerClient.ListServers(ctx)
 	if err != nil {
-		log.Printf("[autoscaler] failed to list servers: %v", err)
+		slog.Error("autoscaler failed to list servers", "error", err)
 		return
 	}
 	nodeCount := len(servers)
@@ -90,7 +90,7 @@ func (a *Autoscaler) CheckOnce() {
 	// 2. Get cluster metrics
 	cpuPct, ramPct, err := a.metrics.GetClusterMetrics(ctx)
 	if err != nil {
-		log.Printf("[autoscaler] failed to get metrics: %v", err)
+		slog.Error("autoscaler failed to get metrics", "error", err)
 		return
 	}
 
@@ -142,7 +142,7 @@ curl -sfL https://get.k3s.io | K3S_URL="%s" K3S_TOKEN="%s" sh -s - agent
 
 	srv, err := a.hetznerClient.CreateServer(ctx, name, a.config.ServerType, a.config.Location, userData)
 	if err != nil {
-		log.Printf("[autoscaler] scale-up failed: %v", err)
+		slog.Error("autoscaler scale-up failed", "error", err)
 		return
 	}
 
@@ -179,7 +179,7 @@ curl -sfL https://get.k3s.io | K3S_URL="%s" K3S_TOKEN="%s" sh -s - agent
 		Action: fmt.Sprintf("Scaled up: created %s (%s)", name, reason),
 	})
 
-	log.Printf("[autoscaler] scale-up: created %s (id=%d, ip=%s)", name, srv.ID, srv.PublicIPv4)
+	slog.Info("autoscaler scale-up: created server", "name", name, "id", srv.ID, "ip", srv.PublicIPv4)
 }
 
 // scaleDown removes the least-utilized node.
@@ -192,7 +192,7 @@ func (a *Autoscaler) scaleDown(ctx context.Context, servers []hetznerclient.Serv
 	target := servers[len(servers)-1]
 
 	if err := a.hetznerClient.DeleteServer(ctx, target.ID); err != nil {
-		log.Printf("[autoscaler] scale-down failed: %v", err)
+		slog.Error("autoscaler scale-down failed", "error", err)
 		return
 	}
 
@@ -218,5 +218,5 @@ func (a *Autoscaler) scaleDown(ctx context.Context, servers []hetznerclient.Serv
 		Action: fmt.Sprintf("Scaled down: removed %s (%s)", target.Name, reason),
 	})
 
-	log.Printf("[autoscaler] scale-down: removed %s (id=%d)", target.Name, target.ID)
+	slog.Info("autoscaler scale-down: removed server", "name", target.Name, "id", target.ID)
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import "./globals.css";
@@ -55,6 +56,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className="min-h-screen bg-surface font-sans text-white antialiased">
+        <Script src="/_next/static/env.js" strategy="beforeInteractive" />
         <Header />
         <main>{children}</main>
         <Footer />

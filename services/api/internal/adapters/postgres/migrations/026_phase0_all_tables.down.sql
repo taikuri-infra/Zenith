@@ -1,0 +1,23 @@
+-- Phase 0: Rollback all memory-only tables
+
+DROP TABLE IF EXISTS autoscaler_status CASCADE;
+DROP TABLE IF EXISTS autoscale_events CASCADE;
+DROP TABLE IF EXISTS autoscaler_nodes CASCADE;
+DROP TABLE IF EXISTS preview_deployments CASCADE;
+DROP TABLE IF EXISTS sso_configs CASCADE;
+DROP TABLE IF EXISTS branding_configs CASCADE;
+DROP TABLE IF EXISTS dpa_records CASCADE;
+DROP TABLE IF EXISTS ip_whitelist CASCADE;
+DROP TABLE IF EXISTS role_assignments CASCADE;
+DROP TABLE IF EXISTS custom_roles CASCADE;
+DROP TABLE IF EXISTS webhook_deliveries CASCADE;
+DROP TABLE IF EXISTS user_webhooks CASCADE;
+DROP TABLE IF EXISTS mfa_enrollments CASCADE;
+DROP TABLE IF EXISTS sessions CASCADE;
+DROP TABLE IF EXISTS api_keys CASCADE;
+DROP TABLE IF EXISTS invoices CASCADE;
+DROP TABLE IF EXISTS stripe_customers CASCADE;
+DROP TABLE IF EXISTS subscriptions CASCADE;
+DROP TABLE IF EXISTS database_backups CASCADE;
+DROP TABLE IF EXISTS app_auth_users CASCADE;
+DROP TABLE IF EXISTS app_auth_configs CASCADE;

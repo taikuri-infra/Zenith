@@ -8,6 +8,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// TokenType distinguishes access tokens from refresh tokens.
+type TokenType string
+
+const (
+	TokenTypeAccess  TokenType = "access"
+	TokenTypeRefresh TokenType = "refresh"
+)
+
 // Claims holds the JWT payload.
 type Claims struct {
 	jwt.RegisteredClaims
@@ -18,10 +26,16 @@ type Claims struct {
 	EmailVerified bool          `json:"email_verified"`
 	AccountID     string        `json:"account_id,omitempty"` // owner's user_id (set for team members)
 	MemberID      string        `json:"member_id,omitempty"`  // team_members.id (set for team members)
+	Type          TokenType     `json:"type,omitempty"`        // "access" or "refresh"
 }
 
-// GenerateToken creates a signed JWT for the given user.
-func GenerateToken(secret string, user *entities.User, expiry time.Duration) (string, error) {
+// GenerateToken creates a signed JWT for the given user with a specific token type.
+func GenerateToken(secret string, user *entities.User, expiry time.Duration, tokenType ...TokenType) (string, error) {
+	tt := TokenTypeAccess
+	if len(tokenType) > 0 {
+		tt = tokenType[0]
+	}
+
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
@@ -34,6 +48,7 @@ func GenerateToken(secret string, user *entities.User, expiry time.Duration) (st
 		Role:          user.Role,
 		ProjectID:     user.ProjectID,
 		EmailVerified: user.EmailVerified,
+		Type:          tt,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -49,7 +64,12 @@ type TeamMemberOverrides struct {
 
 // GenerateTeamMemberToken creates a signed JWT for a team member.
 // The Subject is the member's own user_id, but AccountID points to the owner.
-func GenerateTeamMemberToken(secret string, user *entities.User, expiry time.Duration, overrides TeamMemberOverrides) (string, error) {
+func GenerateTeamMemberToken(secret string, user *entities.User, expiry time.Duration, overrides TeamMemberOverrides, tokenType ...TokenType) (string, error) {
+	tt := TokenTypeAccess
+	if len(tokenType) > 0 {
+		tt = tokenType[0]
+	}
+
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
@@ -64,16 +84,22 @@ func GenerateTeamMemberToken(secret string, user *entities.User, expiry time.Dur
 		EmailVerified: user.EmailVerified,
 		AccountID:     overrides.AccountID,
 		MemberID:      overrides.MemberID,
+		Type:          tt,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }
 
-// ParseToken validates and parses a JWT token.
+// ParseToken validates and parses a JWT token with issuer validation.
 func ParseToken(secret, tokenString string) (*Claims, error) {
 	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+	parser := jwt.NewParser(
+		jwt.WithIssuedAt(),
+		jwt.WithIssuer("zenith"),
+		jwt.WithValidMethods([]string{"HS256"}),
+	)
+	token, err := parser.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
@@ -81,6 +107,20 @@ func ParseToken(secret, tokenString string) (*Claims, error) {
 	})
 	if err != nil || !token.Valid {
 		return nil, fmt.Errorf("invalid or expired token")
+	}
+	return claims, nil
+}
+
+// ParseTokenWithType validates a JWT and ensures it matches the expected token type.
+// This prevents access tokens from being used as refresh tokens and vice versa.
+func ParseTokenWithType(secret, tokenString string, expectedType TokenType) (*Claims, error) {
+	claims, err := ParseToken(secret, tokenString)
+	if err != nil {
+		return nil, err
+	}
+	// Enforce type claim if present (backward compat: tokens without type are accepted)
+	if claims.Type != "" && claims.Type != expectedType {
+		return nil, fmt.Errorf("invalid token type: expected %s", expectedType)
 	}
 	return claims, nil
 }

@@ -1,0 +1,16 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-landing
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-landing
+    app.kubernetes.io/name: zenith-landing
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: landing
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zenith-landing

@@ -212,11 +212,62 @@ func (h *DatabaseHandler) Delete(c *fiber.Ctx) error {
 }
 
 func (h *DatabaseHandler) ListBackups(c *fiber.Ctx) error {
-	// TODO: Implement real backup listing from CRD/S3
-	return c.JSON(fiber.Map{
-		"items": []BackupResponse{},
-		"total": 0,
-	})
+	projectID := c.Params("id")
+	dbName := c.Params("name")
+	namespace := "zenith-" + projectID
+
+	// List CNPG Backup CRDs in the project namespace
+	backups, err := h.k8sClient.ListCRDs(c.Context(), "Backup", namespace)
+	if err != nil {
+		return c.JSON(fiber.Map{"items": []BackupResponse{}, "total": 0})
+	}
+
+	var result []BackupResponse
+	for _, b := range backups {
+		var spec map[string]interface{}
+		_ = json.Unmarshal(b.Spec, &spec)
+
+		// Filter to backups belonging to this database cluster
+		if cluster, ok := spec["cluster"].(map[string]interface{}); ok {
+			if name, _ := cluster["name"].(string); name != dbName {
+				continue
+			}
+		}
+
+		// Parse status fields from CRD
+		status := "unknown"
+		var sizeBytes int64
+		createdAt := time.Now()
+		if b.Status != nil {
+			var statusMap map[string]interface{}
+			_ = json.Unmarshal(b.Status, &statusMap)
+			if phase, ok := statusMap["phase"].(string); ok {
+				status = phase
+			}
+			if size, ok := statusMap["size"].(float64); ok {
+				sizeBytes = int64(size)
+			}
+			if startedAt, ok := statusMap["startedAt"].(string); ok {
+				if t, parseErr := time.Parse(time.RFC3339, startedAt); parseErr == nil {
+					createdAt = t
+				}
+			}
+		}
+
+		result = append(result, BackupResponse{
+			ID:        b.Metadata.Name,
+			Database:  dbName,
+			Status:    status,
+			SizeBytes: sizeBytes,
+			CreatedAt: createdAt,
+		})
+	}
+
+	if result == nil {
+		result = []BackupResponse{}
+	}
+
+	return c.JSON(fiber.Map{"items": result, "total": len(result)})
 }
 
 func (h *DatabaseHandler) CreateBackup(c *fiber.Ctx) error {

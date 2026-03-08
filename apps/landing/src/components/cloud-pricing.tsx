@@ -5,7 +5,7 @@ import { registerUrl } from "@/lib/urls";
 
 export function CloudPricing() {
   return (
-    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
       <PricingCard
         name="Free"
         price="€0"
@@ -37,14 +37,13 @@ export function CloudPricing() {
         ]}
         cta="Upgrade to Pro"
         ctaHref={registerUrl}
-        featured
         index={1}
       />
       <PricingCard
         name="Team"
-        price="€199"
-        period="/mo"
-        description="For growing teams with advanced needs."
+        price="€99"
+        period="/seat/mo"
+        description="For growing teams with collaboration needs."
         features={[
           "20 apps",
           "10 databases (20GB each)",
@@ -58,20 +57,38 @@ export function CloudPricing() {
         index={2}
       />
       <PricingCard
-        name="Enterprise"
-        price="Custom"
-        description="Dedicated infrastructure with compliance and SLAs."
+        name="Business"
+        price="€149"
+        period="/seat/mo"
+        description="For funded startups needing dedicated infra."
         features={[
           "Unlimited apps",
-          "Dedicated infra",
+          "Dedicated infrastructure",
+          "Audit log + compliance",
+          "50 team members",
+          "IP whitelisting",
+          "White-label branding",
+        ]}
+        cta="Start Business Trial"
+        ctaHref={registerUrl}
+        featured
+        index={3}
+      />
+      <PricingCard
+        name="Enterprise"
+        price="Custom"
+        description="Full isolation with compliance and SLAs."
+        features={[
+          "Unlimited everything",
+          "Dedicated namespace",
           "Custom SLAs",
-          "Compliance (SOC 2, GDPR)",
+          "SOC 2, GDPR, ISO 27001",
           "Dedicated support engineer",
           "Custom integrations",
         ]}
         cta="Talk to Us"
         ctaHref="mailto:enterprise@freezenith.com"
-        index={3}
+        index={4}
       />
     </div>
   );

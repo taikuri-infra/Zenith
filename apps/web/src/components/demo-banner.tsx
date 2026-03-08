@@ -1,11 +1,10 @@
 "use client";
 
 import { isDemoMode } from "@/lib/get-api";
+import { LANDING_URL } from "@/lib/runtime-env";
 import { Eye } from "lucide-react";
 
-const landingUrl =
-  process.env.NEXT_PUBLIC_LANDING_URL?.replace(/\/+$/, "") ||
-  "https://freezenith.com";
+const landingUrl = LANDING_URL.replace(/\/+$/, "");
 
 /**
  * Renders a subtle banner at the top of the page when demo mode is active.

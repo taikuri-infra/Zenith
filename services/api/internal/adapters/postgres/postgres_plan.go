@@ -120,3 +120,32 @@ func (r *PostgresUserPlanRepository) ListUsersByPlan(ctx context.Context, tier e
 	}
 	return result, nil
 }
+
+func (r *PostgresUserPlanRepository) ListAllPlans(ctx context.Context) ([]entities.UserPlan, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT user_id, tier, created_at, updated_at FROM subscriptions WHERE status = 'active'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []entities.UserPlan
+	for rows.Next() {
+		var userID, t string
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&userID, &t, &createdAt, &updatedAt); err != nil {
+			continue
+		}
+		planTier := entities.PlanTier(t)
+		result = append(result, entities.UserPlan{
+			UserID: userID,
+			Tier:   planTier,
+			Limits: entities.DefaultPlanLimits(planTier),
+			Timestamps: entities.Timestamps{
+				CreatedAt: createdAt,
+				UpdatedAt: updatedAt,
+			},
+		})
+	}
+	return result, nil
+}

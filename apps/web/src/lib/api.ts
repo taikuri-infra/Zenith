@@ -5,7 +5,7 @@
  * Handles authentication, token refresh, and error handling.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { API_BASE_URL } from "./runtime-env";
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = "zenith_access_token";
@@ -147,6 +147,8 @@ export interface LoginResponse {
   refresh_token: string;
   token_type: string;
   expires_in: number;
+  mfa_required?: boolean;
+  mfa_token?: string;
 }
 
 export interface RegisterRequest {
@@ -168,6 +170,18 @@ export interface RegisterResponse {
 export const auth = {
   async login(data: LoginRequest): Promise<LoginResponse> {
     const response = await apiFetch<LoginResponse>("/api/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    // Only set tokens if MFA is not required
+    if (!response.mfa_required && response.access_token) {
+      setTokens(response.access_token, response.refresh_token);
+    }
+    return response;
+  },
+
+  async mfaLogin(data: { mfa_token: string; code: string }): Promise<LoginResponse> {
+    const response = await apiFetch<LoginResponse>("/api/v1/auth/login/mfa", {
       method: "POST",
       body: JSON.stringify(data),
     });
@@ -1073,6 +1087,65 @@ export const compliance = {
   getStatus: () => apiFetch<ComplianceResponse>("/api/v1/compliance"),
 };
 
+// ---- Audit Log types (Business+) ----
+
+export interface AuditEntry {
+  time: string;
+  actor: string;
+  action: string;
+  cluster?: string;
+}
+
+export interface AuditListResponse {
+  items: AuditEntry[];
+  total: number;
+}
+
+export const audit = {
+  list: (params?: { limit?: number; offset?: number; action?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    if (params?.action) query.set("action", params.action);
+    if (params?.search) query.set("search", params.search);
+    const qs = query.toString();
+    return apiFetch<AuditListResponse>(`/api/v1/audit${qs ? `?${qs}` : ""}`);
+  },
+  exportCSV: (params?: { action?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.action) query.set("action", params.action);
+    if (params?.limit) query.set("limit", String(params.limit));
+    const qs = query.toString();
+    return apiFetch<string>(`/api/v1/audit/export/csv${qs ? `?${qs}` : ""}`, { rawText: true } as RequestInit);
+  },
+  exportJSON: (params?: { action?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.action) query.set("action", params.action);
+    if (params?.limit) query.set("limit", String(params.limit));
+    const qs = query.toString();
+    return apiFetch<AuditListResponse>(`/api/v1/audit/export/json${qs ? `?${qs}` : ""}`);
+  },
+};
+
+// ---- Add-on Marketplace ----
+
+export interface AddOn {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  price_cents: number;
+  min_tier: string;
+  features: string[];
+  popular: boolean;
+  available: boolean;
+}
+
+export const addons = {
+  list: () => apiFetch<AddOn[]>("/api/v1/addons"),
+  get: (id: string) => apiFetch<AddOn>(`/api/v1/addons/${id}`),
+};
+
 // ---- API Key types (Phase 6.5) ----
 
 export interface APIKey {
@@ -1416,9 +1489,31 @@ export interface RegistryImage {
   lastPushed: string;
 }
 
+export interface RegistryArtifact {
+  tag: string;
+  digest: string;
+  size: string;
+  pushed: string;
+  status: "passed" | "warning" | "failed" | "pending";
+  critical: number;
+  high: number;
+  medium: number;
+}
+
+export interface RegistryRepo {
+  name: string;
+  artifact_count: number;
+  last_pushed: string;
+  artifacts?: RegistryArtifact[];
+  scan?: { passed: number; warning: number; failed: number; total: number };
+}
+
 export const registry = {
   listImages: () =>
     apiFetch<{ items: RegistryImage[] }>("/api/v1/registry/images"),
+  listRepos: () => apiFetch<RegistryRepo[]>("/api/v1/registry/repos"),
+  getRepo: (name: string) =>
+    apiFetch<RegistryRepo>(`/api/v1/registry/repos/${name}`),
 };
 
 // ---- API Gateways ----
@@ -1593,6 +1688,242 @@ export const support = {
       method: "POST",
       body: JSON.stringify({ body }),
     }),
+};
+
+// ---- Monitoring ----
+
+export interface MetricsOverview {
+  cpu_percent: number;
+  memory_mb: number;
+  memory_percent: number;
+  request_rate: number;
+  error_rate: number;
+  p95_latency_ms: number;
+  pod_count: number;
+}
+
+export interface TimeSeriesPoint {
+  timestamp: string;
+  value: number;
+}
+
+export interface TimeSeriesResponse {
+  metric: string;
+  range: string;
+  points: TimeSeriesPoint[];
+}
+
+export interface MonitoringLogEntry {
+  timestamp: string;
+  line: string;
+  level: string;
+  labels?: Record<string, string>;
+}
+
+export interface MonitoringLogsResponse {
+  entries: MonitoringLogEntry[];
+  total: number;
+}
+
+export interface PodStatus {
+  name: string;
+  status: string;
+  ready: boolean;
+  restarts: number;
+  cpu_millicores: number;
+  memory_mb: number;
+  started_at: string;
+}
+
+export interface PodsResponse {
+  pods: PodStatus[];
+}
+
+export const monitoring = {
+  getOverview: (appId: string) =>
+    apiFetch<MetricsOverview>(`/api/v1/apps/${appId}/metrics/overview`),
+  getTimeSeries: (appId: string, metric: string, range: string) =>
+    apiFetch<TimeSeriesResponse>(
+      `/api/v1/apps/${appId}/metrics/timeseries?metric=${metric}&range=${range}`
+    ),
+  getLogs: (
+    appId: string,
+    params?: { level?: string; search?: string; limit?: number; since?: string }
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.level) q.set("level", params.level);
+    if (params?.search) q.set("search", params.search);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.since) q.set("since", params.since);
+    const qs = q.toString();
+    return apiFetch<MonitoringLogsResponse>(
+      `/api/v1/apps/${appId}/logs${qs ? "?" + qs : ""}`
+    );
+  },
+  getPods: (appId: string) =>
+    apiFetch<PodsResponse>(`/api/v1/apps/${appId}/pods`),
+  streamLogsURL: (appId: string) => {
+    const token = getAccessToken();
+    return `${API_BASE_URL}/api/v1/apps/${appId}/logs/stream?token=${token}`;
+  },
+};
+
+// ---- Pod Exec Sessions (SSH Audit) ----
+
+export interface PodExecSession {
+  id: string;
+  user_id: string;
+  user_email: string;
+  app_id: string;
+  app_name: string;
+  pod_name: string;
+  container: string;
+  command: string;
+  status: "active" | "completed";
+  ip_address: string;
+  recording_key: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_secs: number;
+}
+
+export const podSessions = {
+  list: (limit?: number, offset?: number) =>
+    apiFetch<{ sessions: PodExecSession[]; total: number }>(`/api/v1/pod-sessions?limit=${limit || 50}&offset=${offset || 0}`),
+  getRecordingURL: (sessionId: string) =>
+    apiFetch<{ url: string; expires_in: number }>(`/api/v1/pod-sessions/${sessionId}/recording`),
+};
+
+// ---- WAF Configuration (Business+ only) ----
+
+export type WAFRuleType = "rate_limit" | "ip_block" | "ip_allow" | "body_limit" | "geo_block" | "header_rule";
+
+export interface WAFConfig {
+  rate_per_second?: number;
+  burst_size?: number;
+  ip_addresses?: string[];
+  max_body_size_kb?: number;
+  countries?: string[];
+  header_name?: string;
+  header_match?: string;
+  action?: string;
+}
+
+export interface WAFRule {
+  id: string;
+  user_id: string;
+  app_id: string;
+  name: string;
+  type: WAFRuleType;
+  enabled: boolean;
+  priority: number;
+  config: WAFConfig;
+  created_at: string;
+  updated_at: string;
+}
+
+export const waf = {
+  listRules: (appId: string) =>
+    apiFetch<{ rules: WAFRule[]; total: number }>(`/api/v1/apps/${appId}/waf/rules`),
+  createRule: (appId: string, data: { name: string; type: WAFRuleType; enabled?: boolean; priority?: number; config: WAFConfig }) =>
+    apiFetch<WAFRule>(`/api/v1/apps/${appId}/waf/rules`, { method: "POST", body: JSON.stringify(data) }),
+  updateRule: (appId: string, ruleId: string, data: { name?: string; enabled?: boolean; priority?: number; config?: WAFConfig }) =>
+    apiFetch<WAFRule>(`/api/v1/apps/${appId}/waf/rules/${ruleId}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteRule: (appId: string, ruleId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/apps/${appId}/waf/rules/${ruleId}`, { method: "DELETE" }),
+};
+
+// ---- Network Policy Configuration (Cilium, Business+ only) ----
+
+export type NetworkPolicyDirection = "ingress" | "egress";
+export type NetworkPolicyAction = "allow" | "deny";
+export type NetworkPolicyProtocol = "TCP" | "UDP";
+
+export interface NetworkPolicyPort {
+  protocol: NetworkPolicyProtocol;
+  port: number;
+}
+
+export interface NetworkPolicyConfig {
+  cidrs?: string[];
+  ports?: NetworkPolicyPort[];
+  namespaces?: string[];
+  pod_labels?: Record<string, string>;
+  fqdns?: string[];
+}
+
+export interface NetworkPolicyRule {
+  id: string;
+  user_id: string;
+  app_id: string;
+  name: string;
+  direction: NetworkPolicyDirection;
+  action: NetworkPolicyAction;
+  enabled: boolean;
+  priority: number;
+  config: NetworkPolicyConfig;
+  created_at: string;
+  updated_at: string;
+}
+
+export const networkPolicies = {
+  listRules: (appId: string) =>
+    apiFetch<{ rules: NetworkPolicyRule[]; total: number }>(`/api/v1/apps/${appId}/network-policies`),
+  createRule: (appId: string, data: { name: string; direction: NetworkPolicyDirection; action: NetworkPolicyAction; enabled?: boolean; priority?: number; config: NetworkPolicyConfig }) =>
+    apiFetch<NetworkPolicyRule>(`/api/v1/apps/${appId}/network-policies`, { method: "POST", body: JSON.stringify(data) }),
+  updateRule: (appId: string, ruleId: string, data: { name?: string; enabled?: boolean; priority?: number; config?: NetworkPolicyConfig }) =>
+    apiFetch<NetworkPolicyRule>(`/api/v1/apps/${appId}/network-policies/${ruleId}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteRule: (appId: string, ruleId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/apps/${appId}/network-policies/${ruleId}`, { method: "DELETE" }),
+};
+
+// ---- Custom Alert Rules + Metrics (Business+ only) ----
+
+export type AlertSeverity = "critical" | "warning" | "info";
+
+export interface AlertRule {
+  id: string;
+  user_id: string;
+  app_id: string;
+  name: string;
+  enabled: boolean;
+  metric: string;
+  condition: string;
+  duration: string;
+  severity: AlertSeverity;
+  description: string;
+  notify_email: boolean;
+  notify_slack: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomMetric {
+  id: string;
+  user_id: string;
+  app_id: string;
+  name: string;
+  expression: string;
+  labels?: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+export const alerts = {
+  listRules: (appId: string) =>
+    apiFetch<{ rules: AlertRule[]; total: number }>(`/api/v1/apps/${appId}/alerts`),
+  createRule: (appId: string, data: { name: string; metric: string; condition: string; duration?: string; severity?: AlertSeverity; description?: string; enabled?: boolean; notify_email?: boolean; notify_slack?: boolean }) =>
+    apiFetch<AlertRule>(`/api/v1/apps/${appId}/alerts`, { method: "POST", body: JSON.stringify(data) }),
+  updateRule: (appId: string, ruleId: string, data: Partial<{ name: string; enabled: boolean; metric: string; condition: string; duration: string; severity: AlertSeverity; description: string; notify_email: boolean; notify_slack: boolean }>) =>
+    apiFetch<AlertRule>(`/api/v1/apps/${appId}/alerts/${ruleId}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteRule: (appId: string, ruleId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/apps/${appId}/alerts/${ruleId}`, { method: "DELETE" }),
+  listMetrics: (appId: string) =>
+    apiFetch<{ metrics: CustomMetric[]; total: number }>(`/api/v1/apps/${appId}/custom-metrics`),
+  createMetric: (appId: string, data: { name: string; expression: string; labels?: Record<string, string> }) =>
+    apiFetch<CustomMetric>(`/api/v1/apps/${appId}/custom-metrics`, { method: "POST", body: JSON.stringify(data) }),
+  deleteMetric: (appId: string, metricId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/apps/${appId}/custom-metrics/${metricId}`, { method: "DELETE" }),
 };
 
 // ---- WebSocket for real-time updates ----

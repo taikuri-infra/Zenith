@@ -1,0 +1,183 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-platform-health
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  platform-health.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "API Request Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [{
+            "expr": "sum(rate(http_requests_total{namespace=\"zenith-platform\"}[5m]))",
+            "legendFormat": "req/s"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "unit": "reqps"
+            }
+          }
+        },
+        {
+          "title": "API Error Rate (5xx)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [{
+            "expr": "sum(rate(http_requests_total{namespace=\"zenith-platform\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total{namespace=\"zenith-platform\"}[5m])), 1) * 100",
+            "legendFormat": "error %"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "color": { "fixedColor": "red", "mode": "fixed" },
+              "unit": "percent",
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "API P95 Latency",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=\"zenith-platform\"}[5m])) by (le)) * 1000",
+            "legendFormat": "p95 ms"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 500 },
+                  { "color": "red", "value": 2000 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Build Queue Length",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+          "targets": [{
+            "expr": "count(kube_job_status_active{namespace=\"zenith-builds\"}) or vector(0)",
+            "legendFormat": "active builds"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 5 },
+                  { "color": "red", "value": 10 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Build Success Rate (24h)",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+          "targets": [{
+            "expr": "sum(kube_job_status_succeeded{namespace=\"zenith-builds\"}) / clamp_min(sum(kube_job_status_succeeded{namespace=\"zenith-builds\"}) + sum(kube_job_status_failed{namespace=\"zenith-builds\"}), 1) * 100",
+            "legendFormat": "success %"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 80 },
+                  { "color": "green", "value": 95 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Pod Count by Namespace",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "targets": [{
+            "expr": "count(kube_pod_info{namespace=~\"zenith-.*\"}) by (namespace)",
+            "legendFormat": "{{namespace}}"
+          }]
+        },
+        {
+          "title": "API CPU Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "targets": [{
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"zenith-platform\",container=\"zenith-api\"}[5m])) * 100",
+            "legendFormat": "CPU %"
+          }],
+          "fieldConfig": {
+            "defaults": { "unit": "percent" }
+          }
+        },
+        {
+          "title": "API Memory Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "targets": [{
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"zenith-platform\",container=\"zenith-api\"}) / (1024*1024)",
+            "legendFormat": "MB"
+          }],
+          "fieldConfig": {
+            "defaults": { "unit": "decmbytes" }
+          }
+        },
+        {
+          "title": "Database Connections",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+          "targets": [
+            {
+              "expr": "cnpg_pg_stat_activity_count{namespace=\"zenith-platform\"}",
+              "legendFormat": "{{datname}} - {{state}}"
+            }
+          ]
+        },
+        {
+          "title": "APISIX Gateway Request Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+          "targets": [{
+            "expr": "sum(rate(apisix_http_status[5m])) by (code)",
+            "legendFormat": "{{code}}"
+          }],
+          "fieldConfig": {
+            "defaults": { "unit": "reqps" }
+          }
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "tags": ["zenith", "platform"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Zenith Platform Health",
+      "uid": "zenith-platform-health"
+    }

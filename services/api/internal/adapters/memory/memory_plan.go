@@ -79,3 +79,14 @@ func (r *MemoryUserPlanRepository) ListUsersByPlan(_ context.Context, tier entit
 	}
 	return result, nil
 }
+
+func (r *MemoryUserPlanRepository) ListAllPlans(_ context.Context) ([]entities.UserPlan, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]entities.UserPlan, 0, len(r.plans))
+	for _, p := range r.plans {
+		result = append(result, *p)
+	}
+	return result, nil
+}

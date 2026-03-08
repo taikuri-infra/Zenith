@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -77,11 +77,12 @@ func (s *CustomerService) CreateCustomer(ctx context.Context, input *dto.CreateC
 			ContactEmail: customer.ContactEmail,
 		})
 		if err != nil {
-			log.Printf("[temporal] failed to start provision workflow for %s: %v", customer.Name, err)
+			slog.Error("failed to start provision workflow", "customer_name", customer.Name, "error", err)
 		}
 	} else if s.orchestrator != nil {
 		go func() {
-			_ = s.orchestrator.ProvisionCluster(ctx, customer)
+			// Use background context — the request context is invalidated once the handler returns.
+			_ = s.orchestrator.ProvisionCluster(context.Background(), customer)
 		}()
 	}
 
@@ -121,7 +122,7 @@ func (s *CustomerService) DeleteCustomer(ctx context.Context, id, actor string) 
 				Namespace:    ns,
 			})
 			if err != nil {
-				log.Printf("[temporal] failed to start deprovision workflow for %s: %v", customer.Name, err)
+				slog.Error("failed to start deprovision workflow", "customer_name", customer.Name, "error", err)
 			}
 		} else if s.orchestrator != nil {
 			_ = s.orchestrator.TeardownCluster(ctx, customer)

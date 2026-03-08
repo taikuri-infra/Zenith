@@ -1,0 +1,51 @@
+# Harbor Trivy Scanning Configuration
+#
+# This is a reference doc — Harbor scanning is configured via Harbor's UI/API,
+# not via Kubernetes manifests. These are the steps to enable it:
+#
+# 1. Enable Trivy scanner in Harbor:
+#    - Navigate to Harbor Admin → Interrogation Services
+#    - Ensure Trivy scanner is listed and healthy
+#    - Set as default scanner
+#
+# 2. Enable automatic scanning on push:
+#    - Navigate to Harbor Admin → Projects → <project>
+#    - Check "Automatically scan images on push"
+#    - Check "Prevent vulnerable images from running" (optional, severity: Critical)
+#
+# 3. Configure scan webhook:
+#    - Navigate to Harbor Admin → Projects → <project> → Webhooks
+#    - Add webhook:
+#      Event Type: Scanning completed
+#      Endpoint URL: https://api.stage.freezenith.com/api/v1/internal/harbor-scan-complete
+#      Auth Header: Bearer <INTERNAL_SECRET>
+#
+# 4. Verify scanning works:
+#    - Push a test image
+#    - Check Harbor UI for scan results
+#    - Verify webhook fires and API labels the deployment
+#
+# API handler implementation: services/api/internal/handlers/harbor_webhook.go
+# The handler:
+#   1. Validates the INTERNAL_SECRET auth header
+#   2. Parses the scan result from Harbor's webhook payload
+#   3. If no critical vulnerabilities: patches the app's deployment with
+#      label "zenith.dev/scan-verified=true"
+#   4. If critical vulns found: creates a notification for the user
+#
+# Harbor API endpoint for manual scan:
+#   POST /api/v2.0/projects/{project_name}/repositories/{repository_name}/artifacts/{reference}/scan
+---
+# ConfigMap with Harbor scanner configuration values (reference for Terraform)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harbor-scanning-config
+  namespace: zenith-platform
+  labels:
+    app.kubernetes.io/part-of: zenith
+data:
+  auto-scan-on-push: "true"
+  prevent-critical-vulns: "true"
+  scan-schedule: "0 2 * * *"  # Daily scan at 02:00 UTC
+  scanner: "Trivy"

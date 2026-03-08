@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAccessToken } from "@/lib/api";
+import { API_BASE_URL, DEMO_MODE } from "@/lib/runtime-env";
 
 /**
  * Shape of events received from the SSE deployment event stream.
@@ -43,8 +44,7 @@ export function useDeployEvents(
     const token = getAccessToken();
     if (!token) return;
 
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-    const url = `${apiBase}/api/v1/events?token=${token}`;
+    const url = `${API_BASE_URL}/api/v1/events?token=${token}`;
 
     const es = new EventSource(url);
     eventSourceRef.current = es;
@@ -75,8 +75,7 @@ export function useDeployEvents(
 
   useEffect(() => {
     // Only connect in non-demo mode
-    const isDemo = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-    if (isDemo) return;
+    if (DEMO_MODE) return;
 
     connect();
 

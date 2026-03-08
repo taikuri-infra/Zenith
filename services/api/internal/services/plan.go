@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -109,7 +109,7 @@ func (s *PlanService) EnforceDowngrade(ctx context.Context, userID string, newTi
 
 	apps, err := s.appRepo.ListAppsByUser(ctx, userID)
 	if err != nil {
-		log.Printf("[plan] EnforceDowngrade: failed to list apps for user %s: %v", userID, err)
+		slog.Error("EnforceDowngrade: failed to list apps", "user_id", userID, "error", err)
 		return
 	}
 
@@ -122,9 +122,9 @@ func (s *PlanService) EnforceDowngrade(ctx context.Context, userID string, newTi
 		for i := limits.MaxApps; i < len(apps); i++ {
 			status := entities.AppStatusSuspended
 			if _, err := s.appRepo.UpdateApp(ctx, apps[i].ID, &dto.UpdateAppInput{Status: &status}); err != nil {
-				log.Printf("[plan] EnforceDowngrade: failed to suspend app %s: %v", apps[i].ID, err)
+				slog.Error("EnforceDowngrade: failed to suspend app", "app_id", apps[i].ID, "error", err)
 			} else {
-				log.Printf("[plan] EnforceDowngrade: suspended app %s (%s) for user %s", apps[i].ID, apps[i].Name, userID)
+				slog.Info("EnforceDowngrade: suspended app", "app_id", apps[i].ID, "app_name", apps[i].Name, "user_id", userID)
 			}
 		}
 	}
@@ -134,6 +134,8 @@ func (s *PlanService) EnforceDowngrade(ctx context.Context, userID string, newTi
 func tierRank(t entities.PlanTier) int {
 	switch t {
 	case entities.PlanEnterprise:
+		return 5
+	case entities.PlanBusiness:
 		return 4
 	case entities.PlanTeam:
 		return 3

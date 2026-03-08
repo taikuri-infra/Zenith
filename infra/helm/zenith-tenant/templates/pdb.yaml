@@ -1,0 +1,34 @@
+{{- range $name, $tenant := .Values.tenants }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-mc
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app: zenith-mc
+    app.kubernetes.io/name: zenith-mc
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mission-control
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zenith-mc
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-web
+  namespace: {{ $tenant.namespace }}
+  labels:
+    app: zenith-web
+    app.kubernetes.io/name: zenith-web
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: web
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zenith-web
+{{- end }}

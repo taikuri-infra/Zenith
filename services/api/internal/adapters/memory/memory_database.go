@@ -40,7 +40,8 @@ func (r *MemoryDatabaseRepository) CreateDatabase(_ context.Context, appID, user
 	if engine == "" {
 		engine = entities.DatabaseEnginePostgres
 	}
-	if engine != entities.DatabaseEnginePostgres && engine != entities.DatabaseEngineMySQL && engine != entities.DatabaseEngineRedis {
+	if engine != entities.DatabaseEnginePostgres && engine != entities.DatabaseEngineMySQL && engine != entities.DatabaseEngineRedis &&
+		engine != entities.DatabaseEngineMongoDB && engine != entities.DatabaseEngineRabbitMQ && engine != entities.DatabaseEngineKafka {
 		return nil, fmt.Errorf("unsupported engine: %s", engine)
 	}
 
@@ -69,10 +70,17 @@ func (r *MemoryDatabaseRepository) CreateDatabase(_ context.Context, appID, user
 	password := generatePassword()
 
 	port := 5432
-	if engine == entities.DatabaseEngineMySQL {
+	switch engine {
+	case entities.DatabaseEngineMySQL:
 		port = 3306
-	} else if engine == entities.DatabaseEngineRedis {
+	case entities.DatabaseEngineRedis:
 		port = 6379
+	case entities.DatabaseEngineMongoDB:
+		port = 27017
+	case entities.DatabaseEngineRabbitMQ:
+		port = 5672
+	case entities.DatabaseEngineKafka:
+		port = 9092
 	}
 
 	db := &entities.UserDatabase{
@@ -188,6 +196,12 @@ func (r *MemoryDatabaseRepository) CountDatabasesByUser(_ context.Context, userI
 		}
 	}
 	return count, nil
+}
+
+func (r *MemoryDatabaseRepository) CountDatabases(_ context.Context) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.databases), nil
 }
 
 // GetPassword returns the raw password for a database (used to build connection string).

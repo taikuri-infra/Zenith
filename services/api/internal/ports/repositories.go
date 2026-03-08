@@ -88,6 +88,7 @@ type AppRepository interface {
 	UpdateApp(ctx context.Context, id string, input *dto.UpdateAppInput) (*entities.App, error)
 	DeleteApp(ctx context.Context, id string) error
 	CountAppsByUser(ctx context.Context, userID string) (int, error)
+	CountApps(ctx context.Context) (int, error)
 
 	// Deployments
 	CreateDeployment(ctx context.Context, appID, gitSHA string) (*entities.Deployment, error)
@@ -123,6 +124,7 @@ type DatabaseRepository interface {
 	DeleteDatabase(ctx context.Context, id string) error
 	UpdateDatabaseStatus(ctx context.Context, id string, status entities.DatabaseStatus) error
 	CountDatabasesByUser(ctx context.Context, userID string) (int, error)
+	CountDatabases(ctx context.Context) (int, error)
 }
 
 // StorageRepository defines per-app storage bucket operations.
@@ -169,6 +171,7 @@ type UserPlanRepository interface {
 	GetUserPlan(ctx context.Context, userID string) (*entities.UserPlan, error)
 	SetUserPlan(ctx context.Context, userID string, tier entities.PlanTier) (*entities.UserPlan, error)
 	ListUsersByPlan(ctx context.Context, tier entities.PlanTier) ([]entities.UserPlan, error)
+	ListAllPlans(ctx context.Context) ([]entities.UserPlan, error)
 }
 
 // DomainRepository defines custom domain operations.
@@ -252,6 +255,7 @@ type RoleRepository interface {
 // IPWhitelistRepository defines IP whitelist operations.
 type IPWhitelistRepository interface {
 	AddEntry(ctx context.Context, userID, cidr, description string) (*entities.IPWhitelistEntry, error)
+	GetEntry(ctx context.Context, id string) (*entities.IPWhitelistEntry, error)
 	ListByUser(ctx context.Context, userID string) ([]entities.IPWhitelistEntry, error)
 	DeleteEntry(ctx context.Context, id string) error
 	IsIPAllowed(ctx context.Context, userID, ip string) (bool, error)
@@ -377,4 +381,25 @@ type AdminRepository interface {
 	AddAuditEntry(ctx context.Context, entry entities.AuditEntry) error
 	GetPlatformUpdate(ctx context.Context) (*entities.PlatformUpdate, error)
 	ListUpdateHistory(ctx context.Context) ([]entities.UpdateHistoryEntry, error)
+}
+
+// NotificationRepository stores user notifications and activity log entries.
+type NotificationRepository interface {
+	CreateNotification(ctx context.Context, notif *entities.Notification) error
+	ListByUser(ctx context.Context, userID string, limit int) ([]entities.Notification, error)
+	MarkRead(ctx context.Context, userID string, ids []string) error
+	MarkAllRead(ctx context.Context, userID string) error
+	CountUnread(ctx context.Context, userID string) (int, error)
+
+	AddActivity(ctx context.Context, entry *entities.ActivityEntry) error
+	ListActivity(ctx context.Context, userID string, limit int) ([]entities.ActivityEntry, error)
+}
+
+// PodExecSessionRepository stores terminal session audit records.
+type PodExecSessionRepository interface {
+	CreateSession(ctx context.Context, session *entities.PodExecSession) error
+	EndSession(ctx context.Context, id string, recordingKey string) error
+	GetSession(ctx context.Context, id string) (*entities.PodExecSession, error)
+	ListByUser(ctx context.Context, userID string, limit, offset int) ([]entities.PodExecSession, int, error)
+	ListAll(ctx context.Context, limit, offset int) ([]entities.PodExecSession, int, error)
 }

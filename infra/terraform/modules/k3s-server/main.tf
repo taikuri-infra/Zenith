@@ -23,41 +23,41 @@ resource "hcloud_firewall" "zenith" {
 
   # SSH
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "22"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "22"
     source_ips = var.ssh_allowed_ips
   }
 
   # HTTP
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "80"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "80"
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
   # HTTPS
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "443"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "443"
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
   # k3s API (only from allowed IPs)
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "6443"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "6443"
     source_ips = var.ssh_allowed_ips
   }
 
   # kubelet
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "10250"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "10250"
     source_ips = var.ssh_allowed_ips
   }
 }
@@ -73,7 +73,7 @@ resource "hcloud_server" "zenith" {
   firewall_ids = [hcloud_firewall.zenith.id]
 
   labels = merge({
-    "zenith.dev/managed-by" = "terraform"
+    "zenith.dev/managed-by"  = "terraform"
     "zenith.dev/environment" = var.environment
     "zenith.dev/role"        = var.role
   }, var.extra_labels)

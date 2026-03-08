@@ -14,8 +14,13 @@ import (
 // with code that references middleware.Claims.
 type Claims = zenithJWT.Claims
 
-// JWTAuth validates JWT tokens from the Authorization header
-func JWTAuth(secret string) fiber.Handler {
+// JWTAuth validates JWT tokens from the Authorization header.
+// If a TokenBlacklist is provided, revoked tokens are rejected.
+func JWTAuth(secret string, blacklist ...*TokenBlacklist) fiber.Handler {
+	var bl *TokenBlacklist
+	if len(blacklist) > 0 {
+		bl = blacklist[0]
+	}
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
@@ -27,9 +32,16 @@ func JWTAuth(secret string) fiber.Handler {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid authorization format")
 		}
 
-		claims, err := zenithJWT.ParseToken(secret, parts[1])
+		tokenStr := parts[1]
+
+		claims, err := zenithJWT.ParseTokenWithType(secret, tokenStr, zenithJWT.TokenTypeAccess)
 		if err != nil {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
+		}
+
+		// Check token blacklist (logout enforcement)
+		if bl != nil && bl.IsRevoked(tokenStr) {
+			return fiber.NewError(fiber.StatusUnauthorized, "token has been revoked")
 		}
 
 		// AccountID trick: team members use the owner's ID for resource lookups
@@ -71,7 +83,11 @@ func APIKeyAuth(validateKey func(key string) (*entities.APIKey, error)) fiber.Ha
 }
 
 // RequireAuth ensures the request is authenticated (either JWT or API key)
-func RequireAuth(secret string) fiber.Handler {
+func RequireAuth(secret string, blacklist ...*TokenBlacklist) fiber.Handler {
+	var bl *TokenBlacklist
+	if len(blacklist) > 0 {
+		bl = blacklist[0]
+	}
 	return func(c *fiber.Ctx) error {
 		// Check if already authenticated (e.g., by API key middleware)
 		if c.Locals("user_id") != nil {
@@ -79,7 +95,7 @@ func RequireAuth(secret string) fiber.Handler {
 		}
 
 		// Try JWT auth
-		return JWTAuth(secret)(c)
+		return JWTAuth(secret, bl)(c)
 	}
 }
 

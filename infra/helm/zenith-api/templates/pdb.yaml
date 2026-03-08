@@ -1,0 +1,16 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zenith-api
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-api
+    app.kubernetes.io/name: zenith-api
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: api
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zenith-api

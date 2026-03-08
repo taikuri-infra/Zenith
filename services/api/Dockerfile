@@ -15,11 +15,9 @@ COPY services/api/ .
 # Build arguments for version injection
 ARG VERSION=dev
 ARG BUILD_TIME=unknown
-ARG GIT_COMMIT=unknown
-
 # Build a statically-linked binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags "-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+    -ldflags "-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
     -o /zenith-api ./cmd/server
 
 # ---- Runner ----

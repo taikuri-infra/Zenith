@@ -39,10 +39,29 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.imagePullSecret }}
       {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: zenith-operator
+                topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: operator
           image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.image) }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           args:
             - --health-probe-bind-address=:{{ .Values.healthPort }}
             - --metrics-bind-address=:{{ .Values.metricsPort }}

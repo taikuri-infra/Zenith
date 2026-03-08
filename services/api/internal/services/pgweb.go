@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -114,7 +114,7 @@ func (s *PgwebService) StartSession(ctx context.Context, dbID, userID string, re
 	s.sessions.Store(dbID, session)
 	_ = db // silence unused
 
-	log.Printf("[pgweb] Started session for database %s (token: %s, readonly: %v)", dbID, token, readOnly)
+	slog.Info("started pgweb session", "database_id", dbID, "token", token, "readonly", readOnly)
 	return session, nil
 }
 
@@ -137,17 +137,17 @@ func (s *PgwebService) StopSession(ctx context.Context, dbID string) error {
 
 	// Delete in reverse order: IngressRoute -> Service -> Deployment
 	if err := s.k8sClient.DeleteCRD(ctx, "IngressRoute", s.namespace, resourceName); err != nil {
-		log.Printf("[pgweb] Warning: failed to delete IngressRoute %s: %v", resourceName, err)
+		slog.Error("failed to delete IngressRoute", "resource_name", resourceName, "error", err)
 	}
 	if err := s.k8sClient.DeleteCRD(ctx, "Service", s.namespace, resourceName); err != nil {
-		log.Printf("[pgweb] Warning: failed to delete Service %s: %v", resourceName, err)
+		slog.Error("failed to delete Service", "resource_name", resourceName, "error", err)
 	}
 	if err := s.k8sClient.DeleteCRD(ctx, "Deployment", s.namespace, resourceName); err != nil {
-		log.Printf("[pgweb] Warning: failed to delete Deployment %s: %v", resourceName, err)
+		slog.Error("failed to delete Deployment", "resource_name", resourceName, "error", err)
 	}
 
 	s.sessions.Delete(dbID)
-	log.Printf("[pgweb] Stopped session for database %s (token: %s)", dbID, session.Token)
+	slog.Info("stopped pgweb session", "database_id", dbID, "token", session.Token)
 	return nil
 }
 
@@ -164,7 +164,7 @@ func (s *PgwebService) CleanupExpired(ctx context.Context) {
 			s.sessions.Range(func(key, value interface{}) bool {
 				session := value.(*PgwebSession)
 				if time.Since(session.CreatedAt) > 30*time.Minute {
-					log.Printf("[pgweb] Auto-expiring session for database %s (age: %s)", session.DatabaseID, time.Since(session.CreatedAt))
+					slog.Info("auto-expiring pgweb session", "database_id", session.DatabaseID, "age", time.Since(session.CreatedAt))
 					s.StopSession(ctx, session.DatabaseID)
 				}
 				return true

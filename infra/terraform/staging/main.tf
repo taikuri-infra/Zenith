@@ -78,7 +78,7 @@ module "dns" {
     tempo        = { name = "tempo.stage" }
     alertmanager = { name = "alerts.stage" }
     # Web dashboard
-    app          = { name = "app.stage" }
+    app = { name = "app.stage" }
     # Wildcard for customer apps (*.apps.stage.freezenith.com)
     apps_wildcard = { name = "*.apps.stage" }
     # Wildcard for API gateways (*.gw.stage.freezenith.com)

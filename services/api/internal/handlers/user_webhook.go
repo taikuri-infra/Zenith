@@ -47,8 +47,10 @@ func (h *UserWebhookHandler) Create(c *fiber.Ctx) error {
 	switch plan.Tier {
 	case entities.PlanTeam:
 		maxWebhooks = 10
-	case entities.PlanEnterprise:
+	case entities.PlanBusiness:
 		maxWebhooks = 50
+	case entities.PlanEnterprise:
+		maxWebhooks = 100
 	}
 
 	count, _ := h.webhookRepo.CountWebhooksByUser(c.Context(), userID)

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -108,7 +109,7 @@ func (s *TeamMemberService) InviteMember(ctx context.Context, accountID, email s
 			teamName = owner.Name + "'s team"
 		}
 		if err := s.emailSender.SendTeamInviteEmail(ctx, email, inviterName, teamName, inviteURL); err != nil {
-			fmt.Printf("[team] failed to send invite email to %s: %v\n", email, err)
+			slog.Warn("failed to send team invite email", "email", email, "error", err)
 		}
 	}
 
@@ -217,12 +218,12 @@ func (s *TeamMemberService) issueTeamTokens(user *entities.User, member *entitie
 		Role:      member.Role,
 	}
 
-	accessToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, AccessTokenExpiry, overrides)
+	accessToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, AccessTokenExpiry, overrides, zenithJWT.TokenTypeAccess)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token")
 	}
 
-	refreshToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, RefreshTokenExpiry, overrides)
+	refreshToken, err := zenithJWT.GenerateTeamMemberToken(s.jwtSecret, user, RefreshTokenExpiry, overrides, zenithJWT.TokenTypeRefresh)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token")
 	}

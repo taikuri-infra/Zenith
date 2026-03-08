@@ -24,8 +24,10 @@ func PerAppResources(tier entities.PlanTier) (cpuLimit, memLimit, cpuReq, memReq
 		return "500m", "512Mi", "100m", "128Mi"
 	case entities.PlanTeam:
 		return "1000m", "1Gi", "200m", "256Mi"
-	case entities.PlanEnterprise:
+	case entities.PlanBusiness:
 		return "2000m", "2Gi", "500m", "512Mi"
+	case entities.PlanEnterprise:
+		return "4000m", "4Gi", "1000m", "1Gi"
 	default: // Free
 		return "250m", "256Mi", "50m", "64Mi"
 	}

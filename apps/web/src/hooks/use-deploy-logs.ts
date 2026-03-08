@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { API_BASE_URL, DEMO_MODE } from "@/lib/runtime-env";
 
 export interface LogEntry {
   timestamp: string;
@@ -13,8 +14,7 @@ interface LogHistoryResponse {
   total: number;
 }
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE = API_BASE_URL;
 
 function getAuthHeader(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -52,7 +52,7 @@ export function useDeployLogs(
     if (!appId || !deploymentId) return;
 
     // Demo mode: return static sample logs
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    if (DEMO_MODE) {
       const demo: LogEntry[] = [
         {
           timestamp: new Date(Date.now() - 12000).toISOString(),

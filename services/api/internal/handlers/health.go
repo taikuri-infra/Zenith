@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,11 +11,9 @@ import (
 var startTime = time.Now()
 
 type HealthResponse struct {
-	Status    string `json:"status"`
-	Version   string `json:"version"`
-	BuildTime string `json:"build_time"`
-	GitCommit string `json:"git_commit"`
-	Uptime    string `json:"uptime"`
+	Status  string `json:"status"`
+	Version string `json:"version"`
+	Uptime  string `json:"uptime"`
 }
 
 type ReadinessResponse struct {
@@ -25,18 +24,15 @@ type ReadinessResponse struct {
 type VersionResponse struct {
 	Version   string `json:"version"`
 	BuildTime string `json:"build_time"`
-	GitCommit string `json:"git_commit"`
 	GoVersion string `json:"go_version"`
 }
 
-func HealthCheck(version, buildTime, gitCommit string) fiber.Handler {
+func HealthCheck(version string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return c.JSON(HealthResponse{
-			Status:    "healthy",
-			Version:   version,
-			BuildTime: buildTime,
-			GitCommit: gitCommit,
-			Uptime:    time.Since(startTime).String(),
+			Status:  "healthy",
+			Version: version,
+			Uptime:  time.Since(startTime).String(),
 		})
 	}
 }
@@ -69,13 +65,12 @@ func ReadinessCheck(pool *pgxpool.Pool) fiber.Handler {
 	}
 }
 
-func VersionInfo(version, buildTime, gitCommit string) fiber.Handler {
+func VersionInfo(version, buildTime string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return c.JSON(VersionResponse{
 			Version:   version,
 			BuildTime: buildTime,
-			GitCommit: gitCommit,
-			GoVersion: "go1.26",
+			GoVersion: runtime.Version(),
 		})
 	}
 }

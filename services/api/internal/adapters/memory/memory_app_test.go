@@ -87,17 +87,17 @@ func TestCreateAppSameNameDifferentUser(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := repo.CreateApp(ctx, &dto.CreateAppInput{
-		UserID: "user-1", Name: "web", RepoURL: "https://github.com/user/repo",
+		UserID: "user-1", ProjectID: "proj-1", Name: "web", RepoURL: "https://github.com/user/repo",
 	})
 	if err != nil {
 		t.Fatalf("First create failed: %v", err)
 	}
 
 	_, err = repo.CreateApp(ctx, &dto.CreateAppInput{
-		UserID: "user-2", Name: "web", RepoURL: "https://github.com/user/repo",
+		UserID: "user-2", ProjectID: "proj-2", Name: "web", RepoURL: "https://github.com/user/repo",
 	})
 	if err != nil {
-		t.Fatalf("Should allow same name for different user, got: %v", err)
+		t.Fatalf("Should allow same name in different project, got: %v", err)
 	}
 }
 

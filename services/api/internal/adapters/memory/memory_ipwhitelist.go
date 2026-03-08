@@ -33,6 +33,16 @@ func (r *MemoryIPWhitelistRepository) AddEntry(ctx context.Context, userID, cidr
 	return entry, nil
 }
 
+func (r *MemoryIPWhitelistRepository) GetEntry(ctx context.Context, id string) (*entities.IPWhitelistEntry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.entries[id]
+	if !ok {
+		return nil, fmt.Errorf("entry not found")
+	}
+	return entry, nil
+}
+
 func (r *MemoryIPWhitelistRepository) ListByUser(ctx context.Context, userID string) ([]entities.IPWhitelistEntry, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

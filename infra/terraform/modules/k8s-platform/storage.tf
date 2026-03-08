@@ -3,13 +3,13 @@
 # =============================================================================
 
 resource "helm_release" "hcloud_csi" {
-  name             = "hcloud-csi"
-  repository       = "https://charts.hetzner.cloud"
-  chart            = "hcloud-csi"
-  version          = var.hcloud_csi_version
-  namespace        = "kube-system"
-  wait             = true
-  timeout          = 300
+  name       = "hcloud-csi"
+  repository = "https://charts.hetzner.cloud"
+  chart      = "hcloud-csi"
+  version    = var.hcloud_csi_version
+  namespace  = "kube-system"
+  wait       = true
+  timeout    = 300
 
   set_sensitive {
     name  = "controller.hcloudToken.value"
@@ -123,8 +123,8 @@ resource "kubernetes_manifest" "cnpg_keycloak" {
       namespace = "keycloak"
     }
     spec = {
-      instances              = var.environment == "production" ? 3 : 2
-      primaryUpdateStrategy  = "unsupervised"
+      instances             = var.environment == "production" ? 3 : 2
+      primaryUpdateStrategy = "unsupervised"
 
       storage = {
         storageClass = "hcloud-volumes"
@@ -222,9 +222,9 @@ resource "kubernetes_manifest" "cnpg_free" {
       namespace = "zenith-shared"
     }
     spec = {
-      instances              = var.environment == "production" ? 3 : 2
-      primaryUpdateStrategy  = "unsupervised"
-      enableSuperuserAccess  = true
+      instances             = var.environment == "production" ? 3 : 2
+      primaryUpdateStrategy = "unsupervised"
+      enableSuperuserAccess = true
 
       storage = {
         storageClass = "hcloud-volumes"

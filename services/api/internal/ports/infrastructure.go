@@ -52,6 +52,39 @@ type KubernetesClient interface {
 	// Generic versioned CRD operations
 	GetCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) (*K8sCRDObject, error)
 	DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error
+
+	// Pod monitoring operations
+	ListPods(ctx context.Context, namespace, labelSelector string) ([]K8sPodInfo, error)
+	GetPodMetrics(ctx context.Context, namespace, labelSelector string) ([]K8sPodMetrics, error)
+
+	// Node monitoring (for autoscaler cluster metrics)
+	GetNodeMetrics(ctx context.Context) ([]K8sNodeMetrics, error)
+}
+
+// K8sPodInfo holds basic pod status information.
+type K8sPodInfo struct {
+	Name             string    `json:"name"`
+	Status           string    `json:"status"`
+	Restarts         int32     `json:"restarts"`
+	StartedAt        time.Time `json:"started_at"`
+	Ready            bool      `json:"ready"`
+	MemoryLimitBytes int64     `json:"memory_limit_bytes,omitempty"`
+}
+
+// K8sPodMetrics holds pod-level resource usage from metrics-server.
+type K8sPodMetrics struct {
+	Name          string `json:"name"`
+	CPUMillicores int64  `json:"cpu_millicores"`
+	MemoryBytes   int64  `json:"memory_bytes"`
+}
+
+// K8sNodeMetrics holds node-level resource usage and capacity.
+type K8sNodeMetrics struct {
+	Name              string `json:"name"`
+	CPUCapacityMillis int64  `json:"cpu_capacity_millis"`
+	CPUUsageMillis    int64  `json:"cpu_usage_millis"`
+	MemCapacityBytes  int64  `json:"mem_capacity_bytes"`
+	MemUsageBytes     int64  `json:"mem_usage_bytes"`
 }
 
 // K8sCRDObject represents a Kubernetes custom resource at the port layer.
@@ -298,6 +331,21 @@ type EmailSender interface {
 	SendTeamInviteEmail(ctx context.Context, to, inviterName, teamName, inviteURL string) error
 	SendSupportTicketNotification(ctx context.Context, to, ticketSubject, ticketURL string) error
 	SendSupportReplyNotification(ctx context.Context, to, userName, ticketSubject, ticketURL string) error
+}
+
+// ---------------------------------------------------------------------------
+// Event Bus (NATS JetStream)
+// ---------------------------------------------------------------------------
+
+// EventBus abstracts an event bus for publishing and subscribing to platform events.
+// Implemented by: adapters/natsclient (real) and adapters/memory (in-memory).
+type EventBus interface {
+	// Publish sends an event to the bus.
+	Publish(ctx context.Context, event *entities.PlatformEvent) error
+	// Subscribe registers a handler for a subject pattern (e.g. "zenith.deploy.>").
+	Subscribe(subject string, handler func(event *entities.PlatformEvent)) error
+	// Close shuts down the connection.
+	Close() error
 }
 
 // ---------------------------------------------------------------------------

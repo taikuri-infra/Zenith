@@ -35,8 +35,20 @@ jobs:
           go-version-file: services/api/go.mod
           cache-dependency-path: services/api/go.sum
 
-      - name: Run Go tests
+      - name: Run API tests
         run: cd services/api && go test ./... -race -count=1
+
+      - name: Run CLI tests
+        run: cd services/cli && go test ./... -race -count=1
+
+      - name: Build CLI
+        run: cd services/cli && go build -o /dev/null ./cmd/zenith/
+
+      - name: Run Terraform Provider tests
+        run: cd services/terraform-provider-zenith && go test ./... -race -count=1
+
+      - name: Build Terraform Provider
+        run: cd services/terraform-provider-zenith && go build -o /dev/null .
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -51,6 +63,16 @@ jobs:
 
       - name: Lint frontend
         run: pnpm turbo lint
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Validate Helm charts
+        run: |
+          for chart in infra/helm/zenith-api infra/helm/zenith-web infra/helm/zenith-landing infra/helm/zenith-operator infra/helm/zenith-demo infra/helm/zenith-tenant; do
+            echo "Linting $chart..."
+            helm lint "$chart" --strict || exit 1
+          done
 
   # =========================================================================
   # Gate 2: Security (Semgrep SAST)
@@ -129,12 +151,20 @@ jobs:
           platforms: linux/amd64
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
-            GIT_COMMIT=${{ needs.prepare.outputs.sha_short }}
             BUILD_TIME=${{ github.event.head_commit.timestamp }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:sha-${{ needs.prepare.outputs.sha_short }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:latest
+
+      - name: Scan zenith-api with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:${{ needs.prepare.outputs.version }}
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
 
   # =========================================================================
   # Build & Push: Landing
@@ -264,6 +294,15 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:sha-${{ needs.prepare.outputs.sha_short }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:latest
+
+      - name: Scan zenith-web with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:${{ needs.prepare.outputs.version }}
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
 
   # =========================================================================
   # Build & Push: Operator

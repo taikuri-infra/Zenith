@@ -2,19 +2,24 @@ package handlers
 
 import (
 	"fmt"
+	"net/mail"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/dotechhq/zenith/services/api/internal/middleware"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
 
 type AuthHandler struct {
-	svc    *services.AuthService
-	appURL string // frontend URL for OAuth redirect
+	svc       *services.AuthService
+	appURL    string // frontend URL for OAuth redirect
+	blacklist *middleware.TokenBlacklist
 }
 
-func NewAuthHandler(svc *services.AuthService) *AuthHandler {
-	return &AuthHandler{svc: svc}
+func NewAuthHandler(svc *services.AuthService, blacklist *middleware.TokenBlacklist) *AuthHandler {
+	return &AuthHandler{svc: svc, blacklist: blacklist}
 }
 
 // SetAppURL configures the frontend URL for OAuth callback redirects.
@@ -49,6 +54,11 @@ type exchangeCodeRequest struct {
 	Code string `json:"code"`
 }
 
+type mfaLoginRequest struct {
+	MFAToken string `json:"mfa_token"`
+	Code     string `json:"code"`
+}
+
 type tokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -60,7 +70,7 @@ type messageResponse struct {
 	Message string `json:"message"`
 }
 
-// Login authenticates a user and returns JWT tokens.
+// Login authenticates a user and returns JWT tokens (or MFA challenge).
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req loginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -69,13 +79,47 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if req.Email == "" || req.Password == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "email and password are required")
 	}
+	if len(req.Email) > 254 || len(req.Password) > 72 {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid input length")
+	}
 
-	tokens, err := h.svc.Login(c.Context(), req.Email, req.Password)
+	result, err := h.svc.Login(c.Context(), req.Email, req.Password)
 	if err != nil {
 		// Return 403 for email verification errors, 401 for auth errors
 		if err.Error() == "please verify your email before logging in" {
 			return fiber.NewError(fiber.StatusForbidden, err.Error())
 		}
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+	}
+
+	// MFA required — return challenge token
+	if result.MFARequired {
+		return c.JSON(fiber.Map{
+			"mfa_required": true,
+			"mfa_token":    result.MFAToken,
+		})
+	}
+
+	return c.JSON(tokenResponse{
+		AccessToken:  result.Tokens.AccessToken,
+		RefreshToken: result.Tokens.RefreshToken,
+		TokenType:    "bearer",
+		ExpiresIn:    result.Tokens.ExpiresIn,
+	})
+}
+
+// MFALogin completes a login that requires MFA verification.
+func (h *AuthHandler) MFALogin(c *fiber.Ctx) error {
+	var req mfaLoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if req.MFAToken == "" || req.Code == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "mfa_token and code are required")
+	}
+
+	tokens, err := h.svc.MFALogin(c.Context(), req.MFAToken, req.Code)
+	if err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
 
@@ -99,10 +143,20 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	if len(req.Password) < 8 {
 		return fiber.NewError(fiber.StatusBadRequest, "password must be at least 8 characters")
 	}
+	if len(req.Password) > 72 {
+		return fiber.NewError(fiber.StatusBadRequest, "password must be 72 characters or fewer")
+	}
+	if len(req.Email) > 254 || len(req.Name) > 255 {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid input length")
+	}
+	if _, err := mail.ParseAddress(req.Email); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid email format")
+	}
 
 	result, err := h.svc.Register(c.Context(), req.Email, req.Password, req.Name)
 	if err != nil {
-		return fiber.NewError(fiber.StatusConflict, err.Error())
+		// Generic message to prevent user enumeration
+		return fiber.NewError(fiber.StatusConflict, "registration failed")
 	}
 
 	// Email/password registration returns a message (verify email first)
@@ -200,7 +254,7 @@ func (h *AuthHandler) OAuthCallback(c *fiber.Ctx) error {
 	state := c.Query("state")
 
 	if code == "" || state == "" {
-		errorMsg := c.Query("error", "missing code or state")
+		errorMsg := url.QueryEscape(c.Query("error", "missing code or state"))
 		return c.Redirect(h.appURL+"/login?error="+errorMsg, fiber.StatusFound)
 	}
 
@@ -272,10 +326,41 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
 
+	// Blacklist the old refresh token AFTER successful validation to prevent
+	// DoS via premature revocation on validation failure.
+	if h.blacklist != nil && req.RefreshToken != "" {
+		h.blacklist.Revoke(req.RefreshToken, time.Now().Add(7*24*time.Hour))
+	}
+
 	return c.JSON(tokenResponse{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		TokenType:    "bearer",
 		ExpiresIn:    tokens.ExpiresIn,
 	})
+}
+
+// Logout revokes the current access token so it can no longer be used.
+// POST /api/v1/auth/logout
+func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	if h.blacklist == nil {
+		return c.JSON(fiber.Map{"message": "logged out"})
+	}
+
+	authHeader := c.Get("Authorization")
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) == 2 {
+		// Revoke access token — expires in 1 hour max
+		h.blacklist.Revoke(parts[1], time.Now().Add(1*time.Hour))
+	}
+
+	// Also revoke refresh token if provided in body
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.BodyParser(&body); err == nil && body.RefreshToken != "" {
+		h.blacklist.Revoke(body.RefreshToken, time.Now().Add(7*24*time.Hour))
+	}
+
+	return c.JSON(fiber.Map{"message": "logged out"})
 }

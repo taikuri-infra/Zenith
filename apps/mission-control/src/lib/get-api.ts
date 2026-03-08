@@ -5,14 +5,15 @@
 
 import { api } from "./api";
 import { demoApi } from "./demo-api";
+import { DEMO_MODE } from "./runtime-env";
 
 export function getApi() {
-  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+  if (DEMO_MODE) {
     return demoApi;
   }
   return api;
 }
 
 export function isDemoMode(): boolean {
-  return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  return DEMO_MODE;
 }
