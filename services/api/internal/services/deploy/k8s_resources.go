@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 )
@@ -13,6 +14,7 @@ type K8sResources struct {
 	IngressRoute     map[string]interface{}
 	HTTPScaledObject map[string]interface{} // nil when always-on (paid tiers)
 	NetworkPolicy    map[string]interface{} // per-app tenant isolation
+	Certificate      map[string]interface{} // nil when no custom domains
 }
 
 // PerAppResources returns CPU/RAM limits and requests per tier for a single app container.
@@ -32,7 +34,8 @@ func PerAppResources(tier entities.PlanTier) (cpuLimit, memLimit, cpuReq, memReq
 // GenerateK8sResources creates the Kubernetes manifests needed to deploy an app.
 // When planLimits is non-nil and the plan uses scale-to-zero, the deployment
 // starts at 0 replicas and an HTTPScaledObject CRD is included for KEDA.
-func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVars []entities.EnvVar, planLimits *entities.PlanLimits, tier entities.PlanTier) *K8sResources {
+// customDomains is a list of verified custom domain hostnames to add to the IngressRoute.
+func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVars []entities.EnvVar, planLimits *entities.PlanLimits, tier entities.PlanTier, customDomains []string) *K8sResources {
 	namespace := "zenith-apps"
 	labels := map[string]string{
 		"app":                   app.Subdomain,
@@ -54,9 +57,14 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 		spec["replicas"] = int32(0)
 
 		res.HTTPScaledObject = GenerateHTTPScaledObject(app, baseDomain, planLimits.SleepAfterMins)
-		res.IngressRoute = generateIngressRouteWithColdStart(app, namespace, labels, baseDomain)
+		res.IngressRoute = generateIngressRouteWithColdStart(app, namespace, labels, baseDomain, customDomains)
 	} else {
-		res.IngressRoute = generateIngressRoute(app, namespace, labels, baseDomain)
+		res.IngressRoute = generateIngressRoute(app, namespace, labels, baseDomain, customDomains)
+	}
+
+	// Generate Certificate CRD when custom domains are present
+	if len(customDomains) > 0 {
+		res.Certificate = generateCertificate(app, namespace, labels, baseDomain, customDomains)
 	}
 
 	return res
@@ -187,8 +195,13 @@ func generateService(app *entities.App, namespace string, labels map[string]stri
 	}
 }
 
-func generateIngressRoute(app *entities.App, namespace string, labels map[string]string, baseDomain string) map[string]interface{} {
-	host := app.Subdomain + "." + baseDomain
+func generateIngressRoute(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string) map[string]interface{} {
+	matchRule := buildHostMatchRule(app.Subdomain+"."+baseDomain, customDomains)
+
+	tls := map[string]interface{}{}
+	if len(customDomains) > 0 {
+		tls["secretName"] = app.Subdomain + "-custom-tls"
+	}
 
 	return map[string]interface{}{
 		"apiVersion": "traefik.io/v1alpha1",
@@ -202,7 +215,7 @@ func generateIngressRoute(app *entities.App, namespace string, labels map[string
 			"entryPoints": []string{"websecure"},
 			"routes": []map[string]interface{}{
 				{
-					"match": fmt.Sprintf("Host(`%s`)", host),
+					"match": matchRule,
 					"kind":  "Rule",
 					"services": []map[string]interface{}{
 						{
@@ -212,7 +225,41 @@ func generateIngressRoute(app *entities.App, namespace string, labels map[string
 					},
 				},
 			},
-			"tls": map[string]interface{}{},
+			"tls": tls,
+		},
+	}
+}
+
+// buildHostMatchRule creates a Traefik Host() match rule with one or more hosts.
+func buildHostMatchRule(primaryHost string, customDomains []string) string {
+	hosts := []string{fmt.Sprintf("Host(`%s`)", primaryHost)}
+	for _, d := range customDomains {
+		hosts = append(hosts, fmt.Sprintf("Host(`%s`)", d))
+	}
+	return strings.Join(hosts, " || ")
+}
+
+// generateCertificate creates a cert-manager Certificate CRD for custom domains.
+func generateCertificate(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string) map[string]interface{} {
+	dnsNames := make([]string, 0, len(customDomains)+1)
+	dnsNames = append(dnsNames, app.Subdomain+"."+baseDomain)
+	dnsNames = append(dnsNames, customDomains...)
+
+	return map[string]interface{}{
+		"apiVersion": "cert-manager.io/v1",
+		"kind":       "Certificate",
+		"metadata": map[string]interface{}{
+			"name":      app.Subdomain + "-custom-tls",
+			"namespace": namespace,
+			"labels":    labels,
+		},
+		"spec": map[string]interface{}{
+			"secretName": app.Subdomain + "-custom-tls",
+			"issuerRef": map[string]interface{}{
+				"name": "letsencrypt-prod",
+				"kind": "ClusterIssuer",
+			},
+			"dnsNames": dnsNames,
 		},
 	}
 }

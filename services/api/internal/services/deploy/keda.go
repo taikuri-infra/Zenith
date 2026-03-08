@@ -1,8 +1,6 @@
 package deploy
 
 import (
-	"fmt"
-
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 )
 
@@ -78,8 +76,13 @@ func generateColdStartMiddleware(namespace string) map[string]interface{} {
 
 // generateIngressRouteWithColdStart generates an IngressRoute with the cold-start
 // error page middleware attached (for free-tier apps that scale to zero).
-func generateIngressRouteWithColdStart(app *entities.App, namespace string, labels map[string]string, baseDomain string) map[string]interface{} {
-	host := app.Subdomain + "." + baseDomain
+func generateIngressRouteWithColdStart(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string) map[string]interface{} {
+	matchRule := buildHostMatchRule(app.Subdomain+"."+baseDomain, customDomains)
+
+	tls := map[string]interface{}{}
+	if len(customDomains) > 0 {
+		tls["secretName"] = app.Subdomain + "-custom-tls"
+	}
 
 	return map[string]interface{}{
 		"apiVersion": "traefik.io/v1alpha1",
@@ -93,7 +96,7 @@ func generateIngressRouteWithColdStart(app *entities.App, namespace string, labe
 			"entryPoints": []string{"websecure"},
 			"routes": []map[string]interface{}{
 				{
-					"match": fmt.Sprintf("Host(`%s`)", host),
+					"match": matchRule,
 					"kind":  "Rule",
 					"middlewares": []map[string]interface{}{
 						{
@@ -109,7 +112,7 @@ func generateIngressRouteWithColdStart(app *entities.App, namespace string, labe
 					},
 				},
 			},
-			"tls": map[string]interface{}{},
+			"tls": tls,
 		},
 	}
 }

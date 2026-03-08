@@ -19,6 +19,7 @@ type Deployer struct {
 	k8sClient  k8sclient.Client
 	appRepo    ports.AppRepository
 	planRepo   ports.UserPlanRepository
+	domainRepo ports.DomainRepository
 	baseDomain string
 }
 
@@ -30,6 +31,11 @@ func NewDeployer(k8sClient k8sclient.Client, appRepo ports.AppRepository, planRe
 		planRepo:   planRepo,
 		baseDomain: baseDomain,
 	}
+}
+
+// SetDomainRepo sets the domain repository for custom domain support.
+func (d *Deployer) SetDomainRepo(repo ports.DomainRepository) {
+	d.domainRepo = repo
 }
 
 // DeployApp deploys an app's built image to Kubernetes.
@@ -57,8 +63,23 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 		}
 	}
 
+	// Fetch active custom domains for this app
+	var customDomains []string
+	if d.domainRepo != nil {
+		domains, err := d.domainRepo.ListDomainsByApp(ctx, app.ID)
+		if err != nil {
+			log.Printf("[deployer] Warning: failed to fetch custom domains for %s: %v", app.ID, err)
+		} else {
+			for _, dom := range domains {
+				if dom.Status == entities.DomainStatusActive {
+					customDomains = append(customDomains, dom.Domain)
+				}
+			}
+		}
+	}
+
 	// Generate K8s resources
-	resources := GenerateK8sResources(app, imageTag, d.baseDomain, envVars, planLimits, tier)
+	resources := GenerateK8sResources(app, imageTag, d.baseDomain, envVars, planLimits, tier, customDomains)
 
 	// Apply Deployment
 	if err := d.applyCRD(ctx, "Deployment", "zenith-apps", app.Subdomain, resources.Deployment); err != nil {
@@ -73,6 +94,13 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 	// Apply IngressRoute
 	if err := d.applyCRD(ctx, "IngressRoute", "zenith-apps", app.Subdomain, resources.IngressRoute); err != nil {
 		return fmt.Errorf("failed to apply IngressRoute: %w", err)
+	}
+
+	// Apply Certificate CRD for custom domains (before NetworkPolicy)
+	if resources.Certificate != nil {
+		if err := d.applyCRD(ctx, "Certificate", "zenith-apps", app.Subdomain+"-custom-tls", resources.Certificate); err != nil {
+			return fmt.Errorf("failed to apply Certificate: %w", err)
+		}
 	}
 
 	// Apply NetworkPolicy for tenant isolation
@@ -118,6 +146,10 @@ func (d *Deployer) DeleteApp(ctx context.Context, app *entities.App) error {
 	// Clean up NetworkPolicy (uses -netpol suffix)
 	if err := d.k8sClient.DeleteCRD(ctx, "NetworkPolicy", namespace, app.Subdomain+"-netpol"); err != nil {
 		log.Printf("[deployer] Warning: failed to delete NetworkPolicy/%s-netpol: %v", app.Subdomain, err)
+	}
+	// Clean up Certificate CRD for custom domains
+	if err := d.k8sClient.DeleteCRD(ctx, "Certificate", namespace, app.Subdomain+"-custom-tls"); err != nil {
+		log.Printf("[deployer] Warning: failed to delete Certificate/%s-custom-tls: %v", app.Subdomain, err)
 	}
 
 	return nil
