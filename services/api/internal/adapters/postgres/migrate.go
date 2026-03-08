@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/lib/pq"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
@@ -23,6 +25,12 @@ func RunMigrations(dsn string, migrations fs.FS) error {
 		dsn = u.String()
 	}
 
+	// Check if tables exist — if schema_migrations says up-to-date but tables are missing,
+	// drop schema_migrations to force re-migration (disaster recovery scenario)
+	if err := checkAndFixMigrationState(dsn); err != nil {
+		slog.Warn("migration state check failed", "error", err)
+	}
+
 	source, err := iofs.New(migrations, ".")
 	if err != nil {
 		return fmt.Errorf("open migration source: %w", err)
@@ -34,30 +42,48 @@ func RunMigrations(dsn string, migrations fs.FS) error {
 	}
 	defer m.Close()
 
-	// Log source version info
-	srcV, srcErr := source.First()
-	if srcErr == nil {
-		slog.Info("migration source available", "first_version", srcV)
-	}
-
-	// Check current DB version
-	curV, dirty, verErr := m.Version()
-	if verErr != nil {
-		slog.Info("no migration version found, will run all migrations", "error", verErr)
-	} else {
-		slog.Info("current migration version", "version", curV, "dirty", dirty)
-	}
-
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
-			v, dirty, _ := m.Version()
-			slog.Info("migrations up to date", "version", v, "dirty", dirty)
+			v, _, _ := m.Version()
+			slog.Info("migrations up to date", "version", v)
 		} else {
 			return fmt.Errorf("run migrations: %w", err)
 		}
 	} else {
 		v, _, _ := m.Version()
 		slog.Info("migrations completed", "version", v)
+	}
+
+	return nil
+}
+
+// checkAndFixMigrationState detects when schema_migrations exists but app tables don't
+// (e.g., after a DB restore that lost data). Drops schema_migrations to force re-migration.
+func checkAndFixMigrationState(dsn string) error {
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Check if schema_migrations exists
+	var smExists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='schema_migrations')").Scan(&smExists)
+	if err != nil || !smExists {
+		return nil // No schema_migrations = fresh DB, nothing to fix
+	}
+
+	// schema_migrations exists — check if core app tables also exist
+	var usersExists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='users')").Scan(&usersExists)
+	if err != nil {
+		return err
+	}
+
+	if !usersExists {
+		slog.Warn("detected stale migration state: schema_migrations exists but users table missing, resetting")
+		_, err = db.Exec("DROP TABLE IF EXISTS schema_migrations")
+		return err
 	}
 
 	return nil
