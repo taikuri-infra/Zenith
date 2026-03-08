@@ -437,6 +437,31 @@ type AuthPoolInfo struct {
 	CreatedAt    string                  `json:"created_at"`
 }
 
+// --- Support DTOs ---
+
+// CreateTicketInput is the request body for creating a support ticket.
+type CreateTicketInput struct {
+	Subject  string `json:"subject"  validate:"required"`
+	Category string `json:"category"`
+	Priority string `json:"priority"`
+	Message  string `json:"message"  validate:"required"`
+}
+
+// AddMessageInput is the request body for adding a message to a ticket.
+type AddMessageInput struct {
+	Body string `json:"body" validate:"required"`
+}
+
+// UpdateTicketStatusInput is the request body for changing ticket status.
+type UpdateTicketStatusInput struct {
+	Status string `json:"status" validate:"required"`
+}
+
+// AssignTicketInput is the request body for assigning a ticket.
+type AssignTicketInput struct {
+	AdminUserID string `json:"admin_user_id" validate:"required"`
+}
+
 // CreateAuthPoolUserInput is the request body for creating a user in an auth pool.
 type CreateAuthPoolUserInput struct {
 	Email     string `json:"email" validate:"required"`

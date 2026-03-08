@@ -296,6 +296,8 @@ type DeprovisionInput struct {
 type EmailSender interface {
 	SendVerificationEmail(ctx context.Context, to, name, verificationURL string) error
 	SendTeamInviteEmail(ctx context.Context, to, inviterName, teamName, inviteURL string) error
+	SendSupportTicketNotification(ctx context.Context, to, ticketSubject, ticketURL string) error
+	SendSupportReplyNotification(ctx context.Context, to, userName, ticketSubject, ticketURL string) error
 }
 
 // ---------------------------------------------------------------------------

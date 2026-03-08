@@ -60,6 +60,28 @@ export interface Tenant {
   status: "active" | "idle" | "suspended";
 }
 
+export interface SupportTicket {
+  id: string;
+  user_id: string;
+  subject: string;
+  category: string;
+  priority: string;
+  status: "open" | "in-progress" | "waiting-on-customer" | "resolved" | "closed";
+  assigned_to?: string;
+  closed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupportMessage {
+  id: string;
+  ticket_id: string;
+  sender_id: string;
+  sender_role: "user" | "admin";
+  body: string;
+  created_at: string;
+}
+
 export interface AuditEntry {
   time: string;
   actor: string;
@@ -549,6 +571,39 @@ class ApiClient {
     usageHistory: (id: string, days = 30) =>
       this.request<UsageHistoryEntry[]>(
         `/api/v1/admin/customers/${encodeURIComponent(id)}/usage/history?days=${days}`
+      ),
+  };
+
+  // Support Tickets (admin)
+  support = {
+    list: (params?: { status?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.status) query.set("status", params.status);
+      if (params?.limit) query.set("limit", String(params.limit));
+      if (params?.offset) query.set("offset", String(params.offset));
+      const qs = query.toString();
+      return this.request<{ items: SupportTicket[]; total: number }>(
+        `/api/v1/admin/support/tickets${qs ? `?${qs}` : ""}`
+      );
+    },
+    get: (id: string) =>
+      this.request<{ ticket: SupportTicket; messages: SupportMessage[] }>(
+        `/api/v1/admin/support/tickets/${id}`
+      ),
+    reply: (id: string, body: string) =>
+      this.request<SupportMessage>(
+        `/api/v1/admin/support/tickets/${id}/reply`,
+        { method: "POST", body: JSON.stringify({ body }) }
+      ),
+    updateStatus: (id: string, status: string) =>
+      this.request<void>(
+        `/api/v1/admin/support/tickets/${id}/status`,
+        { method: "PUT", body: JSON.stringify({ status }) }
+      ),
+    assign: (id: string, adminUserId: string) =>
+      this.request<void>(
+        `/api/v1/admin/support/tickets/${id}/assign`,
+        { method: "PUT", body: JSON.stringify({ admin_user_id: adminUserId }) }
       ),
   };
 

@@ -14,11 +14,13 @@ import {
   Database,
   ScrollText,
   Settings,
+  LifeBuoy,
 } from "lucide-react";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Customers", href: "/customers", icon: Building2 },
+  { name: "Support", href: "/support", icon: LifeBuoy },
   { name: "Plans", href: "/plans", icon: CreditCard },
   { name: "Clusters", href: "/clusters", icon: Server },
   { name: "Modules", href: "/modules", icon: Package },

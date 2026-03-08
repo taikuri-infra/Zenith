@@ -1548,6 +1548,53 @@ export const authPools = {
   get: (id: string) => apiFetch<AuthPool>(`/api/v1/auth-pools/${id}`),
 };
 
+// ---- Support Tickets ----
+
+export interface SupportTicket {
+  id: string;
+  user_id: string;
+  subject: string;
+  category: string;
+  priority: string;
+  status: "open" | "in-progress" | "waiting-on-customer" | "resolved" | "closed";
+  assigned_to?: string;
+  closed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupportMessage {
+  id: string;
+  ticket_id: string;
+  sender_id: string;
+  sender_role: "user" | "admin";
+  body: string;
+  created_at: string;
+}
+
+export const support = {
+  list: () => apiFetch<SupportTicket[]>("/api/v1/support/tickets"),
+  get: (id: string) =>
+    apiFetch<{ ticket: SupportTicket; messages: SupportMessage[] }>(
+      `/api/v1/support/tickets/${id}`
+    ),
+  create: (data: {
+    subject: string;
+    category?: string;
+    priority?: string;
+    message: string;
+  }) =>
+    apiFetch<SupportTicket>("/api/v1/support/tickets", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  reply: (ticketId: string, body: string) =>
+    apiFetch<SupportMessage>(`/api/v1/support/tickets/${ticketId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+};
+
 // ---- WebSocket for real-time updates ----
 
 export type WebSocketEvent =

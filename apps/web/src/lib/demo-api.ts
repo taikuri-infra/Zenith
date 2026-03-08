@@ -1335,6 +1335,13 @@ const demoTeam = {
   acceptInvite: async () => { await delay(500); return { access_token: "demo", refresh_token: "demo", expires_in: 3600 }; },
 };
 
+const demoSupport = {
+  list: async () => { await delay(300); return []; },
+  get: async (id: string) => { await delay(300); return { ticket: { id, user_id: "demo", subject: "Demo ticket", category: "general", priority: "normal", status: "open" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, messages: [] }; },
+  create: async (data: { subject: string; category?: string; priority?: string; message: string }) => { await delay(500); return { id: "tkt-" + Date.now(), user_id: "demo", subject: data.subject, category: data.category || "general", priority: data.priority || "normal", status: "open" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }; },
+  reply: async (ticketId: string, body: string) => { await delay(300); return { id: "msg-" + Date.now(), ticket_id: ticketId, sender_id: "demo", sender_role: "user" as const, body, created_at: new Date().toISOString() }; },
+};
+
 // Re-export as a unified object matching the real API import pattern
 export const demoApi = {
   auth: demoAuth,
@@ -1366,4 +1373,5 @@ export const demoApi = {
   gateways: demoGateways,
   authPools: demoAuthPools,
   team: demoTeam,
+  support: demoSupport,
 };

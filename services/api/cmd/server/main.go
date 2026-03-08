@@ -256,6 +256,15 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		teamRepo = memory.NewMemoryTeamMemberRepository()
 	}
 
+	// Support Tickets (Pro+ only)
+	var supportRepo ports.SupportRepository
+	if pool != nil {
+		supportRepo = postgres.NewPostgresSupportRepository(pool)
+	} else {
+		supportRepo = memory.NewMemorySupportRepository()
+	}
+	supportSvc := services.NewSupportService(supportRepo, planRepo, userRepo)
+
 	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret, planRepo)
 	teamSvc := services.NewTeamMemberService(teamRepo, userRepo, planRepo, cfg.JWTSecret)
 
@@ -268,6 +277,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		emailSender := resendclient.NewClient(cfg.ResendAPIKey, emailFrom)
 		authSvc.SetEmailSender(emailSender, cfg.AppURL)
 		teamSvc.SetEmailSender(emailSender, cfg.AppURL)
+		supportSvc.SetEmailSender(emailSender, cfg.AppURL, cfg.AdminEmail)
 		log.Println("[auth] Email verification enabled (Resend)")
 	} else {
 		log.Println("[auth] Email verification disabled (no RESEND_API_KEY)")
@@ -661,6 +671,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	poolByID.Post("/users/:userId/disable", authPoolHandler.DisableUser)
 	poolByID.Post("/users/:userId/enable", authPoolHandler.EnableUser)
 
+	supportHandler := handlers.NewSupportHandler(supportSvc)
+
+	supportRoutes := protected.Group("/support/tickets")
+	supportRoutes.Post("/", supportHandler.CreateTicket)
+	supportRoutes.Get("/", supportHandler.ListTickets)
+	supportRoutes.Get("/:ticketId", supportHandler.GetTicket)
+	supportRoutes.Post("/:ticketId/messages", supportHandler.AddMessage)
+
 	planSvc := services.NewPlanService(planRepo, appRepo, dbRepo, storageRepo, appAuthRepo)
 	planSvc.SetGatewayRepo(gwRepo)
 	planSvc.SetAuthPoolRepo(authPoolRepo)
@@ -909,6 +927,13 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	if cfg.Mode == "saas" {
 		admin.Get("/billing/overview", billingHandler.GetAdminBillingOverview)
 	}
+
+	// Admin Support Tickets
+	admin.Get("/support/tickets", supportHandler.AdminListTickets)
+	admin.Get("/support/tickets/:ticketId", supportHandler.AdminGetTicket)
+	admin.Post("/support/tickets/:ticketId/reply", supportHandler.AdminReply)
+	admin.Put("/support/tickets/:ticketId/status", supportHandler.AdminUpdateStatus)
+	admin.Put("/support/tickets/:ticketId/assign", supportHandler.AdminAssignTicket)
 
 	// Audit log
 	admin.Get("/audit", adminHandler.ListAuditLog)

@@ -64,6 +64,78 @@ func (c *Client) SendVerificationEmail(_ context.Context, to, name, verification
 	return nil
 }
 
+// SendSupportTicketNotification notifies admin of a new support ticket.
+func (c *Client) SendSupportTicketNotification(_ context.Context, to, ticketSubject, ticketURL string) error {
+	subject := fmt.Sprintf("New support ticket: %s", ticketSubject)
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #e5e5e5; background-color: #0a0a0a;">
+  <div style="text-align: center; margin-bottom: 32px;">
+    <h1 style="color: #10b981; font-size: 24px; margin: 0;">Zenith</h1>
+  </div>
+  <div style="background-color: #171717; border: 1px solid #262626; border-radius: 12px; padding: 32px;">
+    <h2 style="color: #fafafa; font-size: 20px; margin: 0 0 16px;">New Support Ticket</h2>
+    <p style="color: #a3a3a3; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+      A new support ticket has been submitted: <strong style="color: #fafafa;">%s</strong>
+    </p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="%s" style="display: inline-block; background-color: #10b981; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 32px; border-radius: 8px;">
+        View Ticket
+      </a>
+    </div>
+  </div>
+</body>
+</html>`, ticketSubject, ticketURL)
+
+	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    c.from,
+		To:      []string{to},
+		Subject: subject,
+		Html:    html,
+	})
+	if err != nil {
+		return fmt.Errorf("send support ticket notification: %w", err)
+	}
+	return nil
+}
+
+// SendSupportReplyNotification notifies a user that their ticket got a reply.
+func (c *Client) SendSupportReplyNotification(_ context.Context, to, userName, ticketSubject, ticketURL string) error {
+	subject := fmt.Sprintf("Reply to your support ticket: %s", ticketSubject)
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #e5e5e5; background-color: #0a0a0a;">
+  <div style="text-align: center; margin-bottom: 32px;">
+    <h1 style="color: #10b981; font-size: 24px; margin: 0;">Zenith</h1>
+  </div>
+  <div style="background-color: #171717; border: 1px solid #262626; border-radius: 12px; padding: 32px;">
+    <h2 style="color: #fafafa; font-size: 20px; margin: 0 0 16px;">New Reply on Your Ticket</h2>
+    <p style="color: #a3a3a3; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+      Hi %s, there's a new reply on your support ticket: <strong style="color: #fafafa;">%s</strong>
+    </p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="%s" style="display: inline-block; background-color: #10b981; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 32px; border-radius: 8px;">
+        View Conversation
+      </a>
+    </div>
+  </div>
+</body>
+</html>`, userName, ticketSubject, ticketURL)
+
+	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    c.from,
+		To:      []string{to},
+		Subject: subject,
+		Html:    html,
+	})
+	if err != nil {
+		return fmt.Errorf("send support reply notification: %w", err)
+	}
+	return nil
+}
+
 // SendTeamInviteEmail sends a team invitation email.
 func (c *Client) SendTeamInviteEmail(_ context.Context, to, inviterName, teamName, inviteURL string) error {
 	subject := fmt.Sprintf("%s invited you to %s on Zenith", inviterName, teamName)

@@ -354,6 +354,18 @@ type AuthPoolRepository interface {
 	CountPoolsByUser(ctx context.Context, userID string) (int, error)
 }
 
+// SupportRepository defines support ticket persistence operations.
+type SupportRepository interface {
+	CreateTicket(ctx context.Context, ticket *entities.SupportTicket, initialMsg *entities.SupportMessage) error
+	GetTicket(ctx context.Context, id string) (*entities.SupportTicket, error)
+	ListTicketsByUser(ctx context.Context, userID string) ([]entities.SupportTicket, error)
+	ListAllTickets(ctx context.Context, status string, limit, offset int) ([]entities.SupportTicket, int, error)
+	UpdateTicketStatus(ctx context.Context, id string, status entities.TicketStatus) error
+	UpdateTicketAssignee(ctx context.Context, id, adminUserID string) error
+	AddMessage(ctx context.Context, msg *entities.SupportMessage) error
+	ListMessages(ctx context.Context, ticketID string) ([]entities.SupportMessage, error)
+}
+
 // AdminRepository defines admin/platform persistence operations.
 type AdminRepository interface {
 	GetSettings(ctx context.Context) (*entities.PlatformSettings, error)

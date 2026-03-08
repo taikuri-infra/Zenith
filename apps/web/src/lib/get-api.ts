@@ -3,10 +3,10 @@
  * the NEXT_PUBLIC_DEMO_MODE environment variable.
  */
 
-import { auth, projects, apps, databases, storage, storageBuckets, appsDeploy, userDatabases, standaloneDatabases, notifications, activity, userPlan, apiKeys, sessions, mfa, webhooks, roles, ipWhitelist, compliance, dpa, branding, sso, previews, autoscaler, billing, registry, gateways, authPools, team } from "./api";
+import { auth, projects, apps, databases, storage, storageBuckets, appsDeploy, userDatabases, standaloneDatabases, notifications, activity, userPlan, apiKeys, sessions, mfa, webhooks, roles, ipWhitelist, compliance, dpa, branding, sso, previews, autoscaler, billing, registry, gateways, authPools, team, support } from "./api";
 import { demoApi } from "./demo-api";
 
-const realApi = { auth, projects, apps, databases, storage, storageBuckets, appsDeploy, userDatabases, standaloneDatabases, notifications, activity, userPlan, apiKeys, sessions, mfa, webhooks, roles, ipWhitelist, compliance, dpa, branding, sso, previews, autoscaler, billing, registry, gateways, authPools, team };
+const realApi = { auth, projects, apps, databases, storage, storageBuckets, appsDeploy, userDatabases, standaloneDatabases, notifications, activity, userPlan, apiKeys, sessions, mfa, webhooks, roles, ipWhitelist, compliance, dpa, branding, sso, previews, autoscaler, billing, registry, gateways, authPools, team, support };
 
 export function getApi() {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {

@@ -18,6 +18,7 @@ import {
   BookOpen,
   CreditCard,
   Settings,
+  LifeBuoy,
   ScrollText,
   History,
   ListOrdered,
@@ -90,6 +91,7 @@ const navSections: NavSection[] = [
 ];
 
 const bottomNav: NavItem[] = [
+  { name: "Support", href: "/support", icon: LifeBuoy, saasOnly: true },
   { name: "Docs", href: "/docs", icon: BookOpen },
   { name: "Billing", href: "/billing", icon: CreditCard, saasOnly: true },
   { name: "Settings", href: "/settings", icon: Settings },
