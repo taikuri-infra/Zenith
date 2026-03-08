@@ -27,9 +27,9 @@ func (r *PostgresAPIKeyRepository) CreateAPIKey(ctx context.Context, userID, nam
 	now := time.Now()
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO api_keys (id, user_id, name, key_prefix, key_hash, scopes, type, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		id, userID, name, prefix, keyHash, scopes, string(entities.APIKeyPersonal), now,
+		`INSERT INTO api_keys (id, user_id, project_id, name, key_prefix, key_hash, scopes, type, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		id, userID, "", name, prefix, keyHash, scopes, string(entities.APIKeyPersonal), now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create api key: %w", err)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -28,7 +29,13 @@ func (r *PostgresMFARepository) GetEnrollment(ctx context.Context, userID string
 		 FROM mfa_enrollments WHERE user_id = $1`, userID,
 	).Scan(&e.UserID, &status, &e.Secret, &e.BackupCodes, &e.UsedCodes, &e.EnabledAt, &e.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("MFA not enrolled for user %s", userID)
+		if err == pgx.ErrNoRows {
+			return &entities.MFAEnrollment{
+				UserID: userID,
+				Status: entities.MFAStatusDisabled,
+			}, nil
+		}
+		return nil, fmt.Errorf("get MFA enrollment: %w", err)
 	}
 	e.Status = entities.MFAStatus(status)
 	return &e, nil

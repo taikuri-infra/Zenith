@@ -35,6 +35,9 @@ func (h *APIKeyHandler) Create(c *fiber.Ctx) error {
 	if input.Type == "" {
 		input.Type = "personal"
 	}
+	if input.Scopes == nil {
+		input.Scopes = []string{}
+	}
 
 	// Check plan limit
 	plan, _ := h.planRepo.GetUserPlan(c.Context(), userID)
