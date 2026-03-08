@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Modal } from "@/components/modal";
 import { Plus, Trash2, Loader2, Eye, EyeOff, Copy, Check, AlertTriangle, ExternalLink, Lock } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
+import { useToast } from "@/components/toast";
 import { useProject } from "@/hooks/use-project";
 import { getApi, isDemoMode } from "@/lib/get-api";
 import { AppDatabase } from "@/lib/api";
@@ -49,6 +50,7 @@ function CopyField({ label, value, masked = false, mono = true }: { label: strin
 }
 
 export default function QueuesPage() {
+  const { toast } = useToast();
   const { standaloneDatabases, userPlan } = getApi();
   const projectId = useProject();
 
@@ -96,7 +98,7 @@ export default function QueuesPage() {
       setCreatedQueue(result);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to create queue");
     } finally {
       setCreating(false);
     }
@@ -112,7 +114,7 @@ export default function QueuesPage() {
       setCreatedKafka(result);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to create Kafka cluster");
     } finally {
       setCreatingKafka(false);
     }
@@ -124,7 +126,7 @@ export default function QueuesPage() {
       await standaloneDatabases.delete(id);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete queue");
     } finally {
       setDeletingId(null);
       setConfirmDeleteId(null);

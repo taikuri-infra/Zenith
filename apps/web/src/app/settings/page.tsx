@@ -5,6 +5,7 @@ import { PageWithTableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
+import { useToast } from "@/components/toast";
 import { apiKeys, sessions, mfa, webhooks, ipWhitelist, compliance, autoscaler, type APIKey, type Session, type UserWebhook, type WebhookDelivery, type IPWhitelistEntry, type ComplianceCheck, type AutoscalerStatus, type HetznerNode, type AutoscaleEvent } from "@/lib/api";
 import { useState } from "react";
 import {
@@ -87,6 +88,7 @@ export default function SettingsPage() {
 }
 
 function APIKeysTab() {
+  const { toast } = useToast();
   const { data, loading, error, refetch } = useApi(() => apiKeys.list(), []);
 
   const [showCreate, setShowCreate] = useState(false);
@@ -113,7 +115,7 @@ function APIKeysTab() {
       setScopes(["read"]);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to create API key");
     } finally {
       setCreating(false);
     }
@@ -133,7 +135,7 @@ function APIKeysTab() {
       await apiKeys.delete(id);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete API key");
     } finally {
       setDeletingId(null);
     }
@@ -782,6 +784,7 @@ function WebhooksTab() {
 }
 
 function SessionsTab() {
+  const { toast } = useToast();
   const { data, loading, error, refetch } = useApi(() => sessions.list(), []);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokingAll, setRevokingAll] = useState(false);
@@ -797,7 +800,7 @@ function SessionsTab() {
       await sessions.revoke(id);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to revoke session");
     } finally {
       setRevokingId(null);
     }
@@ -809,7 +812,7 @@ function SessionsTab() {
       await sessions.revokeAll();
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to revoke all sessions");
     } finally {
       setRevokingAll(false);
     }

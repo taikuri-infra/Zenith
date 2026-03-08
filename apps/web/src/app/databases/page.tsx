@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
+import { useToast } from "@/components/toast";
 import { useProject } from "@/hooks/use-project";
 import { getApi } from "@/lib/get-api";
 import { type AppDatabase } from "@/lib/api";
@@ -56,6 +57,7 @@ function CopyField({ label, value, mono = true }: { label: string; value: string
 }
 
 export default function DatabasesPage() {
+  const { toast } = useToast();
   const { standaloneDatabases } = getApi();
   const projectId = useProject();
   const [showCreate, setShowCreate] = useState(false);
@@ -82,7 +84,7 @@ export default function DatabasesPage() {
       setCreatedDb(result);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to create database");
     } finally {
       setCreating(false);
     }

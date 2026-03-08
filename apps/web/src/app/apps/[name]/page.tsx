@@ -6,6 +6,7 @@ import { PageWithTableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { BuildLogViewer } from "@/components/build-log-viewer";
+import { useToast } from "@/components/toast";
 import { useApi } from "@/hooks/use-api";
 import { useDeployLogs } from "@/hooks/use-deploy-logs";
 import { type DeployApp, type Deployment, type EnvVar, type Secret, type Release, type AppDatabase, type DatabaseBackup, type AppAuthConfig, type AppAuthUser, type AppBucket, type CustomDomain } from "@/lib/api";
@@ -336,6 +337,7 @@ function OverviewTab({ app }: { app: DeployApp }) {
 
 function DeploymentsTab({ appId }: { appId: string }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const {
     data: deployments,
     loading,
@@ -366,7 +368,7 @@ function DeploymentsTab({ appId }: { appId: string }) {
       await appsDeploy.rollback(appId, deployId);
       refetch();
     } catch {
-      // TODO: show error toast
+      toast("error", "Failed to rollback deployment");
     }
   };
 
@@ -419,6 +421,7 @@ function DeploymentsTab({ appId }: { appId: string }) {
 
 function EnvTab({ appId }: { appId: string }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const { data: envData, loading, error, refetch } = useApi(
     () => appsDeploy.getEnvVars(appId),
     [appId]
@@ -441,7 +444,7 @@ function EnvTab({ appId }: { appId: string }) {
       setNewValue("");
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to set environment variable");
     }
   };
 
@@ -450,7 +453,7 @@ function EnvTab({ appId }: { appId: string }) {
       await appsDeploy.deleteEnvVar(appId, key);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete environment variable");
     }
   };
 
@@ -614,6 +617,7 @@ const engineBadge: Record<string, { label: string; className: string }> = {
 
 function DatabasesTab({ appId }: { appId: string }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const { data: dbs, loading, error, refetch } = useApi(
     () => appsDeploy.listAppDatabases(appId),
     [appId]
@@ -639,7 +643,7 @@ function DatabasesTab({ appId }: { appId: string }) {
       setEngine("postgresql");
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to create database");
     } finally {
       setCreating(false);
     }
@@ -652,7 +656,7 @@ function DatabasesTab({ appId }: { appId: string }) {
       await appsDeploy.deleteAppDatabase(appId, dbId);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete database");
     } finally {
       setDeletingId(null);
     }
@@ -858,6 +862,7 @@ function DatabasesTab({ appId }: { appId: string }) {
 
 function DatabaseBackupsSection({ appId, db }: { appId: string; db: AppDatabase }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const { data: backups, loading, refetch } = useApi(
     () => appsDeploy.listBackups(appId, db.id),
     [appId, db.id]
@@ -873,7 +878,7 @@ function DatabaseBackupsSection({ appId, db }: { appId: string; db: AppDatabase 
       await appsDeploy.createBackup(appId, db.id);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to create backup");
     } finally {
       setCreatingBackup(false);
     }
@@ -885,7 +890,7 @@ function DatabaseBackupsSection({ appId, db }: { appId: string; db: AppDatabase 
       await appsDeploy.restoreBackup(appId, db.id, backupId);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to restore backup");
     } finally {
       setRestoringId(null);
     }
@@ -897,7 +902,7 @@ function DatabaseBackupsSection({ appId, db }: { appId: string; db: AppDatabase 
       await appsDeploy.deleteBackup(appId, db.id, backupId);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete backup");
     } finally {
       setDeletingId(null);
     }
@@ -986,6 +991,7 @@ function DatabaseBackupsSection({ appId, db }: { appId: string; db: AppDatabase 
 
 function StorageTab({ appId }: { appId: string }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const { data: buckets, loading, error, refetch } = useApi(
     () => appsDeploy.listAppBuckets(appId),
     [appId]
@@ -1012,7 +1018,7 @@ function StorageTab({ appId }: { appId: string }) {
       setAccess("private");
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to create storage bucket");
     } finally {
       setCreating(false);
     }
@@ -1025,7 +1031,7 @@ function StorageTab({ appId }: { appId: string }) {
       await appsDeploy.deleteAppBucket(appId, bucketId);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete storage bucket");
     } finally {
       setDeletingId(null);
     }
@@ -1169,6 +1175,7 @@ function StorageTab({ appId }: { appId: string }) {
 
 function AuthTab({ appId }: { appId: string }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const {
     data: authConfig,
     loading: configLoading,
@@ -1200,7 +1207,7 @@ function AuthTab({ appId }: { appId: string }) {
       refetchConfig();
       refetchUsers();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to enable authentication");
     } finally {
       setEnabling(false);
     }
@@ -1212,7 +1219,7 @@ function AuthTab({ appId }: { appId: string }) {
       await appsDeploy.disableAuth(appId);
       refetchConfig();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to disable authentication");
     } finally {
       setDisabling(false);
     }
@@ -1225,7 +1232,7 @@ function AuthTab({ appId }: { appId: string }) {
       refetchUsers();
       refetchConfig();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete auth user");
     } finally {
       setDeletingUserId(null);
     }
@@ -1372,6 +1379,7 @@ function AuthTab({ appId }: { appId: string }) {
 
 function DomainsTab({ appId }: { appId: string }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const { data: domains, loading, error, refetch } = useApi(
     () => appsDeploy.listDomains(appId),
     [appId]
@@ -1396,7 +1404,7 @@ function DomainsTab({ appId }: { appId: string }) {
       setDomainInput("");
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to add custom domain");
     } finally {
       setAdding(false);
     }
@@ -1408,7 +1416,7 @@ function DomainsTab({ appId }: { appId: string }) {
       await appsDeploy.deleteDomain(appId, domainId);
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete custom domain");
     } finally {
       setDeletingId(null);
     }
@@ -1554,6 +1562,7 @@ function DomainsTab({ appId }: { appId: string }) {
 
 function SecretsTab({ appId }: { appId: string }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const { data: secretsData, loading, error, refetch } = useApi(
     () => appsDeploy.listSecrets(appId),
     [appId]
@@ -1581,7 +1590,7 @@ function SecretsTab({ appId }: { appId: string }) {
       setNewValue("");
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to set secret");
     } finally {
       setAdding(false);
     }
@@ -1602,7 +1611,7 @@ function SecretsTab({ appId }: { appId: string }) {
       const result = await appsDeploy.getSecretValue(appId, key);
       setRevealedValues((prev) => ({ ...prev, [key]: result.value }));
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to reveal secret value");
     } finally {
       setRevealingKey(null);
     }
@@ -1626,7 +1635,7 @@ function SecretsTab({ appId }: { appId: string }) {
       });
       refetch();
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to delete secret");
     } finally {
       setDeletingKey(null);
     }
@@ -1770,6 +1779,7 @@ function SecretsTab({ appId }: { appId: string }) {
 
 function ReleasesTab({ appId }: { appId: string }) {
   const { appsDeploy } = getApi();
+  const { toast } = useToast();
   const { data: releasesData, loading, error, refetch } = useApi(
     () => appsDeploy.listReleases(appId),
     [appId]
@@ -1800,7 +1810,7 @@ function ReleasesTab({ appId }: { appId: string }) {
       setDeployedId(releaseId);
       setTimeout(() => setDeployedId(null), 3000);
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to deploy release");
     } finally {
       setDeployingId(null);
     }

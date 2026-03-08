@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Modal } from "@/components/modal";
+import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
 import type { RegistryImage, StorageBucket, Database as DbType, AppType } from "@/lib/api";
 import {
@@ -155,6 +156,7 @@ interface DeployWizardProps {
 }
 
 export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
+  const { toast } = useToast();
   const { appsDeploy, registry, storage, databases } = getApi();
   const [step, setStep] = useState(0);
   const [state, setState] = useState<WizardState>(initialState);
@@ -297,7 +299,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
 
       onClose();
     } catch {
-      // TODO: show error toast
+      toast("error", "Failed to deploy application");
     } finally {
       setDeploying(false);
     }

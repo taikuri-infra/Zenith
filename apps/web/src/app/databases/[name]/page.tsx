@@ -7,6 +7,7 @@ import { ProgressBar } from "@/components/progress-bar";
 import { DatabaseDetailSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { useApi } from "@/hooks/use-api";
+import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -59,6 +60,7 @@ function CopyField({ label, value, masked = false }: { label: string; value: str
 }
 
 export default function DatabaseDetailPage() {
+  const { toast } = useToast();
   const { name: dbId } = useParams<{ name: string }>();
   const { standaloneDatabases } = getApi();
   const [activeTab, setActiveTab] = useState<"overview" | "explorer">("overview");
@@ -75,7 +77,7 @@ export default function DatabaseDetailPage() {
       setNewPassword(result.db_password);
       setNewConnStr(result.connection_string);
     } catch {
-      // TODO: error toast
+      toast("error", "Failed to reset database password");
     } finally {
       setResetting(false);
     }
