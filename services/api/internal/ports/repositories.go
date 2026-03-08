@@ -286,7 +286,7 @@ type BrandingRepository interface {
 // GatewayRepository defines gateway and gateway route persistence operations.
 type GatewayRepository interface {
 	// Gateways
-	CreateGateway(ctx context.Context, userID, name, slug string) (*entities.Gateway, error)
+	CreateGateway(ctx context.Context, userID, projectID, name, slug string) (*entities.Gateway, error)
 	GetGateway(ctx context.Context, id string) (*entities.Gateway, error)
 	GetGatewayBySlug(ctx context.Context, slug string) (*entities.Gateway, error)
 	ListGatewaysByUser(ctx context.Context, userID string) ([]entities.Gateway, error)

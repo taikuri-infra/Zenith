@@ -28,7 +28,7 @@ func NewMemoryGatewayRepository() *MemoryGatewayRepository {
 
 // --- Gateway CRUD ---
 
-func (r *MemoryGatewayRepository) CreateGateway(_ context.Context, userID, name, slug string) (*entities.Gateway, error) {
+func (r *MemoryGatewayRepository) CreateGateway(_ context.Context, userID, projectID, name, slug string) (*entities.Gateway, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -42,6 +42,7 @@ func (r *MemoryGatewayRepository) CreateGateway(_ context.Context, userID, name,
 	gw := &entities.Gateway{
 		ID:         uuid.New().String(),
 		UserID:     userID,
+		ProjectID:  projectID,
 		Name:       name,
 		Slug:       slug,
 		Status:     entities.GatewayStatusProvisioning,

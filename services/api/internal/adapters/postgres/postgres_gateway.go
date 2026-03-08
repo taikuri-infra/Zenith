@@ -67,14 +67,14 @@ func scanGatewayRoute(scanner interface{ Scan(dest ...any) error }) (*entities.G
 
 // --- Gateway CRUD ---
 
-func (r *PostgresGatewayRepository) CreateGateway(ctx context.Context, userID, name, slug string) (*entities.Gateway, error) {
+func (r *PostgresGatewayRepository) CreateGateway(ctx context.Context, userID, projectID, name, slug string) (*entities.Gateway, error) {
 	id := uuid.New().String()
 	now := time.Now()
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO gateways (id, user_id, name, slug, status, route_count, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		id, userID, name, slug, string(entities.GatewayStatusProvisioning), 0, now, now,
+		`INSERT INTO gateways (id, user_id, project_id, name, slug, status, route_count, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		id, userID, projectID, name, slug, string(entities.GatewayStatusProvisioning), 0, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_gateways_slug") {
@@ -86,6 +86,7 @@ func (r *PostgresGatewayRepository) CreateGateway(ctx context.Context, userID, n
 	return &entities.Gateway{
 		ID:         id,
 		UserID:     userID,
+		ProjectID:  projectID,
 		Name:       name,
 		Slug:       slug,
 		Status:     entities.GatewayStatusProvisioning,

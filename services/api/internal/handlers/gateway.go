@@ -9,13 +9,14 @@ import (
 
 // GatewayHandler manages API gateway HTTP endpoints.
 type GatewayHandler struct {
-	gwSvc  *services.GatewayService
-	gwRepo ports.GatewayRepository
+	gwSvc       *services.GatewayService
+	gwRepo      ports.GatewayRepository
+	projectRepo ports.ProjectRepository
 }
 
 // NewGatewayHandler creates a new GatewayHandler.
-func NewGatewayHandler(gwSvc *services.GatewayService, gwRepo ports.GatewayRepository) *GatewayHandler {
-	return &GatewayHandler{gwSvc: gwSvc, gwRepo: gwRepo}
+func NewGatewayHandler(gwSvc *services.GatewayService, gwRepo ports.GatewayRepository, projectRepo ports.ProjectRepository) *GatewayHandler {
+	return &GatewayHandler{gwSvc: gwSvc, gwRepo: gwRepo, projectRepo: projectRepo}
 }
 
 // CreateGateway creates a new API gateway.
@@ -24,7 +25,8 @@ func (h *GatewayHandler) CreateGateway(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
 	var input struct {
-		Name string `json:"name"`
+		Name      string `json:"name"`
+		ProjectID string `json:"project_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
@@ -33,7 +35,15 @@ func (h *GatewayHandler) CreateGateway(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "name is required")
 	}
 
-	gw, err := h.gwSvc.CreateGateway(c.Context(), userID, input.Name)
+	// Resolve project_id: use provided or fall back to default project
+	projectID := input.ProjectID
+	if projectID == "" && h.projectRepo != nil {
+		if dp, err := h.projectRepo.GetDefaultProject(c.Context(), userID); err == nil {
+			projectID = dp.ID
+		}
+	}
+
+	gw, err := h.gwSvc.CreateGateway(c.Context(), userID, projectID, input.Name)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}

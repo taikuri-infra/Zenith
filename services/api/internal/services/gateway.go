@@ -66,7 +66,7 @@ func slugify(name string) string {
 }
 
 // CreateGateway provisions a new API gateway.
-func (s *GatewayService) CreateGateway(ctx context.Context, userID, name string) (*entities.Gateway, error) {
+func (s *GatewayService) CreateGateway(ctx context.Context, userID, projectID, name string) (*entities.Gateway, error) {
 	slug := slugify(name)
 
 	// Check slug uniqueness (also check app subdomains to prevent DNS hijacking)
@@ -78,7 +78,7 @@ func (s *GatewayService) CreateGateway(ctx context.Context, userID, name string)
 	}
 
 	// Create DB record
-	gw, err := s.gwRepo.CreateGateway(ctx, userID, name, slug)
+	gw, err := s.gwRepo.CreateGateway(ctx, userID, projectID, name, slug)
 	if err != nil {
 		return nil, err
 	}
