@@ -25,6 +25,8 @@ type PlanLimits struct {
 	MaxTeamMembers    int `json:"max_team_members"`
 	MaxGateways       int `json:"max_gateways"`
 	MaxGatewayRoutes  int `json:"max_gateway_routes"`
+	MaxAuthPools      int `json:"max_auth_pools"`
+	MaxAuthPoolUsers  int `json:"max_auth_pool_users"`
 	BackupsEnabled  bool `json:"backups_enabled"`
 	CustomDomain    bool `json:"custom_domain"`
 	AlwaysOn        bool `json:"always_on"` // false = scale-to-zero after idle
@@ -40,6 +42,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxAuthUsers: 10000, MaxStorageMB: 10240, MaxBuckets: 5,
 			MaxCPUMillis: 2000, MaxRAMMB: 2048, MaxTeamMembers: 3,
 			MaxGateways: 5, MaxGatewayRoutes: 50,
+			MaxAuthPools: 3, MaxAuthPoolUsers: 50000,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
 		}
 	case PlanTeam:
@@ -48,6 +51,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxAuthUsers: 100000, MaxStorageMB: 102400, MaxBuckets: 20,
 			MaxCPUMillis: 4000, MaxRAMMB: 4096, MaxTeamMembers: 10,
 			MaxGateways: 20, MaxGatewayRoutes: 200,
+			MaxAuthPools: 10, MaxAuthPoolUsers: 500000,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
 		}
 	case PlanEnterprise:
@@ -56,6 +60,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxAuthUsers: 10000000, MaxStorageMB: 10485760, MaxBuckets: 1000,
 			MaxCPUMillis: 64000, MaxRAMMB: 65536, MaxTeamMembers: 1000,
 			MaxGateways: 1000, MaxGatewayRoutes: 10000,
+			MaxAuthPools: 100, MaxAuthPoolUsers: 10000000,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
 		}
 	default: // Free
@@ -64,6 +69,7 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxAuthUsers: 1000, MaxStorageMB: 1024, MaxBuckets: 0,
 			MaxCPUMillis: 500, MaxRAMMB: 512, MaxTeamMembers: 1,
 			MaxGateways: 1, MaxGatewayRoutes: 3,
+			MaxAuthPools: 1, MaxAuthPoolUsers: 1000,
 			BackupsEnabled: false, CustomDomain: false, AlwaysOn: false, SleepAfterMins: 15,
 		}
 	}

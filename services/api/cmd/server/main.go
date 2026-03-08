@@ -602,8 +602,43 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Get("/auth/users", appAuthHandler.ListUsers)
 	appByID.Delete("/auth/users/:userId", appAuthHandler.DeleteUser)
 
+	// Auth Pools (managed authentication backed by Keycloak)
+	var authPoolRepo ports.AuthPoolRepository
+	if pool != nil {
+		authPoolRepo = postgres.NewPostgresAuthPoolRepository(pool)
+	} else {
+		authPoolRepo = memory.NewMemoryAuthPoolRepository()
+	}
+
+	var keycloakIDP ports.IdentityProvider
+	if cfg.KeycloakURL != "" {
+		keycloakIDP = keycloakclient.NewClient(cfg.KeycloakURL, cfg.KeycloakAdminUser, cfg.KeycloakAdminPassword)
+	} else {
+		keycloakIDP = keycloakclient.NewMemoryClient()
+	}
+
+	authPoolSvc := services.NewAuthPoolService(authPoolRepo, planRepo, keycloakIDP, cfg.KeycloakURL)
+	authPoolHandler := handlers.NewAuthPoolHandler(authPoolSvc, authPoolRepo)
+
+	authPools := protected.Group("/auth-pools")
+	authPools.Post("/", handlers.CheckLimit(planRepo, "auth_pools", func(c *fiber.Ctx, userID string) (int, error) {
+		return authPoolRepo.CountPoolsByUser(c.Context(), userID)
+	}), authPoolHandler.CreatePool)
+	authPools.Get("/", authPoolHandler.ListPools)
+
+	poolByID := authPools.Group("/:poolId")
+	poolByID.Get("/", authPoolHandler.GetPool)
+	poolByID.Delete("/", authPoolHandler.DeletePool)
+	poolByID.Post("/users", authPoolHandler.CreateUser)
+	poolByID.Get("/users", authPoolHandler.ListUsers)
+	poolByID.Get("/users/:userId", authPoolHandler.GetUser)
+	poolByID.Delete("/users/:userId", authPoolHandler.DeleteUser)
+	poolByID.Post("/users/:userId/disable", authPoolHandler.DisableUser)
+	poolByID.Post("/users/:userId/enable", authPoolHandler.EnableUser)
+
 	planSvc := services.NewPlanService(planRepo, appRepo, dbRepo, storageRepo, appAuthRepo)
 	planSvc.SetGatewayRepo(gwRepo)
+	planSvc.SetAuthPoolRepo(authPoolRepo)
 	planHandler := handlers.NewPlanHandler(planSvc)
 	protected.Get("/plan", planHandler.GetMyPlan)
 	protected.Post("/plan/upgrade", planHandler.UpgradePlan)
@@ -637,8 +672,15 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	// Custom Domains (Phase 4 — Pro+ only)
-	domainRepo := memory.NewMemoryDomainRepository()
+	var domainRepo ports.DomainRepository
+	if pool != nil {
+		domainRepo = postgres.NewPostgresDomainRepository(pool)
+	} else {
+		domainRepo = memory.NewMemoryDomainRepository()
+	}
+	deployer.SetDomainRepo(domainRepo)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
+	domainHandler.SetDeployer(deployer)
 	appByID.Post("/domains", domainHandler.Add)
 	appByID.Get("/domains", domainHandler.List)
 	appByID.Delete("/domains/:domainId", domainHandler.Delete)

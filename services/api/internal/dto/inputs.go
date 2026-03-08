@@ -314,6 +314,7 @@ type PlanUsage struct {
 	Buckets       int `json:"buckets"`
 	Gateways      int `json:"gateways"`
 	GatewayRoutes int `json:"gateway_routes"`
+	AuthPools     int `json:"auth_pools"`
 }
 
 // --- Domain DTOs ---
@@ -412,4 +413,34 @@ func DefaultPagination() Pagination {
 		Page:     1,
 		PageSize: 20,
 	}
+}
+
+// --- Auth Pool DTOs ---
+
+// CreateAuthPoolInput is the request body for creating an auth pool.
+type CreateAuthPoolInput struct {
+	Name      string `json:"name" validate:"required"`
+	ProjectID string `json:"project_id"`
+}
+
+// AuthPoolInfo is the response for an auth pool.
+type AuthPoolInfo struct {
+	ID           string                  `json:"id"`
+	Name         string                  `json:"name"`
+	ProjectID    string                  `json:"project_id,omitempty"`
+	Status       entities.AuthPoolStatus `json:"status"`
+	IssuerURL    string                  `json:"issuer_url"`
+	ClientID     string                  `json:"client_id"`
+	ClientSecret string                  `json:"client_secret,omitempty"`
+	UserCount    int                     `json:"user_count"`
+	MaxUsers     int                     `json:"max_users"`
+	CreatedAt    string                  `json:"created_at"`
+}
+
+// CreateAuthPoolUserInput is the request body for creating a user in an auth pool.
+type CreateAuthPoolUserInput struct {
+	Email     string `json:"email" validate:"required"`
+	Password  string `json:"password" validate:"required"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
 }

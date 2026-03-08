@@ -187,6 +187,26 @@ type IdentityProvider interface {
 	CreateRealm(ctx context.Context, realmName, displayName string) error
 	DeleteRealm(ctx context.Context, realmName string) error
 	CreateClient(ctx context.Context, realmName, clientID, redirectURI string) (secret string, err error)
+
+	// User management (auth pools)
+	CreateUser(ctx context.Context, realmName, email, password, firstName, lastName string) (userID string, err error)
+	GetUser(ctx context.Context, realmName, userID string) (*IdentityUser, error)
+	ListUsers(ctx context.Context, realmName string, first, max int) ([]IdentityUser, int, error)
+	DeleteUser(ctx context.Context, realmName, userID string) error
+	DisableUser(ctx context.Context, realmName, userID string) error
+	EnableUser(ctx context.Context, realmName, userID string) error
+	CountUsers(ctx context.Context, realmName string) (int, error)
+}
+
+// IdentityUser represents a user in an identity provider realm.
+type IdentityUser struct {
+	ID            string `json:"id"`
+	Email         string `json:"email"`
+	FirstName     string `json:"first_name"`
+	LastName      string `json:"last_name"`
+	Enabled       bool   `json:"enabled"`
+	EmailVerified bool   `json:"email_verified"`
+	CreatedAt     int64  `json:"created_at"`
 }
 
 // ---------------------------------------------------------------------------

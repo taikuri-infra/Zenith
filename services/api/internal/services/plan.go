@@ -19,6 +19,7 @@ type PlanService struct {
 	storageRepo   ports.StorageRepository
 	authRepo      ports.AppAuthRepository
 	gwRepo        ports.GatewayRepository
+	authPoolRepo  ports.AuthPoolRepository
 	stripeEnabled bool
 }
 
@@ -42,6 +43,11 @@ func NewPlanService(
 // SetGatewayRepo injects the gateway repository for usage tracking.
 func (s *PlanService) SetGatewayRepo(repo ports.GatewayRepository) {
 	s.gwRepo = repo
+}
+
+// SetAuthPoolRepo injects the auth pool repository for usage tracking.
+func (s *PlanService) SetAuthPoolRepo(repo ports.AuthPoolRepository) {
+	s.authPoolRepo = repo
 }
 
 // SetStripeEnabled marks whether Stripe billing is active.
@@ -155,6 +161,10 @@ func (s *PlanService) CalculateUsage(ctx context.Context, userID string) dto.Pla
 		usage.GatewayRoutes, _ = s.gwRepo.CountRoutesByUser(ctx, userID)
 	}
 
+	if s.authPoolRepo != nil {
+		usage.AuthPools, _ = s.authPoolRepo.CountPoolsByUser(ctx, userID)
+	}
+
 	return usage
 }
 
@@ -178,6 +188,8 @@ func (s *PlanService) CheckLimit(ctx context.Context, userID, resource string, c
 		limit = plan.Limits.MaxGateways
 	case "gateway_routes":
 		limit = plan.Limits.MaxGatewayRoutes
+	case "auth_pools":
+		limit = plan.Limits.MaxAuthPools
 	default:
 		return nil
 	}

@@ -80,6 +80,8 @@ func CheckLimit(planRepo ports.UserPlanRepository, resource string, countFn func
 			limit = plan.Limits.MaxGateways
 		case "gateway_routes":
 			limit = plan.Limits.MaxGatewayRoutes
+		case "auth_pools":
+			limit = plan.Limits.MaxAuthPools
 		default:
 			return c.Next()
 		}

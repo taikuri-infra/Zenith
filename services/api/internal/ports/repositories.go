@@ -328,6 +328,17 @@ type BillingRepository interface {
 	GetBillingOverview(ctx context.Context) (*entities.BillingOverview, error)
 }
 
+// AuthPoolRepository defines auth pool persistence operations.
+type AuthPoolRepository interface {
+	CreatePool(ctx context.Context, id, userID, projectID, name, realmName, clientID, clientSecret, issuerURL string, maxUsers int) (*entities.AuthPool, error)
+	GetPool(ctx context.Context, id string) (*entities.AuthPool, error)
+	ListPoolsByUser(ctx context.Context, userID string) ([]entities.AuthPool, error)
+	DeletePool(ctx context.Context, id string) error
+	UpdatePoolStatus(ctx context.Context, id string, status entities.AuthPoolStatus) error
+	UpdatePoolUserCount(ctx context.Context, id string, delta int) error
+	CountPoolsByUser(ctx context.Context, userID string) (int, error)
+}
+
 // AdminRepository defines admin/platform persistence operations.
 type AdminRepository interface {
 	GetSettings(ctx context.Context) (*entities.PlatformSettings, error)
