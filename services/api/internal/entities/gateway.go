@@ -24,9 +24,10 @@ const (
 type GatewayRouteAuth string
 
 const (
-	GatewayRouteAuthNone   GatewayRouteAuth = "none"
-	GatewayRouteAuthJWT    GatewayRouteAuth = "jwt"
+	GatewayRouteAuthNone    GatewayRouteAuth = "none"
+	GatewayRouteAuthJWT     GatewayRouteAuth = "jwt"
 	GatewayRouteAuthKeyAuth GatewayRouteAuth = "key-auth"
+	GatewayRouteAuthOIDC    GatewayRouteAuth = "oidc"
 )
 
 // GatewayRoutePlugin represents an inline APISIX plugin on a route.
@@ -45,6 +46,7 @@ var AllowedPlugins = map[string]bool{
 	"ip-restriction": true,
 	"proxy-rewrite":  true,
 	"request-id":     true,
+	"openid-connect": true,
 }
 
 // Gateway represents a customer API gateway backed by APISIX.
@@ -71,6 +73,7 @@ type GatewayRoute struct {
 	AppSubdomain string               `json:"app_subdomain"`
 	StripPrefix  bool                 `json:"strip_prefix"`
 	Auth         GatewayRouteAuth     `json:"auth"`
+	AuthPoolID   string               `json:"auth_pool_id,omitempty"`
 	Plugins      []GatewayRoutePlugin `json:"plugins"`
 	Priority     int                  `json:"priority"`
 	Status       GatewayRouteStatus   `json:"status"`

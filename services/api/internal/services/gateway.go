@@ -15,12 +15,18 @@ import (
 
 // GatewayService handles gateway CRUD and K8s CRD synchronization.
 type GatewayService struct {
-	gwRepo    ports.GatewayRepository
-	appRepo   ports.AppRepository
-	planRepo  ports.UserPlanRepository
-	k8sClient k8sclient.Client
-	gwDomain  string // e.g. "gw.stage.freezenith.com"
-	namespace string // e.g. "zenith-apps"
+	gwRepo       ports.GatewayRepository
+	appRepo      ports.AppRepository
+	planRepo     ports.UserPlanRepository
+	authPoolRepo ports.AuthPoolRepository
+	k8sClient    k8sclient.Client
+	gwDomain     string // e.g. "gw.stage.freezenith.com"
+	namespace    string // e.g. "zenith-apps"
+}
+
+// SetAuthPoolRepo wires the auth pool repo (breaks import cycle).
+func (s *GatewayService) SetAuthPoolRepo(repo ports.AuthPoolRepository) {
+	s.authPoolRepo = repo
 }
 
 // NewGatewayService creates a new GatewayService.
@@ -176,6 +182,24 @@ func (s *GatewayService) CreateRoute(ctx context.Context, gwID string, route *en
 	route.GatewayID = gwID
 	route.AppSubdomain = app.Subdomain
 
+	// Validate auth pool ownership + status
+	if route.AuthPoolID != "" {
+		if s.authPoolRepo == nil {
+			return nil, fmt.Errorf("auth pool integration not configured")
+		}
+		pool, err := s.authPoolRepo.GetPool(ctx, route.AuthPoolID)
+		if err != nil {
+			return nil, fmt.Errorf("auth pool not found: %s", route.AuthPoolID)
+		}
+		if pool.UserID != gw.UserID {
+			return nil, fmt.Errorf("auth pool does not belong to you")
+		}
+		if pool.Status != entities.AuthPoolStatusActive {
+			return nil, fmt.Errorf("auth pool is not active (status: %s)", pool.Status)
+		}
+		route.Auth = entities.GatewayRouteAuthOIDC
+	}
+
 	// Validate plugins
 	if err := validatePlugins(route.Plugins); err != nil {
 		return nil, err
@@ -224,6 +248,24 @@ func (s *GatewayService) UpdateRoute(ctx context.Context, gwID, routeID string, 
 
 	route.ID = routeID
 	route.GatewayID = gwID
+
+	// Validate auth pool ownership + status
+	if route.AuthPoolID != "" {
+		if s.authPoolRepo == nil {
+			return nil, fmt.Errorf("auth pool integration not configured")
+		}
+		pool, err := s.authPoolRepo.GetPool(ctx, route.AuthPoolID)
+		if err != nil {
+			return nil, fmt.Errorf("auth pool not found: %s", route.AuthPoolID)
+		}
+		if pool.UserID != gw.UserID {
+			return nil, fmt.Errorf("auth pool does not belong to you")
+		}
+		if pool.Status != entities.AuthPoolStatusActive {
+			return nil, fmt.Errorf("auth pool is not active (status: %s)", pool.Status)
+		}
+		route.Auth = entities.GatewayRouteAuthOIDC
+	}
 
 	// Validate plugins
 	if err := validatePlugins(route.Plugins); err != nil {
@@ -416,6 +458,24 @@ func (s *GatewayService) syncApisixRoute(ctx context.Context, gw *entities.Gatew
 			plugins = append(plugins, plugin)
 		}
 
+		// Inject openid-connect plugin for auth pool-protected routes
+		if rt.AuthPoolID != "" && s.authPoolRepo != nil {
+			pool, _ := s.authPoolRepo.GetPool(ctx, rt.AuthPoolID)
+			if pool != nil && pool.Status == entities.AuthPoolStatusActive {
+				plugins = append(plugins, map[string]interface{}{
+					"name":   "openid-connect",
+					"enable": true,
+					"config": map[string]interface{}{
+						"client_id":     pool.ClientID,
+						"client_secret": pool.ClientSecret,
+						"discovery":     pool.IssuerURL + "/.well-known/openid-configuration",
+						"bearer_only":   true,
+						"realm":         pool.RealmName,
+					},
+				})
+			}
+		}
+
 		// Add proxy-rewrite if strip_prefix is enabled
 		if rt.StripPrefix {
 			plugins = append(plugins, map[string]interface{}{
@@ -472,6 +532,20 @@ func (s *GatewayService) syncApisixRoute(ctx context.Context, gw *entities.Gatew
 	// Delete then create for clean replacement
 	s.k8sClient.DeleteCRDWithVersion(ctx, "apisix.apache.org/v2", "ApisixRoute", s.namespace, name)
 	return s.k8sClient.CreateCRD(ctx, crd)
+}
+
+// HandleAuthPoolDeleted rebuilds CRDs for gateways affected by an auth pool deletion.
+func (s *GatewayService) HandleAuthPoolDeleted(ctx context.Context, gwIDs []string) {
+	for _, gwID := range gwIDs {
+		gw, err := s.gwRepo.GetGateway(ctx, gwID)
+		if err != nil {
+			continue
+		}
+		s.rebuildApisixRoute(ctx, gw)
+	}
+	if len(gwIDs) > 0 {
+		log.Printf("[gateway] HandleAuthPoolDeleted: rebuilt CRDs for %d gateways", len(gwIDs))
+	}
 }
 
 // validatePlugins checks that all plugins are in the allowlist.

@@ -36,20 +36,24 @@ func scanGateway(scanner interface{ Scan(dest ...any) error }) (*entities.Gatewa
 	return &g, nil
 }
 
-const gwRouteSelectCols = `id, gateway_id, name, path, methods, app_id, app_subdomain, strip_prefix, auth, plugins, priority, status, created_at, updated_at`
+const gwRouteSelectCols = `id, gateway_id, name, path, methods, app_id, app_subdomain, strip_prefix, auth, auth_pool_id, plugins, priority, status, created_at, updated_at`
 
 func scanGatewayRoute(scanner interface{ Scan(dest ...any) error }) (*entities.GatewayRoute, error) {
 	var r entities.GatewayRoute
 	var methodsStr string
 	var pluginsJSON []byte
+	var authPoolID *string
 	err := scanner.Scan(
 		&r.ID, &r.GatewayID, &r.Name, &r.Path, &methodsStr,
 		&r.AppID, &r.AppSubdomain, &r.StripPrefix, &r.Auth,
-		&pluginsJSON, &r.Priority, &r.Status,
+		&authPoolID, &pluginsJSON, &r.Priority, &r.Status,
 		&r.CreatedAt, &r.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if authPoolID != nil {
+		r.AuthPoolID = *authPoolID
 	}
 	r.Methods = strings.Split(methodsStr, ",")
 	if len(pluginsJSON) > 0 {
@@ -221,12 +225,17 @@ func (r *PostgresGatewayRepository) CreateRoute(ctx context.Context, route *enti
 	pluginsJSON, _ := json.Marshal(route.Plugins)
 	methodsStr := strings.Join(route.Methods, ",")
 
+	var authPoolParam interface{}
+	if route.AuthPoolID != "" {
+		authPoolParam = route.AuthPoolID
+	}
+
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO gateway_routes (id, gateway_id, name, path, methods, app_id, app_subdomain, strip_prefix, auth, plugins, priority, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+		`INSERT INTO gateway_routes (id, gateway_id, name, path, methods, app_id, app_subdomain, strip_prefix, auth, auth_pool_id, plugins, priority, status, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		route.ID, route.GatewayID, route.Name, route.Path, methodsStr,
 		route.AppID, route.AppSubdomain, route.StripPrefix, string(route.Auth),
-		pluginsJSON, route.Priority, string(route.Status), now, now,
+		authPoolParam, pluginsJSON, route.Priority, string(route.Status), now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_gw_routes_gw_name") {
@@ -299,12 +308,17 @@ func (r *PostgresGatewayRepository) UpdateRoute(ctx context.Context, route *enti
 	pluginsJSON, _ := json.Marshal(route.Plugins)
 	methodsStr := strings.Join(route.Methods, ",")
 
+	var authPoolParam interface{}
+	if route.AuthPoolID != "" {
+		authPoolParam = route.AuthPoolID
+	}
+
 	ct, err := r.pool.Exec(ctx,
 		`UPDATE gateway_routes SET name = $1, path = $2, methods = $3, app_id = $4, app_subdomain = $5,
-		 strip_prefix = $6, auth = $7, plugins = $8, priority = $9, status = $10, updated_at = $11
-		 WHERE id = $12`,
+		 strip_prefix = $6, auth = $7, auth_pool_id = $8, plugins = $9, priority = $10, status = $11, updated_at = $12
+		 WHERE id = $13`,
 		route.Name, route.Path, methodsStr, route.AppID, route.AppSubdomain,
-		route.StripPrefix, string(route.Auth), pluginsJSON, route.Priority, string(route.Status), now,
+		route.StripPrefix, string(route.Auth), authPoolParam, pluginsJSON, route.Priority, string(route.Status), now,
 		route.ID,
 	)
 	if err != nil {
@@ -389,4 +403,50 @@ func (r *PostgresGatewayRepository) StopRoutesByApp(ctx context.Context, appID s
 		}
 	}
 	return gwIDs, nil
+}
+
+func (r *PostgresGatewayRepository) ClearAuthPoolFromRoutes(ctx context.Context, authPoolID string) ([]string, error) {
+	now := time.Now()
+	rows, err := r.pool.Query(ctx,
+		`UPDATE gateway_routes SET auth_pool_id = NULL, auth = 'none', updated_at = $1 WHERE auth_pool_id = $2 RETURNING gateway_id`,
+		now, authPoolID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("clear auth pool from routes: %w", err)
+	}
+	defer rows.Close()
+
+	seen := make(map[string]bool)
+	var gwIDs []string
+	for rows.Next() {
+		var gwID string
+		if err := rows.Scan(&gwID); err != nil {
+			continue
+		}
+		if !seen[gwID] {
+			seen[gwID] = true
+			gwIDs = append(gwIDs, gwID)
+		}
+	}
+	return gwIDs, nil
+}
+
+func (r *PostgresGatewayRepository) ListRoutesByAuthPool(ctx context.Context, authPoolID string) ([]entities.GatewayRoute, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+gwRouteSelectCols+` FROM gateway_routes WHERE auth_pool_id = $1 ORDER BY created_at ASC`, authPoolID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list routes by auth pool: %w", err)
+	}
+	defer rows.Close()
+
+	var routes []entities.GatewayRoute
+	for rows.Next() {
+		rt, err := scanGatewayRoute(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan route: %w", err)
+		}
+		routes = append(routes, *rt)
+	}
+	return routes, nil
 }

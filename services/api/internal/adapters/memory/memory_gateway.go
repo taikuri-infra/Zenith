@@ -348,3 +348,36 @@ func (r *MemoryGatewayRepository) StopRoutesByApp(_ context.Context, appID strin
 	}
 	return gwIDs, nil
 }
+
+func (r *MemoryGatewayRepository) ClearAuthPoolFromRoutes(_ context.Context, authPoolID string) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	seen := make(map[string]bool)
+	var gwIDs []string
+	for _, rt := range r.routes {
+		if rt.AuthPoolID == authPoolID {
+			rt.AuthPoolID = ""
+			rt.Auth = entities.GatewayRouteAuthNone
+			rt.UpdatedAt = time.Now()
+			if !seen[rt.GatewayID] {
+				seen[rt.GatewayID] = true
+				gwIDs = append(gwIDs, rt.GatewayID)
+			}
+		}
+	}
+	return gwIDs, nil
+}
+
+func (r *MemoryGatewayRepository) ListRoutesByAuthPool(_ context.Context, authPoolID string) ([]entities.GatewayRoute, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var routes []entities.GatewayRoute
+	for _, rt := range r.routes {
+		if rt.AuthPoolID == authPoolID {
+			routes = append(routes, *rt)
+		}
+	}
+	return routes, nil
+}

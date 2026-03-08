@@ -1412,7 +1412,8 @@ export interface GatewayRouteInfo {
   app_id: string;
   app_subdomain: string;
   strip_prefix: boolean;
-  auth: "none" | "jwt" | "key-auth";
+  auth: "none" | "jwt" | "key-auth" | "oidc";
+  auth_pool_id?: string;
   plugins: GatewayRoutePlugin[];
   priority: number;
   status: "active" | "stopped";
@@ -1427,6 +1428,7 @@ export interface CreateRouteInput {
   app_id: string;
   strip_prefix?: boolean;
   auth?: string;
+  auth_pool_id?: string;
   plugins?: GatewayRoutePlugin[];
   priority?: number;
 }
@@ -1438,6 +1440,7 @@ export interface UpdateRouteInput {
   app_id?: string;
   strip_prefix?: boolean;
   auth?: string;
+  auth_pool_id?: string;
   plugins?: GatewayRoutePlugin[];
   priority?: number;
   status?: string;
@@ -1482,6 +1485,29 @@ export const gateways = {
     apiFetch<void>(`/api/v1/gateways/${gwId}/routes/${routeId}`, {
       method: "DELETE",
     }),
+};
+
+// ---- Auth Pools ----
+
+export interface AuthPool {
+  id: string;
+  user_id: string;
+  project_id: string;
+  name: string;
+  realm_name: string;
+  client_id: string;
+  client_secret: string;
+  issuer_url: string;
+  status: "provisioning" | "active" | "error" | "deleting";
+  user_count: number;
+  max_users: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const authPools = {
+  list: () => apiFetch<AuthPool[]>("/api/v1/auth-pools"),
+  get: (id: string) => apiFetch<AuthPool>(`/api/v1/auth-pools/${id}`),
 };
 
 // ---- WebSocket for real-time updates ----

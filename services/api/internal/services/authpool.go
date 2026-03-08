@@ -15,6 +15,14 @@ type AuthPoolService struct {
 	planRepo    ports.UserPlanRepository
 	idp         ports.IdentityProvider
 	keycloakURL string
+	gwRepo      ports.GatewayRepository
+	gwSvc       *GatewayService
+}
+
+// SetGatewayDependencies wires gateway repo and service (breaks import cycle).
+func (s *AuthPoolService) SetGatewayDependencies(gwRepo ports.GatewayRepository, gwSvc *GatewayService) {
+	s.gwRepo = gwRepo
+	s.gwSvc = gwSvc
 }
 
 // NewAuthPoolService creates a new AuthPoolService.
@@ -79,16 +87,34 @@ func (s *AuthPoolService) ListPools(ctx context.Context, userID string) ([]entit
 	return s.poolRepo.ListPoolsByUser(ctx, userID)
 }
 
-// DeletePool removes a pool and its Keycloak realm.
+// DeletePool removes a pool and its Keycloak realm, clearing any gateway routes that reference it.
 func (s *AuthPoolService) DeletePool(ctx context.Context, pool *entities.AuthPool) error {
 	_ = s.poolRepo.UpdatePoolStatus(ctx, pool.ID, entities.AuthPoolStatusDeleting)
+
+	// Clear auth pool references from gateway routes before deleting
+	var affectedGwIDs []string
+	if s.gwRepo != nil {
+		ids, err := s.gwRepo.ClearAuthPoolFromRoutes(ctx, pool.ID)
+		if err == nil {
+			affectedGwIDs = ids
+		}
+	}
 
 	if err := s.idp.DeleteRealm(ctx, pool.RealmName); err != nil {
 		_ = s.poolRepo.UpdatePoolStatus(ctx, pool.ID, entities.AuthPoolStatusError)
 		return fmt.Errorf("delete realm: %w", err)
 	}
 
-	return s.poolRepo.DeletePool(ctx, pool.ID)
+	if err := s.poolRepo.DeletePool(ctx, pool.ID); err != nil {
+		return err
+	}
+
+	// Rebuild CRDs for affected gateways
+	if s.gwSvc != nil && len(affectedGwIDs) > 0 {
+		s.gwSvc.HandleAuthPoolDeleted(ctx, affectedGwIDs)
+	}
+
+	return nil
 }
 
 // CreateUser creates a user in a pool's Keycloak realm.

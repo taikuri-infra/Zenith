@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { getApi } from "@/lib/get-api";
-import { type ApiGateway, type GatewayRouteInfo, type DeployApp } from "@/lib/api";
+import { type ApiGateway, type GatewayRouteInfo, type DeployApp, type AuthPool } from "@/lib/api";
 import { useState, useCallback } from "react";
 
 const methodColors: Record<string, string> = {
@@ -21,7 +21,7 @@ const methodColors: Record<string, string> = {
 };
 
 export default function GatewayPage() {
-  const { gateways, appsDeploy } = getApi();
+  const { gateways, appsDeploy, authPools } = getApi();
   const projectId = useProject();
 
   // Gateways list
@@ -35,6 +35,10 @@ export default function GatewayPage() {
   // User's apps (for route target dropdown)
   const { data: appsData } = useApi(() => appsDeploy.list(projectId || undefined), [projectId]);
   const userApps: DeployApp[] = appsData?.items ?? [];
+
+  // Auth pools (for route OIDC protection dropdown)
+  const { data: poolsData } = useApi(() => authPools.list(), []);
+  const pools: AuthPool[] = (poolsData ?? []).filter((p: AuthPool) => p.status === "active");
 
   // Selected gateway
   const [selectedGwId, setSelectedGwId] = useState<string | null>(null);
@@ -102,6 +106,7 @@ export default function GatewayPage() {
   const [routeAppId, setRouteAppId] = useState("");
   const [routeMethods, setRouteMethods] = useState<Record<string, boolean>>({ GET: true });
   const [routeStripPrefix, setRouteStripPrefix] = useState(false);
+  const [routeAuthPoolId, setRouteAuthPoolId] = useState("");
   const [addingRoute, setAddingRoute] = useState(false);
 
   const handleAddRoute = useCallback(async () => {
@@ -117,6 +122,7 @@ export default function GatewayPage() {
         methods,
         app_id: routeAppId,
         strip_prefix: routeStripPrefix,
+        ...(routeAuthPoolId ? { auth_pool_id: routeAuthPoolId } : {}),
       });
       setShowAddRoute(false);
       setRouteName("");
@@ -124,6 +130,7 @@ export default function GatewayPage() {
       setRouteAppId("");
       setRouteMethods({ GET: true });
       setRouteStripPrefix(false);
+      setRouteAuthPoolId("");
       routesRefetch();
       gwRefetch();
     } catch {
@@ -131,7 +138,7 @@ export default function GatewayPage() {
     } finally {
       setAddingRoute(false);
     }
-  }, [activeGw, routeName, routePath, routeAppId, routeMethods, routeStripPrefix, gateways, routesRefetch, gwRefetch]);
+  }, [activeGw, routeName, routePath, routeAppId, routeMethods, routeStripPrefix, routeAuthPoolId, gateways, routesRefetch, gwRefetch]);
 
   // Delete route
   const handleDeleteRoute = useCallback(async (routeId: string) => {
@@ -286,6 +293,11 @@ export default function GatewayPage() {
                           <td className="px-4 py-3 font-mono text-xs text-neutral-400">{route.app_subdomain}</td>
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-1">
+                              {route.auth === "oidc" && (
+                                <span className="inline-flex rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400">
+                                  OIDC
+                                </span>
+                              )}
                               {route.plugins.map((plugin, i) => (
                                 <span key={`${plugin.name}-${i}`} className="inline-flex rounded bg-surface-300 px-1.5 py-0.5 text-[10px] text-neutral-400">
                                   {plugin.name}
@@ -445,6 +457,26 @@ export default function GatewayPage() {
                 Strip path prefix before forwarding
               </label>
             </div>
+            {pools.length > 0 && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-neutral-400">Auth Pool (OIDC)</label>
+                <select
+                  value={routeAuthPoolId}
+                  onChange={(e) => setRouteAuthPoolId(e.target.value)}
+                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none"
+                >
+                  <option value="">None (no authentication)</option>
+                  {pools.map((pool) => (
+                    <option key={pool.id} value={pool.id}>
+                      {pool.name} ({pool.user_count} users)
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-neutral-600">
+                  Protect this route with OIDC — APISIX auto-validates JWT bearer tokens
+                </p>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-4">
               <button
                 type="button"

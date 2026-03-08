@@ -618,6 +618,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	authPoolSvc := services.NewAuthPoolService(authPoolRepo, planRepo, keycloakIDP, cfg.KeycloakURL)
+	gwSvc.SetAuthPoolRepo(authPoolRepo)
+	authPoolSvc.SetGatewayDependencies(gwRepo, gwSvc)
 	authPoolHandler := handlers.NewAuthPoolHandler(authPoolSvc, authPoolRepo)
 
 	authPools := protected.Group("/auth-pools")

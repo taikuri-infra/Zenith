@@ -166,6 +166,7 @@ func (h *GatewayHandler) CreateRoute(c *fiber.Ctx) error {
 		AppID       string                       `json:"app_id"`
 		StripPrefix bool                         `json:"strip_prefix"`
 		Auth        entities.GatewayRouteAuth    `json:"auth"`
+		AuthPoolID  string                       `json:"auth_pool_id"`
 		Plugins     []entities.GatewayRoutePlugin `json:"plugins"`
 		Priority    int                          `json:"priority"`
 	}
@@ -186,6 +187,7 @@ func (h *GatewayHandler) CreateRoute(c *fiber.Ctx) error {
 		AppID:       input.AppID,
 		StripPrefix: input.StripPrefix,
 		Auth:        input.Auth,
+		AuthPoolID:  input.AuthPoolID,
 		Plugins:     input.Plugins,
 		Priority:    input.Priority,
 	}
@@ -245,6 +247,7 @@ func (h *GatewayHandler) UpdateRoute(c *fiber.Ctx) error {
 		AppID       string                       `json:"app_id"`
 		StripPrefix bool                         `json:"strip_prefix"`
 		Auth        entities.GatewayRouteAuth    `json:"auth"`
+		AuthPoolID  string                       `json:"auth_pool_id"`
 		Plugins     []entities.GatewayRoutePlugin `json:"plugins"`
 		Priority    int                          `json:"priority"`
 		Status      entities.GatewayRouteStatus  `json:"status"`
@@ -260,6 +263,7 @@ func (h *GatewayHandler) UpdateRoute(c *fiber.Ctx) error {
 		AppID:       input.AppID,
 		StripPrefix: input.StripPrefix,
 		Auth:        input.Auth,
+		AuthPoolID:  input.AuthPoolID,
 		Plugins:     input.Plugins,
 		Priority:    input.Priority,
 		Status:      input.Status,

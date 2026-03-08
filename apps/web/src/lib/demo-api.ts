@@ -1318,6 +1318,13 @@ export const demoGateways = {
   deleteRoute: async () => { await delay(300); },
 };
 
+// ---- Auth Pools Demo ----
+
+const demoAuthPools = {
+  list: async () => { await delay(300); return []; },
+  get: async (id: string) => { await delay(300); return { id, user_id: "demo", project_id: "proj-1", name: "My Pool", realm_name: "zp-" + id, client_id: "zenith-pool-" + id, client_secret: "secret", issuer_url: "https://auth.example.com/realms/zp-" + id, status: "active" as const, user_count: 0, max_users: 1000, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" }; },
+};
+
 // Re-export as a unified object matching the real API import pattern
 export const demoApi = {
   auth: demoAuth,
@@ -1347,4 +1354,5 @@ export const demoApi = {
   billing: demoBilling,
   registry: demoRegistry,
   gateways: demoGateways,
+  authPools: demoAuthPools,
 };

@@ -293,6 +293,8 @@ type GatewayRepository interface {
 	CountRoutesByGateway(ctx context.Context, gatewayID string) (int, error)
 	CountRoutesByUser(ctx context.Context, userID string) (int, error)
 	StopRoutesByApp(ctx context.Context, appID string) ([]string, error) // returns affected gateway IDs
+	ClearAuthPoolFromRoutes(ctx context.Context, authPoolID string) ([]string, error) // returns affected gateway IDs
+	ListRoutesByAuthPool(ctx context.Context, authPoolID string) ([]entities.GatewayRoute, error)
 }
 
 // AutoscaleRepository defines autoscaler node and event persistence operations.
