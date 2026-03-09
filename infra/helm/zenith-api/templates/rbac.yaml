@@ -83,11 +83,35 @@ rules:
   # Tenant provisioning: cert-manager certificates
   - apiGroups: ["cert-manager.io"]
     resources: ["certificates"]
-    verbs: ["get", "create", "delete"]
-  # Tenant provisioning: ArgoCD applications
+    verbs: ["get", "list", "create", "delete"]
+  # Tenant provisioning + admin panel: ArgoCD applications
   - apiGroups: ["argoproj.io"]
     resources: ["applications"]
-    verbs: ["get", "create", "delete"]
+    verbs: ["get", "list", "create", "delete"]
+  # Admin panel: CNPG database clusters
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["clusters", "backups", "scheduledbackups"]
+    verbs: ["get", "list"]
+  # Admin panel: Velero backup schedules
+  - apiGroups: ["velero.io"]
+    resources: ["schedules", "backups"]
+    verbs: ["get", "list"]
+  # Admin panel: Kyverno security policies
+  - apiGroups: ["kyverno.io"]
+    resources: ["clusterpolicies", "policies"]
+    verbs: ["get", "list"]
+  # Admin panel: PVC storage overview
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list"]
+  # Admin panel: node/pod metrics
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  # Admin panel: node listing
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
