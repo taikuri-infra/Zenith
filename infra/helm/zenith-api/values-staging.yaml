@@ -40,7 +40,7 @@ ingress:
   host: api.stage.freezenith.com
   tlsSecret: staging-tls
   apisixEnabled: true
-  apisixCorsOrigins: "https://stage.freezenith.com,https://app.stage.freezenith.com"
+  apisixCorsOrigins: "https://stage.freezenith.com,https://app.stage.freezenith.com,https://ms.stage.freezenith.com,https://cloud.stage.freezenith.com"
 
 resources:
   requests:
