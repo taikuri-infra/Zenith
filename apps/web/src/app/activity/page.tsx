@@ -56,7 +56,7 @@ export default function ActivityPage() {
 
   const { data, loading, error, refetch } = useApi(() => activity.list(), []);
 
-  const events: ActivityEvent[] = data ?? [];
+  const events: ActivityEvent[] = Array.isArray(data) ? data : [];
 
   const filtered = useMemo(() => {
     let result = events;

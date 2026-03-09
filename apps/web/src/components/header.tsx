@@ -60,7 +60,7 @@ export function Header() {
     []
   );
 
-  const notifList: Notification[] = notifData ?? [];
+  const notifList: Notification[] = Array.isArray(notifData) ? notifData : [];
   const unreadCount = notifList.filter((n) => !n.read).length;
 
   const toggleUserMenu = () => {
