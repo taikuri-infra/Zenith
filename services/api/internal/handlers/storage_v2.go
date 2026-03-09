@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -52,7 +53,10 @@ func (h *StorageHandlerV2) Create(c *fiber.Ctx) error {
 
 	bucket, err := h.storageRepo.CreateBucket(c.Context(), appID, userID, &input)
 	if err != nil {
-		return fiber.NewError(fiber.StatusConflict, err.Error())
+		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	// Create real S3 bucket
@@ -176,7 +180,10 @@ func (h *StorageHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 
 	bucket, err := h.storageRepo.CreateBucket(c.Context(), "", userID, &input)
 	if err != nil {
-		return fiber.NewError(fiber.StatusConflict, err.Error())
+		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	// Create real S3 bucket

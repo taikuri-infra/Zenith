@@ -218,7 +218,7 @@ function OverviewTab({ app }: { app: DeployApp }) {
     ...(isWeb ? [{ label: "Subdomain", value: app.subdomain }] : []),
     ...(appType === "cron" && app.cron_schedule ? [{ label: "Schedule", value: app.cron_schedule }] : []),
     ...(app.command ? [{ label: "Command", value: app.command }] : []),
-    { label: "Repository", value: app.repo_url, isLink: true },
+    ...(app.repo_url ? [{ label: "Repository", value: app.repo_url, isLink: true }] : []),
     { label: "Branch", value: app.branch || "main" },
     { label: "Status", value: app.status },
   ];

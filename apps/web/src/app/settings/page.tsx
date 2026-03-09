@@ -8,6 +8,7 @@ import { useApi } from "@/hooks/use-api";
 import { useToast } from "@/components/toast";
 import { apiKeys, sessions, mfa, webhooks, ipWhitelist, compliance, autoscaler, type APIKey, type Session, type UserWebhook, type WebhookDelivery, type IPWhitelistEntry, type ComplianceCheck, type AutoscalerStatus, type HetznerNode, type AutoscaleEvent } from "@/lib/api";
 import { useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import {
   KeyRound,
   Monitor,
@@ -311,6 +312,7 @@ function APIKeysTab() {
 }
 
 function MFATab() {
+  const { toast } = useToast();
   const { data, loading, error, refetch } = useApi(() => mfa.getStatus(), []);
   const [enabling, setEnabling] = useState(false);
   const [enrollData, setEnrollData] = useState<{ secret: string; otpauth_uri: string; backup_codes: string[] } | null>(null);
@@ -335,7 +337,7 @@ function MFATab() {
       const result = await mfa.enable();
       setEnrollData(result);
     } catch {
-      // Plan restriction or error
+      toast("error", "Failed to enable MFA. Pro plan or higher required.");
     } finally {
       setEnabling(false);
     }
@@ -348,9 +350,10 @@ function MFATab() {
       await mfa.verify(verifyCode);
       setEnrollData(null);
       setVerifyCode("");
+      toast("success", "MFA enabled successfully");
       refetch();
     } catch {
-      // Invalid code
+      toast("error", "Invalid verification code. Please try again.");
     } finally {
       setVerifying(false);
     }
@@ -363,9 +366,10 @@ function MFATab() {
       await mfa.disable(disableCode);
       setShowDisable(false);
       setDisableCode("");
+      toast("success", "MFA disabled");
       refetch();
     } catch {
-      // Invalid code
+      toast("error", "Invalid code. Please try again.");
     } finally {
       setDisabling(false);
     }
@@ -377,7 +381,7 @@ function MFATab() {
       const result = await mfa.regenerateBackupCodes();
       setNewBackupCodes(result.backup_codes);
     } catch {
-      // Error
+      toast("error", "Failed to regenerate backup codes");
     } finally {
       setRegenerating(false);
     }
@@ -396,6 +400,11 @@ function MFATab() {
           <p className="text-xs text-neutral-400">
             Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password), or enter the secret manually.
           </p>
+          {enrollData.otpauth_uri && (
+            <div className="flex justify-center rounded-lg bg-white p-4">
+              <QRCodeSVG value={enrollData.otpauth_uri} size={200} />
+            </div>
+          )}
           <div className="rounded-lg bg-surface-200 p-4">
             <p className="mb-1 text-[10px] font-medium text-neutral-500 uppercase">Manual entry secret</p>
             <code className="block font-mono text-sm text-accent-400 break-all">{enrollData.secret}</code>

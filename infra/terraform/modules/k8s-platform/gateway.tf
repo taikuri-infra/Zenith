@@ -196,6 +196,12 @@ resource "helm_release" "external_dns" {
     value = "zenith-${var.environment}"
   }
 
+  # Traefik 3.x only ships traefik.io CRDs — disable legacy containo.us watch
+  set {
+    name  = "extraArgs.traefik-disable-legacy"
+    value = ""
+  }
+
   set {
     name  = "resources.requests.cpu"
     value = "25m"

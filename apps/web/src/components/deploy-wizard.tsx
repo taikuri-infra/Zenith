@@ -297,6 +297,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
           }),
       });
 
+      toast("success", "Application deployed successfully! Build is starting...");
       onClose();
     } catch {
       toast("error", "Failed to deploy application");

@@ -11,6 +11,7 @@ import { demoApi } from "@/lib/demo-api";
 import type { DatabaseCluster, DatabaseStats } from "@/lib/api";
 import { useApi, useApiWithFallback } from "@/hooks/use-api";
 import { Database } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 function dbStatusBadge(status: string): "healthy" | "warning" | "error" | "idle" {
   switch (status) {
@@ -28,6 +29,7 @@ function dbStatusBadge(status: string): "healthy" | "warning" | "error" | "idle"
 }
 
 export default function DatabasesPage() {
+  const router = useRouter();
   const apiClient = getApi();
   const stats = useApiWithFallback<DatabaseStats>(
     () => apiClient.databases.stats(),
@@ -88,7 +90,7 @@ export default function DatabasesPage() {
               </thead>
               <tbody>
                 {clusters.map((db) => (
-                  <tr key={`${db.namespace}-${db.name}`} className="border-b border-border last:border-0 transition-colors hover:bg-surface-200">
+                  <tr key={`${db.namespace}-${db.name}`} onClick={() => router.push(`/databases/${db.name}`)} className="border-b border-border last:border-0 transition-colors hover:bg-surface-200 cursor-pointer">
                     <td className="px-4 py-3">
                       <span className="font-medium text-white">{db.name}</span>
                       {db.pgVersion && (

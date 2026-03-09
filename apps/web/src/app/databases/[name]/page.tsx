@@ -11,7 +11,7 @@ import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { Copy, Check, Eye, EyeOff, RotateCw, Download, AlertTriangle, Table2, Info } from "lucide-react";
+import { Copy, Check, Eye, EyeOff, RotateCw, Download, AlertTriangle, Table2, Info, Trash2, ArrowLeft } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { DatabaseExplorer } from "@/components/database-explorer";
 import Link from "next/link";
@@ -69,6 +69,8 @@ export default function DatabaseDetailPage() {
   const [resetting, setResetting] = useState(false);
 
   const [newConnStr, setNewConnStr] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const handleResetPassword = async () => {
     setResetting(true);
@@ -80,6 +82,19 @@ export default function DatabaseDetailPage() {
       toast("error", "Failed to reset database password");
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await standaloneDatabases.delete(dbId);
+      toast("success", "Database deleted");
+      window.location.href = "/databases";
+    } catch {
+      toast("error", "Failed to delete database");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -184,6 +199,22 @@ export default function DatabaseDetailPage() {
                 )}
               </p>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/databases"
+              className="flex items-center gap-1.5 rounded-md border border-border bg-surface-200 px-3 py-1.5 text-xs text-neutral-400 hover:bg-surface-300 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              Back
+            </Link>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete
+            </button>
           </div>
         </div>
 
@@ -318,6 +349,39 @@ export default function DatabaseDetailPage() {
               >
                 {resetting && <RotateCw className="h-4 w-4 animate-spin" />}
                 {resetting ? "Resetting..." : "Reset Password"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <Modal title="Delete Database" onClose={() => setShowDeleteModal(false)}>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3">
+              <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-300">This action is irreversible</p>
+                <p className="text-xs text-red-400/70 mt-0.5">
+                  The database <strong>{db.name}</strong> and all its data will be permanently deleted.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {deleting && <RotateCw className="h-4 w-4 animate-spin" />}
+                {deleting ? "Deleting..." : "Delete Database"}
               </button>
             </div>
           </div>

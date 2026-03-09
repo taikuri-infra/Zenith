@@ -70,7 +70,7 @@ const navSections: NavSection[] = [
   {
     label: "NETWORKING",
     items: [
-      { name: "Gateway", href: "/gateway", icon: Network, saasOnly: true },
+      { name: "API Gateway", href: "/gateway", icon: Network, saasOnly: true },
       { name: "Domains", href: "/networking", icon: Globe },
     ],
   },

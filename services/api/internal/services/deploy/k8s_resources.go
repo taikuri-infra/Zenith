@@ -132,6 +132,7 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 								"allowPrivilegeEscalation": false,
 								"capabilities": map[string]interface{}{
 									"drop": []string{"ALL"},
+									"add":  []string{"CHOWN", "SETUID", "SETGID", "NET_BIND_SERVICE"},
 								},
 							},
 							"resources": map[string]interface{}{

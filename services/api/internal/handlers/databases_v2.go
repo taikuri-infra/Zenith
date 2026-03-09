@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -75,7 +76,13 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 	if h.dbSvc != nil {
 		db, err := h.dbSvc.ProvisionDatabase(c.Context(), appID, userID, &input)
 		if err != nil {
-			return fiber.NewError(fiber.StatusConflict, err.Error())
+			if strings.Contains(err.Error(), "not available on the") {
+				return fiber.NewError(fiber.StatusForbidden, err.Error())
+			}
+			if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+				return fiber.NewError(fiber.StatusConflict, err.Error())
+			}
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 		}
 		pw, connStr := h.fetchCredentials(c.Context(), db)
 		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, pw, connStr))
@@ -84,7 +91,10 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 	// Fallback: metadata-only (dev mode, no CNPG)
 	db, err := h.dbRepo.CreateDatabase(c.Context(), appID, userID, &input)
 	if err != nil {
-		return fiber.NewError(fiber.StatusConflict, err.Error())
+		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	// Auto-inject connection string from memory repo (dev mode)
@@ -186,7 +196,13 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 	if h.dbSvc != nil {
 		db, err := h.dbSvc.ProvisionDatabase(c.Context(), "", userID, &input)
 		if err != nil {
-			return fiber.NewError(fiber.StatusConflict, err.Error())
+			if strings.Contains(err.Error(), "not available on the") {
+				return fiber.NewError(fiber.StatusForbidden, err.Error())
+			}
+			if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+				return fiber.NewError(fiber.StatusConflict, err.Error())
+			}
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 		}
 		pw, connStr := h.fetchCredentials(c.Context(), db)
 		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, pw, connStr))
@@ -195,7 +211,10 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 	// Fallback: metadata-only (dev mode)
 	db, err := h.dbRepo.CreateDatabase(c.Context(), "", userID, &input)
 	if err != nil {
-		return fiber.NewError(fiber.StatusConflict, err.Error())
+		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	pw, connStr := h.fetchCredentials(c.Context(), db)
