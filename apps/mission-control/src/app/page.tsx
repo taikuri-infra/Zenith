@@ -3,332 +3,186 @@
 import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
-import { ProgressBar } from "@/components/progress-bar";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
-import {
-  StatCardRowSkeleton,
-  TableSkeleton,
-  ActivityListSkeleton,
-  Skeleton,
-} from "@/components/loading-skeleton";
+import { StatCardRowSkeleton, Skeleton } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
-import type { Cluster, Module, AuditEntry, PlatformUpdate, CustomerStats, PlatformUsageSummary } from "@/lib/api";
+import type { WarRoomData, ServiceHealthItem } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
-import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import {
+  ArrowUpRight,
+  AlertTriangle,
+} from "lucide-react";
 
-export default function DashboardPage() {
+export default function WarRoomPage() {
   const apiClient = getApi();
+  const warRoom = useApi<WarRoomData>(() => apiClient.warRoom.get());
+  const services = useApi<ServiceHealthItem[]>(() => apiClient.services.list());
 
-  const clusters = useApi<Cluster[]>(() => apiClient.clusters.list());
-  const modules = useApi<Module[]>(() => apiClient.modules.list());
-  const audit = useApi<AuditEntry[]>(() => apiClient.audit.list({ limit: 4 }));
-  const platformUpdate = useApi<PlatformUpdate>(() => apiClient.updates.check());
-  const dashboardStats = useApi(() => apiClient.dashboard.stats());
-  const customerStats = useApi<CustomerStats>(() => apiClient.customers.stats());
-  const platformUsage = useApi<PlatformUsageSummary>(() => apiClient.dashboard.usage());
-
-  const updatesAvailable = modules.data
-    ? modules.data.filter((m) => m.status === "update_available").length
-    : 0;
+  const kpis = warRoom.data?.kpis;
 
   return (
     <Shell>
       <div className="space-y-6">
-        {/* Page title */}
-        <h1 className="text-lg font-semibold text-white">Platform Overview</h1>
+        <h1 className="text-lg font-semibold text-white">Command Center</h1>
 
-        {/* Stat cards */}
-        {dashboardStats.loading ? (
-          <StatCardRowSkeleton />
-        ) : dashboardStats.error ? (
-          <ErrorState error={dashboardStats.error} onRetry={dashboardStats.refetch} />
-        ) : dashboardStats.data ? (
-          <div className="grid grid-cols-4 gap-4">
-            <StatCard
-              label="Clusters"
-              value={dashboardStats.data.clusterCount}
-              sub={dashboardStats.data.allHealthy ? "all healthy" : "issues detected"}
-              alert={!dashboardStats.data.allHealthy}
-            />
-            <StatCard
-              label="Customers"
-              value={customerStats.data?.totalCustomers ?? dashboardStats.data.tenantCount}
-              sub={`${customerStats.data?.activeCustomers ?? dashboardStats.data.activeToday} active`}
-            />
+        {/* KPI Row */}
+        {warRoom.loading ? (
+          <StatCardRowSkeleton count={6} />
+        ) : warRoom.error ? (
+          <ErrorState error={warRoom.error} onRetry={warRoom.refetch} />
+        ) : kpis ? (
+          <div className="grid grid-cols-6 gap-3">
             <StatCard
               label="MRR"
-              value={customerStats.data?.mrr ?? dashboardStats.data.monthlyCost}
-              sub={`${customerStats.data?.newThisMonth ?? 0} new this month`}
+              value={`€${kpis.mrr.toLocaleString()}`}
+              sub={kpis.mrrTrend >= 0 ? `+${kpis.mrrTrend.toFixed(1)}%` : `${kpis.mrrTrend.toFixed(1)}%`}
             />
             <StatCard
-              label="Updates"
-              value={updatesAvailable}
-              sub={`${updatesAvailable} available`}
-              alert={updatesAvailable > 0}
+              label="Active Customers"
+              value={kpis.activeCustomers}
+              sub={`of ${kpis.totalCustomers} total`}
+            />
+            <StatCard
+              label="New Signups"
+              value={kpis.newSignups}
+              sub="this month"
+            />
+            <StatCard
+              label="Churn Rate"
+              value={`${kpis.churnRate.toFixed(1)}%`}
+              sub="monthly"
+              alert={kpis.churnRate > 5}
+            />
+            <StatCard
+              label="Avg Response"
+              value={kpis.avgResponseTime || "—"}
+              sub="support SLA"
+            />
+            <StatCard
+              label="Health Score"
+              value={kpis.healthScore}
+              sub="out of 100"
+              alert={kpis.healthScore < 70}
             />
           </div>
         ) : null}
 
-        {/* Clusters table */}
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-white">Clusters</h2>
-            <Link
-              href="/clusters"
-              className="flex items-center gap-1 text-xs text-neutral-500 transition-colors hover:text-white"
-            >
-              View all <ArrowUpRight className="h-3 w-3" />
-            </Link>
+        {/* Charts Row */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-lg border border-border bg-surface-100 p-4">
+            <h2 className="mb-3 text-sm font-medium text-white">Revenue Trend</h2>
+            <div className="flex h-48 items-center justify-center text-neutral-500 text-sm">
+              Revenue chart — data from /analytics/revenue
+            </div>
           </div>
-          {clusters.loading ? (
-            <TableSkeleton columns={6} rows={3} />
-          ) : clusters.error ? (
-            <ErrorState error={clusters.error} onRetry={clusters.refetch} />
-          ) : !clusters.data || clusters.data.length === 0 ? (
-            <EmptyState
-              title="No clusters"
-              description="No clusters have been created yet."
-            />
-          ) : (
-            <div className="overflow-hidden rounded-lg border border-border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface-100">
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                      Name
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                      K8s
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                      Nodes
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                      CPU
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                      RAM
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clusters.data.map((cluster) => (
-                    <tr
-                      key={cluster.name}
-                      className="border-b border-border last:border-0 transition-colors hover:bg-surface-200"
-                    >
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/clusters/${cluster.name}`}
-                          className="font-medium text-white hover:text-accent-400 transition-colors"
-                        >
-                          {cluster.name}
-                        </Link>
-                        <span className="ml-2 text-xs text-neutral-500">
-                          {cluster.region}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-neutral-400">
-                        {cluster.k8sVersion}
-                        {cluster.upgradeAvailable && (
-                          <span className="ml-1.5 text-amber-400">&#9888;</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-neutral-300">
-                        {cluster.nodes}
-                      </td>
-                      <td className="w-36 px-4 py-3">
-                        <ProgressBar
-                          percent={cluster.cpuPercent}
-                          label={`${cluster.cpuPercent}%`}
-                        />
-                      </td>
-                      <td className="w-36 px-4 py-3">
-                        <ProgressBar
-                          percent={cluster.ramPercent}
-                          label={`${cluster.ramPercent}%`}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={cluster.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="rounded-lg border border-border bg-surface-100 p-4">
+            <h2 className="mb-3 text-sm font-medium text-white">Customer Growth</h2>
+            <div className="flex h-48 items-center justify-center text-neutral-500 text-sm">
+              Growth chart — data from /analytics/growth
             </div>
-          )}
-        </section>
+          </div>
+        </div>
 
-        {/* Platform Resource Usage */}
-        {platformUsage.loading ? (
-          <StatCardRowSkeleton />
-        ) : platformUsage.data ? (
-          <section>
-            <h2 className="mb-3 text-sm font-medium text-white">Platform Resource Usage</h2>
-            <div className="grid grid-cols-4 gap-4">
-              <StatCard
-                label="Total CPU"
-                value={`${platformUsage.data.totalCpu} cores`}
-                sub={`${platformUsage.data.customersReporting} customers reporting`}
-              />
-              <StatCard
-                label="Total RAM"
-                value={`${platformUsage.data.totalRam} GB`}
-                sub="across all customers"
-              />
-              <StatCard
-                label="Total Storage"
-                value={`${platformUsage.data.totalStorage} GB`}
-                sub="DB + volumes"
-              />
-              <StatCard
-                label="Reporting"
-                value={platformUsage.data.customersReporting}
-                sub="customers with metering"
-              />
-            </div>
-          </section>
-        ) : null}
-
-        {/* Two columns: Updates + Activity */}
-        <div className="grid grid-cols-2 gap-6">
-          {/* Available Updates */}
-          <section>
+        {/* 3-Column Row */}
+        <div className="grid grid-cols-3 gap-4">
+          {/* Service Health */}
+          <div className="rounded-lg border border-border bg-surface-100 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-medium text-white">
-                Available Updates
-              </h2>
-              <Link
-                href="/updates"
-                className="flex items-center gap-1 text-xs text-neutral-500 transition-colors hover:text-white"
-              >
+              <h2 className="text-sm font-medium text-white">Services</h2>
+              <Link href="/services" className="flex items-center gap-1 text-xs text-neutral-500 hover:text-white">
                 View all <ArrowUpRight className="h-3 w-3" />
               </Link>
             </div>
-            {platformUpdate.loading || modules.loading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-12 w-full rounded-lg" />
-                <Skeleton className="h-12 w-full rounded-lg" />
-                <Skeleton className="h-12 w-full rounded-lg" />
+            {services.loading ? (
+              <div className="space-y-1.5">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-7 w-full rounded" />
+                ))}
               </div>
-            ) : platformUpdate.error ? (
-              <ErrorState
-                error={platformUpdate.error}
-                onRetry={platformUpdate.refetch}
-              />
-            ) : (
-              <div className="space-y-2">
-                {/* Platform update */}
-                {platformUpdate.data && (
-                  <div className="rounded-lg border border-accent-600/30 bg-accent-600/5 p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded bg-accent-600/20 px-1.5 py-0.5 text-[10px] font-medium text-accent-400">
-                          NEW
-                        </span>
-                        <span className="text-sm font-medium text-white">
-                          Zenith {platformUpdate.data.version}
-                        </span>
-                      </div>
-                      <span className="text-xs text-neutral-500">
-                        Current: {platformUpdate.data.current}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Module updates */}
-                {modules.data
-                  ?.filter((m) => m.status === "update_available")
-                  .map((mod) => (
-                    <div
-                      key={mod.name}
-                      className="flex items-center justify-between rounded-lg border border-border bg-surface-100 p-3"
-                    >
-                      <div>
-                        <span className="text-sm text-white">{mod.name}</span>
-                        <span className="ml-2 text-xs text-neutral-500">
-                          {mod.installed} &rarr; {mod.latest}
-                        </span>
-                      </div>
-                      <Link
-                        href={`/modules/${encodeURIComponent(mod.name)}`}
-                        className="text-xs text-accent-400 hover:text-accent-300"
-                      >
-                        View
-                      </Link>
-                    </div>
-                  ))}
-
-                {!platformUpdate.data &&
-                  (!modules.data ||
-                    modules.data.filter((m) => m.status === "update_available")
-                      .length === 0) && (
-                    <EmptyState
-                      title="All up to date"
-                      description="No updates are available at this time."
-                    />
-                  )}
-              </div>
-            )}
-          </section>
-
-          {/* Recent Activity */}
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-medium text-white">
-                Recent Activity
-              </h2>
-              <Link
-                href="/audit"
-                className="flex items-center gap-1 text-xs text-neutral-500 transition-colors hover:text-white"
-              >
-                View all <ArrowUpRight className="h-3 w-3" />
-              </Link>
-            </div>
-            {audit.loading ? (
-              <ActivityListSkeleton rows={4} />
-            ) : audit.error ? (
-              <ErrorState error={audit.error} onRetry={audit.refetch} />
-            ) : !audit.data || audit.data.length === 0 ? (
-              <EmptyState
-                title="No activity"
-                description="No audit events have been recorded yet."
-              />
-            ) : (
-              <div className="space-y-0 rounded-lg border border-border bg-surface-100">
-                {audit.data.map((entry, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-3 border-b border-border px-3 py-2.5 last:border-0"
-                  >
-                    <span className="mt-px font-mono text-xs text-neutral-500">
-                      {entry.time}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-sm text-neutral-300">
-                        <span className="font-medium text-white">
-                          {entry.actor}
-                        </span>{" "}
-                        {entry.action}
-                      </span>
-                      {entry.cluster && (
-                        <span className="ml-1.5 text-xs text-neutral-500">
-                          on {entry.cluster}
-                        </span>
-                      )}
-                    </div>
+            ) : services.data ? (
+              <div className="grid grid-cols-2 gap-1.5">
+                {services.data.slice(0, 12).map((svc) => (
+                  <div key={svc.name} className="flex items-center gap-1.5 rounded px-2 py-1">
+                    <div className={`h-1.5 w-1.5 rounded-full ${
+                      svc.status === "healthy" ? "bg-emerald-400" :
+                      svc.status === "degraded" ? "bg-amber-400" :
+                      svc.status === "down" ? "bg-red-400" : "bg-neutral-500"
+                    }`} />
+                    <span className="truncate text-xs text-neutral-300">{svc.name}</span>
                   </div>
                 ))}
               </div>
+            ) : null}
+          </div>
+
+          {/* Recent Alerts */}
+          <div className="rounded-lg border border-border bg-surface-100 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-medium text-white">Alerts</h2>
+              <Link href="/alerts" className="flex items-center gap-1 text-xs text-neutral-500 hover:text-white">
+                View all <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </div>
+            {warRoom.data?.recentAlerts && warRoom.data.recentAlerts.length > 0 ? (
+              <div className="space-y-2">
+                {warRoom.data.recentAlerts.slice(0, 5).map((alert, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs">
+                    <AlertTriangle className={`mt-0.5 h-3 w-3 flex-shrink-0 ${
+                      alert.severity === "critical" ? "text-red-400" : "text-amber-400"
+                    }`} />
+                    <span className="text-neutral-300">{alert.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No alerts" description="All systems nominal." />
             )}
-          </section>
+          </div>
+
+          {/* Active Tickets */}
+          <div className="rounded-lg border border-border bg-surface-100 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-medium text-white">Active Tickets</h2>
+              <Link href="/support" className="flex items-center gap-1 text-xs text-neutral-500 hover:text-white">
+                View all <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </div>
+            {warRoom.data?.activeTickets && warRoom.data.activeTickets.length > 0 ? (
+              <div className="space-y-2">
+                {warRoom.data.activeTickets.map((ticket) => (
+                  <Link key={ticket.id} href={`/support/${ticket.id}`} className="block rounded-md border border-border bg-surface-200 px-3 py-2 hover:bg-surface-300 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white truncate">{ticket.subject}</span>
+                      <StatusBadge status={ticket.priority === "critical" ? "error" : ticket.priority === "high" ? "warning" : "healthy"} />
+                    </div>
+                    <span className="text-[10px] text-neutral-500">{ticket.age}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No tickets" description="All tickets resolved." />
+            )}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="flex gap-3">
+          {[
+            { label: "New Customer", href: "/customers/new" },
+            { label: "View Logs", href: "/logs" },
+            { label: "Check Backups", href: "/backups" },
+            { label: "Security Scan", href: "/security" },
+          ].map((action) => (
+            <Link
+              key={action.href}
+              href={action.href}
+              className="rounded-md border border-border bg-surface-100 px-4 py-2 text-xs text-neutral-400 hover:bg-surface-200 hover:text-white transition-colors"
+            >
+              {action.label}
+            </Link>
+          ))}
         </div>
       </div>
     </Shell>

@@ -7,9 +7,9 @@ import { api } from "./api";
 import { demoApi } from "./demo-api";
 import { DEMO_MODE } from "./runtime-env";
 
-export function getApi() {
+export function getApi(): typeof api {
   if (DEMO_MODE) {
-    return demoApi;
+    return demoApi as unknown as typeof api;
   }
   return api;
 }

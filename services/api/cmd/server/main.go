@@ -1220,6 +1220,99 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	admin.Put("/settings", adminHandler.UpdateSettings)
 	admin.Patch("/settings", adminHandler.UpdateSettings)
 
+	// ── Mission Control v2 handlers ──
+
+	// War Room + Analytics
+	analyticsHandler := handlers.NewAdminAnalyticsHandler(pool, userRepo)
+	admin.Get("/war-room", analyticsHandler.GetWarRoom)
+	admin.Get("/analytics/revenue", analyticsHandler.GetRevenue)
+	admin.Get("/analytics/growth", analyticsHandler.GetGrowth)
+	admin.Get("/analytics/usage", analyticsHandler.GetUsageAnalytics)
+	admin.Get("/analytics/cohorts", analyticsHandler.GetCohorts)
+
+	// CRM Pipeline
+	crmHandler := handlers.NewAdminCRMHandler(pool)
+	admin.Get("/crm/pipeline", crmHandler.GetPipeline)
+	admin.Get("/crm/health-scores", crmHandler.GetHealthScores)
+	admin.Post("/crm/customers/:id/notes", crmHandler.SaveNote)
+	admin.Get("/crm/customers/:id/notes", crmHandler.GetNotes)
+	admin.Put("/crm/customers/:id/tags", crmHandler.UpdateTags)
+
+	// Services Health
+	servicesHandler := handlers.NewAdminServicesHandler(k8sClient)
+	admin.Get("/services", servicesHandler.ListServices)
+	admin.Get("/services/:name", servicesHandler.GetService)
+	admin.Post("/services/:name/restart", servicesHandler.RestartService)
+
+	// Observability (Grafana, Loki, Prometheus, Tempo proxying)
+	observabilityHandler := handlers.NewAdminObservabilityHandler(
+		cfg.GrafanaURL, cfg.LokiURL, cfg.PrometheusURL, cfg.TempoURL,
+	)
+	admin.Get("/observability/dashboards", observabilityHandler.ListDashboards)
+	admin.Post("/observability/logs/query", observabilityHandler.QueryLogs)
+	admin.Get("/observability/logs/labels", observabilityHandler.GetLogLabels)
+	admin.Get("/observability/alerts", observabilityHandler.ListAlerts)
+	admin.Get("/observability/alerts/stats", observabilityHandler.GetAlertStats)
+	admin.Get("/observability/alerts/rules", observabilityHandler.ListAlertRules)
+	admin.Post("/observability/alerts/silence", observabilityHandler.CreateSilence)
+	admin.Get("/observability/traces", observabilityHandler.SearchTraces)
+	admin.Get("/observability/traces/:id", observabilityHandler.GetTrace)
+
+	// Security Ops
+	securityHandler := handlers.NewAdminSecurityHandler(pool, k8sClient)
+	admin.Get("/security/posture", securityHandler.GetPosture)
+	admin.Get("/security/policies", securityHandler.ListPolicies)
+	admin.Get("/security/policies/stats", securityHandler.GetPolicyStats)
+	admin.Get("/security/falco/alerts", securityHandler.ListFalcoAlerts)
+	admin.Get("/security/rate-limits", securityHandler.GetRateLimits)
+	admin.Get("/security/images", securityHandler.ListImages)
+	admin.Get("/security/images/stats", securityHandler.GetImageStats)
+	admin.Post("/security/images/:name/scan", securityHandler.TriggerImageScan)
+	admin.Get("/security/sessions", securityHandler.ListSessions)
+	admin.Delete("/security/sessions/:id", securityHandler.TerminateSession)
+
+	// Platform Ops (Backups, GitOps, Registry, Databases, Storage, Networking, Quality)
+	platformOpsHandler := handlers.NewAdminPlatformOpsHandler(pool, k8sClient)
+	admin.Get("/backups", platformOpsHandler.GetBackups)
+	admin.Get("/backups/stats", platformOpsHandler.GetBackupStats)
+	admin.Get("/backups/velero", platformOpsHandler.ListVeleroSchedules)
+	admin.Get("/backups/cnpg", platformOpsHandler.ListCNPGBackups)
+	admin.Post("/backups/trigger", platformOpsHandler.TriggerBackup)
+	admin.Get("/gitops/apps", platformOpsHandler.ListArgoApps)
+	admin.Get("/gitops/stats", platformOpsHandler.GetGitOpsStats)
+	admin.Post("/gitops/apps/:name/sync", platformOpsHandler.SyncArgoApp)
+	admin.Get("/gitops/apps/:name/history", platformOpsHandler.GetArgoAppHistory)
+	admin.Get("/registry/projects", platformOpsHandler.ListRegistryProjects)
+	admin.Get("/registry/stats", platformOpsHandler.GetRegistryStats)
+	admin.Get("/registry/projects/:name/repos", platformOpsHandler.ListRegistryRepos)
+	admin.Get("/databases", platformOpsHandler.ListDatabaseClusters)
+	admin.Get("/databases/stats", platformOpsHandler.GetDatabaseStats)
+	admin.Get("/databases/:name", platformOpsHandler.GetDatabaseCluster)
+	admin.Get("/storage/s3", platformOpsHandler.ListS3Buckets)
+	admin.Get("/storage/volumes", platformOpsHandler.ListVolumes)
+	admin.Get("/storage/stats", platformOpsHandler.GetStorageStats)
+	admin.Get("/networking/dns", platformOpsHandler.ListDNSRecords)
+	admin.Get("/networking/routes", platformOpsHandler.ListRoutes)
+	admin.Get("/networking/certificates", platformOpsHandler.ListCertificates)
+	admin.Get("/quality/metrics", platformOpsHandler.GetQualityMetrics)
+	admin.Get("/quality/tickets", platformOpsHandler.GetQualityTickets)
+
+	// Admin Proxy (authenticated reverse proxy to internal services)
+	proxyHandler := handlers.NewAdminProxyHandler(map[string]string{
+		"grafana":  cfg.GrafanaURL,
+		"argocd":   "http://argocd-server.zenith-platform.svc.cluster.local:443",
+		"harbor":   cfg.HarborURL,
+		"keycloak": cfg.KeycloakURL,
+	})
+	admin.All("/proxy/:service/*", proxyHandler.Proxy)
+
+	// Admin RBAC (admin user roles and permissions)
+	rbacHandler := handlers.NewAdminRBACHandler(pool, userRepo)
+	admin.Get("/admin-users", rbacHandler.ListAdminUsers)
+	admin.Post("/admin-users", rbacHandler.InviteAdminUser)
+	admin.Put("/admin-users/:id/role", rbacHandler.UpdateAdminRole)
+	admin.Delete("/admin-users/:id", rbacHandler.RemoveAdminUser)
+
 	// Hetzner Autoscaler (Phase 5 — SaaS only)
 	var as *autoscale.Autoscaler
 	if cfg.Mode == "saas" {

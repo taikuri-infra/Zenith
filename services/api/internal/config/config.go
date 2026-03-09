@@ -88,9 +88,11 @@ type Config struct {
 	// CNPG Admin DSN (for CREATE DATABASE in shared cluster)
 	CNPGAdminDSN string
 
-	// Monitoring (Prometheus + Loki)
+	// Monitoring (Prometheus + Loki + Grafana + Tempo)
 	PrometheusURL string
 	LokiURL       string
+	GrafanaURL    string
+	TempoURL      string
 
 	// Redis (rate limiting + token blacklist)
 	RedisURL string // REDIS_URL: "redis://host:6379/0" (empty = in-memory fallback)
@@ -170,6 +172,8 @@ func Load() *Config {
 		CNPGAdminDSN:          getEnv("CNPG_ADMIN_DSN", ""),
 		PrometheusURL:         getEnv("PROMETHEUS_URL", "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"),
 		LokiURL:              getEnv("LOKI_URL", "http://loki.monitoring.svc.cluster.local:3100"),
+		GrafanaURL:           getEnv("GRAFANA_URL", "http://grafana.monitoring.svc.cluster.local:3000"),
+		TempoURL:             getEnv("TEMPO_URL", "http://tempo.monitoring.svc.cluster.local:3200"),
 		RedisURL:              getEnv("REDIS_URL", ""),
 		NATSEnabled:           getEnvBool("NATS_ENABLED", false),
 		NATSServers:           getEnv("NATS_SERVERS", "nats://nats.nats.svc.cluster.local:4222"),
