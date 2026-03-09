@@ -1,124 +1,15 @@
 {{- if .Values.global.zenith.domain }}
 # =============================================================================
-# Monitoring IngressRoutes — Grafana + Prometheus
+# Monitoring IngressRoutes — REMOVED (Phase 7: API-as-Proxy)
 # =============================================================================
-
-# --- Basic Auth middleware (protects monitoring endpoints) ---
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: monitoring-basic-auth
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app.kubernetes.io/part-of: zenith-monitoring
-spec:
-  basicAuth:
-    secret: monitoring-basic-auth
-
-# --- Grafana HTTPS ---
----
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: grafana
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app.kubernetes.io/part-of: zenith-monitoring
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`grafana.{{ .Values.global.zenith.domain }}`)
-      kind: Rule
-      services:
-        - name: zenith-monitoring-grafana
-          port: 80
-  tls:
-    secretName: monitoring-tls
-
-# --- Grafana HTTP redirect ---
----
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: grafana-redirect
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app.kubernetes.io/part-of: zenith-monitoring
-spec:
-  entryPoints:
-    - web
-  routes:
-    - match: Host(`grafana.{{ .Values.global.zenith.domain }}`)
-      kind: Rule
-      middlewares:
-        - name: redirect-to-https
-          namespace: {{ .Values.global.zenith.platformNamespace | default "zenith-platform" }}
-      services:
-        - name: zenith-monitoring-grafana
-          port: 80
-
-# --- Prometheus HTTPS (protected with basic auth) ---
----
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: prometheus
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app.kubernetes.io/part-of: zenith-monitoring
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`prometheus.{{ .Values.global.zenith.domain }}`)
-      kind: Rule
-      middlewares:
-        - name: monitoring-basic-auth
-      services:
-        - name: zenith-monitoring-kube-prom-prometheus
-          port: 9090
-  tls:
-    secretName: monitoring-tls
-
-# --- Prometheus HTTP redirect ---
----
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: prometheus-redirect
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app.kubernetes.io/part-of: zenith-monitoring
-spec:
-  entryPoints:
-    - web
-  routes:
-    - match: Host(`prometheus.{{ .Values.global.zenith.domain }}`)
-      kind: Rule
-      middlewares:
-        - name: redirect-to-https
-          namespace: {{ .Values.global.zenith.platformNamespace | default "zenith-platform" }}
-      services:
-        - name: zenith-monitoring-kube-prom-prometheus
-          port: 9090
-
-# --- TLS Certificate for monitoring subdomains ---
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: monitoring-tls
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app.kubernetes.io/part-of: zenith-monitoring
-spec:
-  secretName: monitoring-tls
-  issuerRef:
-    name: letsencrypt-prod
-    kind: ClusterIssuer
-  dnsNames:
-    - grafana.{{ .Values.global.zenith.domain }}
-    - prometheus.{{ .Values.global.zenith.domain }}
+# Grafana and Prometheus are now accessed through the Zenith API proxy at:
+#   /api/v1/admin/proxy/grafana/*
+#   (Prometheus is queried internally by the observability handler)
+#
+# The IngressRoutes, Certificates, and BasicAuth middleware that were here
+# have been intentionally removed to reduce public attack surface.
+# All admin-facing services are accessed through JWT-authenticated API proxy.
+#
+# To restore public access (NOT recommended), see git history for this file.
+# =============================================================================
 {{- end }}

@@ -148,61 +148,10 @@ resource "kubernetes_secret_v1" "harbor_image_updater_creds" {
 
 # =============================================================================
 # ArgoCD TLS — Certificate + IngressRoute (5.10b)
+# REMOVED (Phase 7: API-as-Proxy) — ArgoCD is now accessed through:
+#   /api/v1/admin/proxy/argocd/*
+# To restore, see git history for this file.
 # =============================================================================
-
-resource "kubernetes_manifest" "argocd_certificate" {
-  count = var.enable_argocd ? 1 : 0
-
-  manifest = {
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Certificate"
-    metadata = {
-      name      = "argocd-tls"
-      namespace = "argocd"
-    }
-    spec = {
-      secretName = "argocd-tls"
-      issuerRef = {
-        name = "letsencrypt-prod"
-        kind = "ClusterIssuer"
-      }
-      dnsNames = [
-        "argocd.${var.cluster_domain}",
-      ]
-    }
-  }
-
-  depends_on = [helm_release.argocd]
-}
-
-resource "kubernetes_manifest" "argocd_ingressroute" {
-  count = var.enable_argocd ? 1 : 0
-
-  manifest = {
-    apiVersion = "traefik.io/v1alpha1"
-    kind       = "IngressRoute"
-    metadata = {
-      name      = "argocd"
-      namespace = "argocd"
-    }
-    spec = {
-      entryPoints = ["websecure"]
-      routes = [{
-        match = "Host(`argocd.${var.cluster_domain}`)"
-        kind  = "Rule"
-        services = [{
-          name = "argocd-server"
-          port = 80
-        }]
-      }]
-      tls = {
-        secretName = "argocd-tls"
-      }
-    }
-  }
-
-  depends_on = [helm_release.argocd]
-}
 
 # =============================================================================
 # ArgoCD — AppProject for tenant isolation (5.10c)

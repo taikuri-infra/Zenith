@@ -323,32 +323,6 @@ resource "helm_release" "otel_collector" {
 
 # =============================================================================
 # Hubble UI IngressRoute (5.20)
+# REMOVED (Phase 7: API-as-Proxy) — Hubble UI public access removed.
+# Access via kubectl port-forward or API proxy if needed.
 # =============================================================================
-
-resource "kubernetes_manifest" "hubble_ingressroute" {
-  manifest = {
-    apiVersion = "traefik.io/v1alpha1"
-    kind       = "IngressRoute"
-    metadata = {
-      name      = "hubble-ui"
-      namespace = "kube-system"
-      annotations = {
-        "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
-      }
-    }
-    spec = {
-      entryPoints = ["websecure"]
-      routes = [{
-        match = "Host(`hubble.${var.cluster_domain}`)"
-        kind  = "Rule"
-        services = [{
-          name = "hubble-ui"
-          port = 80
-        }]
-      }]
-      tls = {
-        secretName = "hubble-tls"
-      }
-    }
-  }
-}
