@@ -37,8 +37,21 @@ spec:
                 topologyKey: kubernetes.io/hostname
       securityContext:
         runAsNonRoot: true
-        runAsUser: 65534
-        fsGroup: 65534
+        runAsUser: 1001
+        fsGroup: 1001
+      initContainers:
+        - name: copy-static
+          image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.image) }}
+          command: ['sh', '-c', 'cp -a /app/apps/web/.next/static/* /static/']
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: next-static
+              mountPath: /static
       containers:
         - name: web
           image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.image) }}
@@ -60,6 +73,11 @@ spec:
               value: {{ $value | quote }}
             {{- end }}
           {{- end }}
+          volumeMounts:
+            - name: next-static
+              mountPath: /app/apps/web/.next/static
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:
@@ -76,3 +94,8 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
+      volumes:
+        - name: next-static
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
