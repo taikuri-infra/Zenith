@@ -9,15 +9,16 @@ import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/loading-skeleton";
 import { Modal } from "@/components/modal";
 import { getApi } from "@/lib/get-api";
+import { demoApi } from "@/lib/demo-api";
 import type { Cluster } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
-import Link from "next/link";
+import { useApiWithFallback } from "@/hooks/use-api";
 import { Server } from "lucide-react";
 
 export default function ClustersPage() {
   const apiClient = getApi();
-  const { data: clusters, loading, error, refetch } = useApi<Cluster[]>(
-    () => apiClient.clusters.list()
+  const { data: clusters, loading, error, refetch, isDemo } = useApiWithFallback<Cluster[]>(
+    () => apiClient.clusters.list(),
+    () => demoApi.clusters.list()
   );
 
   const [localClusters, setLocalClusters] = useState<Cluster[]>([]);
@@ -59,7 +60,12 @@ export default function ClustersPage() {
     <Shell>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-white">Clusters</h1>
+          <div>
+            <h1 className="text-lg font-semibold text-white">Clusters</h1>
+            {isDemo && (
+              <p className="mt-1 text-xs text-amber-400/70">Showing sample data</p>
+            )}
+          </div>
           <button
             onClick={() => setShowModal(true)}
             className="rounded-lg bg-accent-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-500"
@@ -83,24 +89,12 @@ export default function ClustersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-100">
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Name
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    K8s Version
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Nodes
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    CPU
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    RAM
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Status
-                  </th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Name</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">K8s Version</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Nodes</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">CPU</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">RAM</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,15 +104,8 @@ export default function ClustersPage() {
                     className="border-b border-border last:border-0 transition-colors hover:bg-surface-200"
                   >
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/clusters/${cluster.name}`}
-                        className="font-medium text-white hover:text-accent-400 transition-colors"
-                      >
-                        {cluster.name}
-                      </Link>
-                      <span className="ml-2 text-xs text-neutral-500">
-                        {cluster.region}
-                      </span>
+                      <span className="font-medium text-white">{cluster.name}</span>
+                      <span className="ml-2 text-xs text-neutral-500">{cluster.region}</span>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-neutral-400">
                       {cluster.k8sVersion}
@@ -126,20 +113,12 @@ export default function ClustersPage() {
                         <span className="ml-1.5 text-amber-400">&#9888;</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-neutral-300">
-                      {cluster.nodes}
+                    <td className="px-4 py-3 text-neutral-300">{cluster.nodes}</td>
+                    <td className="w-36 px-4 py-3">
+                      <ProgressBar percent={cluster.cpuPercent} label={`${cluster.cpuPercent}%`} />
                     </td>
                     <td className="w-36 px-4 py-3">
-                      <ProgressBar
-                        percent={cluster.cpuPercent}
-                        label={`${cluster.cpuPercent}%`}
-                      />
-                    </td>
-                    <td className="w-36 px-4 py-3">
-                      <ProgressBar
-                        percent={cluster.ramPercent}
-                        label={`${cluster.ramPercent}%`}
-                      />
+                      <ProgressBar percent={cluster.ramPercent} label={`${cluster.ramPercent}%`} />
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={cluster.status} />
@@ -162,72 +141,33 @@ export default function ClustersPage() {
             className="space-y-4"
           >
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">
-                Cluster Name
-              </label>
-              <input
-                type="text"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="my-cluster"
-                required
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              />
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Cluster Name</label>
+              <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="my-cluster" required className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">
-                Region
-              </label>
-              <select
-                value={formRegion}
-                onChange={(e) => setFormRegion(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none"
-              >
-                <option value="eu-central">eu-central</option>
-                <option value="us-east">us-east</option>
-                <option value="us-west">us-west</option>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Region</label>
+              <select value={formRegion} onChange={(e) => setFormRegion(e.target.value)} className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none">
+                <option value="eu-central">eu-central (Hetzner FSN1)</option>
+                <option value="eu-west">eu-west (Hetzner NBG1)</option>
+                <option value="us-east">us-east (Hetzner ASH)</option>
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">
-                Node Count
-              </label>
-              <input
-                type="number"
-                value={formNodes}
-                onChange={(e) => setFormNodes(Number(e.target.value))}
-                min={1}
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              />
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Node Count</label>
+              <input type="number" value={formNodes} onChange={(e) => setFormNodes(Number(e.target.value))} min={1} className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">
-                Node Type
-              </label>
-              <select
-                value={formNodeType}
-                onChange={(e) => setFormNodeType(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none"
-              >
-                <option value="CX22">CX22</option>
-                <option value="CX33">CX33</option>
-                <option value="CX43">CX43</option>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Node Type</label>
+              <select value={formNodeType} onChange={(e) => setFormNodeType(e.target.value)} className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none">
+                <option value="CX22">CX22 (2 vCPU, 4GB)</option>
+                <option value="CX32">CX32 (4 vCPU, 8GB)</option>
+                <option value="CX42">CX42 (8 vCPU, 16GB)</option>
+                <option value="CX52">CX52 (16 vCPU, 32GB)</option>
               </select>
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
-              >
-                Create Cluster
-              </button>
+              <button type="button" onClick={() => setShowModal(false)} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button type="submit" className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors">Create Cluster</button>
             </div>
           </form>
         </Modal>

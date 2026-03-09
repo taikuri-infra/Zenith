@@ -7,8 +7,9 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { StatCardRowSkeleton, TableSkeleton } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
+import { demoApi } from "@/lib/demo-api";
 import type { DatabaseCluster, DatabaseStats } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
+import { useApi, useApiWithFallback } from "@/hooks/use-api";
 import { Database } from "lucide-react";
 
 function dbStatusBadge(status: string): "healthy" | "warning" | "error" | "idle" {
@@ -28,15 +29,25 @@ function dbStatusBadge(status: string): "healthy" | "warning" | "error" | "idle"
 
 export default function DatabasesPage() {
   const apiClient = getApi();
-  const stats = useApi<DatabaseStats>(() => apiClient.databases.stats());
-  const { data: clusters, loading, error, refetch } = useApi<DatabaseCluster[]>(
-    () => apiClient.databases.list()
+  const stats = useApiWithFallback<DatabaseStats>(
+    () => apiClient.databases.stats(),
+    () => demoApi.databases.stats(),
+    (data) => !data || data.totalStorage === "0 Gi"
+  );
+  const { data: clusters, loading, error, refetch, isDemo } = useApiWithFallback<DatabaseCluster[]>(
+    () => apiClient.databases.list(),
+    () => demoApi.databases.list()
   );
 
   return (
     <Shell>
       <div className="space-y-6">
-        <h1 className="text-lg font-semibold text-white">Databases</h1>
+        <div>
+          <h1 className="text-lg font-semibold text-white">Databases</h1>
+          {isDemo && (
+            <p className="mt-1 text-xs text-amber-400/70">Showing sample data</p>
+          )}
+        </div>
 
         {/* Stats */}
         {stats.loading ? (
@@ -46,7 +57,7 @@ export default function DatabasesPage() {
             <StatCard label="Total Clusters" value={stats.data.totalClusters} sub="CNPG managed" />
             <StatCard label="Healthy" value={stats.data.healthyClusters} sub="operational" />
             <StatCard label="Total Storage" value={stats.data.totalStorage} sub="allocated" />
-            <StatCard label="Last Backup" value={stats.data.lastBackup || "Never"} sub="most recent" />
+            <StatCard label="Last Backup" value={stats.data.lastBackup ? new Date(stats.data.lastBackup).toLocaleDateString() : "Never"} sub="most recent" />
           </div>
         ) : null}
 
@@ -77,10 +88,12 @@ export default function DatabasesPage() {
               </thead>
               <tbody>
                 {clusters.map((db) => (
-                  <tr key={db.name} className="border-b border-border last:border-0 transition-colors hover:bg-surface-200">
+                  <tr key={`${db.namespace}-${db.name}`} className="border-b border-border last:border-0 transition-colors hover:bg-surface-200">
                     <td className="px-4 py-3">
                       <span className="font-medium text-white">{db.name}</span>
-                      <span className="ml-2 font-mono text-xs text-neutral-500">{db.pgVersion}</span>
+                      {db.pgVersion && (
+                        <span className="ml-2 font-mono text-xs text-neutral-500">PG {db.pgVersion}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-neutral-400">{db.namespace}</td>
                     <td className="px-4 py-3">
@@ -89,7 +102,7 @@ export default function DatabasesPage() {
                     <td className="px-4 py-3 text-neutral-300">
                       {db.readyInstances}/{db.totalInstances}
                     </td>
-                    <td className="px-4 py-3 text-neutral-300">{db.storage}</td>
+                    <td className="px-4 py-3 text-neutral-300">{db.storage || "—"}</td>
                     <td className="px-4 py-3">
                       {db.walArchiving ? (
                         <span className="text-emerald-400 text-xs">Active</span>
@@ -98,7 +111,7 @@ export default function DatabasesPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-neutral-500">
-                      {db.lastBackup || "—"}
+                      {db.lastBackup ? new Date(db.lastBackup).toLocaleDateString() : "—"}
                     </td>
                   </tr>
                 ))}

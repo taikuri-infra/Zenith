@@ -9,20 +9,28 @@ import {
   TableSkeleton,
 } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
+import { demoApi } from "@/lib/demo-api";
 import type { InfraOverview } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
+import { useApiWithFallback } from "@/hooks/use-api";
 import { HardDrive } from "lucide-react";
 
 export default function InfrastructurePage() {
   const apiClient = getApi();
-  const { data: infra, loading, error, refetch } = useApi<InfraOverview>(
-    () => apiClient.infrastructure.overview()
+  const { data: infra, loading, error, refetch, isDemo } = useApiWithFallback<InfraOverview>(
+    () => apiClient.infrastructure.overview(),
+    () => demoApi.infrastructure.overview(),
+    (data) => !data || data.servers === 0
   );
 
   return (
     <Shell>
       <div className="space-y-6">
-        <h1 className="text-lg font-semibold text-white">Infrastructure</h1>
+        <div>
+          <h1 className="text-lg font-semibold text-white">Nodes & Compute</h1>
+          {isDemo && (
+            <p className="mt-1 text-xs text-amber-400/70">Showing sample data</p>
+          )}
+        </div>
 
         {/* Stat cards */}
         {loading ? (
@@ -75,21 +83,11 @@ export default function InfrastructurePage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-surface-100">
-                        <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                          Resource
-                        </th>
-                        <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                          Type
-                        </th>
-                        <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                          Count
-                        </th>
-                        <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                          Cluster
-                        </th>
-                        <th className="px-4 py-2.5 text-right text-xs font-medium text-neutral-500">
-                          Monthly Cost
-                        </th>
+                        <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Resource</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Type</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Count</th>
+                        <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Cluster</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-medium text-neutral-500">Monthly Cost</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -102,21 +100,11 @@ export default function InfrastructurePage() {
                               : ""
                           }`}
                         >
-                          <td className="px-4 py-3 font-medium text-white">
-                            {resource.name}
-                          </td>
-                          <td className="px-4 py-3 text-neutral-400">
-                            {resource.type}
-                          </td>
-                          <td className="px-4 py-3 text-neutral-300">
-                            {resource.count}
-                          </td>
-                          <td className="px-4 py-3 text-neutral-400">
-                            {resource.cluster}
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-xs text-neutral-300">
-                            {resource.monthlyCost}
-                          </td>
+                          <td className="px-4 py-3 font-medium text-white">{resource.name}</td>
+                          <td className="px-4 py-3 text-neutral-400">{resource.type}</td>
+                          <td className="px-4 py-3 text-neutral-300">{resource.count}</td>
+                          <td className="px-4 py-3 text-neutral-400">{resource.cluster}</td>
+                          <td className="px-4 py-3 text-right font-mono text-xs text-neutral-300">{resource.monthlyCost}</td>
                         </tr>
                       ))}
                     </tbody>

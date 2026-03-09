@@ -7,8 +7,9 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { StatCardRowSkeleton, TableSkeleton } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
+import { demoApi } from "@/lib/demo-api";
 import type { QualityMetrics, QualityTicket } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
+import { useApiWithFallback } from "@/hooks/use-api";
 import { ClipboardCheck } from "lucide-react";
 
 function priorityBadge(priority: string) {
@@ -28,13 +29,24 @@ function priorityBadge(priority: string) {
 
 export default function QualityPage() {
   const apiClient = getApi();
-  const metrics = useApi<QualityMetrics>(() => apiClient.quality.metrics());
-  const tickets = useApi<QualityTicket[]>(() => apiClient.quality.tickets());
+  const metrics = useApiWithFallback<QualityMetrics>(
+    () => apiClient.quality.metrics(),
+    () => demoApi.quality.metrics()
+  );
+  const tickets = useApiWithFallback<QualityTicket[]>(
+    () => apiClient.quality.tickets(),
+    () => demoApi.quality.tickets()
+  );
 
   return (
     <Shell>
       <div className="space-y-6">
-        <h1 className="text-lg font-semibold text-white">Quality & SLA</h1>
+        <div>
+          <h1 className="text-lg font-semibold text-white">Quality & SLA</h1>
+          {(metrics.isDemo || tickets.isDemo) && (
+            <p className="mt-1 text-xs text-amber-400/70">Showing sample data</p>
+          )}
+        </div>
 
         {/* KPI Cards */}
         {metrics.loading ? (

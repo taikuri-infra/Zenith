@@ -7,14 +7,16 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { StatCardRowSkeleton, TableSkeleton } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
+import { demoApi } from "@/lib/demo-api";
 import type { VeleroSchedule, CnpgBackup, BackupStats } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
+import { useApiWithFallback } from "@/hooks/use-api";
 import { Archive, RefreshCw } from "lucide-react";
 
 function backupStatusBadge(status: string): "healthy" | "warning" | "error" | "idle" {
   switch (status) {
     case "completed":
     case "success":
+    case "healthy":
       return "healthy";
     case "in_progress":
     case "running":
@@ -28,15 +30,32 @@ function backupStatusBadge(status: string): "healthy" | "warning" | "error" | "i
 
 export default function BackupsPage() {
   const apiClient = getApi();
-  const stats = useApi<BackupStats>(() => apiClient.backups.stats());
-  const velero = useApi<VeleroSchedule[]>(() => apiClient.backups.veleroSchedules());
-  const cnpg = useApi<CnpgBackup[]>(() => apiClient.backups.cnpgBackups());
+  const stats = useApiWithFallback<BackupStats>(
+    () => apiClient.backups.stats(),
+    () => demoApi.backups.stats(),
+    (data) => !data || data.totalSize === "0 B"
+  );
+  const velero = useApiWithFallback<VeleroSchedule[]>(
+    () => apiClient.backups.veleroSchedules(),
+    () => demoApi.backups.veleroSchedules()
+  );
+  const cnpg = useApiWithFallback<CnpgBackup[]>(
+    () => apiClient.backups.cnpgBackups(),
+    () => demoApi.backups.cnpgBackups()
+  );
+
+  const anyDemo = stats.isDemo || velero.isDemo || cnpg.isDemo;
 
   return (
     <Shell>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-white">Backups</h1>
+          <div>
+            <h1 className="text-lg font-semibold text-white">Backups</h1>
+            {anyDemo && (
+              <p className="mt-1 text-xs text-amber-400/70">Showing sample data</p>
+            )}
+          </div>
           <button
             onClick={() => { velero.refetch(); cnpg.refetch(); stats.refetch(); }}
             className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-100 px-3 py-1.5 text-sm text-neutral-400 hover:bg-surface-200 hover:text-white transition-colors"
@@ -53,7 +72,7 @@ export default function BackupsPage() {
           <div className="grid grid-cols-4 gap-4">
             <StatCard label="Velero Schedules" value={stats.data.veleroSchedules} sub="active schedules" />
             <StatCard label="CNPG Clusters" value={stats.data.cnpgClusters} sub="with backups" />
-            <StatCard label="Last Backup" value={stats.data.lastBackup || "Never"} sub="most recent" />
+            <StatCard label="Last Backup" value={stats.data.lastBackup ? new Date(stats.data.lastBackup).toLocaleDateString() : "Never"} sub="most recent" />
             <StatCard label="Total Size" value={stats.data.totalSize} sub="all backups" />
           </div>
         ) : null}
@@ -66,11 +85,7 @@ export default function BackupsPage() {
           ) : velero.error ? (
             <ErrorState error={velero.error} onRetry={velero.refetch} />
           ) : !velero.data || velero.data.length === 0 ? (
-            <EmptyState
-              title="No Velero schedules"
-              description="No Velero backup schedules are configured."
-              icon={Archive}
-            />
+            <EmptyState title="No Velero schedules" description="No Velero backup schedules are configured." icon={Archive} />
           ) : (
             <div className="overflow-hidden rounded-lg border border-border">
               <table className="w-full text-sm">
@@ -89,12 +104,12 @@ export default function BackupsPage() {
                     <tr key={schedule.name} className="border-b border-border last:border-0 transition-colors hover:bg-surface-200">
                       <td className="px-4 py-3 font-medium text-white">{schedule.name}</td>
                       <td className="px-4 py-3 font-mono text-xs text-neutral-400">{schedule.schedule}</td>
-                      <td className="px-4 py-3 text-xs text-neutral-300">{schedule.lastBackup || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-neutral-300">{schedule.lastBackup ? new Date(schedule.lastBackup).toLocaleString() : "—"}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={backupStatusBadge(schedule.lastStatus)} label={schedule.lastStatus} />
                       </td>
                       <td className="px-4 py-3 text-neutral-400 text-xs">{schedule.retention}</td>
-                      <td className="px-4 py-3 text-neutral-500 text-xs">{schedule.storageLocation}</td>
+                      <td className="px-4 py-3 text-neutral-500 text-xs font-mono">{schedule.storageLocation}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -111,11 +126,7 @@ export default function BackupsPage() {
           ) : cnpg.error ? (
             <ErrorState error={cnpg.error} onRetry={cnpg.refetch} />
           ) : !cnpg.data || cnpg.data.length === 0 ? (
-            <EmptyState
-              title="No CNPG backups"
-              description="No CloudNativePG backup configurations found."
-              icon={Archive}
-            />
+            <EmptyState title="No CNPG backups" description="No CloudNativePG backup configurations found." icon={Archive} />
           ) : (
             <div className="overflow-hidden rounded-lg border border-border">
               <table className="w-full text-sm">
@@ -135,7 +146,7 @@ export default function BackupsPage() {
                       <td className="px-4 py-3 font-medium text-white">{backup.cluster}</td>
                       <td className="px-4 py-3 text-neutral-400">{backup.namespace}</td>
                       <td className="px-4 py-3 font-mono text-xs text-neutral-400">{backup.schedule}</td>
-                      <td className="px-4 py-3 text-xs text-neutral-300">{backup.lastBackup || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-neutral-300">{backup.lastBackup ? new Date(backup.lastBackup).toLocaleString() : "—"}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={backupStatusBadge(backup.status)} label={backup.status} />
                       </td>

@@ -7,20 +7,38 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { StatCardRowSkeleton, TableSkeleton } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
+import { demoApi } from "@/lib/demo-api";
 import type { S3Bucket, PvcVolume, StorageStats } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
+import { useApiWithFallback } from "@/hooks/use-api";
 import { HardDrive } from "lucide-react";
 
 export default function StoragePage() {
   const apiClient = getApi();
-  const stats = useApi<StorageStats>(() => apiClient.storage.stats());
-  const buckets = useApi<S3Bucket[]>(() => apiClient.storage.buckets());
-  const volumes = useApi<PvcVolume[]>(() => apiClient.storage.volumes());
+  const stats = useApiWithFallback<StorageStats>(
+    () => apiClient.storage.stats(),
+    () => demoApi.storage.stats(),
+    (data) => !data || data.s3Used === "0 B"
+  );
+  const buckets = useApiWithFallback<S3Bucket[]>(
+    () => apiClient.storage.buckets(),
+    () => demoApi.storage.buckets()
+  );
+  const volumes = useApiWithFallback<PvcVolume[]>(
+    () => apiClient.storage.volumes(),
+    () => demoApi.storage.volumes()
+  );
+
+  const anyDemo = stats.isDemo || buckets.isDemo || volumes.isDemo;
 
   return (
     <Shell>
       <div className="space-y-6">
-        <h1 className="text-lg font-semibold text-white">Storage</h1>
+        <div>
+          <h1 className="text-lg font-semibold text-white">Storage</h1>
+          {anyDemo && (
+            <p className="mt-1 text-xs text-amber-400/70">Showing sample data</p>
+          )}
+        </div>
 
         {/* Stats */}
         {stats.loading ? (
@@ -42,11 +60,7 @@ export default function StoragePage() {
           ) : buckets.error ? (
             <ErrorState error={buckets.error} onRetry={buckets.refetch} />
           ) : !buckets.data || buckets.data.length === 0 ? (
-            <EmptyState
-              title="No buckets"
-              description="No S3 buckets have been created."
-              icon={HardDrive}
-            />
+            <EmptyState title="No buckets" description="No S3 buckets have been created." icon={HardDrive} />
           ) : (
             <div className="overflow-hidden rounded-lg border border-border">
               <table className="w-full text-sm">
@@ -83,11 +97,7 @@ export default function StoragePage() {
           ) : volumes.error ? (
             <ErrorState error={volumes.error} onRetry={volumes.refetch} />
           ) : !volumes.data || volumes.data.length === 0 ? (
-            <EmptyState
-              title="No volumes"
-              description="No persistent volume claims found."
-              icon={HardDrive}
-            />
+            <EmptyState title="No volumes" description="No persistent volume claims found." icon={HardDrive} />
           ) : (
             <div className="overflow-hidden rounded-lg border border-border">
               <table className="w-full text-sm">

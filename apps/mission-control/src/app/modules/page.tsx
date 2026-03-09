@@ -7,15 +7,17 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
+import { demoApi } from "@/lib/demo-api";
 import type { Module } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
+import { useApiWithFallback } from "@/hooks/use-api";
 import { Package } from "lucide-react";
 
 export default function ModulesPage() {
   const apiClient = getApi();
 
-  const { data: modules, loading, error, refetch } = useApi<Module[]>(
-    () => apiClient.modules.list()
+  const { data: modules, loading, error, refetch, isDemo } = useApiWithFallback<Module[]>(
+    () => apiClient.modules.list(),
+    () => demoApi.modules.list()
   );
 
   const [localModules, setLocalModules] = useState<Module[]>([]);
@@ -72,6 +74,9 @@ export default function ModulesPage() {
                 {updatesAvailable !== 1 ? "s" : ""} available
               </p>
             )}
+            {isDemo && (
+              <p className="mt-1 text-xs text-amber-400/70">Showing sample data</p>
+            )}
           </div>
           {updatesAvailable > 0 && (
             <button
@@ -99,24 +104,12 @@ export default function ModulesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-100">
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Module
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Description
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Installed
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Latest
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Status
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">
-                    Action
-                  </th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Module</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Description</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Installed</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Latest</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -125,15 +118,9 @@ export default function ModulesPage() {
                     key={mod.name}
                     className="border-b border-border last:border-0 transition-colors hover:bg-surface-200"
                   >
-                    <td className="px-4 py-3 font-medium text-white">
-                      {mod.name}
-                    </td>
-                    <td className="px-4 py-3 text-neutral-400">
-                      {mod.description}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-neutral-400">
-                      {mod.installed}
-                    </td>
+                    <td className="px-4 py-3 font-medium text-white">{mod.name}</td>
+                    <td className="px-4 py-3 text-neutral-400">{mod.description}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-neutral-400">{mod.installed}</td>
                     <td className="px-4 py-3 font-mono text-xs text-neutral-400">
                       {mod.latest}
                       {mod.status === "update_available" && (
@@ -141,7 +128,7 @@ export default function ModulesPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={mod.status} />
+                      <StatusBadge status={mod.status === "up_to_date" ? "healthy" : "warning"} label={mod.status === "up_to_date" ? "Up to date" : "Update available"} />
                     </td>
                     <td className="px-4 py-3">
                       {mod.status === "update_available" && (

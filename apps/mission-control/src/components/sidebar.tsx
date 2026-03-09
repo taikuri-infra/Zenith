@@ -25,7 +25,6 @@ import {
   ScanLine,
   Users2,
   Package,
-  ArrowUpCircle,
   Archive,
   GitBranch,
   Container,
@@ -102,7 +101,6 @@ const navGroups: NavGroup[] = [
     label: "PLATFORM",
     items: [
       { name: "Modules", href: "/modules", icon: Package },
-      { name: "Updates", href: "/updates", icon: ArrowUpCircle },
       { name: "Backups", href: "/backups", icon: HardDriveDownload },
       { name: "GitOps", href: "/gitops", icon: GitBranch },
       { name: "Registry", href: "/registry", icon: Container },

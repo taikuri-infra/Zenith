@@ -8,16 +8,18 @@ import { TableSkeleton } from "@/components/loading-skeleton";
 import { Modal } from "@/components/modal";
 import { getApi } from "@/lib/get-api";
 import { isDemoMode } from "@/lib/get-api";
+import { demoApi } from "@/lib/demo-api";
 import type { Plan, CreatePlanInput } from "@/lib/api";
-import { useApi } from "@/hooks/use-api";
+import { useApiWithFallback } from "@/hooks/use-api";
 import { useMutation } from "@/hooks/use-api";
 import { CreditCard } from "lucide-react";
 
 export default function PlansPage() {
   const apiClient = getApi();
   const demo = isDemoMode();
-  const { data: plans, loading, error, refetch } = useApi<Plan[]>(
-    () => apiClient.plans.list()
+  const { data: plans, loading, error, refetch, isDemo } = useApiWithFallback<Plan[]>(
+    () => apiClient.plans.list(),
+    () => demoApi.plans.list()
   );
 
   const [showModal, setShowModal] = useState(false);
@@ -78,6 +80,9 @@ export default function PlansPage() {
                 {plans.length} plans &middot;{" "}
                 {plans.filter((p) => p.active).length} active
               </p>
+            )}
+            {isDemo && (
+              <p className="mt-1 text-xs text-amber-400/70">Showing sample data</p>
             )}
           </div>
           <button
