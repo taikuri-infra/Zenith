@@ -62,6 +62,7 @@ type Client interface {
 
 	// Generic CRD operations with explicit apiVersion (for non-Zenith CRDs)
 	GetCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) (*CRDObject, error)
+	ListCRDsWithVersion(ctx context.Context, apiVersion, kind, namespace string) ([]*CRDObject, error)
 	DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error
 
 	// Pod monitoring operations
@@ -70,6 +71,18 @@ type Client interface {
 
 	// Node monitoring (for autoscaler cluster metrics)
 	GetNodeMetrics(ctx context.Context) ([]NodeMetrics, error)
+
+	// PVC listing (for storage overview)
+	ListPVCs(ctx context.Context, namespace string) ([]PVCInfo, error)
+}
+
+// PVCInfo holds PersistentVolumeClaim metadata.
+type PVCInfo struct {
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	Size         string `json:"size"`
+	Status       string `json:"status"`
+	StorageClass string `json:"storageClass"`
 }
 
 // MemoryClient is an in-memory K8s client for testing and development.
@@ -313,6 +326,10 @@ func (c *MemoryClient) GetCRDWithVersion(ctx context.Context, apiVersion, kind, 
 	return c.GetCRD(ctx, kind, namespace, name)
 }
 
+func (c *MemoryClient) ListCRDsWithVersion(ctx context.Context, apiVersion, kind, namespace string) ([]*CRDObject, error) {
+	return c.ListCRDs(ctx, kind, namespace)
+}
+
 func (c *MemoryClient) DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error {
 	return c.DeleteCRD(ctx, kind, namespace, name)
 }
@@ -336,6 +353,13 @@ func (c *MemoryClient) GetPodMetrics(ctx context.Context, namespace, labelSelect
 func (c *MemoryClient) GetNodeMetrics(ctx context.Context) ([]NodeMetrics, error) {
 	return []NodeMetrics{
 		{Name: "dev-node-1", CPUCapacityMillis: 4000, CPUUsageMillis: 2000, MemCapacityBytes: 8 * 1024 * 1024 * 1024, MemUsageBytes: 4 * 1024 * 1024 * 1024},
+	}, nil
+}
+
+// ListPVCs returns fake PVCs (dev/test mode).
+func (c *MemoryClient) ListPVCs(ctx context.Context, namespace string) ([]PVCInfo, error) {
+	return []PVCInfo{
+		{Name: "data-volume-0", Namespace: "default", Size: "10Gi", Status: "Bound", StorageClass: "local-path"},
 	}, nil
 }
 

@@ -716,7 +716,7 @@ func TestObservability_CreateSilence(t *testing.T) {
 func TestSecurity_GetPosture(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/security/posture", h.GetPosture)
 
@@ -742,7 +742,7 @@ func TestSecurity_GetPosture(t *testing.T) {
 func TestSecurity_ListPolicies(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/security/policies", h.ListPolicies)
 
@@ -765,7 +765,7 @@ func TestSecurity_ListPolicies(t *testing.T) {
 func TestSecurity_GetPolicyStats(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/security/policies/stats", h.GetPolicyStats)
 
@@ -788,7 +788,7 @@ func TestSecurity_GetPolicyStats(t *testing.T) {
 func TestSecurity_ListFalcoAlerts(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/security/falco/alerts", h.ListFalcoAlerts)
 
@@ -811,7 +811,7 @@ func TestSecurity_ListFalcoAlerts(t *testing.T) {
 func TestSecurity_GetRateLimits(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/security/rate-limits", h.GetRateLimits)
 
@@ -837,7 +837,7 @@ func TestSecurity_GetRateLimits(t *testing.T) {
 func TestSecurity_ListImages(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/security/images", h.ListImages)
 
@@ -863,7 +863,7 @@ func TestSecurity_ListImages(t *testing.T) {
 func TestSecurity_GetImageStats(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/security/images/stats", h.GetImageStats)
 
@@ -889,7 +889,7 @@ func TestSecurity_GetImageStats(t *testing.T) {
 func TestSecurity_TriggerImageScan(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Post("/api/v1/admin/security/images/:name/scan", h.TriggerImageScan)
 
@@ -918,7 +918,7 @@ func TestSecurity_TriggerImageScan(t *testing.T) {
 func TestSecurity_ListSessions(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/security/sessions", h.ListSessions)
 
@@ -941,7 +941,7 @@ func TestSecurity_ListSessions(t *testing.T) {
 func TestSecurity_TerminateSession(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminSecurityHandler(nil, k8s)
+	h := handlers.NewAdminSecurityHandler(nil, k8s, nil)
 	app.Use(injectTestAdmin)
 	app.Delete("/api/v1/admin/security/sessions/:id", h.TerminateSession)
 
@@ -973,7 +973,7 @@ func TestSecurity_TerminateSession(t *testing.T) {
 func TestPlatformOps_GetBackups(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/backups", h.GetBackups)
 
@@ -996,7 +996,7 @@ func TestPlatformOps_GetBackups(t *testing.T) {
 func TestPlatformOps_GetBackupStats(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/backups/stats", h.GetBackupStats)
 
@@ -1022,7 +1022,7 @@ func TestPlatformOps_GetBackupStats(t *testing.T) {
 func TestPlatformOps_ListVeleroSchedules(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/backups/velero", h.ListVeleroSchedules)
 
@@ -1045,7 +1045,7 @@ func TestPlatformOps_ListVeleroSchedules(t *testing.T) {
 func TestPlatformOps_ListCNPGBackups(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/backups/cnpg", h.ListCNPGBackups)
 
@@ -1071,7 +1071,7 @@ func TestPlatformOps_ListCNPGBackups(t *testing.T) {
 func TestPlatformOps_TriggerBackup(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Post("/api/v1/admin/backups/trigger", h.TriggerBackup)
 
@@ -1099,7 +1099,7 @@ func TestPlatformOps_TriggerBackup(t *testing.T) {
 func TestPlatformOps_ListArgoApps(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/gitops/apps", h.ListArgoApps)
 
@@ -1122,7 +1122,7 @@ func TestPlatformOps_ListArgoApps(t *testing.T) {
 func TestPlatformOps_GetGitOpsStats(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/gitops/stats", h.GetGitOpsStats)
 
@@ -1145,7 +1145,7 @@ func TestPlatformOps_GetGitOpsStats(t *testing.T) {
 func TestPlatformOps_SyncArgoApp(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Post("/api/v1/admin/gitops/apps/:name/sync", h.SyncArgoApp)
 
@@ -1174,7 +1174,7 @@ func TestPlatformOps_SyncArgoApp(t *testing.T) {
 func TestPlatformOps_GetArgoAppHistory(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/gitops/apps/:name/history", h.GetArgoAppHistory)
 
@@ -1199,7 +1199,7 @@ func TestPlatformOps_GetArgoAppHistory(t *testing.T) {
 func TestPlatformOps_ListRegistryProjects(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/registry/projects", h.ListRegistryProjects)
 
@@ -1225,7 +1225,7 @@ func TestPlatformOps_ListRegistryProjects(t *testing.T) {
 func TestPlatformOps_GetRegistryStats(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/registry/stats", h.GetRegistryStats)
 
@@ -1251,7 +1251,7 @@ func TestPlatformOps_GetRegistryStats(t *testing.T) {
 func TestPlatformOps_ListRegistryRepos(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/registry/projects/:name/repos", h.ListRegistryRepos)
 
@@ -1276,7 +1276,7 @@ func TestPlatformOps_ListRegistryRepos(t *testing.T) {
 func TestPlatformOps_ListDatabaseClusters(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/databases", h.ListDatabaseClusters)
 
@@ -1299,7 +1299,7 @@ func TestPlatformOps_ListDatabaseClusters(t *testing.T) {
 func TestPlatformOps_GetDatabaseStats(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/databases/stats", h.GetDatabaseStats)
 
@@ -1322,7 +1322,7 @@ func TestPlatformOps_GetDatabaseStats(t *testing.T) {
 func TestPlatformOps_GetDatabaseCluster_NotFound(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/databases/:name", h.GetDatabaseCluster)
 
@@ -1344,7 +1344,7 @@ func TestPlatformOps_GetDatabaseCluster_NotFound(t *testing.T) {
 func TestPlatformOps_ListS3Buckets(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/storage/s3", h.ListS3Buckets)
 
@@ -1370,7 +1370,7 @@ func TestPlatformOps_ListS3Buckets(t *testing.T) {
 func TestPlatformOps_ListVolumes(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/storage/volumes", h.ListVolumes)
 
@@ -1393,7 +1393,7 @@ func TestPlatformOps_ListVolumes(t *testing.T) {
 func TestPlatformOps_GetStorageStats(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/storage/stats", h.GetStorageStats)
 
@@ -1421,7 +1421,7 @@ func TestPlatformOps_GetStorageStats(t *testing.T) {
 func TestPlatformOps_ListDNSRecords(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/networking/dns", h.ListDNSRecords)
 
@@ -1444,7 +1444,7 @@ func TestPlatformOps_ListDNSRecords(t *testing.T) {
 func TestPlatformOps_ListRoutes(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/networking/routes", h.ListRoutes)
 
@@ -1467,7 +1467,7 @@ func TestPlatformOps_ListRoutes(t *testing.T) {
 func TestPlatformOps_ListCertificates(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/networking/certificates", h.ListCertificates)
 
@@ -1492,7 +1492,7 @@ func TestPlatformOps_ListCertificates(t *testing.T) {
 func TestPlatformOps_GetQualityMetrics(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/quality/metrics", h.GetQualityMetrics)
 
@@ -1515,7 +1515,7 @@ func TestPlatformOps_GetQualityMetrics(t *testing.T) {
 func TestPlatformOps_GetQualityTickets(t *testing.T) {
 	app := newTestApp()
 	k8s := k8sclient.NewMemoryClient()
-	h := handlers.NewAdminPlatformOpsHandler(nil, k8s)
+	h := handlers.NewAdminPlatformOpsHandler(nil, k8s, nil, nil)
 	app.Use(injectTestAdmin)
 	app.Get("/api/v1/admin/quality/tickets", h.GetQualityTickets)
 

@@ -382,6 +382,19 @@ func (c *RealClient) CreateLimitRange(ctx context.Context, namespace, name strin
 
 // --- Generic CRD with explicit apiVersion ---
 
+// pluralizeKind converts a CRD Kind to its plural resource name.
+func pluralizeKind(kind string) string {
+	lower := strings.ToLower(kind)
+	// Handle irregular plurals
+	if strings.HasSuffix(lower, "policy") {
+		return strings.TrimSuffix(lower, "y") + "ies"
+	}
+	if strings.HasSuffix(lower, "ingress") {
+		return lower + "es"
+	}
+	return lower + "s"
+}
+
 func gvrFromAPIVersionKind(apiVersion, kind string) schema.GroupVersionResource {
 	parts := strings.SplitN(apiVersion, "/", 2)
 	group := ""
@@ -389,11 +402,13 @@ func gvrFromAPIVersionKind(apiVersion, kind string) schema.GroupVersionResource 
 	if len(parts) == 2 {
 		group = parts[0]
 		version = parts[1]
+	} else {
+		version = parts[0]
 	}
 	return schema.GroupVersionResource{
 		Group:    group,
 		Version:  version,
-		Resource: strings.ToLower(kind) + "s",
+		Resource: pluralizeKind(kind),
 	}
 }
 
@@ -406,9 +421,68 @@ func (c *RealClient) GetCRDWithVersion(ctx context.Context, apiVersion, kind, na
 	return unstructuredToCRD(uObj)
 }
 
+func (c *RealClient) ListCRDsWithVersion(ctx context.Context, apiVersion, kind, namespace string) ([]*CRDObject, error) {
+	gvr := gvrFromAPIVersionKind(apiVersion, kind)
+	list, err := c.dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var result []*CRDObject
+	for i := range list.Items {
+		obj, err := unstructuredToCRD(&list.Items[i])
+		if err != nil {
+			continue
+		}
+		result = append(result, obj)
+	}
+	return result, nil
+}
+
 func (c *RealClient) DeleteCRDWithVersion(ctx context.Context, apiVersion, kind, namespace, name string) error {
 	gvr := gvrFromAPIVersionKind(apiVersion, kind)
 	return c.dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// ListPVCs lists PersistentVolumeClaims in a namespace (or all namespaces if empty).
+func (c *RealClient) ListPVCs(ctx context.Context, namespace string) ([]PVCInfo, error) {
+	var pvcs []PVCInfo
+	if namespace == "" {
+		// List across all namespaces
+		list, err := c.clientset.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		for _, pvc := range list.Items {
+			pvcs = append(pvcs, pvcToInfo(pvc))
+		}
+	} else {
+		list, err := c.clientset.CoreV1().PersistentVolumeClaims(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		for _, pvc := range list.Items {
+			pvcs = append(pvcs, pvcToInfo(pvc))
+		}
+	}
+	return pvcs, nil
+}
+
+func pvcToInfo(pvc corev1.PersistentVolumeClaim) PVCInfo {
+	size := ""
+	if req, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
+		size = req.String()
+	}
+	sc := ""
+	if pvc.Spec.StorageClassName != nil {
+		sc = *pvc.Spec.StorageClassName
+	}
+	return PVCInfo{
+		Name:         pvc.Name,
+		Namespace:    pvc.Namespace,
+		Size:         size,
+		Status:       string(pvc.Status.Phase),
+		StorageClass: sc,
+	}
 }
 
 // --- Pod monitoring methods ---

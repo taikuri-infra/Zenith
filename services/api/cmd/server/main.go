@@ -1259,7 +1259,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	admin.Get("/observability/traces/:id", observabilityHandler.GetTrace)
 
 	// Security Ops
-	securityHandler := handlers.NewAdminSecurityHandler(pool, k8sClient)
+	securityHandler := handlers.NewAdminSecurityHandler(pool, k8sClient, harborClient)
 	admin.Get("/security/posture", securityHandler.GetPosture)
 	admin.Get("/security/policies", securityHandler.ListPolicies)
 	admin.Get("/security/policies/stats", securityHandler.GetPolicyStats)
@@ -1272,7 +1272,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	admin.Delete("/security/sessions/:id", securityHandler.TerminateSession)
 
 	// Platform Ops (Backups, GitOps, Registry, Databases, Storage, Networking, Quality)
-	platformOpsHandler := handlers.NewAdminPlatformOpsHandler(pool, k8sClient)
+	platformOpsHandler := handlers.NewAdminPlatformOpsHandler(pool, k8sClient, harborClient, objStorage)
 	admin.Get("/backups", platformOpsHandler.GetBackups)
 	admin.Get("/backups/stats", platformOpsHandler.GetBackupStats)
 	admin.Get("/backups/velero", platformOpsHandler.ListVeleroSchedules)
@@ -1300,7 +1300,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Admin Proxy (authenticated reverse proxy to internal services)
 	proxyHandler := handlers.NewAdminProxyHandler(map[string]string{
 		"grafana":  cfg.GrafanaURL,
-		"argocd":   "http://argocd-server.zenith-platform.svc.cluster.local:443",
+		"argocd":   "https://argocd-server.argocd.svc.cluster.local:443",
 		"harbor":   cfg.HarborURL,
 		"keycloak": cfg.KeycloakURL,
 	})
