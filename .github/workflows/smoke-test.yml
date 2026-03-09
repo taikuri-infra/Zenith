@@ -13,7 +13,7 @@ on:
   workflow_run:
     workflows: ["Build & Push Docker Images"]
     types: [completed]
-    branches: [main]
+    branches: [main, staging]
 
   # Scheduled: every 6 hours
   schedule:
@@ -33,6 +33,7 @@ jobs:
       - name: Run customer smoke test
         env:
           ZENITH_API_URL: ${{ env.API_URL }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: ./infra/scripts/smoke-test-customer.sh --verbose
 
@@ -93,78 +94,61 @@ jobs:
         if: env.SLACK_WEBHOOK_URL != ''
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          STATUS_EMOJI: ${{ steps.status.outputs.emoji }}
+          STATUS_COLOR: ${{ steps.status.outputs.color }}
+          STATUS_CUSTOMER: ${{ steps.status.outputs.customer }}
+          STATUS_OWNER: ${{ steps.status.outputs.owner }}
+          STATUS_INFRA: ${{ steps.status.outputs.infra }}
+          TARGET_URL: ${{ env.API_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TRIGGER: ${{ github.event_name }}
         run: |
-          STATUS_ICON() {
-            case "$1" in
-              success) echo "✅" ;;
-              failure) echo "❌" ;;
-              skipped) echo "⏭️" ;;
-              *) echo "❓" ;;
-            esac
-          }
-
-          curl -sS -X POST "$SLACK_WEBHOOK_URL" \
-            -H 'Content-Type: application/json' \
-            -d "$(cat <<EOF
-          {
-            "attachments": [{
-              "color": "${{ steps.status.outputs.color }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {"type": "plain_text", "text": "${{ steps.status.outputs.emoji }} Zenith DR Smoke Test Report"}
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {"type": "mrkdwn", "text": "*Customer Userflow:*\n$(STATUS_ICON ${{ steps.status.outputs.customer }}) ${{ steps.status.outputs.customer }}"},
-                    {"type": "mrkdwn", "text": "*Owner Userflow:*\n$(STATUS_ICON ${{ steps.status.outputs.owner }}) ${{ steps.status.outputs.owner }}"},
-                    {"type": "mrkdwn", "text": "*Infrastructure E2E:*\n$(STATUS_ICON ${{ steps.status.outputs.infra }}) ${{ steps.status.outputs.infra }}"},
-                    {"type": "mrkdwn", "text": "*Target:*\n${{ env.API_URL }}"}
-                  ]
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {"type": "mrkdwn", "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run> | Trigger: ${{ github.event_name }} | $(date -u +%Y-%m-%dT%H:%M:%SZ)"}
-                  ]
-                }
-              ]
-            }]
-          }
-          EOF
-          )"
+          icon() { case "$1" in success) echo "✅";; failure) echo "❌";; skipped) echo "⏭️";; *) echo "❓";; esac; }
+          PAYLOAD=$(jq -n \
+            --arg color "$STATUS_COLOR" \
+            --arg title "$STATUS_EMOJI Zenith DR Smoke Test Report" \
+            --arg customer "$(icon "$STATUS_CUSTOMER") $STATUS_CUSTOMER" \
+            --arg owner "$(icon "$STATUS_OWNER") $STATUS_OWNER" \
+            --arg infra "$(icon "$STATUS_INFRA") $STATUS_INFRA" \
+            --arg target "$TARGET_URL" \
+            --arg ctx "<${RUN_URL}|View Run> | Trigger: ${TRIGGER} | $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{attachments:[{color:$color,blocks:[
+              {type:"header",text:{type:"plain_text",text:$title}},
+              {type:"section",fields:[
+                {type:"mrkdwn",text:("*Customer:*\n"+$customer)},
+                {type:"mrkdwn",text:("*Owner:*\n"+$owner)},
+                {type:"mrkdwn",text:("*Infra E2E:*\n"+$infra)},
+                {type:"mrkdwn",text:("*Target:*\n"+$target)}
+              ]},
+              {type:"context",elements:[{type:"mrkdwn",text:$ctx}]}
+            ]}]}')
+          curl -sS -X POST "$SLACK_WEBHOOK_URL" -H 'Content-Type: application/json' -d "$PAYLOAD"
 
       - name: Send Telegram notification
         if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATUS_EMOJI: ${{ steps.status.outputs.emoji }}
+          STATUS_CUSTOMER: ${{ steps.status.outputs.customer }}
+          STATUS_OWNER: ${{ steps.status.outputs.owner }}
+          STATUS_INFRA: ${{ steps.status.outputs.infra }}
+          TARGET_URL: ${{ env.API_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TRIGGER: ${{ github.event_name }}
         run: |
-          STATUS_ICON() {
-            case "$1" in
-              success) echo "✅" ;;
-              failure) echo "❌" ;;
-              skipped) echo "⏭️" ;;
-              *) echo "❓" ;;
-            esac
-          }
+          icon() { case "$1" in success) echo "✅";; failure) echo "❌";; skipped) echo "⏭️";; *) echo "❓";; esac; }
+          MSG="${STATUS_EMOJI} *Zenith DR Smoke Test Report*
 
-          CUSTOMER_ICON=$(STATUS_ICON "${{ steps.status.outputs.customer }}")
-          OWNER_ICON=$(STATUS_ICON "${{ steps.status.outputs.owner }}")
-          INFRA_ICON=$(STATUS_ICON "${{ steps.status.outputs.infra }}")
+          $(icon "$STATUS_CUSTOMER") Customer Userflow: ${STATUS_CUSTOMER}
+          $(icon "$STATUS_OWNER") Owner Userflow: ${STATUS_OWNER}
+          $(icon "$STATUS_INFRA") Infrastructure E2E: ${STATUS_INFRA}
 
-          MESSAGE="${{ steps.status.outputs.emoji }} *Zenith DR Smoke Test Report*
-
-${CUSTOMER_ICON} Customer Userflow: ${{ steps.status.outputs.customer }}
-${OWNER_ICON} Owner Userflow: ${{ steps.status.outputs.owner }}
-${INFRA_ICON} Infrastructure E2E: ${{ steps.status.outputs.infra }}
-
-Target: \`${{ env.API_URL }}\`
-Trigger: ${{ github.event_name }}
-[View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          Target: \`${TARGET_URL}\`
+          Trigger: ${TRIGGER}
+          [View Run](${RUN_URL})"
 
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d parse_mode=Markdown \
-            -d text="${MESSAGE}"
+            -d text="${MSG}"

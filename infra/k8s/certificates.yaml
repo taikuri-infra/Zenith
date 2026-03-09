@@ -36,3 +36,16 @@ spec:
   dnsNames:
     - ms.embermind.app
     - cloud.embermind.app
+---
+# =============================================================================
+# TLSStore: Set wildcard cert as default for user apps (zenith-apps namespace)
+# All IngressRoutes with `tls: {}` will use this cert automatically
+# =============================================================================
+apiVersion: traefik.io/v1alpha1
+kind: TLSStore
+metadata:
+  name: default
+  namespace: zenith-apps
+spec:
+  defaultCertificate:
+    secretName: apps-wildcard-tls
