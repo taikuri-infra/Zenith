@@ -8,7 +8,7 @@ imagePullSecret: ""  # set via Terraform
 mc:
   enabled: true
   replicas: 1
-  image: zenith-mc:0.3.0
+  image: zenith-mc:0.3.1
   port: 3100
   resources:
     requests:
