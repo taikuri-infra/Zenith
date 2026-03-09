@@ -50,12 +50,22 @@ spec:
             capabilities:
               drop:
                 - ALL
+          {{- if .Values.mc.env }}
+          env:
+            {{- range $key, $value := .Values.mc.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.mc.port }}
               protocol: TCP
           resources:
             {{- toYaml .Values.mc.resources | nindent 12 }}
+          volumeMounts:
+            - name: next-static
+              mountPath: /app/apps/mission-control/.next/static
           livenessProbe:
             httpGet:
               path: /
@@ -70,6 +80,16 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
+      initContainers:
+        - name: copy-static
+          image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.mc.image) }}
+          command: ["sh", "-c", "cp -r /app/apps/mission-control/.next/static/* /static/"]
+          volumeMounts:
+            - name: next-static
+              mountPath: /static
+      volumes:
+        - name: next-static
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

@@ -10,6 +10,10 @@ mc:
   replicas: 1
   image: zenith-mc:0.3.2
   port: 3100
+  env:
+    NEXT_PUBLIC_API_URL: "https://api.stage.freezenith.com"
+    NEXT_PUBLIC_DEMO_MODE: "false"
+    NEXT_PUBLIC_LANDING_URL: "https://stage.freezenith.com"
   resources:
     requests:
       memory: 128Mi
