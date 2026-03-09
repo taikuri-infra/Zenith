@@ -27,7 +27,7 @@ tenants:
       pvcs: "2"
       storage: 10Gi
     mc:
-      image: zenith-mc:0.2.0
+      image: zenith-mc:0.2.1
       host: embermind-ms.stage.freezenith.com
       replicas: 1
       port: 3100

@@ -90,7 +90,7 @@ tenants:
       zenith.dev/tenant: embermind
       zenith.dev/domain: embermind.app
     mc:
-      image: zenith-mc:0.2.0
+      image: zenith-mc:0.2.1
       host: embermind-ms.stage.freezenith.com
       replicas: 1
     web:

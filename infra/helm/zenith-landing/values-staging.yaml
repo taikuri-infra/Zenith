@@ -1,7 +1,7 @@
 # Staging values for zenith-landing
 namespace: zenith-staging
 replicas: 1
-image: zenith-landing:0.3.1
+image: zenith-landing:0.3.2
 imageRegistry: ""  # set via Terraform
 imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via Terraform
