@@ -9,9 +9,9 @@ import { BuildLogViewer } from "@/components/build-log-viewer";
 import { useToast } from "@/components/toast";
 import { useApi } from "@/hooks/use-api";
 import { useDeployLogs } from "@/hooks/use-deploy-logs";
-import { type DeployApp, type Deployment, type EnvVar, type Secret, type Release, type AppDatabase, type DatabaseBackup, type AppAuthConfig, type AppAuthUser, type AppBucket, type CustomDomain } from "@/lib/api";
+import { type DeployApp, type Deployment, type EnvVar, type Secret, type Release, type AppDatabase, type DatabaseBackup, type AppAuthConfig, type AppAuthUser, type AppBucket, type CustomDomain, type PodStatus, monitoring } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useDeployEvents } from "@/hooks/use-deploy-events";
 import {
   GitBranch,
@@ -42,6 +42,7 @@ import {
   Download,
   Cog,
   Heart,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -207,9 +208,37 @@ export default function AppDetailPage() {
   );
 }
 
+function getDiagnosticHint(pod: PodStatus): string {
+  const reason = pod.status_reason || "";
+  const message = pod.status_message || "";
+  if (reason === "CrashLoopBackOff") {
+    return "Your app is crashing on startup. Check the Logs tab for details.";
+  }
+  if (reason === "ErrImagePull" || reason === "ImagePullBackOff") {
+    return "Could not pull the image. Verify the image was built successfully.";
+  }
+  if (reason === "OOMKilled" || pod.last_exit_code === 137) {
+    return "Your app ran out of memory. Consider optimizing memory usage or upgrading your plan.";
+  }
+  if (message.includes("exec format error")) {
+    return "Image was built for the wrong CPU architecture. Rebuild with --platform linux/amd64.";
+  }
+  return "Your app failed to start. Check the Logs tab for more details.";
+}
+
 function OverviewTab({ app }: { app: DeployApp }) {
   const appType = app.app_type ?? "web";
   const isWeb = appType === "web";
+  const [diagnostic, setDiagnostic] = useState<PodStatus | null>(null);
+
+  useEffect(() => {
+    if (app.status === "failed" || app.status === "error") {
+      monitoring.getPods(app.id).then((res) => {
+        const unhealthy = res.pods.find((p) => p.status_reason || !p.ready);
+        if (unhealthy) setDiagnostic(unhealthy);
+      }).catch(() => {});
+    }
+  }, [app.id, app.status]);
 
   const details: { label: string; value: string; isLink?: boolean }[] = [
     { label: "Type", value: appType === "web" ? "Web Service" : appType === "worker" ? "Worker" : "Cron Job" },
@@ -225,6 +254,29 @@ function OverviewTab({ app }: { app: DeployApp }) {
 
   return (
     <div className="space-y-4">
+      {diagnostic && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-400" />
+          <div>
+            <p className="text-sm font-medium text-red-300">
+              {diagnostic.status_reason || "Deployment Failed"}
+            </p>
+            <p className="text-xs text-red-400/80 mt-0.5">
+              {getDiagnosticHint(diagnostic)}
+            </p>
+            {diagnostic.status_message && (
+              <p className="text-xs text-red-400/60 mt-1 font-mono">
+                {diagnostic.status_message}
+              </p>
+            )}
+            {diagnostic.last_exit_code !== undefined && diagnostic.last_exit_code !== 0 && (
+              <p className="text-xs text-red-400/60 mt-1">
+                Exit code: {diagnostic.last_exit_code}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
       {app.status === "sleeping" && (
         <div className="flex items-center gap-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-4 py-3">
           <span className="inline-block h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />

@@ -69,6 +69,9 @@ type K8sPodInfo struct {
 	StartedAt        time.Time `json:"started_at"`
 	Ready            bool      `json:"ready"`
 	MemoryLimitBytes int64     `json:"memory_limit_bytes,omitempty"`
+	StatusReason     string    `json:"status_reason,omitempty"`
+	StatusMessage    string    `json:"status_message,omitempty"`
+	LastExitCode     int32     `json:"last_exit_code,omitempty"`
 }
 
 // K8sPodMetrics holds pod-level resource usage from metrics-server.

@@ -41,6 +41,85 @@ resource "helm_release" "kyverno" {
 }
 
 # =============================================================================
+# Kyverno Policy — Validate Image Architecture (amd64 only in zenith-apps)
+# =============================================================================
+
+resource "kubernetes_manifest" "kyverno_validate_image_arch" {
+  count = var.enable_kyverno ? 1 : 0
+
+  manifest = {
+    apiVersion = "kyverno.io/v1"
+    kind       = "ClusterPolicy"
+    metadata = {
+      name = "validate-image-architecture"
+      annotations = {
+        "policies.kyverno.io/title"       = "Validate Image Architecture"
+        "policies.kyverno.io/category"    = "Supply Chain Security"
+        "policies.kyverno.io/severity"    = "medium"
+        "policies.kyverno.io/description" = "Images deployed to zenith-apps must be built for linux/amd64. This prevents exec format errors from wrong-architecture images."
+      }
+    }
+    spec = {
+      validationFailureAction = "Enforce"
+      background              = false
+      rules = [{
+        name = "check-image-arch"
+        match = {
+          any = [{
+            resources = {
+              kinds      = ["Pod"]
+              namespaces = ["zenith-apps"]
+            }
+          }]
+        }
+        exclude = {
+          any = [{
+            resources = {
+              selector = {
+                matchLabels = {
+                  "zenith.dev/cold-start" = "true"
+                }
+              }
+            }
+          }]
+        }
+        preconditions = {
+          all = [{
+            key      = "{{request.operation}}"
+            operator = "In"
+            value    = ["CREATE", "UPDATE"]
+          }]
+        }
+        validate = {
+          foreach = [{
+            list = "request.object.spec.containers"
+            context = [{
+              name = "imageData"
+              imageRegistry = {
+                reference = "{{element.image}}"
+              }
+            }]
+            deny = {
+              conditions = {
+                any = [{
+                  key      = "{{ imageData.configData.architecture }}"
+                  operator = "NotEquals"
+                  value    = "amd64"
+                }]
+              }
+            }
+            elementScope = true
+          }]
+          message = "One or more container images are not built for linux/amd64. Please rebuild with: docker build --platform linux/amd64"
+        }
+      }]
+    }
+  }
+
+  depends_on = [helm_release.kyverno]
+}
+
+# =============================================================================
 # Falco — Runtime Security Detection (5.14)
 # =============================================================================
 

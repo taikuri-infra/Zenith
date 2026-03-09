@@ -1733,6 +1733,9 @@ export interface PodStatus {
   cpu_millicores: number;
   memory_mb: number;
   started_at: string;
+  status_reason?: string;
+  status_message?: string;
+  last_exit_code?: number;
 }
 
 export interface PodsResponse {

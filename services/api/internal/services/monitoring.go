@@ -292,11 +292,14 @@ func (s *MonitoringService) GetPods(ctx context.Context, userID, appID string) (
 	result := make([]dto.PodStatus, 0, len(pods))
 	for _, p := range pods {
 		ps := dto.PodStatus{
-			Name:      p.Name,
-			Status:    p.Status,
-			Ready:     p.Ready,
-			Restarts:  p.Restarts,
-			StartedAt: p.StartedAt,
+			Name:          p.Name,
+			Status:        p.Status,
+			Ready:         p.Ready,
+			Restarts:      p.Restarts,
+			StartedAt:     p.StartedAt,
+			StatusReason:  p.StatusReason,
+			StatusMessage: p.StatusMessage,
+			LastExitCode:  p.LastExitCode,
 		}
 		if m, ok := metricsMap[p.Name]; ok {
 			ps.CPUMillicores = m.CPUMillicores

@@ -49,6 +49,9 @@ type PodStatus struct {
 	CPUMillicores int64     `json:"cpu_millicores"`
 	MemoryMB      float64   `json:"memory_mb"`
 	StartedAt     time.Time `json:"started_at"`
+	StatusReason  string    `json:"status_reason,omitempty"`
+	StatusMessage string    `json:"status_message,omitempty"`
+	LastExitCode  int32     `json:"last_exit_code,omitempty"`
 }
 
 // PodsResponse holds the list of pods for an app.

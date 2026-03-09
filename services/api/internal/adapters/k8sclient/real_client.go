@@ -500,10 +500,26 @@ func (c *RealClient) ListPods(ctx context.Context, namespace, labelSelector stri
 	for _, p := range pods.Items {
 		var restarts int32
 		ready := true
+		var statusReason, statusMessage string
+		var lastExitCode int32
 		for _, cs := range p.Status.ContainerStatuses {
 			restarts += cs.RestartCount
 			if !cs.Ready {
 				ready = false
+			}
+			if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
+				statusReason = cs.State.Waiting.Reason
+				statusMessage = cs.State.Waiting.Message
+			} else if cs.State.Terminated != nil && cs.State.Terminated.Reason != "" {
+				statusReason = cs.State.Terminated.Reason
+				statusMessage = cs.State.Terminated.Message
+				lastExitCode = cs.State.Terminated.ExitCode
+			}
+			if cs.LastTerminationState.Terminated != nil {
+				lastExitCode = cs.LastTerminationState.Terminated.ExitCode
+				if statusMessage == "" {
+					statusMessage = cs.LastTerminationState.Terminated.Message
+				}
 			}
 		}
 		startedAt := p.CreationTimestamp.Time
@@ -524,6 +540,9 @@ func (c *RealClient) ListPods(ctx context.Context, namespace, labelSelector stri
 			StartedAt:        startedAt,
 			Ready:            ready,
 			MemoryLimitBytes: memLimit,
+			StatusReason:     statusReason,
+			StatusMessage:    statusMessage,
+			LastExitCode:     lastExitCode,
 		})
 	}
 
