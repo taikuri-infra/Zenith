@@ -1,10 +1,11 @@
 /**
  * Runtime environment variable helper.
  *
- * In Docker deployments, NEXT_PUBLIC_* env vars are baked at build time
- * and cannot be changed at runtime. This module reads from window.__ENV
- * (injected by entrypoint.sh) on the client, falling back to process.env
- * for SSR and development.
+ * Next.js only inlines process.env.NEXT_PUBLIC_* with LITERAL dot access
+ * at build time. Dynamic access like process.env[key] is NOT inlined.
+ *
+ * We use direct process.env references as build-time fallbacks, and
+ * window.__ENV (injected by entrypoint.sh) for runtime overrides.
  */
 
 declare global {
@@ -13,23 +14,26 @@ declare global {
   }
 }
 
-function getEnv(key: string, fallback: string = ""): string {
-  // Client-side: read from runtime injection
+function getEnv(key: string, buildTimeValue: string | undefined, fallback: string = ""): string {
+  // Client-side: read from runtime injection (entrypoint.sh → env.js)
   if (typeof window !== "undefined" && window.__ENV?.[key]) {
     return window.__ENV[key];
   }
-  // Server-side / development: read from process.env
-  return process.env[key] || fallback;
+  // Build-time value (inlined by Next.js) or fallback
+  return buildTimeValue || fallback;
 }
 
+// Use direct process.env.NEXT_PUBLIC_* access so Next.js inlines them at build time
 export const API_BASE_URL = getEnv(
   "NEXT_PUBLIC_API_URL",
+  process.env.NEXT_PUBLIC_API_URL,
   "http://localhost:8080"
 );
-export const DEMO_MODE = getEnv("NEXT_PUBLIC_DEMO_MODE", "false") === "true";
-export const ZENITH_MODE = getEnv("NEXT_PUBLIC_ZENITH_MODE", "standalone");
+export const DEMO_MODE = getEnv("NEXT_PUBLIC_DEMO_MODE", process.env.NEXT_PUBLIC_DEMO_MODE, "false") === "true";
+export const ZENITH_MODE = getEnv("NEXT_PUBLIC_ZENITH_MODE", process.env.NEXT_PUBLIC_ZENITH_MODE, "standalone");
 export const LANDING_URL = getEnv(
   "NEXT_PUBLIC_LANDING_URL",
+  process.env.NEXT_PUBLIC_LANDING_URL,
   "https://freezenith.com"
 );
 export const IS_STANDALONE = ZENITH_MODE !== "saas";
