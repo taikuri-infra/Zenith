@@ -1,18 +1,19 @@
 name: Build & Push Docker Images
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/**'
-      - 'services/**'
-      - 'packages/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
+  # Called by release.yml after Release Please creates a release
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to tag images with'
+        required: true
+        type: string
+
+  # Manual trigger (kept for emergency/manual builds)
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., 0.2.0). Defaults to Chart.yaml appVersion.'
+        description: 'Version tag (e.g., 0.8.0). Defaults to Chart.yaml appVersion.'
         required: false
 
 env:
@@ -21,88 +22,9 @@ env:
 
 jobs:
   # =========================================================================
-  # Gate 1: Tests
-  # =========================================================================
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: services/api/go.mod
-          cache-dependency-path: services/api/go.sum
-
-      - name: Run API tests
-        run: cd services/api && go test ./... -race -count=1
-
-      - name: Run CLI tests
-        run: cd services/cli && go test ./... -race -count=1
-
-      - name: Build CLI
-        run: cd services/cli && go build -o /dev/null ./cmd/zenith/
-
-      - name: Run Terraform Provider tests
-        run: cd services/terraform-provider-zenith && go test ./... -race -count=1
-
-      - name: Build Terraform Provider
-        run: cd services/terraform-provider-zenith && go build -o /dev/null .
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint frontend
-        run: pnpm turbo lint
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-
-      - name: Validate Helm charts
-        run: |
-          for chart in infra/helm/zenith-api infra/helm/zenith-web infra/helm/zenith-landing infra/helm/zenith-operator infra/helm/zenith-demo infra/helm/zenith-tenant; do
-            echo "Linting $chart..."
-            helm lint "$chart" --strict || exit 1
-          done
-
-  # =========================================================================
-  # Gate 2: Security (Semgrep SAST)
-  # =========================================================================
-  security:
-    name: Semgrep SAST
-    runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Semgrep
-        run: semgrep scan --config auto --config .semgrep.yml --error .
-        env:
-          SEMGREP_RULES: >-
-            p/default
-            p/golang
-            p/typescript
-            p/nextjs
-            p/docker
-            p/kubernetes
-            p/secrets
-            p/owasp-top-ten
-
-  # =========================================================================
   # Prepare: determine version + SHA
   # =========================================================================
   prepare:
-    needs: [test, security]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -113,8 +35,8 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
           else
             VERSION=$(grep 'appVersion' infra/helm/zenith/Chart.yaml | awk '{print $2}' | tr -d '"')
           fi

@@ -9,9 +9,9 @@ on:
         required: false
         default: 'https://api.stage.freezenith.com'
 
-  # Run after successful image build
+  # Run after successful release or manual image build
   workflow_run:
-    workflows: ["Build & Push Docker Images"]
+    workflows: ["Release", "Build & Push Docker Images"]
     types: [completed]
     branches: [main, staging]
 

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, staging]
+
+jobs:
+  # =========================================================================
+  # Tests: Go + Node.js + Helm
+  # =========================================================================
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/api/go.mod
+          cache-dependency-path: services/api/go.sum
+
+      - name: Run API tests
+        run: cd services/api && go test ./... -race -count=1
+
+      - name: Run CLI tests
+        run: cd services/cli && go test ./... -race -count=1
+
+      - name: Build CLI
+        run: cd services/cli && go build -o /dev/null ./cmd/zenith/
+
+      - name: Run Terraform Provider tests
+        run: cd services/terraform-provider-zenith && go test ./... -race -count=1
+
+      - name: Build Terraform Provider
+        run: cd services/terraform-provider-zenith && go build -o /dev/null .
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint frontend
+        run: pnpm turbo lint
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Validate Helm charts
+        run: |
+          for chart in infra/helm/zenith-api infra/helm/zenith-web infra/helm/zenith-landing infra/helm/zenith-operator infra/helm/zenith-demo infra/helm/zenith-tenant; do
+            echo "Linting $chart..."
+            helm lint "$chart" --strict || exit 1
+          done
+
+  # =========================================================================
+  # Security: Semgrep SAST
+  # =========================================================================
+  security:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: semgrep scan --config auto --config .semgrep.yml --error .
+        env:
+          SEMGREP_RULES: >-
+            p/default
+            p/golang
+            p/typescript
+            p/nextjs
+            p/docker
+            p/kubernetes
+            p/secrets
+            p/owasp-top-ten
+
+  # =========================================================================
+  # Commitlint: validate conventional commit messages
+  # =========================================================================
+  commitlint:
+    name: Commitlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: wagoid/commitlint-github-action@v6

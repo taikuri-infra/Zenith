@@ -13,6 +13,8 @@
     "build:landing": "turbo build --filter=@zenith/landing"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0"
   },

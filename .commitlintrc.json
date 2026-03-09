@@ -1,0 +1,11 @@
+{
+  "extends": ["@commitlint/config-conventional"],
+  "rules": {
+    "scope-enum": [1, "always", [
+      "api", "web", "admin", "landing", "mc",
+      "cli", "operator", "helm", "terraform",
+      "ci", "infra", "deps"
+    ]],
+    "subject-case": [2, "always", "lower-case"]
+  }
+}
