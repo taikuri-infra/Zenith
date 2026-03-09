@@ -3,7 +3,7 @@
 namespace: zenith-staging
 imageRegistry: ""  # set via Terraform
 imagePullPolicy: IfNotPresent
-imagePullSecret: ""  # set via Terraform
+imagePullSecret: "harbor-registry"
 
 mc:
   enabled: true
