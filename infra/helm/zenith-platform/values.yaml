@@ -59,6 +59,10 @@ certificate:
 tenantQuotas:
   enabled: false
 
+# Cosign image signature verification (requires Kyverno)
+cosign:
+  enabled: false
+
 # Legacy Kong routes — removed, now using APISIX via zenith-api chart
 # kong:
 #   enabled: false
