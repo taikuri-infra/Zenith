@@ -1411,7 +1411,7 @@ const demoGatewayRoutes = [
 
 export const demoGateways = {
   list: async (_projectId?: string) => { await delay(300); return [demoGateway]; },
-  get: async (id: string) => { await delay(300); return { gateway: { ...demoGateway, id }, routes: demoGatewayRoutes }; },
+  get: async (id: string) => { await delay(300); return { gateway: { ...demoGateway, id }, routes: demoGatewayRoutes, groups: [] }; },
   create: async (name: string) => { await delay(500); return { ...demoGateway, id: "gw-new-" + Date.now(), name, slug: name.toLowerCase().replace(/\s+/g, "-"), route_count: 0 }; },
   update: async (id: string, name: string) => { await delay(300); return { ...demoGateway, id, name }; },
   delete: async () => { await delay(300); },
@@ -1423,6 +1423,13 @@ export const demoGateways = {
   },
   updateRoute: async (_gwId: string, routeId: string, data: Record<string, unknown>) => { await delay(300); return { ...demoGatewayRoutes[0], id: routeId, ...data }; },
   deleteRoute: async () => { await delay(300); },
+  listGroups: async () => { await delay(300); return []; },
+  createGroup: async (_gwId: string, data: { name: string; app_id: string }) => {
+    await delay(500);
+    return { id: "grp-" + Date.now(), gateway_id: "gw-1", name: data.name, app_id: data.app_id, app_subdomain: "my-app", plugins: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  },
+  updateGroup: async (_gwId: string, groupId: string, data: Record<string, unknown>) => { await delay(300); return { id: groupId, gateway_id: "gw-1", name: "group", app_id: "app-1", app_subdomain: "my-app", plugins: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...data }; },
+  deleteGroup: async () => { await delay(300); },
 };
 
 // ---- Auth Pools Demo ----
