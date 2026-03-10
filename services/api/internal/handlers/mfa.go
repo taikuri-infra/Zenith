@@ -24,7 +24,12 @@ func (h *MFAHandler) GetStatus(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 	enrollment, err := h.mfaRepo.GetEnrollment(c.Context(), userID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		// No enrollment is normal — return disabled status instead of 500
+		return c.JSON(fiber.Map{
+			"status":       entities.MFAStatusDisabled,
+			"enabled_at":   nil,
+			"backup_codes": 0,
+		})
 	}
 	return c.JSON(fiber.Map{
 		"status":       enrollment.Status,

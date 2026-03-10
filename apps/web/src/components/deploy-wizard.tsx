@@ -401,7 +401,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         ...(envVarsToSend.length > 0 && { env_vars: envVarsToSend }),
       });
 
-      toast("success", "Application deployed successfully! Build is starting...");
+      toast("success", "Application created! Deploying now — check the app list for status.");
       onClose();
     } catch (err: unknown) {
       const apiErr = err as { status?: number; body?: { error?: string } };

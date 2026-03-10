@@ -47,8 +47,10 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 
 	scaleToZero := planLimits != nil && ShouldScaleToZero(planLimits)
 
-	// Use APISIX routing when the app has an auto-gateway
-	useApisix := app.AutoGatewayID != ""
+	// APISIX is used for the platform API gateway (api.stage.freezenith.com),
+	// NOT for routing customer app traffic. Customer apps route directly to
+	// their own service. The auto-gateway creates APISIX routes on *.gw.* domains.
+	useApisix := false
 
 	res := &K8sResources{
 		Deployment:    generateDeployment(app, imageTag, namespace, labels, envVars, tier),
