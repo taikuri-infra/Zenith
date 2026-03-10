@@ -256,15 +256,17 @@ export default function GatewayPage() {
 
     setAddingRoute(true);
     try {
-      await gateways.createRoute(activeGw.id, {
+      const routeData: Parameters<typeof gateways.createRoute>[1] = {
         name: routeName.trim(),
         path: routePath.trim(),
         methods,
-        ...(routeGroupId ? { group_id: routeGroupId } : { app_id: routeAppId }),
         strip_prefix: routeStripPrefix,
-        ...(routeAuthPoolId ? { auth_pool_id: routeAuthPoolId } : {}),
-        ...(routePlugins.length > 0 ? { plugins: routePlugins } : {}),
-      });
+      };
+      if (routeGroupId) routeData.group_id = routeGroupId;
+      else routeData.app_id = routeAppId;
+      if (routeAuthPoolId) routeData.auth_pool_id = routeAuthPoolId;
+      if (routePlugins.length > 0) routeData.plugins = routePlugins;
+      await gateways.createRoute(activeGw.id, routeData);
       setShowAddRoute(false);
       setRouteName("");
       setRoutePath("");
