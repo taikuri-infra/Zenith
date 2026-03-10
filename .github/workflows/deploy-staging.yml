@@ -70,7 +70,16 @@ jobs:
         if: |
           inputs.skip_tests != true &&
           (inputs.component == 'web' || inputs.component == 'mc' || inputs.component == 'landing' || inputs.component == 'all')
-        run: pnpm install --frozen-lockfile && pnpm turbo lint
+        run: |
+          pnpm install --frozen-lockfile
+          COMP="${{ inputs.component }}"
+          if [ "$COMP" = "all" ]; then
+            pnpm turbo lint
+          elif [ "$COMP" = "mc" ]; then
+            pnpm turbo lint --filter=@zenith/mission-control
+          else
+            pnpm turbo lint --filter=@zenith/${COMP}
+          fi
 
       # ── Harbor Login ───────────────────────────────────────────────────────
       - name: Login to Harbor
