@@ -1,0 +1,79 @@
+{{- if .Values.cosign.enabled }}
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Cosign Image Signatures
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/description: >-
+      Verifies that all container images deployed in zenith-* namespaces
+      are signed with the Zenith cosign key. System images (CNPG, Keycloak,
+      APISIX, Grafana, etc.) are exempted.
+spec:
+  validationFailureAction: {{ .Values.cosign.enforcement | default "Enforce" }}
+  background: true
+  rules:
+    - name: verify-zenith-images
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "zenith-*"
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - "kube-system"
+                - "kube-public"
+      preconditions:
+        all:
+          - key: "{{ `{{request.operation || 'BACKGROUND'}}` }}"
+            operator: AnyIn
+            value:
+              - CREATE
+              - UPDATE
+      validate:
+        message: "Image signature verification failed. Only CI-signed images are allowed."
+        foreach:
+          - list: "request.object.spec.[initContainers, ephemeralContainers, containers][]"
+            preconditions:
+              all:
+                # Skip system images that are not built by our CI
+                - key: "{{ `{{element.image}}` }}"
+                  operator: AnyNotIn
+                  value:
+                    - "ghcr.io/cloudnative-pg/*"
+                    - "quay.io/keycloak/*"
+                    - "apache/apisix*"
+                    - "grafana/*"
+                    - "prom/*"
+                    - "bitnami/*"
+                    - "docker.io/library/*"
+                    - "registry.k8s.io/*"
+                    - "quay.io/jetstack/*"
+                    - "quay.io/kiwigrid/*"
+                    - "quay.io/argoproj/*"
+                    - "docker.io/kedacore/*"
+                    - "ghcr.io/kyverno/*"
+                    - "falcosecurity/*"
+                    - "velero/*"
+                    - "curlimages/*"
+                    - "busybox*"
+                    - "nginx*"
+            validate:
+              pattern:
+                image: "{{ .Values.cosign.registryPattern | default (printf "%s/*" .Values.registry.host) }}"
+              {{- if .Values.cosign.publicKey }}
+              imageVerify:
+                - imageReferences:
+                    - "{{ .Values.cosign.registryPattern | default (printf "%s/*" .Values.registry.host) }}"
+                  attestors:
+                    - entries:
+                        - keys:
+                            publicKeys: |-
+                              {{ .Values.cosign.publicKey | nindent 30 }}
+              {{- end }}
+{{- end }}

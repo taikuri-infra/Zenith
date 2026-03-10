@@ -18,16 +18,6 @@ output "landing_status" {
   value       = helm_release.zenith_landing.status
 }
 
-output "demo_status" {
-  description = "Zenith Demo release status"
-  value       = var.enable_demo ? helm_release.zenith_demo[0].status : "disabled"
-}
-
-output "tenant_status" {
-  description = "Zenith Tenant release status"
-  value       = var.enable_tenants ? helm_release.zenith_tenant[0].status : "disabled"
-}
-
 output "apisix_status" {
   description = "APISIX API Gateway release status"
   value       = var.enable_apisix ? helm_release.apisix[0].status : "disabled"

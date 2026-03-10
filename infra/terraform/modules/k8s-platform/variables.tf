@@ -32,18 +32,6 @@ variable "landing_chart_path" {
   default     = ""
 }
 
-variable "demo_chart_path" {
-  description = "Local path to the zenith-demo Helm chart"
-  type        = string
-  default     = ""
-}
-
-variable "tenant_chart_path" {
-  description = "Local path to the zenith-tenant Helm chart"
-  type        = string
-  default     = ""
-}
-
 # --- Per-chart values files ---
 
 variable "platform_values_file" {
@@ -59,18 +47,6 @@ variable "api_values_file" {
 variable "landing_values_file" {
   description = "Path to the zenith-landing values file"
   type        = string
-}
-
-variable "demo_values_file" {
-  description = "Path to the zenith-demo values file"
-  type        = string
-  default     = ""
-}
-
-variable "tenant_values_file" {
-  description = "Path to the zenith-tenant values file"
-  type        = string
-  default     = ""
 }
 
 # --- Registry Credentials (for imagePullSecret) ---
@@ -194,18 +170,6 @@ variable "enable_keda" {
 
 variable "enable_monitoring" {
   description = "Install monitoring stack (Prometheus + Grafana + Loki)"
-  type        = bool
-  default     = false
-}
-
-variable "enable_demo" {
-  description = "Deploy demo MC + Web instances"
-  type        = bool
-  default     = false
-}
-
-variable "enable_tenants" {
-  description = "Deploy tenant MC + Web instances"
   type        = bool
   default     = false
 }

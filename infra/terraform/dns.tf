@@ -32,24 +32,6 @@ resource "cloudflare_record" "freezenith_api" {
   ttl     = 1
 }
 
-resource "cloudflare_record" "freezenith_demo_ms" {
-  zone_id = var.freezenith_zone_id
-  name    = "demo-ms"
-  content = var.server_ip
-  type    = "A"
-  proxied = false
-  ttl     = 1
-}
-
-resource "cloudflare_record" "freezenith_demo_cloud" {
-  zone_id = var.freezenith_zone_id
-  name    = "demo-cloud"
-  content = var.server_ip
-  type    = "A"
-  proxied = false
-  ttl     = 1
-}
-
 # ---- embermind.app zone ----
 
 resource "cloudflare_record" "embermind_ms" {

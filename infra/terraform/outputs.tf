@@ -1,11 +1,9 @@
 output "freezenith_records" {
   description = "freezenith.com DNS records"
   value = {
-    root       = cloudflare_record.freezenith_root.hostname
-    www        = cloudflare_record.freezenith_www.hostname
-    api        = cloudflare_record.freezenith_api.hostname
-    demo_ms    = cloudflare_record.freezenith_demo_ms.hostname
-    demo_cloud = cloudflare_record.freezenith_demo_cloud.hostname
+    root = cloudflare_record.freezenith_root.hostname
+    www  = cloudflare_record.freezenith_www.hostname
+    api  = cloudflare_record.freezenith_api.hostname
   }
 }
 

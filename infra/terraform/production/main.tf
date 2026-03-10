@@ -96,11 +96,9 @@ module "platform_dns" {
   server_ip = module.management.server_ip
 
   platform_records = {
-    root       = { name = "@" }
-    www        = { name = "www" }
-    api        = { name = "api" }
-    demo_ms    = { name = "demo-ms" }
-    demo_cloud = { name = "demo-cloud" }
+    root = { name = "@" }
+    www  = { name = "www" }
+    api  = { name = "api" }
   }
 
   customer_records = {}

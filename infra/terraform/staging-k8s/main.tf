@@ -103,23 +103,18 @@ module "platform" {
   domain         = var.domain
   cluster_domain = var.cluster_domain
 
-  # Helm charts from local filesystem (Harbor is not ready on first deploy)
-  chart_repository = ""
+  # Helm charts (empty = local filesystem, set to OCI URL for registry)
+  chart_repository = var.chart_repository
   chart_version    = var.zenith_chart_version
 
   # Local chart paths (used when chart_repository is empty)
   platform_chart_path = "${path.module}/../../helm/zenith-platform"
   api_chart_path      = "${path.module}/../../helm/zenith-api"
   landing_chart_path  = "${path.module}/../../helm/zenith-landing"
-  demo_chart_path     = "${path.module}/../../helm/zenith-demo"
-  tenant_chart_path   = "${path.module}/../../helm/zenith-tenant"
-
   # Per-chart values files
   platform_values_file = "${path.module}/../../helm/zenith-platform/values-staging.yaml"
   api_values_file      = "${path.module}/../../helm/zenith-api/values-staging.yaml"
   landing_values_file  = "${path.module}/../../helm/zenith-landing/values-staging.yaml"
-  demo_values_file     = "${path.module}/../../helm/zenith-demo/values-staging.yaml"
-  tenant_values_file   = "${path.module}/../../helm/zenith-tenant/values-staging.yaml"
 
   # Registry credentials (for OCI pull + imagePullSecret)
   registry_host          = var.registry_host
@@ -173,6 +168,4 @@ module "platform" {
   enable_sealed_secrets = true
   enable_monitoring     = true
   enable_keda           = true
-  enable_demo           = true
-  enable_tenants        = false # Tenants provisioned dynamically via purchase flow
 }

@@ -18,16 +18,6 @@ output "landing" {
   value       = module.platform.landing_status
 }
 
-output "demo" {
-  description = "Zenith Demo status"
-  value       = module.platform.demo_status
-}
-
-output "tenant" {
-  description = "Zenith Tenant status"
-  value       = module.platform.tenant_status
-}
-
 # V2: APISIX replaces Kong
 output "apisix" {
   description = "APISIX API Gateway status"

@@ -58,6 +58,12 @@ variable "zenith_chart_version" {
   default     = "0.4.0"
 }
 
+variable "chart_repository" {
+  description = "OCI Helm chart repository URL (leave empty for local chart paths)"
+  type        = string
+  default     = ""
+}
+
 # --- App Secrets ---
 
 variable "jwt_secret" {

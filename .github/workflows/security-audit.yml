@@ -1,0 +1,182 @@
+name: Weekly Security Audit
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Monday 6am UTC
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ secrets.HARBOR_HOST }}
+  PROJECT: zenith-stage
+
+jobs:
+  kube-bench:
+    name: CIS Benchmark (kube-bench)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run kube-bench
+        run: |
+          mkdir -p security-reports
+          docker run --rm \
+            aquasec/kube-bench:latest \
+            run --json > security-reports/kube-bench.json 2>&1 || true
+          echo "kube-bench scan complete"
+
+      - name: Upload kube-bench report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kube-bench-report
+          path: security-reports/kube-bench.json
+          retention-days: 30
+
+  trivy-images:
+    name: Trivy Image Scan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - zenith-api
+          - zenith-web
+          - zenith-landing
+          - zenith-mc
+          - zenith-operator
+    steps:
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_ROBOT_USER }}
+          password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+
+      - name: Scan ${{ matrix.image }}
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ matrix.image }}:latest
+          format: json
+          output: trivy-${{ matrix.image }}.json
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-${{ matrix.image }}
+          path: trivy-${{ matrix.image }}.json
+          retention-days: 30
+
+  trivy-repo:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan repo dependencies
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: trivy-fs.json
+          severity: CRITICAL,HIGH
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-fs-report
+          path: trivy-fs.json
+          retention-days: 30
+
+  zap-baseline:
+    name: OWASP ZAP Baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: https://api.stage.freezenith.com
+          allow_issue_writing: false
+          cmd_options: '-I -J zap-report.json'
+
+      - name: Upload ZAP report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-baseline-report
+          path: zap-report.json
+          retention-days: 30
+
+  summary:
+    name: Audit Summary
+    needs: [kube-bench, trivy-images, trivy-repo, zap-baseline]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: reports/
+
+      - name: Generate summary
+        id: summary
+        run: |
+          echo "## Weekly Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Count critical/high across trivy reports
+          CRITICAL=0
+          HIGH=0
+          for f in reports/trivy-*/trivy-*.json; do
+            if [[ -f "$f" ]]; then
+              C=$(grep -c '"Severity":"CRITICAL"' "$f" 2>/dev/null || echo 0)
+              H=$(grep -c '"Severity":"HIGH"' "$f" 2>/dev/null || echo 0)
+              CRITICAL=$((CRITICAL + C))
+              HIGH=$((HIGH + H))
+            fi
+          done
+
+          echo "| Trivy (images + fs) | Critical: $CRITICAL, High: $HIGH |" >> $GITHUB_STEP_SUMMARY
+
+          # ZAP summary
+          ZAP_ALERTS=0
+          if [[ -f reports/zap-baseline-report/zap-report.json ]]; then
+            ZAP_ALERTS=$(grep -c '"riskcode"' reports/zap-baseline-report/zap-report.json 2>/dev/null || echo 0)
+          fi
+          echo "| OWASP ZAP | $ZAP_ALERTS alerts |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Set output for notifications
+          echo "critical=$CRITICAL" >> "$GITHUB_OUTPUT"
+          echo "high=$HIGH" >> "$GITHUB_OUTPUT"
+          echo "zap_alerts=$ZAP_ALERTS" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -sf -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\":\"Security Audit: Critical=${{ steps.summary.outputs.critical }}, High=${{ steps.summary.outputs.high }}, ZAP=${{ steps.summary.outputs.zap_alerts }} — <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Report>\"}" \
+            || true
+
+      - name: Notify Telegram
+        if: env.TELEGRAM_BOT_TOKEN != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode="Markdown" \
+            -d text="*Security Audit*: Critical=${{ steps.summary.outputs.critical }}, High=${{ steps.summary.outputs.high }}, ZAP=${{ steps.summary.outputs.zap_alerts }} — [View Report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
+            || true

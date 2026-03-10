@@ -1,0 +1,49 @@
+name: Load Test (k6)
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'API URL to test against'
+        required: true
+        default: 'https://api.stage.freezenith.com'
+      scenario:
+        description: 'Scenario to run'
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - auth
+          - crud
+          - mixed
+          - spike
+      vus:
+        description: 'Override max VUs (leave empty for defaults)'
+        required: false
+
+jobs:
+  load-test:
+    name: k6 Load Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run k6 load test
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: infra/scripts/load-test.js
+        env:
+          API_URL: ${{ inputs.api_url }}
+          SCENARIO: ${{ inputs.scenario }}
+
+      - name: Generate HTML report
+        if: always()
+        run: |
+          # k6 outputs to stdout; capture summary in step summary
+          echo "## k6 Load Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| API URL | ${{ inputs.api_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Scenario | ${{ inputs.scenario }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY

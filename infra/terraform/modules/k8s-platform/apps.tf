@@ -135,35 +135,3 @@ resource "helm_release" "zenith_landing" {
   depends_on = [helm_release.zenith_platform]
 }
 
-# =============================================================================
-# Zenith Demo — MC + Web demo instances (optional)
-# =============================================================================
-
-resource "helm_release" "zenith_demo" {
-  count = var.enable_demo ? 1 : 0
-
-  name      = "zenith-demo"
-  chart     = var.chart_repository != "" ? "zenith-demo" : var.demo_chart_path
-  version   = var.chart_repository != "" ? var.chart_version : null
-  namespace = var.platform_namespace
-  wait      = false
-  timeout   = 300
-
-  repository          = var.chart_repository != "" ? var.chart_repository : null
-  repository_username = var.chart_repository != "" ? var.registry_username : null
-  repository_password = var.chart_repository != "" ? var.registry_password : null
-
-  values = [file(var.demo_values_file)]
-
-  set {
-    name  = "imagePullSecret"
-    value = var.registry_host != "" ? "harbor-registry" : ""
-  }
-
-  set {
-    name  = "imageRegistry"
-    value = var.registry_host != "" ? "${var.registry_host}/zenith-stage" : ""
-  }
-
-  depends_on = [helm_release.zenith_platform]
-}

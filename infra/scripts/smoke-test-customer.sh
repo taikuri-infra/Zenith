@@ -1674,9 +1674,133 @@ if echo "$LOGIN_RESP3" | grep -q '"access_token"\|"token"'; then
 fi
 
 # =============================================
-# 40. Cleanup
+# 41. Cross-Tenant Isolation
 # =============================================
-section "40" "Cleanup (delete test resources)"
+section "41" "Cross-tenant isolation (Tenant B cannot access Tenant A resources)"
+
+TENANT_B_EMAIL="tenant-b-$(date +%s)@test.zenith.dev"
+TENANT_B_PASSWORD="TenantB1234"
+TOKEN_B=""
+
+# Register Tenant B
+TENANT_B_REG=$(curl -so /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
+  -d "{\"email\":\"${TENANT_B_EMAIL}\",\"password\":\"${TENANT_B_PASSWORD}\",\"name\":\"Tenant B\"}" \
+  "${API_URL}/api/v1/auth/register" 2>/dev/null)
+if [[ "$TENANT_B_REG" == "201" || "$TENANT_B_REG" == "200" ]]; then
+  pass "Register Tenant B (status: $TENANT_B_REG)"
+else
+  fail "Register Tenant B (status: $TENANT_B_REG)"
+fi
+
+# Login as Tenant B
+TENANT_B_LOGIN=$(curl -sf -X POST -H "Content-Type: application/json" \
+  -d "{\"email\":\"${TENANT_B_EMAIL}\",\"password\":\"${TENANT_B_PASSWORD}\"}" \
+  "${API_URL}/api/v1/auth/login" 2>/dev/null)
+if echo "$TENANT_B_LOGIN" | grep -q '"access_token"\|"token"'; then
+  TOKEN_B=$(echo "$TENANT_B_LOGIN" | grep -o '"access_token":"[^"]*"' | head -1 | cut -d'"' -f4)
+  [[ -z "$TOKEN_B" ]] && TOKEN_B=$(echo "$TENANT_B_LOGIN" | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
+  pass "Login as Tenant B — got token"
+else
+  fail "Login as Tenant B" "$TENANT_B_LOGIN"
+fi
+
+# Helper: check status with Tenant B's token
+api_status_b() {
+  local method="${1}"
+  local path="${2}"
+  local data="${3:-}"
+  local status
+  if [[ -n "$data" ]]; then
+    status=$(curl -so /dev/null -w "%{http_code}" -X "$method" -H "Authorization: Bearer $TOKEN_B" -H "Content-Type: application/json" -d "$data" "${API_URL}${path}" 2>/dev/null)
+  else
+    status=$(curl -so /dev/null -w "%{http_code}" -X "$method" -H "Authorization: Bearer $TOKEN_B" -H "Content-Type: application/json" "${API_URL}${path}" 2>/dev/null)
+  fi
+  if _retry_on_429 "$status"; then
+    if [[ -n "$data" ]]; then
+      status=$(curl -so /dev/null -w "%{http_code}" -X "$method" -H "Authorization: Bearer $TOKEN_B" -H "Content-Type: application/json" -d "$data" "${API_URL}${path}" 2>/dev/null)
+    else
+      status=$(curl -so /dev/null -w "%{http_code}" -X "$method" -H "Authorization: Bearer $TOKEN_B" -H "Content-Type: application/json" "${API_URL}${path}" 2>/dev/null)
+    fi
+  fi
+  echo "$status"
+}
+
+if [[ -n "$TOKEN_B" ]]; then
+  # Tenant B tries to GET Tenant A's app
+  if [[ -n "$APP_ID" ]]; then
+    CROSS_APP=$(api_status_b GET "/api/v1/apps/${APP_ID}")
+    if [[ "$CROSS_APP" == "403" || "$CROSS_APP" == "404" ]]; then
+      pass "Tenant B cannot read Tenant A app (status: $CROSS_APP)"
+    else
+      fail "ISOLATION BREACH: Tenant B read Tenant A app (status: $CROSS_APP)"
+    fi
+
+    # Tenant B tries to DELETE Tenant A's app
+    CROSS_DEL_APP=$(api_status_b DELETE "/api/v1/apps/${APP_ID}")
+    if [[ "$CROSS_DEL_APP" == "403" || "$CROSS_DEL_APP" == "404" ]]; then
+      pass "Tenant B cannot delete Tenant A app (status: $CROSS_DEL_APP)"
+    else
+      fail "ISOLATION BREACH: Tenant B deleted Tenant A app (status: $CROSS_DEL_APP)"
+    fi
+  fi
+
+  # Tenant B tries to GET Tenant A's database
+  if [[ -n "$DB_ID" ]]; then
+    CROSS_DB=$(api_status_b GET "/api/v1/databases/${DB_ID}")
+    if [[ "$CROSS_DB" == "403" || "$CROSS_DB" == "404" ]]; then
+      pass "Tenant B cannot read Tenant A database (status: $CROSS_DB)"
+    else
+      fail "ISOLATION BREACH: Tenant B read Tenant A database (status: $CROSS_DB)"
+    fi
+  fi
+
+  # Tenant B tries to GET Tenant A's storage bucket
+  if [[ -n "$BUCKET_ID" ]]; then
+    CROSS_BUCKET=$(api_status_b GET "/api/v1/storage-buckets/${BUCKET_ID}")
+    if [[ "$CROSS_BUCKET" == "403" || "$CROSS_BUCKET" == "404" ]]; then
+      pass "Tenant B cannot read Tenant A storage (status: $CROSS_BUCKET)"
+    else
+      fail "ISOLATION BREACH: Tenant B read Tenant A storage (status: $CROSS_BUCKET)"
+    fi
+  fi
+
+  # Tenant B tries to GET Tenant A's API key
+  if [[ -n "$APIKEY_ID" ]]; then
+    CROSS_KEY=$(api_status_b GET "/api/v1/api-keys/${APIKEY_ID}")
+    if [[ "$CROSS_KEY" == "403" || "$CROSS_KEY" == "404" ]]; then
+      pass "Tenant B cannot read Tenant A API key (status: $CROSS_KEY)"
+    else
+      fail "ISOLATION BREACH: Tenant B read Tenant A API key (status: $CROSS_KEY)"
+    fi
+  fi
+
+  # Tenant B tries to GET Tenant A's gateway
+  if [[ -n "$GW_ID" ]]; then
+    CROSS_GW=$(api_status_b GET "/api/v1/gateways/${GW_ID}")
+    if [[ "$CROSS_GW" == "403" || "$CROSS_GW" == "404" ]]; then
+      pass "Tenant B cannot read Tenant A gateway (status: $CROSS_GW)"
+    else
+      fail "ISOLATION BREACH: Tenant B read Tenant A gateway (status: $CROSS_GW)"
+    fi
+  fi
+
+  # Cleanup: delete Tenant B account
+  DEL_B_STATUS=$(curl -so /dev/null -w "%{http_code}" -X DELETE \
+    -H "Authorization: Bearer $TOKEN_B" -H "Content-Type: application/json" \
+    "${API_URL}/api/v1/auth/account" 2>/dev/null)
+  if [[ "$DEL_B_STATUS" == "200" || "$DEL_B_STATUS" == "204" || "$DEL_B_STATUS" == "429" ]]; then
+    pass "Tenant B account deleted (status: $DEL_B_STATUS)"
+  else
+    fail "Tenant B account cleanup (status: $DEL_B_STATUS)"
+  fi
+else
+  fail "Skipping cross-tenant tests — Tenant B login failed"
+fi
+
+# =============================================
+# 42. Cleanup
+# =============================================
+section "42" "Cleanup (delete test resources)"
 
 # Clean up auth pool
 if [[ -n "$POOL_ID" ]]; then

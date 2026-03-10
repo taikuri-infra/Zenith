@@ -1,10 +1,53 @@
-# Copy to terraform.tfvars and fill in values
+# ===========================================================================
+# Zenith Production — terraform.tfvars template
+# Copy to terraform.tfvars and fill in all values before applying.
+# ===========================================================================
 
 kubeconfig_path = "~/.kube/zenith-production.yaml"
 
-jwt_secret     = ""
-admin_email    = "admin@freezenith.com"
-admin_password = ""
+# --- Hetzner ---
+hcloud_token = ""
 
-enable_keda       = true
-enable_monitoring = true
+# --- Domains ---
+domain         = "freezenith.com"
+cluster_domain = "freezenith.com"
+
+# --- Registry ---
+registry_host          = "registry.freezenith.com"
+customer_registry_host = "hub.freezenith.com"
+registry_username      = ""
+registry_password      = ""
+zenith_chart_version   = "0.4.0"
+chart_repository       = ""  # OCI registry URL, or empty for local charts
+
+# --- App Secrets ---
+jwt_secret             = ""   # openssl rand -base64 48
+admin_email            = "admin@freezenith.com"
+admin_password         = ""   # openssl rand -base64 20
+github_webhook_secret  = ""   # openssl rand -hex 32
+secrets_encryption_key = ""   # openssl rand -hex 32
+resend_api_key         = ""   # from resend.com dashboard
+google_client_id       = ""   # from Google Cloud Console
+
+# --- Database Storage (production: larger than staging) ---
+keycloak_db_storage_size = "20Gi"
+free_db_storage_size     = "20Gi"
+
+# --- S3 / Object Storage (Hetzner) ---
+s3_access_key = ""
+s3_secret_key = ""
+s3_endpoint   = "https://fsn1.your-objectstorage.com"
+
+# --- Cloudflare ---
+cloudflare_api_token = ""
+
+# --- Keycloak ---
+keycloak_db_password    = ""  # openssl rand -base64 48
+keycloak_admin_password = ""  # openssl rand -hex 32
+
+# --- Temporal ---
+temporal_db_user     = "temporal"
+temporal_db_password = ""     # openssl rand -hex 32
+
+# --- ArgoCD / GitOps ---
+github_token = ""             # GitHub PAT with repo scope

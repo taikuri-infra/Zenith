@@ -28,7 +28,7 @@ echo "================================================"
 echo ""
 
 # --- 1. kube-bench: CIS Kubernetes Benchmark ---
-echo "[1/4] Running kube-bench (CIS Benchmark)..."
+echo "[1/6] Running kube-bench (CIS Benchmark)..."
 if command -v kube-bench &>/dev/null; then
   kube-bench run --json > "$OUTPUT_DIR/kube-bench_${TIMESTAMP}.json" 2>&1 || true
   echo "  -> $OUTPUT_DIR/kube-bench_${TIMESTAMP}.json"
@@ -71,7 +71,7 @@ fi
 echo ""
 
 # --- 2. kube-hunter: Penetration Testing ---
-echo "[2/4] Running kube-hunter..."
+echo "[2/6] Running kube-hunter..."
 if command -v kube-hunter &>/dev/null; then
   kube-hunter --pod --report json > "$OUTPUT_DIR/kube-hunter_${TIMESTAMP}.json" 2>&1 || true
   echo "  -> $OUTPUT_DIR/kube-hunter_${TIMESTAMP}.json"
@@ -87,7 +87,7 @@ fi
 echo ""
 
 # --- 3. Trivy: Vulnerability Scanning ---
-echo "[3/4] Running Trivy (image + k8s scan)..."
+echo "[3/6] Running Trivy (image + k8s scan)..."
 if command -v trivy &>/dev/null; then
   # Scan the cluster for misconfigurations
   trivy k8s --report summary \
@@ -115,7 +115,7 @@ fi
 echo ""
 
 # --- 4. kubeaudit: Security Auditing ---
-echo "[4/4] Running kubeaudit..."
+echo "[4/6] Running kubeaudit..."
 if command -v kubeaudit &>/dev/null; then
   kubeaudit all --json \
     --kubeconfig "$KUBECONFIG" \
@@ -126,11 +126,79 @@ else
 fi
 echo ""
 
-# --- Summary ---
+# --- 5. OWASP ZAP Baseline Scan ---
+STAGING_API_URL="${STAGING_API_URL:-https://api.stage.freezenith.com}"
+echo "[5/6] Running OWASP ZAP baseline scan against ${STAGING_API_URL}..."
+if command -v docker &>/dev/null; then
+  docker run --rm -v "$OUTPUT_DIR:/zap/wrk:rw" \
+    ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+    -t "$STAGING_API_URL" \
+    -J "zap-baseline_${TIMESTAMP}.json" \
+    -r "zap-baseline_${TIMESTAMP}.html" \
+    -I 2>&1 | tail -20 || true
+  echo "  -> $OUTPUT_DIR/zap-baseline_${TIMESTAMP}.json"
+  echo "  -> $OUTPUT_DIR/zap-baseline_${TIMESTAMP}.html"
+else
+  echo "  -> Docker not found. ZAP requires Docker."
+fi
+echo ""
+
+# --- 6. Trivy Filesystem Scan (Go/Node deps) ---
+echo "[6/6] Running Trivy filesystem scan on repo..."
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if command -v trivy &>/dev/null; then
+  trivy fs --format json \
+    --output "$OUTPUT_DIR/trivy-fs_${TIMESTAMP}.json" \
+    --severity CRITICAL,HIGH \
+    "$REPO_ROOT" 2>&1 || true
+  echo "  -> $OUTPUT_DIR/trivy-fs_${TIMESTAMP}.json"
+else
+  echo "  -> trivy not found. Install: https://aquasecurity.github.io/trivy/"
+fi
+echo ""
+
+# --- Summary Report ---
+CRITICAL_COUNT=0
+HIGH_COUNT=0
+MEDIUM_COUNT=0
+
+# Count findings from trivy-fs
+if [[ -f "$OUTPUT_DIR/trivy-fs_${TIMESTAMP}.json" ]]; then
+  FS_CRIT=$(grep -c '"Severity":"CRITICAL"' "$OUTPUT_DIR/trivy-fs_${TIMESTAMP}.json" 2>/dev/null || echo 0)
+  FS_HIGH=$(grep -c '"Severity":"HIGH"' "$OUTPUT_DIR/trivy-fs_${TIMESTAMP}.json" 2>/dev/null || echo 0)
+  FS_MED=$(grep -c '"Severity":"MEDIUM"' "$OUTPUT_DIR/trivy-fs_${TIMESTAMP}.json" 2>/dev/null || echo 0)
+  CRITICAL_COUNT=$((CRITICAL_COUNT + FS_CRIT))
+  HIGH_COUNT=$((HIGH_COUNT + FS_HIGH))
+  MEDIUM_COUNT=$((MEDIUM_COUNT + FS_MED))
+fi
+
+# Count findings from trivy-k8s
+if [[ -f "$OUTPUT_DIR/trivy-k8s_${TIMESTAMP}.json" ]]; then
+  K8S_CRIT=$(grep -c '"Severity":"CRITICAL"' "$OUTPUT_DIR/trivy-k8s_${TIMESTAMP}.json" 2>/dev/null || echo 0)
+  K8S_HIGH=$(grep -c '"Severity":"HIGH"' "$OUTPUT_DIR/trivy-k8s_${TIMESTAMP}.json" 2>/dev/null || echo 0)
+  K8S_MED=$(grep -c '"Severity":"MEDIUM"' "$OUTPUT_DIR/trivy-k8s_${TIMESTAMP}.json" 2>/dev/null || echo 0)
+  CRITICAL_COUNT=$((CRITICAL_COUNT + K8S_CRIT))
+  HIGH_COUNT=$((HIGH_COUNT + K8S_HIGH))
+  MEDIUM_COUNT=$((MEDIUM_COUNT + K8S_MED))
+fi
+
+# Count ZAP alerts
+if [[ -f "$OUTPUT_DIR/zap-baseline_${TIMESTAMP}.json" ]]; then
+  ZAP_HIGH=$(grep -c '"riskcode":"3"' "$OUTPUT_DIR/zap-baseline_${TIMESTAMP}.json" 2>/dev/null || echo 0)
+  ZAP_MED=$(grep -c '"riskcode":"2"' "$OUTPUT_DIR/zap-baseline_${TIMESTAMP}.json" 2>/dev/null || echo 0)
+  HIGH_COUNT=$((HIGH_COUNT + ZAP_HIGH))
+  MEDIUM_COUNT=$((MEDIUM_COUNT + ZAP_MED))
+fi
+
 echo "================================================"
 echo "  Scan Complete"
 echo "  Reports: $OUTPUT_DIR/"
 echo "================================================"
+echo ""
+echo "  Findings Summary:"
+echo "    CRITICAL: $CRITICAL_COUNT"
+echo "    HIGH:     $HIGH_COUNT"
+echo "    MEDIUM:   $MEDIUM_COUNT"
 echo ""
 echo "Files generated:"
 ls -la "$OUTPUT_DIR"/*"${TIMESTAMP}"* 2>/dev/null || echo "  (check individual tool output)"
@@ -139,3 +207,10 @@ echo "Next steps:"
 echo "  1. Review critical/high findings in each report"
 echo "  2. Fix findings and re-scan"
 echo "  3. Document exceptions in docs/security-exceptions.md"
+
+# Exit with error if critical findings (CI-usable)
+if [[ "$CRITICAL_COUNT" -gt 0 ]]; then
+  echo ""
+  echo "ERROR: $CRITICAL_COUNT critical finding(s) detected. Failing."
+  exit 1
+fi
