@@ -10,6 +10,7 @@ import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type App, type DeployApp } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
+import { useToast } from "@/components/toast";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import {
@@ -20,6 +21,8 @@ import {
   Container,
   Globe,
   Cog,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function AppsPage() {
@@ -49,10 +52,30 @@ export default function AppsPage() {
   const tier = planData?.tier ?? "free";
   const isPro = tier !== "free";
 
+  const { toast } = useToast();
   const [appList, setAppList] = useState<App[]>([]);
   const [showDeploy, setShowDeploy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DeployApp | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const deployApps: DeployApp[] = deployData?.items ?? [];
+
+  const handleDeleteApp = async () => {
+    if (!deleteTarget || deleteConfirm !== deleteTarget.name) return;
+    setDeleting(true);
+    try {
+      await appsDeploy.delete(deleteTarget.id);
+      toast("success", `App "${deleteTarget.name}" deleted`);
+      setDeleteTarget(null);
+      setDeleteConfirm("");
+      window.location.reload();
+    } catch {
+      toast("error", "Failed to delete app");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     if (appsData?.items) {
@@ -314,26 +337,39 @@ export default function AppsPage() {
                   </div>
 
                   {/* Footer */}
-                  <div className="mt-4 flex items-center border-t border-border pt-3">
-                    {(app.app_type ?? "web") === "web" ? (
-                      app.url ? (
-                        <a
-                          href={app.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 transition-colors"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          {app.subdomain}
-                        </a>
+                  <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+                    <div>
+                      {(app.app_type ?? "web") === "web" ? (
+                        app.url ? (
+                          <a
+                            href={app.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 transition-colors"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            {app.subdomain}
+                          </a>
+                        ) : (
+                          <span className="text-xs text-neutral-600">No URL yet</span>
+                        )
+                      ) : app.app_type === "cron" ? (
+                        <span className="text-xs text-neutral-500">Schedule: {app.cron_schedule}</span>
                       ) : (
-                        <span className="text-xs text-neutral-600">No URL yet</span>
-                      )
-                    ) : app.app_type === "cron" ? (
-                      <span className="text-xs text-neutral-500">Schedule: {app.cron_schedule}</span>
-                    ) : (
-                      <span className="text-xs text-neutral-500">Background process</span>
-                    )}
+                        <span className="text-xs text-neutral-500">Background process</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setDeleteTarget(app);
+                        setDeleteConfirm("");
+                      }}
+                      className="rounded p-1 text-neutral-600 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                      title="Delete app"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -345,6 +381,60 @@ export default function AppsPage() {
       {/* Deploy Wizard */}
       {showDeploy && (
         <DeployWizard onClose={() => setShowDeploy(false)} isPro={isPro} projectId={projectId} />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface-100 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
+                <AlertTriangle className="h-5 w-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-white">Delete App</h3>
+                <p className="text-xs text-neutral-500">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-neutral-300 mb-4">
+              This will permanently delete <span className="font-semibold text-white">{deleteTarget.name}</span> and all its data, including databases, storage, and deployments.
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-xs text-neutral-400 mb-1.5">
+                Type <span className="font-mono font-semibold text-white">{deleteTarget.name}</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={deleteTarget.name}
+                className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-red-500 focus:outline-none"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteConfirm("");
+                }}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-300 hover:bg-surface-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteApp}
+                disabled={deleteConfirm !== deleteTarget.name || deleting}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deleting ? "Deleting..." : "Delete App"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Shell>
   );
