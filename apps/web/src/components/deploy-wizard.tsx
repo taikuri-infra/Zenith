@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
-import type { RegistryImage, StorageBucket, Database as DbType, AppType } from "@/lib/api";
+import type { RegistryImage, StorageBucket, Database as DbType, AppType, AppExposure } from "@/lib/api";
 import {
   Rocket,
   Container,
@@ -25,6 +25,7 @@ import {
   Globe,
   Cog,
   Clock,
+  Shield,
 } from "lucide-react";
 
 // ── Well-known image catalog ──
@@ -104,11 +105,17 @@ const PLAN_RESOURCES: Record<string, { cpu: string; ram: string }> = {
   enterprise: { cpu: "4 vCPU",    ram: "4 GB" },
 };
 
+// User-facing category → maps to appType + exposure
+type AppCategory = "frontend" | "api" | "background";
+
 interface WizardState {
   // Step 0 — Type
+  category: AppCategory;
   appType: AppType;
+  exposure: AppExposure;
   command: string;
   cronSchedule: string;
+  backgroundMode: "always" | "scheduled";
   // Step 1
   imageSource: "zenith" | "external";
   selectedImage: string;
@@ -132,9 +139,12 @@ interface WizardState {
 }
 
 const initialState: WizardState = {
+  category: "frontend",
   appType: "web",
+  exposure: "public",
   command: "",
   cronSchedule: "",
+  backgroundMode: "always",
   imageSource: "external",
   selectedImage: "",
   externalImage: "",
@@ -154,9 +164,9 @@ const initialState: WizardState = {
   dbEngine: "postgres",
 };
 
-// Steps are dynamic — cron jobs skip the Resources step
+// Steps are dynamic — background jobs skip the Resources step
 const WEB_STEPS = ["Type", "Image", "Config", "Resources", "Review"] as const;
-const CRON_STEPS = ["Type", "Image", "Config", "Review"] as const;
+const BG_STEPS = ["Type", "Image", "Config", "Review"] as const;
 
 // ── Helpers ──
 
@@ -218,8 +228,9 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
   const [newEnvKey, setNewEnvKey] = useState("");
   const [newEnvValue, setNewEnvValue] = useState("");
 
+  const isBackground = state.category === "background";
   const isCron = state.appType === "cron";
-  const steps = isCron ? CRON_STEPS : WEB_STEPS;
+  const steps = isBackground ? BG_STEPS : WEB_STEPS;
   const lastStep = steps.length - 1;
 
   // Name availability check
@@ -286,7 +297,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
 
   // Fetch existing buckets when entering Resources step as Pro+
   useEffect(() => {
-    if (!isCron && step === 3 && isPro && !bucketsFetched && !bucketsLoading && projectId) {
+    if (!isBackground && step === 3 && isPro && !bucketsFetched && !bucketsLoading && projectId) {
       setBucketsLoading(true);
       storage.list(projectId).then((res) => {
         setExistingBuckets(res.items);
@@ -297,11 +308,11 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         setBucketsLoading(false);
       });
     }
-  }, [step, isCron, isPro, projectId, storage, bucketsFetched, bucketsLoading]);
+  }, [step, isBackground, isPro, projectId, storage, bucketsFetched, bucketsLoading]);
 
   // Fetch existing databases when entering Resources step (all tiers)
   useEffect(() => {
-    if (!isCron && step === 3 && !dbsFetched && !dbsLoading && projectId) {
+    if (!isBackground && step === 3 && !dbsFetched && !dbsLoading && projectId) {
       setDbsLoading(true);
       databases.list(projectId).then((res) => {
         setExistingDbs(res.items);
@@ -312,7 +323,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         setDbsLoading(false);
       });
     }
-  }, [step, isCron, projectId, databases, dbsFetched, dbsLoading]);
+  }, [step, isBackground, projectId, databases, dbsFetched, dbsLoading]);
 
   const update = <K extends keyof WizardState>(key: K, value: WizardState[K]) =>
     setState((s) => ({ ...s, [key]: value }));
@@ -335,7 +346,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
     // Step 2 done if name valid
     if (state.appName.trim() && isValidAppName(state.appName.trim())) c.push(2);
     // Step 3: Resources (web/worker only) — optional, passing through = done
-    if (!isCron && highestStep > 3) c.push(3);
+    if (!isBackground && highestStep > 3) c.push(3);
     return c;
   })();
 
@@ -343,8 +354,8 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
 
   const canNext = (() => {
     if (step === 0) {
-      // Type step: cron needs a schedule
-      if (state.appType === "cron") return !!state.cronSchedule.trim();
+      // Type step: scheduled background needs a cron expression
+      if (state.category === "background" && state.backgroundMode === "scheduled") return !!state.cronSchedule.trim();
       return true;
     }
     if (step === 1) {
@@ -379,6 +390,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         image_url: imageUrl,
         ...(port > 0 && { port }),
         app_type: state.appType,
+        exposure: state.exposure,
         ...(state.appType === "worker" && state.command && { command: state.command.trim() }),
         ...(state.appType === "cron" && state.cronSchedule && { cron_schedule: state.cronSchedule.trim() }),
         ...(state.imageSource === "external" &&
@@ -429,34 +441,90 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
 
   // ── Step renderers ──
 
+  // Helper to set category and derive appType + exposure
+  const setCategory = (cat: AppCategory) => {
+    if (cat === "frontend") {
+      setState((s) => ({ ...s, category: cat, appType: "web", exposure: "public" }));
+    } else if (cat === "api") {
+      setState((s) => ({ ...s, category: cat, appType: "web", exposure: "protected" }));
+    } else {
+      // background — keep existing backgroundMode
+      const bgType = state.backgroundMode === "scheduled" ? "cron" : "worker";
+      setState((s) => ({ ...s, category: cat, appType: bgType as AppType, exposure: "public" }));
+    }
+  };
+
+  const setBackgroundMode = (mode: "always" | "scheduled") => {
+    setState((s) => ({
+      ...s,
+      backgroundMode: mode,
+      appType: mode === "scheduled" ? "cron" : "worker",
+    }));
+  };
+
   const renderStepType = () => (
     <div className="space-y-4">
-      <p className="text-sm text-neutral-400">What type of service are you deploying?</p>
+      <p className="text-sm text-neutral-400">What are you deploying?</p>
       <div className="grid gap-3 grid-cols-3">
         {([
-          { type: "web" as AppType, icon: Globe, label: "Web App", desc: "HTTP server with a public URL. Perfect for APIs, websites, and dashboards." },
-          { type: "worker" as AppType, icon: Cog, label: "Background Worker", desc: "Long-running process without a URL. For queues, bots, and data processing." },
-          { type: "cron" as AppType, icon: Clock, label: "Scheduled Task", desc: "Runs on a schedule then stops. For backups, reports, and cleanup jobs." },
-        ] as const).map(({ type, icon: Icon, label, desc }) => (
+          { cat: "frontend" as AppCategory, icon: Globe, label: "Frontend", desc: "Public web app with a URL. React, Next.js, Vue, nginx, dashboards." },
+          { cat: "api" as AppCategory, icon: Shield, label: "API Service", desc: "Protected HTTP service behind the API gateway. Express, FastAPI, Go, Spring Boot." },
+          { cat: "background" as AppCategory, icon: Cog, label: "Background Job", desc: "No URL, runs in the cluster. Workers, crons, data pipelines." },
+        ] as const).map(({ cat, icon: Icon, label, desc }) => (
           <button
-            key={type}
+            key={cat}
             type="button"
-            onClick={() => update("appType", type)}
+            onClick={() => setCategory(cat)}
             className={`rounded-lg border p-4 text-left transition-colors ${
-              state.appType === type
+              state.category === cat
                 ? "border-accent-500 bg-accent-500/10"
                 : "border-border bg-surface-100 hover:border-neutral-600"
             }`}
           >
-            <Icon className={`h-5 w-5 mb-2 ${state.appType === type ? "text-accent-400" : "text-neutral-500"}`} />
+            <Icon className={`h-5 w-5 mb-2 ${state.category === cat ? "text-accent-400" : "text-neutral-500"}`} />
             <div className="text-sm font-medium text-white">{label}</div>
             <p className="mt-0.5 text-[11px] text-neutral-500">{desc}</p>
           </button>
         ))}
       </div>
 
-      {/* Worker: optional command */}
-      {state.appType === "worker" && (
+      {/* Background: sub-options */}
+      {state.category === "background" && (
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-neutral-400">Run mode</p>
+          <div className="grid gap-3 grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setBackgroundMode("always")}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                state.backgroundMode === "always"
+                  ? "border-accent-500 bg-accent-500/10"
+                  : "border-border bg-surface-100 hover:border-neutral-600"
+              }`}
+            >
+              <Cog className={`h-4 w-4 mb-1 ${state.backgroundMode === "always" ? "text-accent-400" : "text-neutral-500"}`} />
+              <div className="text-sm font-medium text-white">Always Running</div>
+              <p className="mt-0.5 text-[11px] text-neutral-500">Queue workers, bots, data processors</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBackgroundMode("scheduled")}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                state.backgroundMode === "scheduled"
+                  ? "border-accent-500 bg-accent-500/10"
+                  : "border-border bg-surface-100 hover:border-neutral-600"
+              }`}
+            >
+              <Clock className={`h-4 w-4 mb-1 ${state.backgroundMode === "scheduled" ? "text-accent-400" : "text-neutral-500"}`} />
+              <div className="text-sm font-medium text-white">Scheduled</div>
+              <p className="mt-0.5 text-[11px] text-neutral-500">Backups, reports, cleanup scripts</p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Always-running worker: optional command */}
+      {state.category === "background" && state.backgroundMode === "always" && (
         <div>
           <label className="mb-1.5 block text-xs font-medium text-neutral-400">
             Command Override <span className="text-neutral-600">(optional)</span>
@@ -471,8 +539,8 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         </div>
       )}
 
-      {/* Cron: required schedule + optional command */}
-      {state.appType === "cron" && (
+      {/* Scheduled cron: required schedule + optional command */}
+      {state.category === "background" && state.backgroundMode === "scheduled" && (
         <div className="space-y-3">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-neutral-400">
@@ -1214,7 +1282,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
   const renderStep3 = () => {
     const imageUrl =
       state.imageSource === "zenith" ? state.selectedImage : state.externalImage.trim();
-    const typeLabels: Record<AppType, string> = { web: "Web App", worker: "Background Worker", cron: "Scheduled Task" };
+    const categoryLabels: Record<AppCategory, string> = { frontend: "Frontend", api: "API Service", background: "Background Job" };
     const planKey = isPro ? "pro" : "free";
     const planRes = PLAN_RESOURCES[planKey];
 
@@ -1236,22 +1304,28 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
           <h3 className="text-xs font-medium text-neutral-500 mb-2">Configuration</h3>
           <div className="grid grid-cols-2 gap-y-2 text-sm">
             <span className="text-neutral-400">Type</span>
-            <span className="text-white">{typeLabels[state.appType]}</span>
+            <span className="text-white">{categoryLabels[state.category]}{state.category === "background" ? ` (${state.backgroundMode === "scheduled" ? "Scheduled" : "Always Running"})` : ""}</span>
             <span className="text-neutral-400">Name</span>
             <span className="text-white font-mono">{state.appName}</span>
-            {state.appType === "web" && (
+            {state.category !== "background" && (
+              <>
+                <span className="text-neutral-400">Exposure</span>
+                <span className="text-white">{state.exposure === "protected" ? "Protected (JWT)" : "Public"}</span>
+              </>
+            )}
+            {state.category !== "background" && (
               <>
                 <span className="text-neutral-400">URL</span>
                 <span className="text-white font-mono text-xs">{nameCheckUrl || `https://${state.appName}.apps.stage.freezenith.com`}</span>
               </>
             )}
-            {state.appType === "web" && (
+            {state.category !== "background" && (
               <>
                 <span className="text-neutral-400">Port</span>
                 <span className="text-white font-mono">{state.port || "auto-detect"}</span>
               </>
             )}
-            {state.appType === "cron" && (
+            {isCron && (
               <>
                 <span className="text-neutral-400">Schedule</span>
                 <span className="text-white font-mono">{state.cronSchedule}</span>
@@ -1290,7 +1364,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         )}
 
         {/* Resources (web/worker only) */}
-        {!isCron && ((state.dbEnabled && state.dbName) || (state.s3Enabled && state.s3Bucket)) ? (
+        {!isBackground && ((state.dbEnabled && state.dbName) || (state.s3Enabled && state.s3Bucket)) ? (
           <div className="rounded-lg border border-border bg-surface-100 p-4">
             <h3 className="text-xs font-medium text-neutral-500 mb-2">Resources</h3>
             <div className="space-y-2">
@@ -1323,7 +1397,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
 
   // ── Render ──
 
-  const stepContent = isCron
+  const stepContent = isBackground
     ? [renderStepType, renderStep0, renderStep1, renderStep3]
     : [renderStepType, renderStep0, renderStep1, renderStep2, renderStep3];
 
@@ -1348,7 +1422,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {!isCron && step === 3 && (
+          {!isBackground && step === 3 && (
             <button
               type="button"
               onClick={() => goToStep(step + 1)}

@@ -387,6 +387,7 @@ export const storage = {
 // ---- Deploy Engine API (Phase 2) ----
 
 export type AppType = "web" | "worker" | "cron";
+export type AppExposure = "public" | "protected";
 
 export interface HealthCheckConfig {
   path: string;
@@ -416,6 +417,8 @@ export interface DeployApp {
   app_type?: AppType;
   command?: string;
   cron_schedule?: string;
+  exposure?: AppExposure;
+  auto_gateway_id?: string;
   health_check?: HealthCheckConfig;
   health_status?: HealthCheckStatus;
   created_at: string;
@@ -428,6 +431,7 @@ export interface CreateDeployAppRequest {
   deploy_source: "git" | "image";
   port?: number;
   app_type?: AppType;
+  exposure?: AppExposure;
   command?: string;
   cron_schedule?: string;
   // Git deploy fields

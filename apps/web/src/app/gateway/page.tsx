@@ -9,9 +9,11 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
+import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
-import { type ApiGateway, type GatewayRouteInfo, type GatewayGroup, type GatewayRoutePlugin, type DeployApp, type AuthPool, type CreateRouteInput } from "@/lib/api";
+import { type ApiGateway, type GatewayRouteInfo, type GatewayGroup, type GatewayRoutePlugin, type DeployApp, type AuthPool, type CreateRouteInput, type UpdateRouteInput } from "@/lib/api";
 import { useState, useCallback } from "react";
+import { Pencil, Trash2, AlertTriangle, Power } from "lucide-react";
 
 /* ── method badge colors ── */
 const methodColors: Record<string, string> = {
@@ -94,30 +96,49 @@ function serializePlugins(plugins: PluginEntry[]): GatewayRoutePlugin[] {
   }));
 }
 
+/* ── deserialize APISIX plugin config → form fields ── */
+function deserializePluginConfig(name: string, config: Record<string, unknown>): Record<string, unknown> {
+  if (name === "ip-restriction") {
+    const wl = config.whitelist;
+    return { whitelist: Array.isArray(wl) ? wl.join("\n") : String(wl ?? "") };
+  }
+  if (name === "proxy-rewrite") {
+    const uri = config.regex_uri;
+    if (Array.isArray(uri) && uri.length >= 2) {
+      return { regex_from: String(uri[0]), regex_to: String(uri[1]) };
+    }
+    return { regex_from: "", regex_to: "" };
+  }
+  return { ...config };
+}
+
+function deserializePlugins(plugins: GatewayRoutePlugin[]): PluginEntry[] {
+  return plugins.map(p => ({
+    name: p.name,
+    enable: p.enable !== false,
+    config: deserializePluginConfig(p.name, p.config ?? {}),
+  }));
+}
+
 /* ── plugin editor component (form fields, NOT raw JSON) ── */
 function PluginEditor({ plugins, onChange }: { plugins: PluginEntry[]; onChange: (p: PluginEntry[]) => void }) {
   const usedNames = new Set(plugins.map(p => p.name));
   const available = Object.entries(PLUGIN_DEFS).filter(([n]) => !usedNames.has(n));
+  const [showPicker, setShowPicker] = useState(false);
+
+  const addPlugin = (name: string) => {
+    onChange([...plugins, { name, enable: true, config: { ...PLUGIN_DEFS[name].defaults } }]);
+    setShowPicker(false);
+  };
 
   const update = (idx: number, key: string, value: unknown) =>
     onChange(plugins.map((p, i) => i === idx ? { ...p, config: { ...p.config, [key]: value } } : p));
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-neutral-400">Plugins</label>
-        {available.length > 0 && (
-          <select
-            value=""
-            onChange={e => { if (e.target.value) onChange([...plugins, { name: e.target.value, enable: true, config: { ...PLUGIN_DEFS[e.target.value].defaults } }]); }}
-            className="rounded-md border border-border bg-surface-200 px-2 py-1 text-xs text-white focus:border-accent-500 focus:outline-none"
-          >
-            <option value="">+ Add plugin...</option>
-            {available.map(([n, d]) => <option key={n} value={n}>{n} — {d.description}</option>)}
-          </select>
-        )}
-      </div>
-      {plugins.length === 0 && <p className="text-xs text-neutral-600">No plugins configured</p>}
+      <label className="text-xs font-medium text-neutral-400">Plugins</label>
+
+      {/* Existing plugins */}
       {plugins.map((plugin, idx) => {
         const def = PLUGIN_DEFS[plugin.name];
         return (
@@ -169,6 +190,44 @@ function PluginEditor({ plugins, onChange }: { plugins: PluginEntry[]; onChange:
           </div>
         );
       })}
+
+      {/* Add plugin button + picker */}
+      {available.length > 0 && (
+        showPicker ? (
+          <div className="rounded-md border border-accent-500/30 bg-surface-200 p-2 space-y-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-medium text-neutral-400">Select a plugin to add</span>
+              <button type="button" onClick={() => setShowPicker(false)} className="text-[10px] text-neutral-500 hover:text-neutral-300">Cancel</button>
+            </div>
+            {available.map(([name, def]) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => addPlugin(name)}
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left hover:bg-surface-300 transition-colors"
+              >
+                <span className="text-xs font-medium text-white">{name}</span>
+                <span className="text-[10px] text-neutral-500">{def.description}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowPicker(true)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs text-neutral-400 hover:border-accent-500/50 hover:text-accent-400 transition-colors"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Plugin
+          </button>
+        )
+      )}
+
+      {plugins.length === 0 && !showPicker && available.length === 0 && (
+        <p className="text-xs text-neutral-600">No plugins available</p>
+      )}
     </div>
   );
 }
@@ -180,6 +239,7 @@ function PluginEditor({ plugins, onChange }: { plugins: PluginEntry[]; onChange:
 export default function GatewayPage() {
   const { gateways, appsDeploy, authPools } = getApi();
   const projectId = useProject();
+  const { toast } = useToast();
 
   const { data: gwList, loading: gwLoading, error: gwError, refetch: gwRefetch } = useApi(() => gateways.list(projectId || undefined), [projectId]);
   const { data: appsData } = useApi(() => appsDeploy.list(projectId || undefined), [projectId]);
@@ -216,20 +276,40 @@ export default function GatewayPage() {
     try {
       const gw = await gateways.create(newGwName.trim());
       setShowCreateGw(false); setNewGwName(""); setSelectedGwId(gw.id); gwRefetch();
+      toast("success", "Gateway created");
+    } catch {
+      toast("error", "Failed to create gateway");
     } finally { setCreating(false); }
-  }, [newGwName, gateways, gwRefetch]);
+  }, [newGwName, gateways, gwRefetch, toast]);
+
+  /* ── Delete Gateway (confirmation dialog) ── */
+  const [showDeleteGw, setShowDeleteGw] = useState(false);
+  const [deleteGwConfirm, setDeleteGwConfirm] = useState("");
+  const [deletingGw, setDeletingGw] = useState(false);
 
   const handleDeleteGw = useCallback(async () => {
-    if (!activeGw || !confirm(`Delete gateway "${activeGw.name}"? This removes all routes and K8s resources.`)) return;
-    await gateways.delete(activeGw.id);
-    setSelectedGwId(null); gwRefetch();
-  }, [activeGw, gateways, gwRefetch]);
+    if (!activeGw) return;
+    setDeletingGw(true);
+    try {
+      await gateways.delete(activeGw.id);
+      setShowDeleteGw(false); setDeleteGwConfirm(""); setSelectedGwId(null); gwRefetch();
+      toast("success", "Gateway deleted");
+    } catch {
+      toast("error", "Failed to delete gateway");
+    } finally { setDeletingGw(false); }
+  }, [activeGw, gateways, gwRefetch, toast]);
 
+  /* ── Sync Gateway ── */
   const handleSyncGw = useCallback(async () => {
     if (!activeGw) return;
-    await gateways.sync(activeGw.id);
-    routesRefetch(); groupsRefetch();
-  }, [activeGw, gateways, routesRefetch, groupsRefetch]);
+    try {
+      await gateways.sync(activeGw.id);
+      routesRefetch(); groupsRefetch();
+      toast("success", "Gateway synced");
+    } catch {
+      toast("error", "Failed to sync");
+    }
+  }, [activeGw, gateways, routesRefetch, groupsRefetch, toast]);
 
   /* ── Add Route (pre-selects group when opened from group card) ── */
   const [showAddRoute, setShowAddRoute] = useState(false);
@@ -273,14 +353,28 @@ export default function GatewayPage() {
       await gateways.createRoute(activeGw.id, data);
       setShowAddRoute(false);
       routesRefetch(); gwRefetch();
+      toast("success", "Route created");
+    } catch {
+      toast("error", "Failed to create route");
     } finally { setAddingRoute(false); }
-  }, [activeGw, routeName, routePath, routeAppId, routeGroupId, routeMethods, routeStripPrefix, routeAuthPoolId, routePlugins, gateways, routesRefetch, gwRefetch]);
+  }, [activeGw, routeName, routePath, routeAppId, routeGroupId, routeMethods, routeStripPrefix, routeAuthPoolId, routePlugins, gateways, routesRefetch, gwRefetch, toast]);
+
+  /* ── Delete Route (confirmation dialog) ── */
+  const [deleteRouteTarget, setDeleteRouteTarget] = useState<GatewayRouteInfo | null>(null);
+  const [deletingRoute, setDeletingRoute] = useState(false);
 
   const handleDeleteRoute = useCallback(async (routeId: string) => {
     if (!activeGw) return;
-    await gateways.deleteRoute(activeGw.id, routeId);
-    routesRefetch(); gwRefetch();
-  }, [activeGw, gateways, routesRefetch, gwRefetch]);
+    setDeletingRoute(true);
+    try {
+      await gateways.deleteRoute(activeGw.id, routeId);
+      setDeleteRouteTarget(null);
+      routesRefetch(); gwRefetch();
+      toast("success", "Route deleted");
+    } catch {
+      toast("error", "Failed to delete route");
+    } finally { setDeletingRoute(false); }
+  }, [activeGw, gateways, routesRefetch, gwRefetch, toast]);
 
   /* ── Add Group ── */
   const [showAddGroup, setShowAddGroup] = useState(false);
@@ -301,14 +395,155 @@ export default function GatewayPage() {
       });
       setShowAddGroup(false); setGroupName(""); setGroupAppId(""); setGroupPlugins([]);
       groupsRefetch();
+      toast("success", "Group created");
+    } catch {
+      toast("error", "Failed to create group");
     } finally { setAddingGroup(false); }
-  }, [activeGw, groupName, groupAppId, groupPlugins, gateways, groupsRefetch]);
+  }, [activeGw, groupName, groupAppId, groupPlugins, gateways, groupsRefetch, toast]);
+
+  /* ── Delete Group (confirmation dialog) ── */
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<GatewayGroup | null>(null);
+  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState("");
+  const [deletingGroup, setDeletingGroup] = useState(false);
 
   const handleDeleteGroup = useCallback(async (groupId: string) => {
     if (!activeGw) return;
-    await gateways.deleteGroup(activeGw.id, groupId);
-    groupsRefetch(); routesRefetch();
-  }, [activeGw, gateways, groupsRefetch, routesRefetch]);
+    setDeletingGroup(true);
+    try {
+      await gateways.deleteGroup(activeGw.id, groupId);
+      setDeleteGroupTarget(null); setDeleteGroupConfirm("");
+      groupsRefetch(); routesRefetch();
+      toast("success", "Group deleted");
+    } catch {
+      toast("error", "Failed to delete group");
+    } finally { setDeletingGroup(false); }
+  }, [activeGw, gateways, groupsRefetch, routesRefetch, toast]);
+
+  /* ── Edit Group ── */
+  const [editGroup, setEditGroup] = useState<GatewayGroup | null>(null);
+  const [editGroupName, setEditGroupName] = useState("");
+  const [editGroupAppId, setEditGroupAppId] = useState("");
+  const [editGroupPlugins, setEditGroupPlugins] = useState<PluginEntry[]>([]);
+  const [savingGroup, setSavingGroup] = useState(false);
+
+  const openEditGroup = (group: GatewayGroup) => {
+    setEditGroup(group);
+    setEditGroupName(group.name);
+    setEditGroupAppId(group.app_id);
+    setEditGroupPlugins(deserializePlugins(group.plugins));
+  };
+
+  const handleUpdateGroup = useCallback(async () => {
+    if (!activeGw || !editGroup || !editGroupName.trim() || !editGroupAppId) return;
+    setSavingGroup(true);
+    try {
+      const serialized = serializePlugins(editGroupPlugins);
+      await gateways.updateGroup(activeGw.id, editGroup.id, {
+        name: editGroupName.trim(),
+        app_id: editGroupAppId,
+        plugins: serialized,
+      });
+      setEditGroup(null);
+      groupsRefetch(); routesRefetch();
+      toast("success", "Group updated");
+    } catch {
+      toast("error", "Failed to update group");
+    } finally { setSavingGroup(false); }
+  }, [activeGw, editGroup, editGroupName, editGroupAppId, editGroupPlugins, gateways, groupsRefetch, routesRefetch, toast]);
+
+  /* ── Edit Route ── */
+  const [editRoute, setEditRoute] = useState<GatewayRouteInfo | null>(null);
+  const [editRouteName, setEditRouteName] = useState("");
+  const [editRoutePath, setEditRoutePath] = useState("");
+  const [editRouteAppId, setEditRouteAppId] = useState("");
+  const [editRouteGroupId, setEditRouteGroupId] = useState("");
+  const [editRouteMethods, setEditRouteMethods] = useState<Record<string, boolean>>({});
+  const [editRouteStripPrefix, setEditRouteStripPrefix] = useState(false);
+  const [editRouteAuthPoolId, setEditRouteAuthPoolId] = useState("");
+  const [editRoutePlugins, setEditRoutePlugins] = useState<PluginEntry[]>([]);
+  const [savingRoute, setSavingRoute] = useState(false);
+
+  const openEditRoute = (route: GatewayRouteInfo) => {
+    setEditRoute(route);
+    setEditRouteName(route.name);
+    setEditRoutePath(route.path);
+    setEditRouteAppId(route.app_id ?? "");
+    setEditRouteGroupId(route.group_id ?? "");
+    const methods: Record<string, boolean> = {};
+    route.methods.forEach(m => { methods[m] = true; });
+    setEditRouteMethods(methods);
+    setEditRouteStripPrefix(route.strip_prefix ?? false);
+    setEditRouteAuthPoolId(route.auth_pool_id ?? "");
+    setEditRoutePlugins(deserializePlugins(route.plugins));
+  };
+
+  const handleUpdateRoute = useCallback(async () => {
+    if (!activeGw || !editRoute || !editRouteName.trim() || !editRoutePath.trim()) return;
+    const methods = Object.entries(editRouteMethods).filter(([, v]) => v).map(([k]) => k);
+    if (methods.length === 0) methods.push("GET");
+    setSavingRoute(true);
+    try {
+      const data: UpdateRouteInput = {
+        name: editRouteName.trim(),
+        path: editRoutePath.trim(),
+        methods,
+        strip_prefix: editRouteStripPrefix,
+        plugins: serializePlugins(editRoutePlugins),
+      };
+      if (editRouteGroupId) {
+        data.group_id = editRouteGroupId;
+      } else {
+        data.app_id = editRouteAppId;
+      }
+      if (editRouteAuthPoolId) {
+        data.auth = "oidc";
+        data.auth_pool_id = editRouteAuthPoolId;
+      } else {
+        data.auth = "";
+        data.auth_pool_id = "";
+      }
+      await gateways.updateRoute(activeGw.id, editRoute.id, data);
+      setEditRoute(null);
+      routesRefetch(); gwRefetch();
+      toast("success", "Route updated");
+    } catch {
+      toast("error", "Failed to update route");
+    } finally { setSavingRoute(false); }
+  }, [activeGw, editRoute, editRouteName, editRoutePath, editRouteAppId, editRouteGroupId, editRouteMethods, editRouteStripPrefix, editRouteAuthPoolId, editRoutePlugins, gateways, routesRefetch, gwRefetch, toast]);
+
+  /* ── Toggle Route Status ── */
+  const handleToggleRouteStatus = useCallback(async (route: GatewayRouteInfo) => {
+    if (!activeGw) return;
+    const newStatus = route.status === "active" ? "stopped" : "active";
+    try {
+      await gateways.updateRoute(activeGw.id, route.id, { status: newStatus });
+      routesRefetch();
+      toast("success", newStatus === "active" ? "Route activated" : "Route stopped");
+    } catch {
+      toast("error", "Failed to update status");
+    }
+  }, [activeGw, gateways, routesRefetch, toast]);
+
+  /* ── Form validation helpers ── */
+  const routeNameHasSpaces = (name: string) => name.includes(" ");
+  const routePathInvalid = (path: string) => path.length > 0 && !path.startsWith("/");
+  const noMethodsSelected = (methods: Record<string, boolean>) => !Object.values(methods).some(Boolean);
+
+  // Add route validation
+  const addRouteValid = routeName.trim().length > 0
+    && routePath.trim().length > 0
+    && !routeNameHasSpaces(routeName)
+    && !routePathInvalid(routePath)
+    && !noMethodsSelected(routeMethods)
+    && (!!routeAppId || !!routeGroupId);
+
+  // Edit route validation
+  const editRouteValid = editRouteName.trim().length > 0
+    && editRoutePath.trim().length > 0
+    && !routeNameHasSpaces(editRouteName)
+    && !routePathInvalid(editRoutePath)
+    && !noMethodsSelected(editRouteMethods)
+    && (!!editRouteAppId || !!editRouteGroupId);
 
   /* ── Render ── */
 
@@ -318,32 +553,52 @@ export default function GatewayPage() {
   const gatewayList: ApiGateway[] = gwList ?? [];
   const standaloneRoutes = routeList.filter(r => !r.group_id);
 
-  const routeRow = (route: GatewayRouteInfo) => (
-    <tr key={route.id} className="border-b border-border last:border-0 hover:bg-surface-200/50 transition-colors">
-      <td className="px-4 py-2.5 text-sm font-medium text-white">{route.name}</td>
-      <td className="px-4 py-2.5 font-mono text-xs text-neutral-400">{route.path}</td>
-      <td className="px-4 py-2.5">
-        <div className="flex flex-wrap gap-1">
-          {route.methods.map(m => (
-            <span key={m} className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${methodColors[m] || "bg-neutral-500/10 text-neutral-400"}`}>{m}</span>
-          ))}
-        </div>
-      </td>
-      <td className="px-4 py-2.5">
-        <div className="flex flex-wrap gap-1">
-          {route.plugins.map((p, i) => (
-            <span key={`${p.name}-${i}`} className="inline-flex rounded bg-surface-300 px-1.5 py-0.5 text-[10px] text-neutral-400">{p.name}</span>
-          ))}
-          {route.auth === "oidc" && <span className="inline-flex rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400">OIDC</span>}
-          {route.strip_prefix && <span className="inline-flex rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-400">strip-prefix</span>}
-        </div>
-      </td>
-      <td className="px-4 py-2.5"><StatusBadge status={route.status === "active" ? "running" : "stopped"} /></td>
-      <td className="px-4 py-2.5">
-        <button onClick={() => handleDeleteRoute(route.id)} className="text-xs text-red-400 hover:text-red-300 transition-colors">Delete</button>
-      </td>
-    </tr>
-  );
+  const routeRow = (route: GatewayRouteInfo, groupPlugins?: GatewayRoutePlugin[]) => {
+    const routePluginNames = new Set(route.plugins.map(p => p.name));
+    return (
+      <tr key={route.id} className="border-b border-border last:border-0 hover:bg-surface-200/50 transition-colors">
+        <td className="px-4 py-2.5 text-sm font-medium text-white">{route.name}</td>
+        <td className="px-4 py-2.5 font-mono text-xs text-neutral-400">{route.path}</td>
+        <td className="px-4 py-2.5">
+          <div className="flex flex-wrap gap-1">
+            {route.methods.map(m => (
+              <span key={m} className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${methodColors[m] || "bg-neutral-500/10 text-neutral-400"}`}>{m}</span>
+            ))}
+          </div>
+        </td>
+        <td className="px-4 py-2.5">
+          <div className="flex flex-wrap gap-1">
+            {/* Inherited group plugins (faded accent for non-overridden) */}
+            {groupPlugins?.map((p, i) => (
+              <span key={`g-${p.name}-${i}`} className={`inline-flex rounded px-1.5 py-0.5 text-[10px] ${routePluginNames.has(p.name) ? "line-through opacity-40 bg-accent-500/10 text-accent-400" : "bg-accent-500/10 text-accent-400 opacity-60"}`}>
+                {p.name}
+              </span>
+            ))}
+            {/* Route-level plugins */}
+            {route.plugins.map((p, i) => (
+              <span key={`r-${p.name}-${i}`} className="inline-flex rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{p.name}</span>
+            ))}
+            {route.auth === "oidc" && <span className="inline-flex rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400">OIDC</span>}
+            {route.strip_prefix && <span className="inline-flex rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-400">strip-prefix</span>}
+          </div>
+        </td>
+        <td className="px-4 py-2.5"><StatusBadge status={route.status === "active" ? "running" : "stopped"} /></td>
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => handleToggleRouteStatus(route)} className={`p-1 rounded transition-colors ${route.status === "active" ? "text-emerald-400 hover:text-emerald-300" : "text-neutral-500 hover:text-neutral-300"}`} title={route.status === "active" ? "Stop route" : "Activate route"}>
+              <Power className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => openEditRoute(route)} className="p-1 text-neutral-400 hover:text-white rounded transition-colors" title="Edit route">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => setDeleteRouteTarget(route)} className="p-1 text-red-400 hover:text-red-300 rounded transition-colors" title="Delete route">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   const routeTableHead = (
     <thead>
@@ -353,10 +608,130 @@ export default function GatewayPage() {
         <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500">Methods</th>
         <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500">Plugins</th>
         <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500">Status</th>
-        <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500"></th>
+        <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500">Actions</th>
       </tr>
     </thead>
   );
+
+  /* ── Inline validation hint ── */
+  const ValidationHint = ({ show, color = "red", children }: { show: boolean; color?: "red" | "amber"; children: React.ReactNode }) =>
+    show ? <p className={`mt-0.5 text-[10px] ${color === "red" ? "text-red-400" : "text-amber-400"}`}>{children}</p> : null;
+
+  /* ── Route form fields (shared between Add and Edit) ── */
+  const RouteFormFields = ({
+    name, setName, path, setPath, methods, setMethods, appId, setAppId, gId, setGId,
+    stripPrefix, setStripPrefix, authPoolId, setAuthPoolId, plugins, setPlugins,
+    isEdit,
+  }: {
+    name: string; setName: (v: string) => void;
+    path: string; setPath: (v: string) => void;
+    methods: Record<string, boolean>; setMethods: (v: Record<string, boolean>) => void;
+    appId: string; setAppId: (v: string) => void;
+    gId: string; setGId: (v: string) => void;
+    stripPrefix: boolean; setStripPrefix: (v: boolean) => void;
+    authPoolId: string; setAuthPoolId: (v: string) => void;
+    plugins: PluginEntry[]; setPlugins: (v: PluginEntry[]) => void;
+    isEdit: boolean;
+  }) => {
+    const inGroup = !!gId;
+    const group = groupList.find(g => g.id === gId);
+    return (
+      <>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-neutral-400">Name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="users-api"
+            className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" required autoFocus />
+          <ValidationHint show={routeNameHasSpaces(name)}>Route name should not contain spaces</ValidationHint>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-neutral-400">Path</label>
+          <input type="text" value={path} onChange={e => setPath(e.target.value)} placeholder="/api/v1/users/*"
+            className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" required />
+          <ValidationHint show={routePathInvalid(path)}>Path must start with /</ValidationHint>
+        </div>
+
+        {/* Group selector — always visible in edit mode to allow moving */}
+        {(isEdit || (!gId && groupList.length > 0)) && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-neutral-400">Group {isEdit ? "" : "(optional)"}</label>
+            <select value={gId} onChange={e => { setGId(e.target.value); if (e.target.value) setAppId(""); }}
+              className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none">
+              <option value="">Standalone (select target app below)</option>
+              {groupList.map(g => <option key={g.id} value={g.id}>{g.name} ({g.app_subdomain})</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Target app — only when standalone */}
+        {!gId && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-neutral-400">Target App</label>
+            <select value={appId} onChange={e => setAppId(e.target.value)}
+              className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none" required={!gId}>
+              <option value="">Select an app...</option>
+              {userApps.map(app => <option key={app.id} value={app.id}>{app.name} ({app.subdomain})</option>)}
+            </select>
+          </div>
+        )}
+
+        {inGroup && (
+          <div className="rounded-md bg-accent-500/5 border border-accent-500/20 px-3 py-2">
+            <p className="text-xs text-accent-400">Target app inherited from group{group ? ` (${group.app_subdomain})` : ""}. Route-level plugins override group plugins with the same name.</p>
+          </div>
+        )}
+
+        {/* Effective plugins hint (edit mode, grouped routes) */}
+        {isEdit && inGroup && group && group.plugins.length > 0 && (
+          <div className="rounded-md bg-surface-200 border border-border px-3 py-2 space-y-1">
+            <p className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Effective Plugins</p>
+            <div className="flex flex-wrap gap-1">
+              {group.plugins.map((p, i) => {
+                const overridden = plugins.some(rp => rp.name === p.name);
+                return (
+                  <span key={`eg-${p.name}-${i}`} className={`inline-flex rounded px-1.5 py-0.5 text-[10px] ${overridden ? "line-through opacity-40 bg-accent-500/10 text-accent-400" : "bg-accent-500/10 text-accent-400"}`}>
+                    {p.name} (group)
+                  </span>
+                );
+              })}
+              {plugins.filter(p => p.enable).map((p, i) => (
+                <span key={`er-${p.name}-${i}`} className="inline-flex rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">
+                  {p.name} (route)
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-neutral-400">Methods</label>
+          <div className="flex gap-4 pt-1">
+            {["GET", "POST", "PUT", "DELETE"].map(m => (
+              <label key={m} className="flex items-center gap-1.5 text-xs text-neutral-300">
+                <input type="checkbox" checked={methods[m] || false} onChange={e => setMethods({ ...methods, [m]: e.target.checked })} className="rounded border-border bg-surface-200" />
+                {m}
+              </label>
+            ))}
+          </div>
+          <ValidationHint show={noMethodsSelected(methods)} color="amber">Select at least one method</ValidationHint>
+        </div>
+        <label className="flex items-center gap-2 text-xs text-neutral-300">
+          <input type="checkbox" checked={stripPrefix} onChange={e => setStripPrefix(e.target.checked)} className="rounded border-border bg-surface-200" />
+          Strip path prefix before forwarding
+        </label>
+        {pools.length > 0 && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-neutral-400">Auth Pool (OIDC)</label>
+            <select value={authPoolId} onChange={e => setAuthPoolId(e.target.value)}
+              className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none">
+              <option value="">None</option>
+              {pools.map(pool => <option key={pool.id} value={pool.id}>{pool.name} ({pool.user_count} users)</option>)}
+            </select>
+          </div>
+        )}
+        <PluginEditor plugins={plugins} onChange={setPlugins} />
+      </>
+    );
+  };
 
   return (
     <Shell>
@@ -385,7 +760,7 @@ export default function GatewayPage() {
                 <StatusBadge status={activeGw.status === "active" ? "running" : activeGw.status === "error" ? "error" : "pending"} />
                 <span className="font-mono text-xs text-neutral-500">{activeGw.endpoint}</span>
                 <button onClick={handleSyncGw} className="ml-auto rounded-md border border-border px-2.5 py-1 text-xs text-neutral-400 hover:text-white transition-colors" title="Force reconcile K8s CRDs">Sync</button>
-                <button onClick={handleDeleteGw} className="rounded-md border border-red-500/30 px-2.5 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors">Delete</button>
+                <button onClick={() => { setShowDeleteGw(true); setDeleteGwConfirm(""); }} className="rounded-md border border-red-500/30 px-2.5 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors">Delete</button>
               </>
             )}
           </div>
@@ -449,9 +824,16 @@ export default function GatewayPage() {
                           ))}
                           <button
                             type="button"
-                            onClick={e => { e.stopPropagation(); handleDeleteGroup(group.id); }}
-                            className="ml-2 text-xs text-red-400 hover:text-red-300 transition-colors"
-                          >Delete</button>
+                            onClick={e => { e.stopPropagation(); openEditGroup(group); }}
+                            className="ml-2 p-1 text-neutral-400 hover:text-white rounded transition-colors"
+                            title="Edit group"
+                          ><Pencil className="h-3.5 w-3.5" /></button>
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setDeleteGroupTarget(group); setDeleteGroupConfirm(""); }}
+                            className="p-1 text-red-400 hover:text-red-300 rounded transition-colors"
+                            title="Delete group"
+                          ><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       </button>
 
@@ -461,18 +843,23 @@ export default function GatewayPage() {
                           {groupRoutes.length > 0 ? (
                             <table className="w-full text-sm">
                               {routeTableHead}
-                              <tbody>{groupRoutes.map(routeRow)}</tbody>
+                              <tbody>{groupRoutes.map(r => routeRow(r, group.plugins))}</tbody>
                             </table>
                           ) : (
-                            <div className="px-4 py-4 text-center text-xs text-neutral-600">
-                              No routes in this group yet
+                            <div className="px-4 py-6 text-center">
+                              <p className="text-xs text-neutral-500">No routes in this group yet.</p>
+                              <button onClick={() => openAddRoute(group.id)} className="mt-2 text-xs text-accent-400 hover:text-accent-300 transition-colors">
+                                Add your first route to {group.name}
+                              </button>
                             </div>
                           )}
-                          <div className="border-t border-border px-4 py-2">
-                            <button onClick={() => openAddRoute(group.id)} className="text-xs text-accent-400 hover:text-accent-300 transition-colors">
-                              + Add Route to {group.name}
-                            </button>
-                          </div>
+                          {groupRoutes.length > 0 && (
+                            <div className="border-t border-border px-4 py-2">
+                              <button onClick={() => openAddRoute(group.id)} className="text-xs text-accent-400 hover:text-accent-300 transition-colors">
+                                + Add Route to {group.name}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -486,15 +873,30 @@ export default function GatewayPage() {
                     <div className="overflow-hidden rounded-lg border border-border">
                       <table className="w-full text-sm">
                         {routeTableHead}
-                        <tbody>{standaloneRoutes.map(routeRow)}</tbody>
+                        <tbody>{standaloneRoutes.map(r => routeRow(r))}</tbody>
                       </table>
                     </div>
                   </div>
                 )}
 
+                {/* ── Better empty state ── */}
                 {groupList.length === 0 && standaloneRoutes.length === 0 && (
-                  <div className="rounded-lg border border-border p-8 text-center text-sm text-neutral-500">
-                    No groups or routes yet. Start by creating a group, then add routes to it.
+                  <div className="rounded-lg border border-border bg-surface-100 p-10 text-center">
+                    <svg className="mx-auto h-10 w-10 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                    </svg>
+                    <h3 className="mt-3 text-sm font-medium text-white">No routes configured</h3>
+                    <p className="mt-1 text-xs text-neutral-500">Create a group to bundle routes to one app with shared plugins, or add a standalone route for individual endpoints.</p>
+                    <div className="mt-4 flex justify-center gap-3">
+                      <button onClick={() => { setShowAddGroup(true); setGroupName(""); setGroupAppId(""); setGroupPlugins([]); }}
+                        className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm text-white hover:bg-accent-600 transition-colors">
+                        + New Group
+                      </button>
+                      <button onClick={() => openAddRoute()}
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors">
+                        + Standalone Route
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -536,77 +938,46 @@ export default function GatewayPage() {
       {showAddRoute && (
         <Modal title={routeGroupId ? `Add Route to ${groupList.find(g => g.id === routeGroupId)?.name ?? "Group"}` : "Add Standalone Route"} onClose={() => setShowAddRoute(false)}>
           <form onSubmit={e => { e.preventDefault(); handleAddRoute(); }} className="space-y-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Name</label>
-              <input type="text" value={routeName} onChange={e => setRouteName(e.target.value)} placeholder="users-api"
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" required autoFocus />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Path</label>
-              <input type="text" value={routePath} onChange={e => setRoutePath(e.target.value)} placeholder="/api/v1/users/*"
-                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" required />
-            </div>
-
-            {/* Group selector — only show if creating standalone (not pre-assigned) */}
-            {!routeGroupId && groupList.length > 0 && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-neutral-400">Group (optional)</label>
-                <select value={routeGroupId} onChange={e => { setRouteGroupId(e.target.value); if (e.target.value) setRouteAppId(""); }}
-                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none">
-                  <option value="">Standalone (select target app below)</option>
-                  {groupList.map(g => <option key={g.id} value={g.id}>{g.name} ({g.app_subdomain})</option>)}
-                </select>
-              </div>
-            )}
-
-            {/* Target app — only when standalone */}
-            {!routeGroupId && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-neutral-400">Target App</label>
-                <select value={routeAppId} onChange={e => setRouteAppId(e.target.value)}
-                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none" required={!routeGroupId}>
-                  <option value="">Select an app...</option>
-                  {userApps.map(app => <option key={app.id} value={app.id}>{app.name} ({app.subdomain})</option>)}
-                </select>
-              </div>
-            )}
-
-            {routeGroupId && (
-              <div className="rounded-md bg-accent-500/5 border border-accent-500/20 px-3 py-2">
-                <p className="text-xs text-accent-400">Target app inherited from group. Route-level plugins override group plugins with the same name.</p>
-              </div>
-            )}
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-400">Methods</label>
-              <div className="flex gap-4 pt-1">
-                {["GET", "POST", "PUT", "DELETE"].map(m => (
-                  <label key={m} className="flex items-center gap-1.5 text-xs text-neutral-300">
-                    <input type="checkbox" checked={routeMethods[m] || false} onChange={e => setRouteMethods(prev => ({ ...prev, [m]: e.target.checked }))} className="rounded border-border bg-surface-200" />
-                    {m}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-xs text-neutral-300">
-              <input type="checkbox" checked={routeStripPrefix} onChange={e => setRouteStripPrefix(e.target.checked)} className="rounded border-border bg-surface-200" />
-              Strip path prefix before forwarding
-            </label>
-            {pools.length > 0 && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-neutral-400">Auth Pool (OIDC)</label>
-                <select value={routeAuthPoolId} onChange={e => setRouteAuthPoolId(e.target.value)}
-                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none">
-                  <option value="">None</option>
-                  {pools.map(pool => <option key={pool.id} value={pool.id}>{pool.name} ({pool.user_count} users)</option>)}
-                </select>
-              </div>
-            )}
-            <PluginEditor plugins={routePlugins} onChange={setRoutePlugins} />
+            <RouteFormFields
+              name={routeName} setName={setRouteName}
+              path={routePath} setPath={setRoutePath}
+              methods={routeMethods} setMethods={setRouteMethods}
+              appId={routeAppId} setAppId={setRouteAppId}
+              gId={routeGroupId} setGId={setRouteGroupId}
+              stripPrefix={routeStripPrefix} setStripPrefix={setRouteStripPrefix}
+              authPoolId={routeAuthPoolId} setAuthPoolId={setRouteAuthPoolId}
+              plugins={routePlugins} setPlugins={setRoutePlugins}
+              isEdit={false}
+            />
             <div className="flex justify-end gap-2 pt-4">
               <button type="button" onClick={() => setShowAddRoute(false)} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
-              <button type="submit" disabled={addingRoute} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50">
+              <button type="submit" disabled={addingRoute || !addRouteValid} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50">
                 {addingRoute ? "Adding..." : "Add Route"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ── Edit Route Modal ── */}
+      {editRoute && (
+        <Modal title={`Edit Route: ${editRoute.name}`} onClose={() => setEditRoute(null)}>
+          <form onSubmit={e => { e.preventDefault(); handleUpdateRoute(); }} className="space-y-3">
+            <RouteFormFields
+              name={editRouteName} setName={setEditRouteName}
+              path={editRoutePath} setPath={setEditRoutePath}
+              methods={editRouteMethods} setMethods={setEditRouteMethods}
+              appId={editRouteAppId} setAppId={setEditRouteAppId}
+              gId={editRouteGroupId} setGId={setEditRouteGroupId}
+              stripPrefix={editRouteStripPrefix} setStripPrefix={setEditRouteStripPrefix}
+              authPoolId={editRouteAuthPoolId} setAuthPoolId={setEditRouteAuthPoolId}
+              plugins={editRoutePlugins} setPlugins={setEditRoutePlugins}
+              isEdit={true}
+            />
+            <div className="flex justify-end gap-2 pt-4">
+              <button type="button" onClick={() => setEditRoute(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button type="submit" disabled={savingRoute || !editRouteValid} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50">
+                {savingRoute ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </form>
@@ -641,6 +1012,124 @@ export default function GatewayPage() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* ── Edit Group Modal ── */}
+      {editGroup && (
+        <Modal title={`Edit Group: ${editGroup.name}`} onClose={() => setEditGroup(null)}>
+          <form onSubmit={e => { e.preventDefault(); handleUpdateGroup(); }} className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Name</label>
+              <input type="text" value={editGroupName} onChange={e => setEditGroupName(e.target.value)} placeholder="users-service"
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" required autoFocus />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Target App</label>
+              <select value={editGroupAppId} onChange={e => setEditGroupAppId(e.target.value)}
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none" required>
+                <option value="">Select an app...</option>
+                {userApps.map(app => <option key={app.id} value={app.id}>{app.name} ({app.subdomain})</option>)}
+              </select>
+            </div>
+            <PluginEditor plugins={editGroupPlugins} onChange={setEditGroupPlugins} />
+            <p className="text-xs text-neutral-600">Group plugins apply to all routes. Route-level plugins override on name collision.</p>
+            <div className="flex justify-end gap-2 pt-4">
+              <button type="button" onClick={() => setEditGroup(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button type="submit" disabled={savingGroup} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50">
+                {savingGroup ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ── Delete Gateway Confirmation ── */}
+      {showDeleteGw && activeGw && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface-100 p-6 shadow-xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
+                <AlertTriangle className="h-6 w-6 text-red-400" />
+              </div>
+              <h3 className="mt-3 text-lg font-semibold text-white">Delete Gateway</h3>
+              <p className="mt-1 text-xs text-neutral-500">This action cannot be undone</p>
+            </div>
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-neutral-300">
+                This will permanently delete <strong className="text-white">{activeGw.name}</strong> and all its routes, groups, and K8s resources.
+              </p>
+              <div>
+                <label className="mb-1 block text-xs text-neutral-500">Type <strong className="text-white">{activeGw.name}</strong> to confirm</label>
+                <input type="text" value={deleteGwConfirm} onChange={e => setDeleteGwConfirm(e.target.value)} autoFocus
+                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-red-500 focus:outline-none" />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={() => { setShowDeleteGw(false); setDeleteGwConfirm(""); }} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button onClick={handleDeleteGw} disabled={deleteGwConfirm !== activeGw.name || deletingGw}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50">
+                {deletingGw ? "Deleting..." : "Delete Gateway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Group Confirmation ── */}
+      {deleteGroupTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface-100 p-6 shadow-xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
+                <AlertTriangle className="h-6 w-6 text-red-400" />
+              </div>
+              <h3 className="mt-3 text-lg font-semibold text-white">Delete Group</h3>
+              <p className="mt-1 text-xs text-neutral-500">This action cannot be undone</p>
+            </div>
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-neutral-300">
+                This will permanently delete the group <strong className="text-white">{deleteGroupTarget.name}</strong>. Routes in this group will become standalone.
+              </p>
+              <div>
+                <label className="mb-1 block text-xs text-neutral-500">Type <strong className="text-white">{deleteGroupTarget.name}</strong> to confirm</label>
+                <input type="text" value={deleteGroupConfirm} onChange={e => setDeleteGroupConfirm(e.target.value)} autoFocus
+                  className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-red-500 focus:outline-none" />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={() => { setDeleteGroupTarget(null); setDeleteGroupConfirm(""); }} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button onClick={() => handleDeleteGroup(deleteGroupTarget.id)} disabled={deleteGroupConfirm !== deleteGroupTarget.name || deletingGroup}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50">
+                {deletingGroup ? "Deleting..." : "Delete Group"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Route Confirmation ── */}
+      {deleteRouteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface-100 p-6 shadow-xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
+                <AlertTriangle className="h-6 w-6 text-red-400" />
+              </div>
+              <h3 className="mt-3 text-lg font-semibold text-white">Delete Route</h3>
+              <p className="mt-1 text-xs text-neutral-500">This action cannot be undone</p>
+            </div>
+            <p className="mt-4 text-sm text-neutral-300">
+              Are you sure you want to delete the route <strong className="text-white">{deleteRouteTarget.name}</strong> ({deleteRouteTarget.path})?
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={() => setDeleteRouteTarget(null)} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button onClick={() => handleDeleteRoute(deleteRouteTarget.id)} disabled={deletingRoute}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50">
+                {deletingRoute ? "Deleting..." : "Delete Route"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Shell>
   );
