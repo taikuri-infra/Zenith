@@ -98,7 +98,7 @@ func (s *GatewayService) CreateGateway(ctx context.Context, userID, projectID, n
 	}
 
 	// Create empty ApisixRoute
-	if err := s.syncApisixRoute(ctx, gw, nil); err != nil {
+	if err := s.syncApisixRoute(ctx, gw, nil, nil); err != nil {
 		slog.Warn("failed to create ApisixRoute", "slug", slug, "error", err)
 	}
 
@@ -170,17 +170,34 @@ func (s *GatewayService) CreateRoute(ctx context.Context, gwID string, route *en
 		return nil, err
 	}
 
-	// Validate target app exists and belongs to user
-	app, err := s.appRepo.GetApp(ctx, route.AppID)
-	if err != nil {
-		return nil, fmt.Errorf("target app not found: %s", route.AppID)
-	}
-	if app.UserID != gw.UserID {
-		return nil, fmt.Errorf("target app does not belong to you")
-	}
-
 	route.GatewayID = gwID
-	route.AppSubdomain = app.Subdomain
+
+	// If route belongs to a group, inherit app from group
+	if route.GroupID != "" {
+		group, err := s.gwRepo.GetGroup(ctx, route.GroupID)
+		if err != nil {
+			return nil, fmt.Errorf("group not found: %s", route.GroupID)
+		}
+		if group.GatewayID != gwID {
+			return nil, fmt.Errorf("group does not belong to this gateway")
+		}
+		// Clear route-level app fields (inherited from group)
+		route.AppID = ""
+		route.AppSubdomain = ""
+	} else {
+		// Standalone route — validate target app
+		if route.AppID == "" {
+			return nil, fmt.Errorf("app_id is required for standalone routes (not in a group)")
+		}
+		app, err := s.appRepo.GetApp(ctx, route.AppID)
+		if err != nil {
+			return nil, fmt.Errorf("target app not found: %s", route.AppID)
+		}
+		if app.UserID != gw.UserID {
+			return nil, fmt.Errorf("target app does not belong to you")
+		}
+		route.AppSubdomain = app.Subdomain
+	}
 
 	// Validate auth pool ownership + status
 	if route.AuthPoolID != "" {
@@ -231,19 +248,33 @@ func (s *GatewayService) UpdateRoute(ctx context.Context, gwID, routeID string, 
 		return nil, fmt.Errorf("route does not belong to this gateway")
 	}
 
-	// If app changed, validate it
-	if route.AppID != "" && route.AppID != existing.AppID {
-		app, err := s.appRepo.GetApp(ctx, route.AppID)
+	// Handle group assignment
+	if route.GroupID != "" {
+		group, err := s.gwRepo.GetGroup(ctx, route.GroupID)
 		if err != nil {
-			return nil, fmt.Errorf("target app not found: %s", route.AppID)
+			return nil, fmt.Errorf("group not found: %s", route.GroupID)
 		}
-		if app.UserID != gw.UserID {
-			return nil, fmt.Errorf("target app does not belong to you")
+		if group.GatewayID != gwID {
+			return nil, fmt.Errorf("group does not belong to this gateway")
 		}
-		route.AppSubdomain = app.Subdomain
+		// Clear route-level app fields (inherited from group)
+		route.AppID = ""
+		route.AppSubdomain = ""
 	} else {
-		route.AppID = existing.AppID
-		route.AppSubdomain = existing.AppSubdomain
+		// Standalone route — validate app
+		if route.AppID != "" && route.AppID != existing.AppID {
+			app, err := s.appRepo.GetApp(ctx, route.AppID)
+			if err != nil {
+				return nil, fmt.Errorf("target app not found: %s", route.AppID)
+			}
+			if app.UserID != gw.UserID {
+				return nil, fmt.Errorf("target app does not belong to you")
+			}
+			route.AppSubdomain = app.Subdomain
+		} else if route.AppID == "" && existing.GroupID == "" {
+			route.AppID = existing.AppID
+			route.AppSubdomain = existing.AppSubdomain
+		}
 	}
 
 	route.ID = routeID
@@ -304,6 +335,119 @@ func (s *GatewayService) DeleteRoute(ctx context.Context, gwID, routeID string) 
 	return nil
 }
 
+// --- Group CRUD ---
+
+// CreateGroup adds a group to the gateway.
+func (s *GatewayService) CreateGroup(ctx context.Context, gwID string, group *entities.GatewayGroup) (*entities.GatewayGroup, error) {
+	gw, err := s.gwRepo.GetGateway(ctx, gwID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate target app
+	app, err := s.appRepo.GetApp(ctx, group.AppID)
+	if err != nil {
+		return nil, fmt.Errorf("target app not found: %s", group.AppID)
+	}
+	if app.UserID != gw.UserID {
+		return nil, fmt.Errorf("target app does not belong to you")
+	}
+
+	group.GatewayID = gwID
+	group.AppSubdomain = app.Subdomain
+
+	if err := validatePlugins(group.Plugins); err != nil {
+		return nil, err
+	}
+
+	created, err := s.gwRepo.CreateGroup(ctx, group)
+	if err != nil {
+		return nil, err
+	}
+
+	// Rebuild CRD (group plugins now apply to any routes assigned to this group)
+	s.rebuildApisixRoute(ctx, gw)
+	return created, nil
+}
+
+// ListGroups lists groups in a gateway.
+func (s *GatewayService) ListGroups(ctx context.Context, gwID string) ([]entities.GatewayGroup, error) {
+	return s.gwRepo.ListGroupsByGateway(ctx, gwID)
+}
+
+// UpdateGroup updates a group and rebuilds the CRD.
+func (s *GatewayService) UpdateGroup(ctx context.Context, gwID, groupID string, group *entities.GatewayGroup) (*entities.GatewayGroup, error) {
+	gw, err := s.gwRepo.GetGateway(ctx, gwID)
+	if err != nil {
+		return nil, err
+	}
+
+	existing, err := s.gwRepo.GetGroup(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if existing.GatewayID != gwID {
+		return nil, fmt.Errorf("group does not belong to this gateway")
+	}
+
+	// If app changed, validate it
+	if group.AppID != "" && group.AppID != existing.AppID {
+		app, err := s.appRepo.GetApp(ctx, group.AppID)
+		if err != nil {
+			return nil, fmt.Errorf("target app not found: %s", group.AppID)
+		}
+		if app.UserID != gw.UserID {
+			return nil, fmt.Errorf("target app does not belong to you")
+		}
+		group.AppSubdomain = app.Subdomain
+	} else {
+		group.AppID = existing.AppID
+		group.AppSubdomain = existing.AppSubdomain
+	}
+
+	if group.Name == "" {
+		group.Name = existing.Name
+	}
+
+	group.ID = groupID
+	group.GatewayID = gwID
+
+	if err := validatePlugins(group.Plugins); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.gwRepo.UpdateGroup(ctx, group)
+	if err != nil {
+		return nil, err
+	}
+
+	s.rebuildApisixRoute(ctx, gw)
+	return updated, nil
+}
+
+// DeleteGroup removes a group (routes get group_id = NULL via ON DELETE SET NULL).
+func (s *GatewayService) DeleteGroup(ctx context.Context, gwID, groupID string) error {
+	existing, err := s.gwRepo.GetGroup(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	if existing.GatewayID != gwID {
+		return fmt.Errorf("group does not belong to this gateway")
+	}
+
+	if err := s.gwRepo.DeleteGroup(ctx, groupID); err != nil {
+		return err
+	}
+
+	gw, err := s.gwRepo.GetGateway(ctx, gwID)
+	if err != nil {
+		return nil // gateway was deleted
+	}
+
+	s.rebuildApisixRoute(ctx, gw)
+	return nil
+}
+
 // SyncGateway forces a reconciliation of K8s CRDs from the DB state.
 func (s *GatewayService) SyncGateway(ctx context.Context, id string) error {
 	gw, err := s.gwRepo.GetGateway(ctx, id)
@@ -327,15 +471,37 @@ func (s *GatewayService) ReconcileAll(ctx context.Context) {
 	slog.Info("gateway reconciliation available via /sync endpoint")
 }
 
-// HandleAppDeleted stops all routes pointing to the deleted app and rebuilds CRDs.
+// HandleAppDeleted stops all routes pointing to the deleted app, removes groups, and rebuilds CRDs.
 func (s *GatewayService) HandleAppDeleted(ctx context.Context, appID string) {
+	// Stop standalone routes pointing to the app
 	gwIDs, err := s.gwRepo.StopRoutesByApp(ctx, appID)
 	if err != nil {
 		slog.Error("failed to stop routes for deleted app", "app_id", appID, "error", err)
-		return
 	}
 
-	for _, gwID := range gwIDs {
+	// Remove groups targeting the app (routes get group_id = NULL via ON DELETE SET NULL)
+	groupGwIDs, err := s.gwRepo.StopGroupsByApp(ctx, appID)
+	if err != nil {
+		slog.Error("failed to stop groups for deleted app", "app_id", appID, "error", err)
+	}
+
+	// Merge affected gateway IDs
+	seen := make(map[string]bool)
+	var allGwIDs []string
+	for _, id := range gwIDs {
+		if !seen[id] {
+			seen[id] = true
+			allGwIDs = append(allGwIDs, id)
+		}
+	}
+	for _, id := range groupGwIDs {
+		if !seen[id] {
+			seen[id] = true
+			allGwIDs = append(allGwIDs, id)
+		}
+	}
+
+	for _, gwID := range allGwIDs {
 		gw, err := s.gwRepo.GetGateway(ctx, gwID)
 		if err != nil {
 			continue
@@ -343,8 +509,8 @@ func (s *GatewayService) HandleAppDeleted(ctx context.Context, appID string) {
 		s.rebuildApisixRoute(ctx, gw)
 	}
 
-	if len(gwIDs) > 0 {
-		slog.Info("stopped routes for deleted app", "gateway_count", len(gwIDs), "app_id", appID)
+	if len(allGwIDs) > 0 {
+		slog.Info("stopped routes/groups for deleted app", "gateway_count", len(allGwIDs), "app_id", appID)
 	}
 }
 
@@ -429,23 +595,73 @@ func (s *GatewayService) rebuildApisixRoute(ctx context.Context, gw *entities.Ga
 		return
 	}
 
-	if err := s.syncApisixRoute(ctx, gw, routes); err != nil {
+	groups, err := s.gwRepo.ListGroupsByGateway(ctx, gw.ID)
+	if err != nil {
+		slog.Error("failed to list groups for ApisixRoute rebuild", "slug", gw.Slug, "error", err)
+		groups = nil
+	}
+
+	if err := s.syncApisixRoute(ctx, gw, routes, groups); err != nil {
 		slog.Error("failed to sync ApisixRoute", "slug", gw.Slug, "error", err)
 	}
 }
 
+// mergePlugins merges group-level and route-level plugins. Route plugins take precedence.
+func mergePlugins(groupPlugins, routePlugins []entities.GatewayRoutePlugin) []entities.GatewayRoutePlugin {
+	merged := make([]entities.GatewayRoutePlugin, 0, len(groupPlugins)+len(routePlugins))
+	seen := map[string]bool{}
+	// Route plugins take precedence
+	for _, p := range routePlugins {
+		merged = append(merged, p)
+		seen[p.Name] = true
+	}
+	// Add group plugins not overridden by route
+	for _, p := range groupPlugins {
+		if !seen[p.Name] {
+			merged = append(merged, p)
+		}
+	}
+	return merged
+}
+
 // syncApisixRoute creates or updates the ApisixRoute CRD for a gateway.
-func (s *GatewayService) syncApisixRoute(ctx context.Context, gw *entities.Gateway, routes []entities.GatewayRoute) error {
+func (s *GatewayService) syncApisixRoute(ctx context.Context, gw *entities.Gateway, routes []entities.GatewayRoute, groups []entities.GatewayGroup) error {
 	name := "gw-" + gw.Slug
 	host := gw.Slug + "." + s.gwDomain
+
+	// Build group lookup
+	groupMap := make(map[string]*entities.GatewayGroup, len(groups))
+	for i := range groups {
+		groupMap[groups[i].ID] = &groups[i]
+	}
 
 	httpRoutes := make([]map[string]interface{}, 0, len(routes))
 	for _, rt := range routes {
 		routeName := "r-" + rt.ID[:8]
 
+		// Resolve app from group if route belongs to one
+		appSubdomain := rt.AppSubdomain
+		var effectivePlugins []entities.GatewayRoutePlugin
+		if rt.GroupID != "" {
+			if grp, ok := groupMap[rt.GroupID]; ok {
+				appSubdomain = grp.AppSubdomain
+				effectivePlugins = mergePlugins(grp.Plugins, rt.Plugins)
+			} else {
+				effectivePlugins = rt.Plugins
+			}
+		} else {
+			effectivePlugins = rt.Plugins
+		}
+
+		// Skip routes with no resolved backend
+		if appSubdomain == "" {
+			slog.Warn("skipping route with no app subdomain", "route_id", rt.ID, "route_name", rt.Name)
+			continue
+		}
+
 		// Build plugins list
-		plugins := make([]map[string]interface{}, 0, len(rt.Plugins))
-		for _, p := range rt.Plugins {
+		plugins := make([]map[string]interface{}, 0, len(effectivePlugins))
+		for _, p := range effectivePlugins {
 			plugin := map[string]interface{}{
 				"name":   p.Name,
 				"enable": p.Enable,
@@ -495,7 +711,7 @@ func (s *GatewayService) syncApisixRoute(ctx context.Context, gw *entities.Gatew
 			},
 			"backends": []map[string]interface{}{
 				{
-					"serviceName": rt.AppSubdomain,
+					"serviceName": appSubdomain,
 					"servicePort": 80,
 				},
 			},

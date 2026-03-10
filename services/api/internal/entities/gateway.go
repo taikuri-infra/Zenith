@@ -66,6 +66,7 @@ type Gateway struct {
 type GatewayRoute struct {
 	ID           string               `json:"id"`
 	GatewayID    string               `json:"gateway_id"`
+	GroupID      string               `json:"group_id,omitempty"`
 	Name         string               `json:"name"`
 	Path         string               `json:"path"`
 	Methods      []string             `json:"methods"`
@@ -77,5 +78,16 @@ type GatewayRoute struct {
 	Plugins      []GatewayRoutePlugin `json:"plugins"`
 	Priority     int                  `json:"priority"`
 	Status       GatewayRouteStatus   `json:"status"`
+	Timestamps
+}
+
+// GatewayGroup represents a service abstraction that bundles routes pointing to the same app.
+type GatewayGroup struct {
+	ID           string               `json:"id"`
+	GatewayID    string               `json:"gateway_id"`
+	Name         string               `json:"name"`
+	AppID        string               `json:"app_id"`
+	AppSubdomain string               `json:"app_subdomain"`
+	Plugins      []GatewayRoutePlugin `json:"plugins"`
 	Timestamps
 }

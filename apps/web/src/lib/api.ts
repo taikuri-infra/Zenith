@@ -1539,6 +1539,7 @@ export interface GatewayRoutePlugin {
 export interface GatewayRouteInfo {
   id: string;
   gateway_id: string;
+  group_id?: string;
   name: string;
   path: string;
   methods: string[];
@@ -1554,11 +1555,23 @@ export interface GatewayRouteInfo {
   updated_at: string;
 }
 
+export interface GatewayGroup {
+  id: string;
+  gateway_id: string;
+  name: string;
+  app_id: string;
+  app_subdomain: string;
+  plugins: GatewayRoutePlugin[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CreateRouteInput {
   name: string;
   path: string;
   methods: string[];
-  app_id: string;
+  app_id?: string;
+  group_id?: string;
   strip_prefix?: boolean;
   auth?: string;
   auth_pool_id?: string;
@@ -1585,7 +1598,7 @@ export const gateways = {
       projectId ? `/api/v1/gateways?project_id=${projectId}` : "/api/v1/gateways"
     ),
   get: (id: string) =>
-    apiFetch<{ gateway: ApiGateway; routes: GatewayRouteInfo[] }>(
+    apiFetch<{ gateway: ApiGateway; routes: GatewayRouteInfo[]; groups: GatewayGroup[] }>(
       `/api/v1/gateways/${id}`
     ),
   create: (name: string) =>
@@ -1616,6 +1629,22 @@ export const gateways = {
     }),
   deleteRoute: (gwId: string, routeId: string) =>
     apiFetch<void>(`/api/v1/gateways/${gwId}/routes/${routeId}`, {
+      method: "DELETE",
+    }),
+  listGroups: (gwId: string) =>
+    apiFetch<GatewayGroup[]>(`/api/v1/gateways/${gwId}/groups`),
+  createGroup: (gwId: string, data: { name: string; app_id: string; plugins?: GatewayRoutePlugin[] }) =>
+    apiFetch<GatewayGroup>(`/api/v1/gateways/${gwId}/groups`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateGroup: (gwId: string, groupId: string, data: { name?: string; app_id?: string; plugins?: GatewayRoutePlugin[] }) =>
+    apiFetch<GatewayGroup>(`/api/v1/gateways/${gwId}/groups/${groupId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteGroup: (gwId: string, groupId: string) =>
+    apiFetch<void>(`/api/v1/gateways/${gwId}/groups/${groupId}`, {
       method: "DELETE",
     }),
 };

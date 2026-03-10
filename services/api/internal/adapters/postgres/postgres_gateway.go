@@ -36,21 +36,33 @@ func scanGateway(scanner interface{ Scan(dest ...any) error }) (*entities.Gatewa
 	return &g, nil
 }
 
-const gwRouteSelectCols = `id, gateway_id, name, path, methods, app_id, app_subdomain, strip_prefix, auth, auth_pool_id, plugins, priority, status, created_at, updated_at`
+const gwRouteSelectCols = `id, gateway_id, group_id, name, path, methods, app_id, app_subdomain, strip_prefix, auth, auth_pool_id, plugins, priority, status, created_at, updated_at`
 
 func scanGatewayRoute(scanner interface{ Scan(dest ...any) error }) (*entities.GatewayRoute, error) {
 	var r entities.GatewayRoute
 	var methodsStr string
 	var pluginsJSON []byte
 	var authPoolID *string
+	var groupID *string
+	var appID *string
+	var appSubdomain *string
 	err := scanner.Scan(
-		&r.ID, &r.GatewayID, &r.Name, &r.Path, &methodsStr,
-		&r.AppID, &r.AppSubdomain, &r.StripPrefix, &r.Auth,
+		&r.ID, &r.GatewayID, &groupID, &r.Name, &r.Path, &methodsStr,
+		&appID, &appSubdomain, &r.StripPrefix, &r.Auth,
 		&authPoolID, &pluginsJSON, &r.Priority, &r.Status,
 		&r.CreatedAt, &r.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if groupID != nil {
+		r.GroupID = *groupID
+	}
+	if appID != nil {
+		r.AppID = *appID
+	}
+	if appSubdomain != nil {
+		r.AppSubdomain = *appSubdomain
 	}
 	if authPoolID != nil {
 		r.AuthPoolID = *authPoolID
@@ -63,6 +75,27 @@ func scanGatewayRoute(scanner interface{ Scan(dest ...any) error }) (*entities.G
 		r.Plugins = []entities.GatewayRoutePlugin{}
 	}
 	return &r, nil
+}
+
+const gwGroupSelectCols = `id, gateway_id, name, app_id, app_subdomain, plugins, created_at, updated_at`
+
+func scanGatewayGroup(scanner interface{ Scan(dest ...any) error }) (*entities.GatewayGroup, error) {
+	var g entities.GatewayGroup
+	var pluginsJSON []byte
+	err := scanner.Scan(
+		&g.ID, &g.GatewayID, &g.Name, &g.AppID, &g.AppSubdomain,
+		&pluginsJSON, &g.CreatedAt, &g.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(pluginsJSON) > 0 {
+		json.Unmarshal(pluginsJSON, &g.Plugins)
+	}
+	if g.Plugins == nil {
+		g.Plugins = []entities.GatewayRoutePlugin{}
+	}
+	return &g, nil
 }
 
 // --- Gateway CRUD ---
@@ -230,12 +263,24 @@ func (r *PostgresGatewayRepository) CreateRoute(ctx context.Context, route *enti
 	if route.AuthPoolID != "" {
 		authPoolParam = route.AuthPoolID
 	}
+	var groupIDParam interface{}
+	if route.GroupID != "" {
+		groupIDParam = route.GroupID
+	}
+	var appIDParam interface{}
+	if route.AppID != "" {
+		appIDParam = route.AppID
+	}
+	var appSubdomainParam interface{}
+	if route.AppSubdomain != "" {
+		appSubdomainParam = route.AppSubdomain
+	}
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO gateway_routes (id, gateway_id, name, path, methods, app_id, app_subdomain, strip_prefix, auth, auth_pool_id, plugins, priority, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-		route.ID, route.GatewayID, route.Name, route.Path, methodsStr,
-		route.AppID, route.AppSubdomain, route.StripPrefix, string(route.Auth),
+		`INSERT INTO gateway_routes (id, gateway_id, group_id, name, path, methods, app_id, app_subdomain, strip_prefix, auth, auth_pool_id, plugins, priority, status, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		route.ID, route.GatewayID, groupIDParam, route.Name, route.Path, methodsStr,
+		appIDParam, appSubdomainParam, route.StripPrefix, string(route.Auth),
 		authPoolParam, pluginsJSON, route.Priority, string(route.Status), now, now,
 	)
 	if err != nil {
@@ -313,14 +358,27 @@ func (r *PostgresGatewayRepository) UpdateRoute(ctx context.Context, route *enti
 	if route.AuthPoolID != "" {
 		authPoolParam = route.AuthPoolID
 	}
+	var groupIDParam interface{}
+	if route.GroupID != "" {
+		groupIDParam = route.GroupID
+	}
+	var appIDParam interface{}
+	if route.AppID != "" {
+		appIDParam = route.AppID
+	}
+	var appSubdomainParam interface{}
+	if route.AppSubdomain != "" {
+		appSubdomainParam = route.AppSubdomain
+	}
 
 	ct, err := r.pool.Exec(ctx,
 		`UPDATE gateway_routes SET name = $1, path = $2, methods = $3, app_id = $4, app_subdomain = $5,
-		 strip_prefix = $6, auth = $7, auth_pool_id = $8, plugins = $9, priority = $10, status = $11, updated_at = $12
+		 strip_prefix = $6, auth = $7, auth_pool_id = $8, plugins = $9, priority = $10, status = $11, updated_at = $12,
+		 group_id = $14
 		 WHERE id = $13`,
-		route.Name, route.Path, methodsStr, route.AppID, route.AppSubdomain,
+		route.Name, route.Path, methodsStr, appIDParam, appSubdomainParam,
 		route.StripPrefix, string(route.Auth), authPoolParam, pluginsJSON, route.Priority, string(route.Status), now,
-		route.ID,
+		route.ID, groupIDParam,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("update route: %w", err)
@@ -450,4 +508,124 @@ func (r *PostgresGatewayRepository) ListRoutesByAuthPool(ctx context.Context, au
 		routes = append(routes, *rt)
 	}
 	return routes, nil
+}
+
+// --- Group CRUD ---
+
+func (r *PostgresGatewayRepository) CreateGroup(ctx context.Context, group *entities.GatewayGroup) (*entities.GatewayGroup, error) {
+	group.ID = uuid.New().String()
+	now := time.Now()
+	group.CreatedAt = now
+	group.UpdatedAt = now
+
+	if group.Plugins == nil {
+		group.Plugins = []entities.GatewayRoutePlugin{}
+	}
+	pluginsJSON, _ := json.Marshal(group.Plugins)
+
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO gateway_groups (id, gateway_id, name, app_id, app_subdomain, plugins, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		group.ID, group.GatewayID, group.Name, group.AppID, group.AppSubdomain,
+		pluginsJSON, now, now,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "idx_gw_groups_gw_name") {
+			return nil, fmt.Errorf("group name '%s' already exists in this gateway", group.Name)
+		}
+		return nil, fmt.Errorf("create group: %w", err)
+	}
+
+	return group, nil
+}
+
+func (r *PostgresGatewayRepository) GetGroup(ctx context.Context, id string) (*entities.GatewayGroup, error) {
+	g, err := scanGatewayGroup(r.pool.QueryRow(ctx,
+		`SELECT `+gwGroupSelectCols+` FROM gateway_groups WHERE id = $1`, id,
+	))
+	if err != nil {
+		return nil, fmt.Errorf("group not found: %s", id)
+	}
+	return g, nil
+}
+
+func (r *PostgresGatewayRepository) ListGroupsByGateway(ctx context.Context, gatewayID string) ([]entities.GatewayGroup, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+gwGroupSelectCols+` FROM gateway_groups WHERE gateway_id = $1 ORDER BY created_at ASC`, gatewayID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list groups: %w", err)
+	}
+	defer rows.Close()
+
+	var groups []entities.GatewayGroup
+	for rows.Next() {
+		g, err := scanGatewayGroup(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan group: %w", err)
+		}
+		groups = append(groups, *g)
+	}
+	return groups, nil
+}
+
+func (r *PostgresGatewayRepository) UpdateGroup(ctx context.Context, group *entities.GatewayGroup) (*entities.GatewayGroup, error) {
+	now := time.Now()
+	if group.Plugins == nil {
+		group.Plugins = []entities.GatewayRoutePlugin{}
+	}
+	pluginsJSON, _ := json.Marshal(group.Plugins)
+
+	ct, err := r.pool.Exec(ctx,
+		`UPDATE gateway_groups SET name = $1, app_id = $2, app_subdomain = $3, plugins = $4, updated_at = $5 WHERE id = $6`,
+		group.Name, group.AppID, group.AppSubdomain, pluginsJSON, now, group.ID,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "idx_gw_groups_gw_name") {
+			return nil, fmt.Errorf("group name '%s' already exists in this gateway", group.Name)
+		}
+		return nil, fmt.Errorf("update group: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return nil, fmt.Errorf("group not found: %s", group.ID)
+	}
+
+	group.UpdatedAt = now
+	return group, nil
+}
+
+func (r *PostgresGatewayRepository) DeleteGroup(ctx context.Context, id string) error {
+	ct, err := r.pool.Exec(ctx, `DELETE FROM gateway_groups WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete group: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("group not found: %s", id)
+	}
+	return nil
+}
+
+func (r *PostgresGatewayRepository) StopGroupsByApp(ctx context.Context, appID string) ([]string, error) {
+	// Find gateways affected by groups targeting this app, then delete the groups
+	rows, err := r.pool.Query(ctx,
+		`DELETE FROM gateway_groups WHERE app_id = $1 RETURNING gateway_id`, appID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("stop groups by app: %w", err)
+	}
+	defer rows.Close()
+
+	seen := make(map[string]bool)
+	var gwIDs []string
+	for rows.Next() {
+		var gwID string
+		if err := rows.Scan(&gwID); err != nil {
+			continue
+		}
+		if !seen[gwID] {
+			seen[gwID] = true
+			gwIDs = append(gwIDs, gwID)
+		}
+	}
+	return gwIDs, nil
 }

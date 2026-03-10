@@ -312,6 +312,14 @@ type GatewayRepository interface {
 	StopRoutesByApp(ctx context.Context, appID string) ([]string, error) // returns affected gateway IDs
 	ClearAuthPoolFromRoutes(ctx context.Context, authPoolID string) ([]string, error) // returns affected gateway IDs
 	ListRoutesByAuthPool(ctx context.Context, authPoolID string) ([]entities.GatewayRoute, error)
+
+	// Groups
+	CreateGroup(ctx context.Context, group *entities.GatewayGroup) (*entities.GatewayGroup, error)
+	GetGroup(ctx context.Context, id string) (*entities.GatewayGroup, error)
+	ListGroupsByGateway(ctx context.Context, gatewayID string) ([]entities.GatewayGroup, error)
+	UpdateGroup(ctx context.Context, group *entities.GatewayGroup) (*entities.GatewayGroup, error)
+	DeleteGroup(ctx context.Context, id string) error
+	StopGroupsByApp(ctx context.Context, appID string) ([]string, error) // returns affected gateway IDs
 }
 
 // AutoscaleRepository defines autoscaler node and event persistence operations.

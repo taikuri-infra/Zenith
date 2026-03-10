@@ -16,6 +16,7 @@ type MemoryGatewayRepository struct {
 	mu       sync.RWMutex
 	gateways map[string]*entities.Gateway
 	routes   map[string]*entities.GatewayRoute
+	groups   map[string]*entities.GatewayGroup
 }
 
 // NewMemoryGatewayRepository creates a new in-memory GatewayRepository.
@@ -23,6 +24,7 @@ func NewMemoryGatewayRepository() *MemoryGatewayRepository {
 	return &MemoryGatewayRepository{
 		gateways: make(map[string]*entities.Gateway),
 		routes:   make(map[string]*entities.GatewayRoute),
+		groups:   make(map[string]*entities.GatewayGroup),
 	}
 }
 
@@ -381,4 +383,116 @@ func (r *MemoryGatewayRepository) ListRoutesByAuthPool(_ context.Context, authPo
 		}
 	}
 	return routes, nil
+}
+
+// --- Group CRUD ---
+
+func (r *MemoryGatewayRepository) CreateGroup(_ context.Context, group *entities.GatewayGroup) (*entities.GatewayGroup, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, g := range r.groups {
+		if g.GatewayID == group.GatewayID && g.Name == group.Name {
+			return nil, fmt.Errorf("group name '%s' already exists in this gateway", group.Name)
+		}
+	}
+
+	now := time.Now()
+	group.ID = uuid.New().String()
+	group.CreatedAt = now
+	group.UpdatedAt = now
+	if group.Plugins == nil {
+		group.Plugins = []entities.GatewayRoutePlugin{}
+	}
+
+	r.groups[group.ID] = group
+	return group, nil
+}
+
+func (r *MemoryGatewayRepository) GetGroup(_ context.Context, id string) (*entities.GatewayGroup, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	g, ok := r.groups[id]
+	if !ok {
+		return nil, fmt.Errorf("group not found: %s", id)
+	}
+	return g, nil
+}
+
+func (r *MemoryGatewayRepository) ListGroupsByGateway(_ context.Context, gatewayID string) ([]entities.GatewayGroup, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var groups []entities.GatewayGroup
+	for _, g := range r.groups {
+		if g.GatewayID == gatewayID {
+			groups = append(groups, *g)
+		}
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].CreatedAt.Before(groups[j].CreatedAt)
+	})
+	return groups, nil
+}
+
+func (r *MemoryGatewayRepository) UpdateGroup(_ context.Context, group *entities.GatewayGroup) (*entities.GatewayGroup, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.groups[group.ID]
+	if !ok {
+		return nil, fmt.Errorf("group not found: %s", group.ID)
+	}
+
+	group.CreatedAt = existing.CreatedAt
+	group.UpdatedAt = time.Now()
+	if group.Plugins == nil {
+		group.Plugins = []entities.GatewayRoutePlugin{}
+	}
+	r.groups[group.ID] = group
+	return group, nil
+}
+
+func (r *MemoryGatewayRepository) DeleteGroup(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.groups[id]; !ok {
+		return fmt.Errorf("group not found: %s", id)
+	}
+
+	// Unlink routes from this group
+	for _, rt := range r.routes {
+		if rt.GroupID == id {
+			rt.GroupID = ""
+		}
+	}
+
+	delete(r.groups, id)
+	return nil
+}
+
+func (r *MemoryGatewayRepository) StopGroupsByApp(_ context.Context, appID string) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	seen := make(map[string]bool)
+	var gwIDs []string
+	for gid, g := range r.groups {
+		if g.AppID == appID {
+			if !seen[g.GatewayID] {
+				seen[g.GatewayID] = true
+				gwIDs = append(gwIDs, g.GatewayID)
+			}
+			// Unlink routes
+			for _, rt := range r.routes {
+				if rt.GroupID == gid {
+					rt.GroupID = ""
+				}
+			}
+			delete(r.groups, gid)
+		}
+	}
+	return gwIDs, nil
 }

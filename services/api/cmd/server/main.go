@@ -682,6 +682,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	gwByID.Put("/routes/:routeId", gwHandler.UpdateRoute)
 	gwByID.Delete("/routes/:routeId", gwHandler.DeleteRoute)
 
+	gwByID.Post("/groups", gwHandler.CreateGroup)
+	gwByID.Get("/groups", gwHandler.ListGroups)
+	gwByID.Put("/groups/:groupId", gwHandler.UpdateGroup)
+	gwByID.Delete("/groups/:groupId", gwHandler.DeleteGroup)
+
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
 	var backupRepo ports.BackupRepository
 	if pool != nil {

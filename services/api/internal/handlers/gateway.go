@@ -74,7 +74,7 @@ func (h *GatewayHandler) ListGateways(c *fiber.Ctx) error {
 	return c.JSON(gws)
 }
 
-// GetGateway returns a single gateway with its routes.
+// GetGateway returns a single gateway with its routes and groups.
 // GET /api/v1/gateways/:gwId
 func (h *GatewayHandler) GetGateway(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
@@ -96,9 +96,18 @@ func (h *GatewayHandler) GetGateway(c *fiber.Ctx) error {
 		routes = []entities.GatewayRoute{}
 	}
 
+	groups, err := h.gwRepo.ListGroupsByGateway(c.Context(), gwID)
+	if err != nil {
+		groups = []entities.GatewayGroup{}
+	}
+	if groups == nil {
+		groups = []entities.GatewayGroup{}
+	}
+
 	return c.JSON(fiber.Map{
 		"gateway": gw,
 		"routes":  routes,
+		"groups":  groups,
 	})
 }
 
@@ -174,6 +183,7 @@ func (h *GatewayHandler) CreateRoute(c *fiber.Ctx) error {
 		Path        string                       `json:"path"`
 		Methods     []string                     `json:"methods"`
 		AppID       string                       `json:"app_id"`
+		GroupID     string                       `json:"group_id"`
 		StripPrefix bool                         `json:"strip_prefix"`
 		Auth        entities.GatewayRouteAuth    `json:"auth"`
 		AuthPoolID  string                       `json:"auth_pool_id"`
@@ -183,8 +193,12 @@ func (h *GatewayHandler) CreateRoute(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
-	if input.Name == "" || input.Path == "" || input.AppID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "name, path, and app_id are required")
+	if input.Name == "" || input.Path == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "name and path are required")
+	}
+	// app_id is required for standalone routes (not in a group)
+	if input.AppID == "" && input.GroupID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "app_id is required (or assign to a group)")
 	}
 	if len(input.Methods) == 0 {
 		input.Methods = []string{"GET"}
@@ -195,6 +209,7 @@ func (h *GatewayHandler) CreateRoute(c *fiber.Ctx) error {
 		Path:        input.Path,
 		Methods:     input.Methods,
 		AppID:       input.AppID,
+		GroupID:     input.GroupID,
 		StripPrefix: input.StripPrefix,
 		Auth:        input.Auth,
 		AuthPoolID:  input.AuthPoolID,
@@ -255,6 +270,7 @@ func (h *GatewayHandler) UpdateRoute(c *fiber.Ctx) error {
 		Path        string                       `json:"path"`
 		Methods     []string                     `json:"methods"`
 		AppID       string                       `json:"app_id"`
+		GroupID     string                       `json:"group_id"`
 		StripPrefix bool                         `json:"strip_prefix"`
 		Auth        entities.GatewayRouteAuth    `json:"auth"`
 		AuthPoolID  string                       `json:"auth_pool_id"`
@@ -271,6 +287,7 @@ func (h *GatewayHandler) UpdateRoute(c *fiber.Ctx) error {
 		Path:        input.Path,
 		Methods:     input.Methods,
 		AppID:       input.AppID,
+		GroupID:     input.GroupID,
 		StripPrefix: input.StripPrefix,
 		Auth:        input.Auth,
 		AuthPoolID:  input.AuthPoolID,
@@ -328,4 +345,131 @@ func (h *GatewayHandler) SyncGateway(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "gateway synced"})
+}
+
+// --- Group Handlers ---
+
+// CreateGroup creates a new group in a gateway.
+// POST /api/v1/gateways/:gwId/groups
+func (h *GatewayHandler) CreateGroup(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	var input struct {
+		Name    string                        `json:"name"`
+		AppID   string                        `json:"app_id"`
+		Plugins []entities.GatewayRoutePlugin  `json:"plugins"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Name == "" || input.AppID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "name and app_id are required")
+	}
+
+	group := &entities.GatewayGroup{
+		Name:    input.Name,
+		AppID:   input.AppID,
+		Plugins: input.Plugins,
+	}
+
+	created, err := h.gwSvc.CreateGroup(c.Context(), gwID, group)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(created)
+}
+
+// ListGroups lists groups in a gateway.
+// GET /api/v1/gateways/:gwId/groups
+func (h *GatewayHandler) ListGroups(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	groups, err := h.gwSvc.ListGroups(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if groups == nil {
+		groups = []entities.GatewayGroup{}
+	}
+
+	return c.JSON(groups)
+}
+
+// UpdateGroup updates a group.
+// PUT /api/v1/gateways/:gwId/groups/:groupId
+func (h *GatewayHandler) UpdateGroup(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+	groupID := c.Params("groupId")
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	var input struct {
+		Name    string                        `json:"name"`
+		AppID   string                        `json:"app_id"`
+		Plugins []entities.GatewayRoutePlugin  `json:"plugins"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	group := &entities.GatewayGroup{
+		Name:    input.Name,
+		AppID:   input.AppID,
+		Plugins: input.Plugins,
+	}
+
+	updated, err := h.gwSvc.UpdateGroup(c.Context(), gwID, groupID, group)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.JSON(updated)
+}
+
+// DeleteGroup deletes a group.
+// DELETE /api/v1/gateways/:gwId/groups/:groupId
+func (h *GatewayHandler) DeleteGroup(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+	groupID := c.Params("groupId")
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	if err := h.gwSvc.DeleteGroup(c.Context(), gwID, groupID); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "group deleted"})
 }
