@@ -74,10 +74,13 @@ jobs:
 
       # ── Harbor Login ───────────────────────────────────────────────────────
       - name: Login to Harbor
+        env:
+          HARBOR_USER: ${{ secrets.HARBOR_ROBOT_USER }}
+          HARBOR_TOKEN: ${{ secrets.HARBOR_ROBOT_TOKEN }}
         run: |
-          echo "${{ secrets.HARBOR_ROBOT_TOKEN }}" | \
+          echo "$HARBOR_TOKEN" | \
             docker login "${{ env.REGISTRY }}" \
-              --username "${{ secrets.HARBOR_ROBOT_USER }}" \
+              --username "$HARBOR_USER" \
               --password-stdin
 
       # ── Build, Push, Update Values ─────────────────────────────────────────
