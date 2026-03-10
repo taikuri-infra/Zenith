@@ -72,7 +72,7 @@ module "dns" {
     argocd       = { name = "argocd.stage" }
     keycloak     = { name = "auth.stage" }
     temporal     = { name = "temporal.stage" }
-    harbor       = { name = "registry.stage" }
+    # registry.stage → 65.108.210.253 (internal Harbor, managed manually in Cloudflare)
     harbor_hub   = { name = "hub.stage" }
     hubble       = { name = "hubble.stage" }
     tempo        = { name = "tempo.stage" }
