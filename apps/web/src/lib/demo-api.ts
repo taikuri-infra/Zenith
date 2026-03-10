@@ -53,6 +53,7 @@ import type {
   NetworkPolicyRule,
   AlertRule,
   CustomMetric,
+  CreateRouteInput,
 } from "./api";
 
 import {
@@ -1417,9 +1418,9 @@ export const demoGateways = {
   delete: async () => { await delay(300); },
   sync: async () => { await delay(300); },
   listRoutes: async () => { await delay(300); return demoGatewayRoutes; },
-  createRoute: async (_gwId: string, data: { name: string; path: string; methods: string[]; app_id: string }) => {
+  createRoute: async (_gwId: string, data: CreateRouteInput) => {
     await delay(500);
-    return { ...demoGatewayRoutes[0], id: "rt-new-" + Date.now(), ...data, app_subdomain: "my-next-app", plugins: [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    return { ...demoGatewayRoutes[0], id: "rt-new-" + Date.now(), name: data.name, path: data.path, methods: data.methods, app_id: data.app_id ?? "", app_subdomain: "my-next-app", plugins: data.plugins ?? [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
   },
   updateRoute: async (_gwId: string, routeId: string, data: Record<string, unknown>) => { await delay(300); return { ...demoGatewayRoutes[0], id: routeId, ...data }; },
   deleteRoute: async () => { await delay(300); },
