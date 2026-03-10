@@ -1,7 +1,7 @@
 # Staging values for zenith-api
 namespace: zenith-staging
 replicas: 1
-image: zenith-api:sha-d69021a
+image: zenith-api:sha-8d2a491
 imageRegistry: ""  # set via Terraform
 imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via Terraform
