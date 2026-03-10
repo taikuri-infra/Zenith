@@ -78,6 +78,18 @@ func (r *MemoryGatewayRepository) GetGatewayBySlug(_ context.Context, slug strin
 	return nil, fmt.Errorf("gateway not found: %s", slug)
 }
 
+func (r *MemoryGatewayRepository) GetGatewayByProject(_ context.Context, projectID string) (*entities.Gateway, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, g := range r.gateways {
+		if g.ProjectID == projectID {
+			return g, nil
+		}
+	}
+	return nil, fmt.Errorf("no gateway found for project: %s", projectID)
+}
+
 func (r *MemoryGatewayRepository) ListGatewaysByUser(_ context.Context, userID string) ([]entities.Gateway, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

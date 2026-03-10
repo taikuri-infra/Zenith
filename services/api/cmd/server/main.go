@@ -656,11 +656,13 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		gwRepo = memory.NewMemoryGatewayRepository()
 	}
 	gwSvc := services.NewGatewayService(gwRepo, appRepo, planRepo, k8sClient, cfg.GatewayDomain, "zenith-apps")
+	gwSvc.SetAppsDomain(cfg.BaseDomain)
 	gwHandler := handlers.NewGatewayHandler(gwSvc, gwRepo, projectRepo)
 	onAppDeleted := func(ctx context.Context, appID string) {
 		gwSvc.HandleAppDeleted(ctx, appID)
 	}
 	appHandlerV2.SetOnAppDeleted(onAppDeleted)
+	appHandlerV2.SetGatewayService(gwSvc)
 	projectHandlerV2.SetOnAppDeleted(onAppDeleted)
 	go gwSvc.ReconcileAll(context.Background())
 

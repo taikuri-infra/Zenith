@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"strings"
 	"time"
@@ -60,6 +62,12 @@ type AppImageDeployer interface {
 	TriggerImageDeploy(app *entities.App, deployment *entities.Deployment, image string) error
 }
 
+// AppGatewayService is the subset of GatewayService needed for auto-gateway creation.
+type AppGatewayService interface {
+	EnsureProjectGateway(ctx context.Context, userID, projectID, projectSlug string) (*entities.Gateway, error)
+	AutoCreateRoute(ctx context.Context, gw *entities.Gateway, app *entities.App) error
+}
+
 // AppHandlerV2 handles app CRUD operations using the AppRepository.
 // This replaces the original CRD-based AppHandler for Phase 2.
 type AppHandlerV2 struct {
@@ -68,6 +76,7 @@ type AppHandlerV2 struct {
 	baseDomain   string
 	deployer     AppDeleter
 	pipeline     AppImageDeployer
+	gwService    AppGatewayService
 	onAppDeleted func(ctx context.Context, appID string) // callback for cascade (e.g. stop gateway routes)
 }
 
@@ -84,6 +93,11 @@ func (h *AppHandlerV2) SetProjectRepo(repo ports.ProjectRepository) {
 // SetOnAppDeleted sets a callback invoked after an app is deleted (e.g. to stop gateway routes).
 func (h *AppHandlerV2) SetOnAppDeleted(fn func(ctx context.Context, appID string)) {
 	h.onAppDeleted = fn
+}
+
+// SetGatewayService configures the gateway service for auto-gateway creation.
+func (h *AppHandlerV2) SetGatewayService(svc AppGatewayService) {
+	h.gwService = svc
 }
 
 // wellKnownPorts maps popular base image names to their default listening port.
@@ -144,6 +158,7 @@ type CreateAppV2Request struct {
 	AppType          string `json:"app_type,omitempty"`
 	Command          string `json:"command,omitempty"`
 	CronSchedule     string `json:"cron_schedule,omitempty"`
+	Exposure         string `json:"exposure,omitempty"` // "public" or "protected"
 	EnvVars          []struct {
 		Key   string `json:"key"`
 		Value string `json:"value"`
@@ -152,52 +167,60 @@ type CreateAppV2Request struct {
 
 // AppV2Response is the API response for an app.
 type AppV2Response struct {
-	ID           string    `json:"id"`
-	ProjectID    string    `json:"project_id"`
-	Name         string    `json:"name"`
-	DeploySource string    `json:"deploy_source"`
-	RepoURL      string    `json:"repo_url,omitempty"`
-	Branch       string    `json:"branch,omitempty"`
-	ImageURL     string    `json:"image_url,omitempty"`
-	Framework    string    `json:"framework"`
-	Status       string    `json:"status"`
-	Subdomain    string    `json:"subdomain"`
-	URL          string    `json:"url"`
-	Port         int       `json:"port"`
-	AppType      string    `json:"app_type"`
-	Command      string    `json:"command,omitempty"`
-	CronSchedule string    `json:"cron_schedule,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	ProjectID     string    `json:"project_id"`
+	Name          string    `json:"name"`
+	DeploySource  string    `json:"deploy_source"`
+	RepoURL       string    `json:"repo_url,omitempty"`
+	Branch        string    `json:"branch,omitempty"`
+	ImageURL      string    `json:"image_url,omitempty"`
+	Framework     string    `json:"framework"`
+	Status        string    `json:"status"`
+	Subdomain     string    `json:"subdomain"`
+	URL           string    `json:"url"`
+	Port          int       `json:"port"`
+	AppType       string    `json:"app_type"`
+	Command       string    `json:"command,omitempty"`
+	CronSchedule  string    `json:"cron_schedule,omitempty"`
+	Exposure      string    `json:"exposure"`
+	AutoGatewayID string    `json:"auto_gateway_id,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func (h *AppHandlerV2) appToResponse(app *entities.App) AppV2Response {
 	url := ""
-	if app.Subdomain != "" && h.baseDomain != "" {
+	if app.Subdomain != "" && h.baseDomain != "" && app.AppType == entities.AppTypeWeb {
 		url = "https://" + app.Subdomain + "." + h.baseDomain
 	}
 	appType := string(app.AppType)
 	if appType == "" {
 		appType = "web"
 	}
+	exposure := string(app.Exposure)
+	if exposure == "" {
+		exposure = "public"
+	}
 	return AppV2Response{
-		ID:           app.ID,
-		ProjectID:    app.ProjectID,
-		Name:         app.Name,
-		DeploySource: string(app.DeploySource),
-		RepoURL:      app.RepoURL,
-		Branch:       app.Branch,
-		ImageURL:     app.ImageURL,
-		Framework:    string(app.Framework),
-		Status:       string(app.Status),
-		Subdomain:    app.Subdomain,
-		URL:          url,
-		Port:         app.Port,
-		AppType:      appType,
-		Command:      app.Command,
-		CronSchedule: app.CronSchedule,
-		CreatedAt:    app.CreatedAt,
-		UpdatedAt:    app.UpdatedAt,
+		ID:            app.ID,
+		ProjectID:     app.ProjectID,
+		Name:          app.Name,
+		DeploySource:  string(app.DeploySource),
+		RepoURL:       app.RepoURL,
+		Branch:        app.Branch,
+		ImageURL:      app.ImageURL,
+		Framework:     string(app.Framework),
+		Status:        string(app.Status),
+		Subdomain:     app.Subdomain,
+		URL:           url,
+		Port:          app.Port,
+		AppType:       appType,
+		Command:       app.Command,
+		CronSchedule:  app.CronSchedule,
+		Exposure:      exposure,
+		AutoGatewayID: app.AutoGatewayID,
+		CreatedAt:     app.CreatedAt,
+		UpdatedAt:     app.UpdatedAt,
 	}
 }
 
@@ -257,6 +280,15 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		}
 	}
 
+	// Parse exposure (default: public for web, none for worker/cron)
+	exposure := entities.AppExposure(req.Exposure)
+	if exposure == "" {
+		exposure = entities.ExposurePublic
+	}
+	if exposure != entities.ExposurePublic && exposure != entities.ExposureProtected {
+		return NewBadRequest("exposure must be 'public' or 'protected'")
+	}
+
 	app, err := h.appRepo.CreateApp(c.Context(), &dto.CreateAppInput{
 		UserID:           userID.(string),
 		ProjectID:        projectID,
@@ -271,6 +303,7 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		AppType:          appType,
 		Command:          req.Command,
 		CronSchedule:     req.CronSchedule,
+		Exposure:         exposure,
 	})
 	if err != nil {
 		if isAlreadyExists(err) {
@@ -292,6 +325,29 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		if len(vars) > 0 {
 			if err := h.appRepo.SetEnvVars(c.Context(), app.ID, vars); err != nil {
 				slog.Warn("failed to set initial env vars", "app_id", app.ID, "error", err)
+			}
+		}
+	}
+
+	// Auto-gateway: for web apps, create per-project gateway and route via APISIX
+	if appType == entities.AppTypeWeb && h.gwService != nil && projectID != "" {
+		projectSlug := ""
+		if h.projectRepo != nil {
+			if p, err := h.projectRepo.GetProject(c.Context(), projectID); err == nil {
+				projectSlug = p.Slug
+			}
+		}
+
+		gw, err := h.gwService.EnsureProjectGateway(c.Context(), userID.(string), projectID, projectSlug)
+		if err != nil {
+			slog.Warn("auto-gateway: failed to ensure project gateway", "project_id", projectID, "error", err)
+		} else {
+			if err := h.gwService.AutoCreateRoute(c.Context(), gw, app); err != nil {
+				slog.Warn("auto-gateway: failed to create route", "app_id", app.ID, "error", err)
+			} else {
+				// Update app with auto_gateway_id
+				app.AutoGatewayID = gw.ID
+				h.appRepo.SetAutoGatewayID(c.Context(), app.ID, gw.ID)
 			}
 		}
 	}
@@ -388,22 +444,62 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "app deleted"})
 }
 
-// CheckName handles GET /api/v1/apps/check-name?name=xxx
-// Returns availability and the resulting subdomain/URL.
+// CheckName handles GET /api/v1/apps/check-name?name=xxx&project_id=yyy
+// Returns the auto-generated subdomain (with suffix) and URL.
+// With the new suffix system, names are always available (deterministic, no collisions).
 func (h *AppHandlerV2) CheckName(c *fiber.Ctx) error {
 	name := strings.TrimSpace(c.Query("name"))
 	if name == "" {
 		return NewBadRequest("name query parameter is required")
 	}
 
-	subdomain := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
-	subdomain = strings.ReplaceAll(subdomain, " ", "-")
+	projectID := c.Query("project_id")
+	if projectID == "" {
+		// Fall back to default project
+		userID := c.Locals("user_id")
+		if userID != nil && h.projectRepo != nil {
+			if dp, err := h.projectRepo.GetDefaultProject(c.Context(), userID.(string)); err == nil {
+				projectID = dp.ID
+			}
+		}
+	}
+
+	// Generate the same subdomain the CreateApp path uses (DNS-safe slug + suffix)
+	slug := strings.ToLower(strings.TrimSpace(name))
+	slug = strings.ReplaceAll(slug, "_", "-")
+	slug = strings.ReplaceAll(slug, " ", "-")
+	// Strip non-DNS characters (match postgres_app.go sanitizeSlug)
+	for _, c := range slug {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+			slug = strings.Map(func(r rune) rune {
+				if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+					return r
+				}
+				return -1
+			}, slug)
+			break
+		}
+	}
+	for strings.Contains(slug, "--") {
+		slug = strings.ReplaceAll(slug, "--", "-")
+	}
+	slug = strings.Trim(slug, "-")
+	if len(slug) > 48 {
+		slug = strings.TrimRight(slug[:48], "-")
+	}
+	if slug == "" {
+		return NewBadRequest("name produces an empty slug after sanitization")
+	}
+	hash := sha256.Sum256([]byte(projectID + name))
+	suffix := hex.EncodeToString(hash[:2]) // 4 hex chars
+	subdomain := slug + "-" + suffix
 
 	url := ""
 	if subdomain != "" && h.baseDomain != "" {
 		url = "https://" + subdomain + "." + h.baseDomain
 	}
 
+	// With deterministic suffix, always available unless exact collision exists
 	available := true
 	if _, err := h.appRepo.GetAppBySubdomain(c.Context(), subdomain); err == nil {
 		available = false

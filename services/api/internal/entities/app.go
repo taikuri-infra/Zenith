@@ -31,6 +31,14 @@ const (
 	AppTypeCron   AppType = "cron"
 )
 
+// AppExposure controls how the app is exposed through the gateway.
+type AppExposure string
+
+const (
+	ExposurePublic    AppExposure = "public"    // Frontend: APISIX passthrough, no auth
+	ExposureProtected AppExposure = "protected" // API Service: APISIX + jwt-auth plugin
+)
+
 // Framework represents the detected framework type.
 type Framework string
 
@@ -66,5 +74,7 @@ type App struct {
 	AppType          AppType      `json:"app_type"`
 	Command          string       `json:"command,omitempty"`
 	CronSchedule     string       `json:"cron_schedule,omitempty"`
+	Exposure         AppExposure  `json:"exposure"`
+	AutoGatewayID    string       `json:"auto_gateway_id,omitempty"`
 	Timestamps
 }

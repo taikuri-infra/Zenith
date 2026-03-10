@@ -21,6 +21,7 @@ type GatewayService struct {
 	authPoolRepo ports.AuthPoolRepository
 	k8sClient    k8sclient.Client
 	gwDomain     string // e.g. "gw.stage.freezenith.com"
+	appsDomain   string // e.g. "apps.stage.freezenith.com" — for auto-route host matching
 	namespace    string // e.g. "zenith-apps"
 }
 
@@ -46,6 +47,11 @@ func NewGatewayService(
 		gwDomain:  gwDomain,
 		namespace: namespace,
 	}
+}
+
+// SetAppsDomain configures the apps base domain for auto-route host matching.
+func (s *GatewayService) SetAppsDomain(domain string) {
+	s.appsDomain = domain
 }
 
 var slugRegexp = regexp.MustCompile(`[^a-z0-9-]`)
@@ -471,6 +477,99 @@ func (s *GatewayService) ReconcileAll(ctx context.Context) {
 	slog.Info("gateway reconciliation available via /sync endpoint")
 }
 
+// EnsureProjectGateway returns the existing auto-gateway for a project or creates a new one.
+// Uses DB unique constraint (idx_gateways_project_id) to prevent TOCTOU race conditions.
+func (s *GatewayService) EnsureProjectGateway(ctx context.Context, userID, projectID, projectSlug string) (*entities.Gateway, error) {
+	// Try to find an existing gateway for this project
+	gw, err := s.gwRepo.GetGatewayByProject(ctx, projectID)
+	if err == nil {
+		gw.Endpoint = fmt.Sprintf("https://%s.%s", gw.Slug, s.gwDomain)
+		return gw, nil
+	}
+
+	// Create a new auto-gateway for the project
+	slug := projectSlug
+	if slug == "" {
+		slug = "gw-" + projectID[:8]
+	}
+	slug = slugify(slug)
+
+	// Ensure slug uniqueness by appending project ID prefix if needed
+	if _, err := s.gwRepo.GetGatewayBySlug(ctx, slug); err == nil {
+		slug = slug + "-" + projectID[:8]
+	}
+
+	name := slug + " Gateway"
+	gw, err = s.gwRepo.CreateGateway(ctx, userID, projectID, name, slug)
+	if err != nil {
+		// Race condition: another request created the gateway between our check and insert.
+		// The DB unique constraint (idx_gateways_project_id) catches this — retry the lookup.
+		if strings.Contains(err.Error(), "idx_gateways_project_id") || strings.Contains(err.Error(), "duplicate key") {
+			gw, err = s.gwRepo.GetGatewayByProject(ctx, projectID)
+			if err == nil {
+				gw.Endpoint = fmt.Sprintf("https://%s.%s", gw.Slug, s.gwDomain)
+				return gw, nil
+			}
+		}
+		return nil, fmt.Errorf("failed to create project gateway: %w", err)
+	}
+
+	gw.Endpoint = fmt.Sprintf("https://%s.%s", slug, s.gwDomain)
+
+	// Create K8s resources
+	if err := s.ensureExternalNameBridge(ctx); err != nil {
+		slog.Warn("failed to ensure ExternalName bridge", "error", err)
+	}
+
+	if err := s.createIngressRoute(ctx, gw); err != nil {
+		slog.Warn("auto-gateway: failed to create IngressRoute", "slug", slug, "error", err)
+		s.gwRepo.UpdateGatewayStatus(ctx, gw.ID, entities.GatewayStatusError)
+		gw.Status = entities.GatewayStatusError
+		return gw, nil
+	}
+
+	if err := s.syncApisixRoute(ctx, gw, nil, nil); err != nil {
+		slog.Warn("auto-gateway: failed to create ApisixRoute", "slug", slug, "error", err)
+	}
+
+	s.gwRepo.UpdateGatewayStatus(ctx, gw.ID, entities.GatewayStatusActive)
+	gw.Status = entities.GatewayStatusActive
+	return gw, nil
+}
+
+// AutoCreateRoute creates an APISIX route for an app in the project gateway.
+// For "protected" exposure, the jwt-auth plugin is added.
+func (s *GatewayService) AutoCreateRoute(ctx context.Context, gw *entities.Gateway, app *entities.App) error {
+	// Build plugins based on exposure
+	var plugins []entities.GatewayRoutePlugin
+	if app.Exposure == entities.ExposureProtected {
+		plugins = append(plugins, entities.GatewayRoutePlugin{
+			Name:   "jwt-auth",
+			Enable: true,
+		})
+	}
+
+	route := &entities.GatewayRoute{
+		GatewayID:    gw.ID,
+		Name:         "auto-" + app.Subdomain,
+		Path:         "/*",
+		Methods:      nil, // all methods
+		AppID:        app.ID,
+		AppSubdomain: app.Subdomain,
+		Auth:         entities.GatewayRouteAuthNone,
+		Status:       entities.GatewayRouteStatusActive,
+		Plugins:      plugins,
+	}
+
+	if _, err := s.gwRepo.CreateRoute(ctx, route); err != nil {
+		return fmt.Errorf("failed to create auto-route for app %s: %w", app.Name, err)
+	}
+
+	// Rebuild ApisixRoute CRD
+	s.rebuildApisixRoute(ctx, gw)
+	return nil
+}
+
 // HandleAppDeleted stops all routes pointing to the deleted app, removes groups, and rebuilds CRDs.
 func (s *GatewayService) HandleAppDeleted(ctx context.Context, appID string) {
 	// Stop standalone routes pointing to the app
@@ -627,7 +726,7 @@ func mergePlugins(groupPlugins, routePlugins []entities.GatewayRoutePlugin) []en
 // syncApisixRoute creates or updates the ApisixRoute CRD for a gateway.
 func (s *GatewayService) syncApisixRoute(ctx context.Context, gw *entities.Gateway, routes []entities.GatewayRoute, groups []entities.GatewayGroup) error {
 	name := "gw-" + gw.Slug
-	host := gw.Slug + "." + s.gwDomain
+	gwHost := gw.Slug + "." + s.gwDomain
 
 	// Build group lookup
 	groupMap := make(map[string]*entities.GatewayGroup, len(groups))
@@ -657,6 +756,13 @@ func (s *GatewayService) syncApisixRoute(ctx context.Context, gw *entities.Gatew
 		if appSubdomain == "" {
 			slog.Warn("skipping route with no app subdomain", "route_id", rt.ID, "route_name", rt.Name)
 			continue
+		}
+
+		// Auto-routes use the app's subdomain host (traffic arrives with app Host header).
+		// Manual routes use the gateway host.
+		host := gwHost
+		if strings.HasPrefix(rt.Name, "auto-") && s.appsDomain != "" {
+			host = appSubdomain + "." + s.appsDomain
 		}
 
 		// Build plugins list

@@ -47,10 +47,13 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 
 	scaleToZero := planLimits != nil && ShouldScaleToZero(planLimits)
 
+	// Use APISIX routing when the app has an auto-gateway
+	useApisix := app.AutoGatewayID != ""
+
 	res := &K8sResources{
 		Deployment:    generateDeployment(app, imageTag, namespace, labels, envVars, tier),
 		Service:       generateService(app, namespace, labels),
-		NetworkPolicy: generateNetworkPolicy(app, namespace, labels),
+		NetworkPolicy: generateNetworkPolicy(app, namespace, labels, useApisix),
 	}
 
 	if scaleToZero {
@@ -59,9 +62,17 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 		spec["replicas"] = int32(0)
 
 		res.HTTPScaledObject = GenerateHTTPScaledObject(app, baseDomain, planLimits.SleepAfterMins)
-		res.IngressRoute = generateIngressRouteWithColdStart(app, namespace, labels, baseDomain, customDomains)
+		if useApisix {
+			res.IngressRoute = generateIngressRouteViaApisixWithColdStart(app, namespace, labels, baseDomain, customDomains)
+		} else {
+			res.IngressRoute = generateIngressRouteWithColdStart(app, namespace, labels, baseDomain, customDomains)
+		}
 	} else {
-		res.IngressRoute = generateIngressRoute(app, namespace, labels, baseDomain, customDomains)
+		if useApisix {
+			res.IngressRoute = generateIngressRouteViaApisix(app, namespace, labels, baseDomain, customDomains)
+		} else {
+			res.IngressRoute = generateIngressRoute(app, namespace, labels, baseDomain, customDomains)
+		}
 	}
 
 	// Generate Certificate CRD when custom domains are present
@@ -259,6 +270,87 @@ func generateIngressRoute(app *entities.App, namespace string, labels map[string
 	}
 }
 
+// generateIngressRouteViaApisix creates a Traefik IngressRoute that routes through the
+// APISIX gateway bridge (ExternalName svc) instead of directly to the app service.
+// Used for apps with auto-gateway (exposure=public or exposure=protected).
+func generateIngressRouteViaApisix(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string) map[string]interface{} {
+	matchRule := buildHostMatchRule(app.Subdomain+"."+baseDomain, customDomains)
+
+	tls := map[string]interface{}{}
+	if len(customDomains) > 0 {
+		tls["secretName"] = app.Subdomain + "-custom-tls"
+	}
+
+	return map[string]interface{}{
+		"apiVersion": "traefik.io/v1alpha1",
+		"kind":       "IngressRoute",
+		"metadata": map[string]interface{}{
+			"name":      app.Subdomain,
+			"namespace": namespace,
+			"labels":    labels,
+		},
+		"spec": map[string]interface{}{
+			"entryPoints": []string{"websecure"},
+			"routes": []map[string]interface{}{
+				{
+					"match": matchRule,
+					"kind":  "Rule",
+					"services": []map[string]interface{}{
+						{
+							"name": "apisix-gateway-bridge",
+							"port": 80,
+						},
+					},
+				},
+			},
+			"tls": tls,
+		},
+	}
+}
+
+// generateIngressRouteViaApisixWithColdStart creates an IngressRoute that routes through APISIX
+// with the cold-start error page middleware (for free-tier apps that scale to zero).
+func generateIngressRouteViaApisixWithColdStart(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string) map[string]interface{} {
+	matchRule := buildHostMatchRule(app.Subdomain+"."+baseDomain, customDomains)
+
+	tls := map[string]interface{}{}
+	if len(customDomains) > 0 {
+		tls["secretName"] = app.Subdomain + "-custom-tls"
+	}
+
+	return map[string]interface{}{
+		"apiVersion": "traefik.io/v1alpha1",
+		"kind":       "IngressRoute",
+		"metadata": map[string]interface{}{
+			"name":      app.Subdomain,
+			"namespace": namespace,
+			"labels":    labels,
+		},
+		"spec": map[string]interface{}{
+			"entryPoints": []string{"websecure"},
+			"routes": []map[string]interface{}{
+				{
+					"match": matchRule,
+					"kind":  "Rule",
+					"middlewares": []map[string]interface{}{
+						{
+							"name":      "cold-start-errors",
+							"namespace": namespace,
+						},
+					},
+					"services": []map[string]interface{}{
+						{
+							"name": "apisix-gateway-bridge",
+							"port": 80,
+						},
+					},
+				},
+			},
+			"tls": tls,
+		},
+	}
+}
+
 // buildHostMatchRule creates a Traefik Host() match rule with one or more hosts.
 func buildHostMatchRule(primaryHost string, customDomains []string) string {
 	hosts := []string{fmt.Sprintf("Host(`%s`)", primaryHost)}
@@ -294,9 +386,39 @@ func generateCertificate(app *entities.App, namespace string, labels map[string]
 }
 
 // generateNetworkPolicy creates a NetworkPolicy that isolates user app pods:
-// - Ingress: only from Traefik (kube-system namespace)
+// - Ingress: only from Traefik (kube-system namespace) and optionally APISIX (apisix namespace)
 // - Egress: DNS (kube-dns) + internet (blocks 10.0.0.0/8, 172.16.0.0/12 to prevent pod-to-pod)
-func generateNetworkPolicy(app *entities.App, namespace string, labels map[string]string) map[string]interface{} {
+func generateNetworkPolicy(app *entities.App, namespace string, labels map[string]string, allowApisix bool) map[string]interface{} {
+	ingressFrom := []map[string]interface{}{
+		{
+			"namespaceSelector": map[string]interface{}{
+				"matchLabels": map[string]string{
+					"kubernetes.io/metadata.name": "kube-system",
+				},
+			},
+			"podSelector": map[string]interface{}{
+				"matchLabels": map[string]string{
+					"app.kubernetes.io/name": "traefik",
+				},
+			},
+		},
+	}
+
+	if allowApisix {
+		ingressFrom = append(ingressFrom, map[string]interface{}{
+			"namespaceSelector": map[string]interface{}{
+				"matchLabels": map[string]string{
+					"kubernetes.io/metadata.name": "apisix",
+				},
+			},
+			"podSelector": map[string]interface{}{
+				"matchLabels": map[string]string{
+					"app.kubernetes.io/name": "apisix",
+				},
+			},
+		})
+	}
+
 	return map[string]interface{}{
 		"apiVersion": "networking.k8s.io/v1",
 		"kind":       "NetworkPolicy",
@@ -314,20 +436,7 @@ func generateNetworkPolicy(app *entities.App, namespace string, labels map[strin
 			"policyTypes": []string{"Ingress", "Egress"},
 			"ingress": []map[string]interface{}{
 				{
-					"from": []map[string]interface{}{
-						{
-							"namespaceSelector": map[string]interface{}{
-								"matchLabels": map[string]string{
-									"kubernetes.io/metadata.name": "kube-system",
-								},
-							},
-							"podSelector": map[string]interface{}{
-								"matchLabels": map[string]string{
-									"app.kubernetes.io/name": "traefik",
-								},
-							},
-						},
-					},
+					"from": ingressFrom,
 				},
 			},
 			"egress": []map[string]interface{}{

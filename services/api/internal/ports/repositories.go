@@ -87,6 +87,7 @@ type AppRepository interface {
 	ListAppsByProject(ctx context.Context, projectID string) ([]entities.App, error)
 	UpdateApp(ctx context.Context, id string, input *dto.UpdateAppInput) (*entities.App, error)
 	DeleteApp(ctx context.Context, id string) error
+	SetAutoGatewayID(ctx context.Context, appID, gatewayID string) error
 	CountAppsByUser(ctx context.Context, userID string) (int, error)
 	CountApps(ctx context.Context) (int, error)
 
@@ -293,6 +294,7 @@ type GatewayRepository interface {
 	CreateGateway(ctx context.Context, userID, projectID, name, slug string) (*entities.Gateway, error)
 	GetGateway(ctx context.Context, id string) (*entities.Gateway, error)
 	GetGatewayBySlug(ctx context.Context, slug string) (*entities.Gateway, error)
+	GetGatewayByProject(ctx context.Context, projectID string) (*entities.Gateway, error)
 	ListGatewaysByUser(ctx context.Context, userID string) ([]entities.Gateway, error)
 	ListGatewaysByProject(ctx context.Context, projectID string) ([]entities.Gateway, error)
 	UpdateGateway(ctx context.Context, id, name string) (*entities.Gateway, error)

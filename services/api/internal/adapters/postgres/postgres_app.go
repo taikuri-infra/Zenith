@@ -2,7 +2,10 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,6 +14,62 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// dnsLabelRegex matches only valid DNS label characters (lowercase alphanumeric + hyphens).
+var dnsLabelRegex = regexp.MustCompile(`[^a-z0-9-]`)
+
+// reservedNames contains names that conflict with infrastructure services.
+var reservedNames = map[string]bool{
+	"apisix-gateway-bridge": true,
+	"apisix-gateway-proxy":  true,
+	"apisix":                true,
+	"traefik":               true,
+	"keycloak":              true,
+	"harbor":                true,
+	"argocd":                true,
+	"grafana":               true,
+	"prometheus":            true,
+	"loki":                  true,
+	"keda":                  true,
+	"cert-manager":          true,
+	"cold-start":            true,
+	"cold-start-errors":     true,
+	"external-dns":          true,
+	"hubble":                true,
+	"cilium":                true,
+	"cnpg":                  true,
+	"nats":                  true,
+	"redis":                 true,
+	"admin":                 true,
+	"api":                   true,
+	"www":                   true,
+	"mail":                  true,
+	"ftp":                   true,
+	"localhost":             true,
+}
+
+// sanitizeSlug generates a DNS-safe slug from an app name.
+// Only allows [a-z0-9-], max 48 chars (leaving room for 5-char suffix "-xxxx").
+func sanitizeSlug(name string) (string, error) {
+	s := strings.ToLower(strings.TrimSpace(name))
+	s = strings.ReplaceAll(s, "_", "-")
+	s = strings.ReplaceAll(s, " ", "-")
+	s = dnsLabelRegex.ReplaceAllString(s, "")
+	// Collapse multiple hyphens
+	for strings.Contains(s, "--") {
+		s = strings.ReplaceAll(s, "--", "-")
+	}
+	s = strings.Trim(s, "-")
+	if s == "" {
+		return "", fmt.Errorf("app name '%s' produces an empty slug after sanitization", name)
+	}
+	// Enforce max length (DNS label max = 63, minus suffix "-xxxx" = 58, leave some margin)
+	if len(s) > 48 {
+		s = s[:48]
+		s = strings.TrimRight(s, "-")
+	}
+	return s, nil
+}
 
 // PostgresAppRepository is a PostgreSQL-backed AppRepository.
 type PostgresAppRepository struct {
@@ -54,8 +113,19 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 		port = 8080 // handler should resolve well-known ports before reaching here
 	}
 
-	subdomain := strings.ToLower(strings.ReplaceAll(input.Name, "_", "-"))
-	subdomain = strings.ReplaceAll(subdomain, " ", "-")
+	// Generate subdomain: DNS-safe slug + 4-char hex suffix (deterministic, no collisions)
+	slug, err := sanitizeSlug(input.Name)
+	if err != nil {
+		return nil, err
+	}
+	hash := sha256.Sum256([]byte(input.ProjectID + input.Name))
+	suffix := hex.EncodeToString(hash[:2]) // 4 hex chars
+	subdomain := slug + "-" + suffix
+
+	// Block reserved infrastructure names
+	if reservedNames[slug] || reservedNames[subdomain] {
+		return nil, fmt.Errorf("app name '%s' is reserved and cannot be used", input.Name)
+	}
 
 	id := uuid.New().String()
 	now := time.Now()
@@ -65,13 +135,18 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 		appType = entities.AppTypeWeb
 	}
 
-	_, err := r.pool.Exec(ctx,
-		`INSERT INTO apps (id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+	exposure := input.Exposure
+	if exposure == "" {
+		exposure = entities.ExposurePublic
+	}
+
+	_, err = r.pool.Exec(ctx,
+		`INSERT INTO apps (id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
 		id, input.UserID, input.ProjectID, input.Name, string(deploySource), input.RepoURL, branch,
 		input.ImageURL, input.RegistryUsername, input.RegistryPassword,
 		string(entities.FrameworkUnknown), string(entities.AppStatusPending), subdomain, port,
-		string(appType), input.Command, input.CronSchedule, now, now,
+		string(appType), input.Command, input.CronSchedule, string(exposure), now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_apps_project_name") {
@@ -101,6 +176,7 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 		AppType:          appType,
 		Command:          input.Command,
 		CronSchedule:     input.CronSchedule,
+		Exposure:         exposure,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -110,12 +186,14 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 
 func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	var app entities.App
-	var framework, status, deploySource, appType string
+	var framework, status, deploySource, appType, exposure string
+	var autoGatewayID *string
 
 	err := scan(&app.ID, &app.UserID, &app.ProjectID, &app.Name, &deploySource, &app.RepoURL, &app.Branch,
 		&app.ImageURL, &app.RegistryUser, &app.RegistryPassword,
 		&framework, &status, &app.Subdomain, &app.Port,
 		&appType, &app.Command, &app.CronSchedule,
+		&exposure, &autoGatewayID,
 		&app.CreatedAt, &app.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -128,10 +206,17 @@ func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	if app.AppType == "" {
 		app.AppType = entities.AppTypeWeb
 	}
+	app.Exposure = entities.AppExposure(exposure)
+	if app.Exposure == "" {
+		app.Exposure = entities.ExposurePublic
+	}
+	if autoGatewayID != nil {
+		app.AutoGatewayID = *autoGatewayID
+	}
 	return &app, nil
 }
 
-const appColumns = `id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, created_at, updated_at`
+const appColumns = `id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, auto_gateway_id, created_at, updated_at`
 
 func (r *PostgresAppRepository) GetApp(ctx context.Context, id string) (*entities.App, error) {
 	row := r.pool.QueryRow(ctx,
@@ -247,6 +332,17 @@ func (r *PostgresAppRepository) DeleteApp(ctx context.Context, id string) error 
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("app not found")
+	}
+	return nil
+}
+
+func (r *PostgresAppRepository) SetAutoGatewayID(ctx context.Context, appID, gatewayID string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE apps SET auto_gateway_id = $1, updated_at = now() WHERE id = $2`,
+		gatewayID, appID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to set auto_gateway_id: %w", err)
 	}
 	return nil
 }

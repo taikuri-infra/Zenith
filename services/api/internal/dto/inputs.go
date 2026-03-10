@@ -19,6 +19,7 @@ type CreateAppInput struct {
 	AppType          entities.AppType      `json:"app_type"`
 	Command          string                `json:"command"`
 	CronSchedule     string                `json:"cron_schedule"`
+	Exposure         entities.AppExposure  `json:"exposure"`
 }
 
 // UpdateAppInput is the request body for updating an existing app.

@@ -148,6 +148,16 @@ func (r *PostgresGatewayRepository) GetGatewayBySlug(ctx context.Context, slug s
 	return g, nil
 }
 
+func (r *PostgresGatewayRepository) GetGatewayByProject(ctx context.Context, projectID string) (*entities.Gateway, error) {
+	g, err := scanGateway(r.pool.QueryRow(ctx,
+		`SELECT `+gwSelectCols+` FROM gateways WHERE project_id = $1 ORDER BY created_at ASC LIMIT 1`, projectID,
+	))
+	if err != nil {
+		return nil, fmt.Errorf("no gateway found for project: %s", projectID)
+	}
+	return g, nil
+}
+
 func (r *PostgresGatewayRepository) ListGatewaysByUser(ctx context.Context, userID string) ([]entities.Gateway, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+gwSelectCols+` FROM gateways WHERE user_id = $1 ORDER BY created_at DESC`, userID,

@@ -236,6 +236,19 @@ func (r *MemoryAppRepository) DeleteApp(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *MemoryAppRepository) SetAutoGatewayID(_ context.Context, appID, gatewayID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	app, ok := r.apps[appID]
+	if !ok {
+		return fmt.Errorf("app not found")
+	}
+	app.AutoGatewayID = gatewayID
+	r.apps[appID] = app
+	return nil
+}
+
 func (r *MemoryAppRepository) CountAppsByUser(ctx context.Context, userID string) (int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
