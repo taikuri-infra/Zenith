@@ -1,0 +1,179 @@
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to deploy'
+        type: choice
+        required: true
+        default: 'api'
+        options:
+          - api
+          - web
+          - mc
+          - landing
+          - operator
+          - all
+      skip_tests:
+        description: 'Skip tests (fast iteration)'
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: registry.stage.freezenith.com
+  PROJECT: zenith-stage
+
+jobs:
+  deploy:
+    name: "Deploy ${{ inputs.component }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Tests (Go) ────────────────────────────────────────────────────────
+      - name: Set up Go
+        if: |
+          inputs.skip_tests != true &&
+          (inputs.component == 'api' || inputs.component == 'operator' || inputs.component == 'all')
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/api/go.mod
+          cache-dependency-path: services/api/go.sum
+
+      - name: Run API tests
+        if: |
+          inputs.skip_tests != true &&
+          (inputs.component == 'api' || inputs.component == 'all')
+        run: cd services/api && go test ./... -race -count=1
+
+      # ── Tests (Node.js) ───────────────────────────────────────────────────
+      - name: Set up Node.js
+        if: |
+          inputs.skip_tests != true &&
+          (inputs.component == 'web' || inputs.component == 'mc' || inputs.component == 'landing' || inputs.component == 'all')
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        if: |
+          inputs.skip_tests != true &&
+          (inputs.component == 'web' || inputs.component == 'mc' || inputs.component == 'landing' || inputs.component == 'all')
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies and lint
+        if: |
+          inputs.skip_tests != true &&
+          (inputs.component == 'web' || inputs.component == 'mc' || inputs.component == 'landing' || inputs.component == 'all')
+        run: pnpm install --frozen-lockfile && pnpm turbo lint
+
+      # ── Harbor Login ───────────────────────────────────────────────────────
+      - name: Login to Harbor
+        run: |
+          echo "${{ secrets.HARBOR_ROBOT_TOKEN }}" | \
+            docker login "${{ env.REGISTRY }}" \
+              --username "${{ secrets.HARBOR_ROBOT_USER }}" \
+              --password-stdin
+
+      # ── Build, Push, Update Values ─────────────────────────────────────────
+      - name: Deploy component(s)
+        run: |
+          SHA_SHORT=$(git rev-parse --short HEAD)
+
+          deploy_component() {
+            local COMP="$1"
+            local IMAGE_NAME="zenith-${COMP}"
+            local DOCKERFILE=""
+            local BUILD_CONTEXT="."
+            local BUILD_ARGS=""
+            local VALUES_FILE="infra/helm/${IMAGE_NAME}/values-staging.yaml"
+
+            # Staging uses SHA-based tags (traceable, no version management)
+            # Production uses Release Please semver via release.yml
+            local TAG="sha-${SHA_SHORT}"
+
+            # Component-specific config
+            case "$COMP" in
+              api)
+                DOCKERFILE="services/api/Dockerfile"
+                BUILD_ARGS="--build-arg VERSION=${TAG} --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                ;;
+              web)
+                DOCKERFILE="apps/web/Dockerfile"
+                BUILD_ARGS="--build-arg NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com --build-arg NEXT_PUBLIC_LANDING_URL=https://stage.freezenith.com"
+                ;;
+              mc)
+                DOCKERFILE="apps/mission-control/Dockerfile"
+                BUILD_ARGS="--build-arg NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com --build-arg NEXT_PUBLIC_LANDING_URL=https://stage.freezenith.com"
+                ;;
+              landing)
+                DOCKERFILE="apps/landing/Dockerfile"
+                BUILD_ARGS="--build-arg NEXT_PUBLIC_APP_URL=https://app.stage.freezenith.com"
+                ;;
+              operator)
+                DOCKERFILE="services/operator/Dockerfile"
+                BUILD_CONTEXT="./services/operator"
+                ;;
+              *)
+                echo "ERROR: Unknown component: $COMP"
+                return 1
+                ;;
+            esac
+
+            local FULL_IMAGE="${{ env.REGISTRY }}/${{ env.PROJECT }}/${IMAGE_NAME}"
+
+            echo "============================================="
+            echo "Building ${IMAGE_NAME}:${TAG}"
+            echo "============================================="
+
+            # Build
+            docker build \
+              --platform linux/amd64 \
+              -f "$DOCKERFILE" \
+              $BUILD_ARGS \
+              -t "${FULL_IMAGE}:${TAG}" \
+              -t "${FULL_IMAGE}:latest" \
+              "$BUILD_CONTEXT"
+
+            # Push both tags
+            docker push "${FULL_IMAGE}:${TAG}"
+            docker push "${FULL_IMAGE}:latest"
+
+            # Update values file if it exists
+            if [ -f "$VALUES_FILE" ]; then
+              sed -i "s|^image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${TAG}|" "$VALUES_FILE"
+              echo "Updated ${VALUES_FILE} -> ${IMAGE_NAME}:${TAG}"
+            fi
+
+            echo "Done: ${IMAGE_NAME}:${TAG}"
+          }
+
+          COMPONENT="${{ inputs.component }}"
+          if [ "$COMPONENT" = "all" ]; then
+            for comp in api web mc landing operator; do
+              deploy_component "$comp"
+            done
+          else
+            deploy_component "$COMPONENT"
+          fi
+
+      # ── Commit & Push ──────────────────────────────────────────────────────
+      - name: Commit and push to staging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add infra/helm/*/values-staging.yaml
+          if git diff --cached --quiet; then
+            echo "No values changes to commit"
+          else
+            COMPONENT="${{ inputs.component }}"
+            VERSIONS=$(git diff --cached -- '*.yaml' | grep '^+image:' | sed 's/+image: //' | tr '\n' ', ' | sed 's/, *$//')
+            git commit -m "chore: bump staging ${COMPONENT} -- ${VERSIONS}"
+            git push origin staging
+            echo "Pushed to staging -- ArgoCD will auto-sync"
+          fi

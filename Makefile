@@ -18,7 +18,8 @@ IMAGES := zenith-api zenith-landing zenith-mc zenith-mc-demo zenith-web zenith-w
 	push push-api push-landing push-mc push-web push-operator push-all \
 	chart-lint chart-package chart-push \
 	deploy-staging tf-plan tf-apply \
-	ci-images ci-chart ci-terraform ci-all
+	ci-images ci-chart ci-terraform ci-all \
+	deploy deploy-api deploy-web deploy-mc deploy-landing deploy-operator deploy-all ci
 
 # --- Help ---
 help: ## Show this help
@@ -143,3 +144,33 @@ ci-terraform: ## CI: Run Terraform plan via act
 	act -j terraform-staging -j terraform-staging-k8s
 
 ci-all: ci-images ci-chart ci-terraform ## CI: Run everything
+
+# =============================================================================
+# Deploy to Staging via act (full pipeline: test + build + push + values + git)
+# Requires: act CLI, .secrets file (HARBOR_ROBOT_USER, HARBOR_ROBOT_TOKEN)
+# =============================================================================
+
+ACT_DEPLOY := act -j deploy -W .github/workflows/deploy-staging.yml --secret-file .secrets
+
+deploy: deploy-all ## Alias for deploy-all
+
+deploy-api: ## Deploy API to staging (test + build + push + ArgoCD sync)
+	$(ACT_DEPLOY) --input component=api
+
+deploy-web: ## Deploy Web to staging
+	$(ACT_DEPLOY) --input component=web
+
+deploy-mc: ## Deploy MC to staging
+	$(ACT_DEPLOY) --input component=mc
+
+deploy-landing: ## Deploy Landing to staging
+	$(ACT_DEPLOY) --input component=landing
+
+deploy-operator: ## Deploy Operator to staging
+	$(ACT_DEPLOY) --input component=operator
+
+deploy-all: ## Deploy ALL components to staging
+	$(ACT_DEPLOY) --input component=all
+
+ci: ## Run CI tests locally via act
+	act -j test -W .github/workflows/ci.yml --secret-file .secrets

@@ -65,6 +65,7 @@ jobs:
           password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
 
       - name: Build & push zenith-api
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -78,6 +79,21 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:sha-${{ needs.prepare.outputs.sha_short }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api:latest
+
+      - name: Install cosign
+        if: env.COSIGN_PRIVATE_KEY != ''
+        uses: sigstore/cosign-installer@v3
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+      - name: Sign zenith-api image
+        if: env.COSIGN_PRIVATE_KEY != ''
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-api@${{ steps.build.outputs.digest }}
 
       - name: Scan zenith-api with Trivy
         uses: aquasecurity/trivy-action@master
@@ -108,6 +124,7 @@ jobs:
           password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
 
       - name: Build & push zenith-landing
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -120,6 +137,21 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing:sha-${{ needs.prepare.outputs.sha_short }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing:latest
+
+      - name: Install cosign
+        if: env.COSIGN_PRIVATE_KEY != ''
+        uses: sigstore/cosign-installer@v3
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+      - name: Sign zenith-landing image
+        if: env.COSIGN_PRIVATE_KEY != ''
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-landing@${{ steps.build.outputs.digest }}
 
   # =========================================================================
   # Build & Push: Mission Control + Demo
@@ -141,6 +173,7 @@ jobs:
           password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
 
       - name: Build & push zenith-mc
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -154,6 +187,21 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc:sha-${{ needs.prepare.outputs.sha_short }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc:latest
+
+      - name: Install cosign
+        if: env.COSIGN_PRIVATE_KEY != ''
+        uses: sigstore/cosign-installer@v3
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+      - name: Sign zenith-mc image
+        if: env.COSIGN_PRIVATE_KEY != ''
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc@${{ steps.build.outputs.digest }}
 
       - name: Build & push zenith-mc-demo
         uses: docker/build-push-action@v5
@@ -189,6 +237,7 @@ jobs:
           password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
 
       - name: Build & push zenith-web
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -202,6 +251,21 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:sha-${{ needs.prepare.outputs.sha_short }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web:latest
+
+      - name: Install cosign
+        if: env.COSIGN_PRIVATE_KEY != ''
+        uses: sigstore/cosign-installer@v3
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+      - name: Sign zenith-web image
+        if: env.COSIGN_PRIVATE_KEY != ''
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web@${{ steps.build.outputs.digest }}
 
       - name: Build & push zenith-web-demo
         uses: docker/build-push-action@v5
@@ -246,6 +310,7 @@ jobs:
           password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
 
       - name: Build & push zenith-operator
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: ./services/operator
@@ -256,3 +321,18 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-operator:${{ needs.prepare.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-operator:sha-${{ needs.prepare.outputs.sha_short }}
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-operator:latest
+
+      - name: Install cosign
+        if: env.COSIGN_PRIVATE_KEY != ''
+        uses: sigstore/cosign-installer@v3
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+      - name: Sign zenith-operator image
+        if: env.COSIGN_PRIVATE_KEY != ''
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-operator@${{ steps.build.outputs.digest }}

@@ -1,0 +1,101 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenith-mc
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: zenith-mc
+    app.kubernetes.io/name: zenith-mc
+    app.kubernetes.io/part-of: zenith
+    app.kubernetes.io/component: mc
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: zenith-mc
+  template:
+    metadata:
+      labels:
+        app: zenith-mc
+        app.kubernetes.io/name: zenith-mc
+        app.kubernetes.io/part-of: zenith
+        app.kubernetes.io/component: mc
+    spec:
+      {{- if .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecret }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: zenith-mc
+                topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      initContainers:
+        - name: copy-static
+          image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.image) }}
+          command: ['sh', '-c', 'cp -a /app/apps/mission-control/.next/static/* /static/']
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: next-static
+              mountPath: /static
+      containers:
+        - name: mc
+          image: {{ include "zenith.image" (dict "registry" .Values.imageRegistry "image" .Values.image) }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: {{ .Values.port }}
+              protocol: TCP
+          {{- if .Values.env }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: next-static
+              mountPath: /app/apps/mission-control/.next/static
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: next-static
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

@@ -53,6 +53,25 @@ jobs:
         run: helm package infra/helm/zenith/ --destination /tmp/
 
       - name: Push chart to Harbor
+        id: push
         run: |
-          helm push /tmp/zenith-${{ steps.version.outputs.version }}.tgz \
-            oci://${{ env.REGISTRY }}/${{ env.PROJECT }}
+          OUTPUT=$(helm push /tmp/zenith-${{ steps.version.outputs.version }}.tgz \
+            oci://${{ env.REGISTRY }}/${{ env.PROJECT }} 2>&1)
+          echo "$OUTPUT"
+          DIGEST=$(echo "$OUTPUT" | grep -oP 'Digest: \Ksha256:[a-f0-9]+' || true)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        if: env.COSIGN_PRIVATE_KEY != ''
+        uses: sigstore/cosign-installer@v3
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+      - name: Sign Helm chart
+        if: env.COSIGN_PRIVATE_KEY != '' && steps.push.outputs.digest != ''
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
+            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith@${{ steps.push.outputs.digest }}

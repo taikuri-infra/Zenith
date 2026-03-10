@@ -1,0 +1,25 @@
+# Production values for zenith-mc
+namespace: zenith-platform
+replicas: 2
+image: zenith-mc:latest
+imageRegistry: ""  # set via Terraform
+imagePullPolicy: IfNotPresent
+imagePullSecret: ""  # set via Terraform
+port: 3000
+
+env:
+  NEXT_PUBLIC_API_URL: "https://api.freezenith.com"
+  NEXT_PUBLIC_LANDING_URL: "https://freezenith.com"
+
+ingress:
+  hosts:
+    - ms.freezenith.com
+  tlsSecret: freezenith-tls
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    memory: 128Mi
+    cpu: 100m

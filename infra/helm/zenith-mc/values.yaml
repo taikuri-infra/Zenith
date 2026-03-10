@@ -1,0 +1,22 @@
+namespace: zenith-platform
+replicas: 1
+image: zenith-mc:latest
+imageRegistry: ""
+imagePullPolicy: Never
+imagePullSecret: ""
+port: 3000
+
+env: {}
+
+ingress:
+  hosts:
+    - ms.freezenith.com
+  tlsSecret: freezenith-tls
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    memory: 128Mi
+    cpu: 100m

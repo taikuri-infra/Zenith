@@ -18,7 +18,9 @@ on:
           - all
           - api-only
           - web-only
-          - admin-only
+          - mc-only
+          - landing-only
+          - operator-only
 
 env:
   STAGING_REGISTRY: ${{ secrets.HARBOR_HOST }}
@@ -69,6 +71,26 @@ jobs:
           username: ${{ secrets.HARBOR_ROBOT_USER }}
           password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
 
+      - name: Install cosign
+        if: env.COSIGN_PUBLIC_KEY != ''
+        uses: sigstore/cosign-installer@v3
+        env:
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+
+      - name: Verify image signatures (supply chain gate)
+        if: env.COSIGN_PUBLIC_KEY != ''
+        env:
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+        run: |
+          echo "Verifying cosign signatures for version ${{ inputs.version }}..."
+          for IMAGE in zenith-api zenith-web zenith-mc zenith-landing zenith-operator; do
+            echo "Verifying ${IMAGE}..."
+            cosign verify --key env://COSIGN_PUBLIC_KEY \
+              ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/${IMAGE}:${{ inputs.version }} \
+              || { echo "FAILED: ${IMAGE} signature verification failed"; exit 1; }
+          done
+          echo "All image signatures verified successfully"
+
       - name: Promote API image
         if: inputs.components == 'all' || inputs.components == 'api-only'
         run: |
@@ -87,14 +109,32 @@ jobs:
           docker push ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-web:${{ inputs.version }}
           echo "Promoted zenith-web:${{ inputs.version }} to production"
 
-      - name: Promote Admin image
-        if: inputs.components == 'all' || inputs.components == 'admin-only'
+      - name: Promote MC image
+        if: inputs.components == 'all' || inputs.components == 'mc-only'
         run: |
-          docker pull ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-admin:${{ inputs.version }}
-          docker tag ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-admin:${{ inputs.version }} \
-                     ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-admin:${{ inputs.version }}
-          docker push ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-admin:${{ inputs.version }}
-          echo "Promoted zenith-admin:${{ inputs.version }} to production"
+          docker pull ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-mc:${{ inputs.version }}
+          docker tag ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-mc:${{ inputs.version }} \
+                     ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-mc:${{ inputs.version }}
+          docker push ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-mc:${{ inputs.version }}
+          echo "Promoted zenith-mc:${{ inputs.version }} to production"
+
+      - name: Promote Landing image
+        if: inputs.components == 'all' || inputs.components == 'landing-only'
+        run: |
+          docker pull ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-landing:${{ inputs.version }}
+          docker tag ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-landing:${{ inputs.version }} \
+                     ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-landing:${{ inputs.version }}
+          docker push ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-landing:${{ inputs.version }}
+          echo "Promoted zenith-landing:${{ inputs.version }} to production"
+
+      - name: Promote Operator image
+        if: inputs.components == 'all' || inputs.components == 'operator-only'
+        run: |
+          docker pull ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-operator:${{ inputs.version }}
+          docker tag ${{ env.STAGING_REGISTRY }}/${{ env.STAGING_PROJECT }}/zenith-operator:${{ inputs.version }} \
+                     ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-operator:${{ inputs.version }}
+          docker push ${{ env.PROD_REGISTRY }}/${{ env.PROD_PROJECT }}/zenith-operator:${{ inputs.version }}
+          echo "Promoted zenith-operator:${{ inputs.version }} to production"
 
   # Step 3: Update Helm chart version and deploy
   deploy:
@@ -109,16 +149,27 @@ jobs:
 
       - name: Update Helm chart appVersion
         run: |
-          cd deploy/charts/zenith-platform
+          cd infra/helm/zenith
           sed -i "s/^appVersion:.*/appVersion: \"${{ inputs.version }}\"/" Chart.yaml
           echo "Updated Chart.yaml appVersion to ${{ inputs.version }}"
-          cat Chart.yaml | head -10
+          head -10 Chart.yaml
+
+      - name: Update production values
+        run: |
+          VERSION=${{ inputs.version }}
+          for chart in zenith-api zenith-web zenith-mc zenith-landing zenith-operator; do
+            FILE="infra/helm/${chart}/values-production.yaml"
+            if [ -f "$FILE" ]; then
+              sed -i "s|^image: ${chart}:.*|image: ${chart}:${VERSION}|" "$FILE"
+              echo "Updated ${FILE} -> ${chart}:${VERSION}"
+            fi
+          done
 
       - name: Create production deployment commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add deploy/charts/zenith-platform/Chart.yaml
+          git add infra/helm/zenith/Chart.yaml infra/helm/*/values-production.yaml
           git commit -m "chore(prod): promote v${{ inputs.version }} to production
 
           Components: ${{ inputs.components }}
