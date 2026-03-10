@@ -576,6 +576,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Apps — Phase 2 (under /apps)
 	apps := protected.Group("/apps")
+	apps.Get("/check-name", appHandlerV2.CheckName)
 	apps.Post("/", handlers.CheckLimit(planRepo, "apps", func(c *fiber.Ctx, userID string) (int, error) {
 		return appRepo.CountAppsByUser(c.Context(), userID)
 	}), appHandlerV2.Create)

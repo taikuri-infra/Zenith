@@ -27,6 +27,67 @@ import {
   Clock,
 } from "lucide-react";
 
+// ── Well-known image catalog ──
+
+const WELL_KNOWN_IMAGES: Record<string, { port: number; description: string }> = {
+  "nginx":            { port: 80,    description: "Web server" },
+  "httpd":            { port: 80,    description: "Apache HTTP" },
+  "node":             { port: 3000,  description: "Node.js" },
+  "python":           { port: 8000,  description: "Python" },
+  "golang":           { port: 8080,  description: "Go" },
+  "redis":            { port: 6379,  description: "Redis" },
+  "postgres":         { port: 5432,  description: "PostgreSQL" },
+  "mysql":            { port: 3306,  description: "MySQL" },
+  "mongo":            { port: 27017, description: "MongoDB" },
+  "traefik":          { port: 80,    description: "Traefik proxy" },
+  "caddy":            { port: 80,    description: "Caddy server" },
+  "grafana/grafana":  { port: 3000,  description: "Grafana" },
+  "prom/prometheus":  { port: 9090,  description: "Prometheus" },
+};
+
+/** Extract base image name from a ref (strip registry + tag). */
+function extractBaseImage(ref: string): string {
+  ref = ref.trim();
+  if (!ref) return "";
+  const parts = ref.split("/");
+  let name: string;
+  if (parts.length >= 2 && (parts[0].includes(".") || parts[0].includes(":"))) {
+    name = parts.slice(1).join("/");
+  } else {
+    name = ref;
+  }
+  // Strip "library/" prefix
+  if (name.startsWith("library/")) name = name.slice(8);
+  // Strip tag
+  const colonIdx = name.lastIndexOf(":");
+  if (colonIdx > 0) name = name.slice(0, colonIdx);
+  return name;
+}
+
+/** Detect well-known image and return its info, or null. */
+function detectWellKnownImage(ref: string): { name: string; port: number; description: string } | null {
+  const base = extractBaseImage(ref);
+  if (!base) return null;
+  const match = WELL_KNOWN_IMAGES[base];
+  if (match) return { name: base, ...match };
+  return null;
+}
+
+// ── Image ref normalizer (mirrors API-side logic) ──
+
+function normalizeImageRef(ref: string): string {
+  ref = ref.trim();
+  if (!ref) return ref;
+  const addTag = !ref.includes(":");
+  const parts = ref.split("/");
+  const hasRegistry = parts.length > 1 && (parts[0].includes(".") || parts[0].includes(":"));
+  if (!hasRegistry) {
+    ref = ref.includes("/") ? "docker.io/" + ref : "docker.io/library/" + ref;
+  }
+  if (addTag) ref += ":latest";
+  return ref;
+}
+
 // ── Types ──
 
 interface EnvEntry {
@@ -34,22 +95,14 @@ interface EnvEntry {
   value: string;
 }
 
-type InstanceSize = "nano" | "small" | "medium" | "large";
-
-interface InstancePreset {
-  id: InstanceSize;
-  label: string;
-  cpu: string;
-  ram: string;
-  proOnly: boolean;
-}
-
-const INSTANCE_SIZES: InstancePreset[] = [
-  { id: "nano",   label: "Nano",   cpu: "0.25 vCPU", ram: "256 MB", proOnly: false },
-  { id: "small",  label: "Small",  cpu: "0.5 vCPU",  ram: "512 MB", proOnly: true },
-  { id: "medium", label: "Medium", cpu: "1 vCPU",    ram: "1 GB",   proOnly: true },
-  { id: "large",  label: "Large",  cpu: "2 vCPU",    ram: "2 GB",   proOnly: true },
-];
+// Plan-tier resource limits (read-only display)
+const PLAN_RESOURCES: Record<string, { cpu: string; ram: string }> = {
+  free:       { cpu: "0.25 vCPU", ram: "256 MB" },
+  pro:        { cpu: "0.5 vCPU",  ram: "512 MB" },
+  team:       { cpu: "1 vCPU",    ram: "1 GB" },
+  business:   { cpu: "2 vCPU",    ram: "2 GB" },
+  enterprise: { cpu: "4 vCPU",    ram: "4 GB" },
+};
 
 interface WizardState {
   // Step 0 — Type
@@ -66,7 +119,7 @@ interface WizardState {
   // Step 2
   appName: string;
   port: string;
-  instanceSize: InstanceSize;
+  portAutoDetected: boolean;
   envVars: EnvEntry[];
   // Step 3 (Resources)
   s3Enabled: boolean;
@@ -89,8 +142,8 @@ const initialState: WizardState = {
   regUser: "",
   regPass: "",
   appName: "",
-  port: "3000",
-  instanceSize: "nano",
+  port: "",
+  portAutoDetected: false,
   envVars: [],
   s3Enabled: false,
   s3Mode: "existing",
@@ -168,6 +221,42 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
   const isCron = state.appType === "cron";
   const steps = isCron ? CRON_STEPS : WEB_STEPS;
   const lastStep = steps.length - 1;
+
+  // Name availability check
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [nameCheckUrl, setNameCheckUrl] = useState("");
+  const [nameChecking, setNameChecking] = useState(false);
+
+  // Debounced name availability check
+  useEffect(() => {
+    const name = state.appName.trim();
+    if (!name || !isValidAppName(name)) {
+      setNameAvailable(null);
+      setNameCheckUrl("");
+      return;
+    }
+    setNameChecking(true);
+    const timer = setTimeout(() => {
+      appsDeploy.checkName(name).then((res) => {
+        setNameAvailable(res.available);
+        setNameCheckUrl(res.url);
+        setNameChecking(false);
+      }).catch(() => {
+        setNameAvailable(null);
+        setNameChecking(false);
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [state.appName, appsDeploy]);
+
+  // Smart port detection when image changes
+  useEffect(() => {
+    const imageRef = state.imageSource === "zenith" ? state.selectedImage : state.externalImage;
+    const detected = detectWellKnownImage(imageRef);
+    if (detected && (state.port === "" || state.portAutoDetected)) {
+      setState((s) => ({ ...s, port: String(detected.port), portAutoDetected: true }));
+    }
+  }, [state.externalImage, state.selectedImage, state.imageSource]);
 
   // Registry images (lazy-loaded when Zenith source selected)
   const [registryImages, setRegistryImages] = useState<RegistryImage[]>([]);
@@ -280,13 +369,15 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
           ? state.selectedImage
           : state.externalImage.trim();
 
-      const port = parseInt(state.port, 10) || 3000;
+      const port = parseInt(state.port, 10) || 0; // 0 = let API resolve from well-known images or default
+
+      const envVarsToSend = state.envVars.filter((e) => e.key && e.value);
 
       await appsDeploy.create({
         name: state.appName.trim(),
         deploy_source: "image",
         image_url: imageUrl,
-        port,
+        ...(port > 0 && { port }),
         app_type: state.appType,
         ...(state.appType === "worker" && state.command && { command: state.command.trim() }),
         ...(state.appType === "cron" && state.cronSchedule && { cron_schedule: state.cronSchedule.trim() }),
@@ -295,12 +386,18 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
             registry_username: state.regUser.trim(),
             registry_password: state.regPass.trim(),
           }),
+        ...(envVarsToSend.length > 0 && { env_vars: envVarsToSend }),
       });
 
       toast("success", "Application deployed successfully! Build is starting...");
       onClose();
-    } catch {
-      toast("error", "Failed to deploy application");
+    } catch (err: unknown) {
+      const apiErr = err as { status?: number; body?: { error?: string } };
+      if (apiErr?.status === 409) {
+        toast("error", "This app name is already taken. Please choose another.");
+      } else {
+        toast("error", "Failed to deploy application");
+      }
     } finally {
       setDeploying(false);
     }
@@ -337,9 +434,9 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
       <p className="text-sm text-neutral-400">What type of service are you deploying?</p>
       <div className="grid gap-3 grid-cols-3">
         {([
-          { type: "web" as AppType, icon: Globe, label: "Web Service", desc: "HTTP server with a URL" },
-          { type: "worker" as AppType, icon: Cog, label: "Worker", desc: "Background process, no HTTP" },
-          { type: "cron" as AppType, icon: Clock, label: "Cron Job", desc: "Scheduled task on a timer" },
+          { type: "web" as AppType, icon: Globe, label: "Web App", desc: "HTTP server with a public URL. Perfect for APIs, websites, and dashboards." },
+          { type: "worker" as AppType, icon: Cog, label: "Background Worker", desc: "Long-running process without a URL. For queues, bots, and data processing." },
+          { type: "cron" as AppType, icon: Clock, label: "Scheduled Task", desc: "Runs on a schedule then stops. For backups, reports, and cleanup jobs." },
         ] as const).map(({ type, icon: Icon, label, desc }) => (
           <button
             key={type}
@@ -561,10 +658,29 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
                 type="text"
                 value={state.externalImage}
                 onChange={(e) => update("externalImage", e.target.value)}
-                placeholder="docker.io/user/app:latest"
+                placeholder="nginx, user/app, or ghcr.io/org/image:tag"
                 className="w-full rounded-lg border border-border bg-surface-200 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
               />
             </div>
+            {state.externalImage.trim() && (() => {
+              const resolved = normalizeImageRef(state.externalImage.trim());
+              const changed = resolved !== state.externalImage.trim();
+              const detected = detectWellKnownImage(state.externalImage.trim());
+              return (
+                <div className="mt-1 space-y-0.5">
+                  {detected && (
+                    <p className="text-[11px] text-emerald-400">
+                      Detected: <span className="font-medium">{detected.description}</span> (port {detected.port})
+                    </p>
+                  )}
+                  {changed && (
+                    <p className="text-[11px] text-neutral-500">
+                      Resolves to <span className="font-mono text-accent-400">{resolved}</span>
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Private registry toggle */}
@@ -630,7 +746,10 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
     </div>
   );
 
-  const renderStep1 = () => (
+  const renderStep1 = () => {
+    const planKey = isPro ? "pro" : "free";
+    const res = PLAN_RESOURCES[planKey];
+    return (
     <div className="space-y-4">
       {/* App Name */}
       <div>
@@ -648,6 +767,25 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
           <p className="mt-1 text-[11px] text-red-400">
             Must start with a letter and contain only lowercase letters, numbers, and hyphens
           </p>
+        ) : state.appName && isValidAppName(state.appName) ? (
+          <div className="mt-1 space-y-0.5">
+            {nameChecking ? (
+              <p className="text-[11px] text-neutral-500">Checking availability...</p>
+            ) : nameAvailable === true && nameCheckUrl ? (
+              <p className="text-[11px] text-emerald-400">
+                <Check className="inline h-3 w-3 mr-0.5" />
+                Available &mdash; <span className="font-mono text-emerald-400/80">{nameCheckUrl}</span>
+              </p>
+            ) : nameAvailable === false ? (
+              <p className="text-[11px] text-red-400">
+                This name is taken, try another
+              </p>
+            ) : (
+              <p className="text-[11px] text-neutral-600">
+                Lowercase letters, numbers, and hyphens only
+              </p>
+            )}
+          </div>
         ) : (
           <p className="mt-1 text-[11px] text-neutral-600">
             Lowercase letters, numbers, and hyphens only
@@ -664,64 +802,48 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
           <input
             type="number"
             value={state.port}
-            onChange={(e) => update("port", e.target.value)}
-            placeholder="3000"
+            onChange={(e) => {
+              update("port", e.target.value);
+              setState((s) => ({ ...s, port: e.target.value, portAutoDetected: false }));
+            }}
+            placeholder="8080"
             min={1}
             max={65535}
             className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
           />
-          <p className="mt-1 text-[11px] text-neutral-600">
-            The port your application listens on
-          </p>
+          {state.portAutoDetected ? (
+            <p className="mt-1 text-[11px] text-emerald-400">
+              Auto-detected from image. You can override this.
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] text-neutral-600">
+              The port your application listens on{!state.port && " (defaults to 8080)"}
+            </p>
+          )}
         </div>
       )}
 
-      {/* Instance Size */}
+      {/* Plan Resources (read-only info) */}
       <div>
         <label className="mb-1.5 block text-xs font-medium text-neutral-400">
-          Instance Size
+          Resources
         </label>
-        <div className="grid grid-cols-4 gap-2">
-          {INSTANCE_SIZES.map((size) => {
-            const locked = size.proOnly && !isPro;
-            const selected = state.instanceSize === size.id;
-            return (
-              <button
-                key={size.id}
-                type="button"
-                disabled={locked}
-                onClick={() => update("instanceSize", size.id)}
-                className={`relative rounded-lg border p-3 text-left transition-colors ${
-                  selected
-                    ? "border-accent-500 bg-accent-500/10"
-                    : locked
-                      ? "border-border bg-surface-100 opacity-50 cursor-not-allowed"
-                      : "border-border bg-surface-100 hover:border-neutral-600"
-                }`}
-              >
-                {locked && (
-                  <Crown className="absolute right-2 top-2 h-3 w-3 text-amber-400" />
-                )}
-                <div className="text-sm font-medium text-white">{size.label}</div>
-                <div className="mt-1 space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-                    <Cpu className="h-3 w-3" />
-                    {size.cpu}
-                  </div>
-                  <div className="text-[11px] text-neutral-500">
-                    {size.ram}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-        {!isPro && (
-          <p className="mt-1.5 flex items-center gap-1 text-[11px] text-neutral-500">
-            <Crown className="h-3 w-3 text-amber-400" />
-            Upgrade to Pro to unlock larger instance sizes
+        <div className="rounded-lg border border-border bg-surface-100 p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-sm text-white">
+              <Cpu className="h-3.5 w-3.5 text-neutral-500" />
+              {res.cpu}
+            </div>
+            <div className="text-neutral-600">|</div>
+            <div className="text-sm text-white">{res.ram}</div>
+          </div>
+          <p className="mt-1.5 text-[11px] text-neutral-500">
+            {isPro ? "Pro plan" : "Free plan"} per-app limit.
+            {!isPro && (
+              <span className="ml-1 text-amber-400">Upgrade to Pro for more resources.</span>
+            )}
           </p>
-        )}
+        </div>
       </div>
 
       {/* Env Vars */}
@@ -782,6 +904,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
       </div>
     </div>
   );
+  };
 
   const renderStep2 = () => (
     <div className="space-y-6">
@@ -1091,7 +1214,9 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
   const renderStep3 = () => {
     const imageUrl =
       state.imageSource === "zenith" ? state.selectedImage : state.externalImage.trim();
-    const typeLabels: Record<AppType, string> = { web: "Web Service", worker: "Worker", cron: "Cron Job" };
+    const typeLabels: Record<AppType, string> = { web: "Web App", worker: "Background Worker", cron: "Scheduled Task" };
+    const planKey = isPro ? "pro" : "free";
+    const planRes = PLAN_RESOURCES[planKey];
 
     return (
       <div className="space-y-4">
@@ -1116,8 +1241,14 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
             <span className="text-white font-mono">{state.appName}</span>
             {state.appType === "web" && (
               <>
+                <span className="text-neutral-400">URL</span>
+                <span className="text-white font-mono text-xs">{nameCheckUrl || `https://${state.appName}.apps.stage.freezenith.com`}</span>
+              </>
+            )}
+            {state.appType === "web" && (
+              <>
                 <span className="text-neutral-400">Port</span>
-                <span className="text-white font-mono">{state.port || "3000"}</span>
+                <span className="text-white font-mono">{state.port || "auto-detect"}</span>
               </>
             )}
             {state.appType === "cron" && (
@@ -1132,12 +1263,10 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
                 <span className="text-white font-mono text-xs">{state.command}</span>
               </>
             )}
-            <span className="text-neutral-400">Instance</span>
-            <span className="text-white">
-              {INSTANCE_SIZES.find((s) => s.id === state.instanceSize)?.label}
-              <span className="ml-1.5 text-neutral-500 text-xs">
-                ({INSTANCE_SIZES.find((s) => s.id === state.instanceSize)?.cpu}, {INSTANCE_SIZES.find((s) => s.id === state.instanceSize)?.ram})
-              </span>
+            <span className="text-neutral-400">Resources</span>
+            <span className="text-white text-xs">
+              {planRes.cpu}, {planRes.ram}
+              <span className="ml-1.5 text-neutral-500">({isPro ? "Pro" : "Free"} plan)</span>
             </span>
           </div>
         </div>

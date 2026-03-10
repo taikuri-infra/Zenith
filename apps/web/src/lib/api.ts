@@ -437,6 +437,8 @@ export interface CreateDeployAppRequest {
   image_url?: string;
   registry_username?: string;
   registry_password?: string;
+  // Environment variables (set on create)
+  env_vars?: { key: string; value: string }[];
 }
 
 export interface Deployment {
@@ -1244,6 +1246,10 @@ export const appsDeploy = {
     }),
   delete: (id: string) =>
     apiFetch<void>(`/api/v1/apps/${id}`, { method: "DELETE" }),
+  checkName: (name: string) =>
+    apiFetch<{ available: boolean; subdomain: string; url: string }>(
+      `/api/v1/apps/check-name?name=${encodeURIComponent(name)}`
+    ),
 
   // Deployments
   listDeployments: (appId: string, limit = 20) =>
@@ -1584,6 +1590,7 @@ export interface UpdateRouteInput {
   path?: string;
   methods?: string[];
   app_id?: string;
+  group_id?: string;
   strip_prefix?: boolean;
   auth?: string;
   auth_pool_id?: string;

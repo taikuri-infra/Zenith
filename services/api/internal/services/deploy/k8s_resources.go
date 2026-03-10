@@ -94,6 +94,75 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 
 	cpuLimit, memLimit, cpuReq, memReq := PerAppResources(tier)
 
+	container := map[string]interface{}{
+		"name":  "app",
+		"image": imageTag,
+		"env":   k8sEnv,
+		"securityContext": map[string]interface{}{
+			"allowPrivilegeEscalation": false,
+			"capabilities": map[string]interface{}{
+				"drop": []string{"ALL"},
+				"add":  []string{"CHOWN", "SETUID", "SETGID", "NET_BIND_SERVICE"},
+			},
+		},
+		"resources": map[string]interface{}{
+			"limits": map[string]string{
+				"cpu":    cpuLimit,
+				"memory": memLimit,
+			},
+			"requests": map[string]string{
+				"cpu":    cpuReq,
+				"memory": memReq,
+			},
+		},
+	}
+
+	// Conditional probes and ports by app type
+	switch app.AppType {
+	case entities.AppTypeWorker:
+		// Workers don't serve HTTP — use exec probe with generous intervals
+		container["readinessProbe"] = map[string]interface{}{
+			"exec": map[string]interface{}{
+				"command": []string{"/bin/sh", "-c", "true"},
+			},
+			"initialDelaySeconds": 5,
+			"periodSeconds":       30,
+		}
+		container["livenessProbe"] = map[string]interface{}{
+			"exec": map[string]interface{}{
+				"command": []string{"/bin/sh", "-c", "true"},
+			},
+			"initialDelaySeconds": 15,
+			"periodSeconds":       60,
+		}
+	case entities.AppTypeCron:
+		// Cron jobs run and exit — no probes needed
+	default:
+		// Web apps: HTTP probes on the app port
+		container["ports"] = []map[string]interface{}{
+			{
+				"containerPort": port,
+				"protocol":      "TCP",
+			},
+		}
+		container["readinessProbe"] = map[string]interface{}{
+			"httpGet": map[string]interface{}{
+				"path": "/",
+				"port": port,
+			},
+			"initialDelaySeconds": 5,
+			"periodSeconds":       10,
+		}
+		container["livenessProbe"] = map[string]interface{}{
+			"httpGet": map[string]interface{}{
+				"path": "/",
+				"port": port,
+			},
+			"initialDelaySeconds": 15,
+			"periodSeconds":       20,
+		}
+	}
+
 	return map[string]interface{}{
 		"apiVersion": "apps/v1",
 		"kind":       "Deployment",
@@ -118,50 +187,7 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 						{"name": "app-registry-auth"},
 					},
 					"containers": []map[string]interface{}{
-						{
-							"name":  "app",
-							"image": imageTag,
-							"ports": []map[string]interface{}{
-								{
-									"containerPort": port,
-									"protocol":      "TCP",
-								},
-							},
-							"env": k8sEnv,
-							"securityContext": map[string]interface{}{
-								"allowPrivilegeEscalation": false,
-								"capabilities": map[string]interface{}{
-									"drop": []string{"ALL"},
-									"add":  []string{"CHOWN", "SETUID", "SETGID", "NET_BIND_SERVICE"},
-								},
-							},
-							"resources": map[string]interface{}{
-								"limits": map[string]string{
-									"cpu":    cpuLimit,
-									"memory": memLimit,
-								},
-								"requests": map[string]string{
-									"cpu":    cpuReq,
-									"memory": memReq,
-								},
-							},
-							"readinessProbe": map[string]interface{}{
-								"httpGet": map[string]interface{}{
-									"path": "/",
-									"port": port,
-								},
-								"initialDelaySeconds": 5,
-								"periodSeconds":       10,
-							},
-							"livenessProbe": map[string]interface{}{
-								"httpGet": map[string]interface{}{
-									"path": "/",
-									"port": port,
-								},
-								"initialDelaySeconds": 15,
-								"periodSeconds":       20,
-							},
-						},
+						container,
 					},
 				},
 			},

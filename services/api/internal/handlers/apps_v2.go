@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -10,6 +11,44 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
+
+// normalizeImageRef resolves short Docker image references the same way
+// the Docker CLI does:
+//
+//	"nginx"                → "docker.io/library/nginx:latest"
+//	"hashicorp/http-echo"  → "docker.io/hashicorp/http-echo:latest"
+//	"ghcr.io/foo/bar:v1"   → "ghcr.io/foo/bar:v1"  (already qualified)
+func normalizeImageRef(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return ref
+	}
+
+	// If it already has a tag with a digest, leave it alone
+	// If no tag, append :latest
+	addTag := !strings.Contains(ref, ":") || (strings.Count(ref, ":") == 1 && strings.Contains(ref, "://"))
+
+	// Check if the first component contains a dot or colon (registry host)
+	// e.g. "ghcr.io/...", "registry.example.com/...", "localhost:5000/..."
+	parts := strings.SplitN(ref, "/", 2)
+	hasRegistry := len(parts) > 1 && (strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":"))
+
+	if !hasRegistry {
+		if !strings.Contains(ref, "/") {
+			// Bare name like "nginx" → "docker.io/library/nginx"
+			ref = "docker.io/library/" + ref
+		} else {
+			// User/image like "hashicorp/http-echo" → "docker.io/hashicorp/http-echo"
+			ref = "docker.io/" + ref
+		}
+	}
+
+	if addTag {
+		ref += ":latest"
+	}
+
+	return ref
+}
 
 // AppDeleter is the subset of deploy.Deployer needed for cleanup.
 type AppDeleter interface {
@@ -47,6 +86,48 @@ func (h *AppHandlerV2) SetOnAppDeleted(fn func(ctx context.Context, appID string
 	h.onAppDeleted = fn
 }
 
+// wellKnownPorts maps popular base image names to their default listening port.
+var wellKnownPorts = map[string]int{
+	"nginx":           80,
+	"httpd":           80,
+	"node":            3000,
+	"python":          8000,
+	"golang":          8080,
+	"redis":           6379,
+	"postgres":        5432,
+	"mysql":           3306,
+	"mongo":           27017,
+	"traefik":         80,
+	"caddy":           80,
+	"grafana/grafana":  3000,
+	"prom/prometheus":  9090,
+}
+
+// resolveWellKnownPort returns the default port for a well-known image, or 0.
+func resolveWellKnownPort(imageRef string) int {
+	// Strip registry prefix and tag to get the base name
+	ref := strings.TrimSpace(imageRef)
+	// Remove registry host (contains . or :)
+	parts := strings.SplitN(ref, "/", 3)
+	var name string
+	if len(parts) >= 2 && (strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":")) {
+		// e.g. "docker.io/library/nginx:latest" → "library/nginx:latest"
+		name = strings.Join(parts[1:], "/")
+	} else {
+		name = ref
+	}
+	// Strip "library/" prefix (Docker Hub official images)
+	name = strings.TrimPrefix(name, "library/")
+	// Strip tag
+	if idx := strings.LastIndex(name, ":"); idx > 0 {
+		name = name[:idx]
+	}
+	if p, ok := wellKnownPorts[name]; ok {
+		return p
+	}
+	return 0
+}
+
 // --- Request/Response types ---
 
 // CreateAppV2Request is the request body for creating a new app.
@@ -63,6 +144,10 @@ type CreateAppV2Request struct {
 	AppType          string `json:"app_type,omitempty"`
 	Command          string `json:"command,omitempty"`
 	CronSchedule     string `json:"cron_schedule,omitempty"`
+	EnvVars          []struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	} `json:"env_vars,omitempty"`
 }
 
 // AppV2Response is the API response for an app.
@@ -146,6 +231,15 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 	if deploySource == entities.DeploySourceImage && req.ImageURL == "" {
 		return NewBadRequest("image_url is required for image deploys")
 	}
+	if deploySource == entities.DeploySourceImage {
+		req.ImageURL = normalizeImageRef(req.ImageURL)
+		// Smart port: if port not specified, try well-known image catalog before default
+		if req.Port == 0 {
+			if p := resolveWellKnownPort(req.ImageURL); p > 0 {
+				req.Port = p
+			}
+		}
+	}
 
 	appType := entities.AppType(req.AppType)
 	if appType == "" {
@@ -184,6 +278,22 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		}
 		slog.Error("failed to create app", "error", err)
 		return NewInternal("failed to create app")
+	}
+
+	// Bulk-insert env vars if provided
+	if len(req.EnvVars) > 0 {
+		vars := make(map[string]string, len(req.EnvVars))
+		for _, ev := range req.EnvVars {
+			k := strings.TrimSpace(ev.Key)
+			if k != "" {
+				vars[k] = ev.Value
+			}
+		}
+		if len(vars) > 0 {
+			if err := h.appRepo.SetEnvVars(c.Context(), app.ID, vars); err != nil {
+				slog.Warn("failed to set initial env vars", "app_id", app.ID, "error", err)
+			}
+		}
 	}
 
 	// For image deploys, immediately trigger deployment (no build step needed)
@@ -276,6 +386,34 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "app deleted"})
+}
+
+// CheckName handles GET /api/v1/apps/check-name?name=xxx
+// Returns availability and the resulting subdomain/URL.
+func (h *AppHandlerV2) CheckName(c *fiber.Ctx) error {
+	name := strings.TrimSpace(c.Query("name"))
+	if name == "" {
+		return NewBadRequest("name query parameter is required")
+	}
+
+	subdomain := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+	subdomain = strings.ReplaceAll(subdomain, " ", "-")
+
+	url := ""
+	if subdomain != "" && h.baseDomain != "" {
+		url = "https://" + subdomain + "." + h.baseDomain
+	}
+
+	available := true
+	if _, err := h.appRepo.GetAppBySubdomain(c.Context(), subdomain); err == nil {
+		available = false
+	}
+
+	return c.JSON(fiber.Map{
+		"available": available,
+		"subdomain": subdomain,
+		"url":       url,
+	})
 }
 
 // isAlreadyExists checks if an error indicates a duplicate resource.

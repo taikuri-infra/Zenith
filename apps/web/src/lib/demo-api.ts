@@ -54,6 +54,7 @@ import type {
   AlertRule,
   CustomMetric,
   CreateRouteInput,
+  UpdateRouteInput,
 } from "./api";
 
 import {
@@ -424,6 +425,15 @@ export const demoAppsDeploy = {
   },
   delete: async (): Promise<void> => {
     throw new Error("Not available in demo mode");
+  },
+  checkName: async (name: string): Promise<{ available: boolean; subdomain: string; url: string }> => {
+    await delay();
+    const subdomain = name.toLowerCase().replace(/[_\s]/g, "-");
+    return {
+      available: !mockDeployApps.some((a) => a.subdomain === subdomain),
+      subdomain,
+      url: `https://${subdomain}.apps.stage.freezenith.com`,
+    };
   },
   listDeployments: async (): Promise<{ items: Deployment[]; total: number }> => {
     await delay();
@@ -1422,7 +1432,20 @@ export const demoGateways = {
     await delay(500);
     return { ...demoGatewayRoutes[0], id: "rt-new-" + Date.now(), name: data.name, path: data.path, methods: data.methods, app_id: data.app_id ?? "", app_subdomain: "my-next-app", plugins: data.plugins ?? [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
   },
-  updateRoute: async (_gwId: string, routeId: string, data: Record<string, unknown>) => { await delay(300); return { ...demoGatewayRoutes[0], id: routeId, ...data }; },
+  updateRoute: async (_gwId: string, routeId: string, data: UpdateRouteInput) => {
+    await delay(300);
+    const base = demoGatewayRoutes[0];
+    return {
+      ...base,
+      id: routeId,
+      name: data.name ?? base.name,
+      path: data.path ?? base.path,
+      methods: data.methods ?? base.methods,
+      status: (data.status === "active" || data.status === "stopped" ? data.status : base.status) as "active" | "stopped",
+      strip_prefix: data.strip_prefix ?? base.strip_prefix,
+      plugins: data.plugins ?? base.plugins,
+    };
+  },
   deleteRoute: async () => { await delay(300); },
   listGroups: async () => { await delay(300); return []; },
   createGroup: async (_gwId: string, data: { name: string; app_id: string }) => {

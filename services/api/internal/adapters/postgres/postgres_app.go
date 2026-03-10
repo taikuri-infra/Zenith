@@ -51,7 +51,7 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 
 	port := input.Port
 	if port == 0 {
-		port = 8080
+		port = 8080 // handler should resolve well-known ports before reaching here
 	}
 
 	subdomain := strings.ToLower(strings.ReplaceAll(input.Name, "_", "-"))
