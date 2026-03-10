@@ -82,8 +82,8 @@ func gvrFromCRD(obj *CRDObject) schema.GroupVersionResource {
 		version = parts[1]
 	}
 
-	// Pluralize kind (simple lowercase + "s")
-	plural := strings.ToLower(obj.Kind) + "s"
+	// Pluralize kind (lowercase + "s", with irregular plural handling)
+	plural := pluralizeKind(obj.Kind)
 
 	return schema.GroupVersionResource{
 		Group:    group,
@@ -96,7 +96,7 @@ func gvrFromKind(kind, namespace string) schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "zenith.dev",
 		Version:  "v1alpha1",
-		Resource: strings.ToLower(kind) + "s",
+		Resource: pluralizeKind(kind),
 	}
 }
 
