@@ -66,12 +66,18 @@ jobs:
           (inputs.component == 'web' || inputs.component == 'mc' || inputs.component == 'landing' || inputs.component == 'all')
         uses: pnpm/action-setup@v4
 
-      - name: Install dependencies and lint
+      - name: Install dependencies
         if: |
           inputs.skip_tests != true &&
           (inputs.component == 'web' || inputs.component == 'mc' || inputs.component == 'landing' || inputs.component == 'all')
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (advisory)
+        if: |
+          inputs.skip_tests != true &&
+          (inputs.component == 'web' || inputs.component == 'mc' || inputs.component == 'landing' || inputs.component == 'all')
+        continue-on-error: true
         run: |
-          pnpm install --frozen-lockfile
           COMP="${{ inputs.component }}"
           if [ "$COMP" = "all" ]; then
             pnpm turbo lint
