@@ -11,12 +11,13 @@ import (
 
 // AuthPoolService orchestrates auth pool operations between Keycloak and the database.
 type AuthPoolService struct {
-	poolRepo    ports.AuthPoolRepository
-	planRepo    ports.UserPlanRepository
-	idp         ports.IdentityProvider
-	keycloakURL string
-	gwRepo      ports.GatewayRepository
-	gwSvc       *GatewayService
+	poolRepo           ports.AuthPoolRepository
+	planRepo           ports.UserPlanRepository
+	idp                ports.IdentityProvider
+	keycloakURL        string // internal URL for API→Keycloak calls
+	keycloakExternalURL string // public URL for issuer URLs shown to users
+	gwRepo             ports.GatewayRepository
+	gwSvc              *GatewayService
 }
 
 // SetGatewayDependencies wires gateway repo and service (breaks import cycle).
@@ -26,20 +27,22 @@ func (s *AuthPoolService) SetGatewayDependencies(gwRepo ports.GatewayRepository,
 }
 
 // NewAuthPoolService creates a new AuthPoolService.
-func NewAuthPoolService(poolRepo ports.AuthPoolRepository, planRepo ports.UserPlanRepository, idp ports.IdentityProvider, keycloakURL string) *AuthPoolService {
+func NewAuthPoolService(poolRepo ports.AuthPoolRepository, planRepo ports.UserPlanRepository, idp ports.IdentityProvider, keycloakURL, keycloakExternalURL string) *AuthPoolService {
 	return &AuthPoolService{
-		poolRepo:    poolRepo,
-		planRepo:    planRepo,
-		idp:         idp,
-		keycloakURL: keycloakURL,
+		poolRepo:           poolRepo,
+		planRepo:           planRepo,
+		idp:                idp,
+		keycloakURL:        keycloakURL,
+		keycloakExternalURL: keycloakExternalURL,
 	}
 }
 
 // CreatePool provisions a new auth pool (Keycloak realm + OIDC client + DB record).
 func (s *AuthPoolService) CreatePool(ctx context.Context, userID, projectID, name string) (*entities.AuthPool, error) {
 	poolID := uuid.New().String()
-	realmName := "zp-" + poolID
-	clientID := "zenith-pool-" + poolID
+	shortID := poolID[:8] // use first 8 chars for cleaner realm names
+	realmName := "zp-" + shortID
+	clientID := "zenith-pool-" + shortID
 
 	// Get plan limits for max users
 	maxUsers := 1000
@@ -61,7 +64,12 @@ func (s *AuthPoolService) CreatePool(ctx context.Context, userID, projectID, nam
 		return nil, fmt.Errorf("create client: %w", err)
 	}
 
-	issuerURL := s.keycloakURL + "/realms/" + realmName
+	// Use external URL for user-facing issuer, fall back to internal
+	baseURL := s.keycloakExternalURL
+	if baseURL == "" {
+		baseURL = s.keycloakURL
+	}
+	issuerURL := baseURL + "/realms/" + realmName
 
 	// Persist to database
 	pool, err := s.poolRepo.CreatePool(ctx, poolID, userID, projectID, name, realmName, clientID, clientSecret, issuerURL, maxUsers)

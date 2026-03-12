@@ -113,6 +113,10 @@ spec:
             - name: KEYCLOAK_URL
               value: {{ .Values.env.KEYCLOAK_URL | quote }}
             {{- end }}
+            {{- if .Values.env.KEYCLOAK_EXTERNAL_URL }}
+            - name: KEYCLOAK_EXTERNAL_URL
+              value: {{ .Values.env.KEYCLOAK_EXTERNAL_URL | quote }}
+            {{- end }}
             {{- if .Values.keycloakAdminSecret }}
             - name: KEYCLOAK_ADMIN_USER
               valueFrom:

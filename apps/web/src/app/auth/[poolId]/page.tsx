@@ -9,7 +9,7 @@ import { getApi } from "@/lib/get-api";
 import type { AuthPool, AuthPoolUser } from "@/lib/api";
 import {
   Shield, Users, Key, Copy, Check, ChevronLeft, Plus,
-  Trash2, Loader2, UserCheck, UserX, Eye, EyeOff, LogIn,
+  Trash2, Loader2, UserCheck, UserX, Eye, EyeOff, LogIn, BookOpen,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -324,6 +324,53 @@ export default function PoolDetailPage() {
           <p className="mt-2 text-[11px] text-neutral-600">
             Test authentication with a pool user&apos;s credentials. Tokens are issued by Keycloak via the OIDC password grant.
           </p>
+        </section>
+
+        {/* How to Use */}
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
+            <BookOpen className="h-4 w-4 text-neutral-500" />
+            How to Use
+          </h2>
+          <div className="rounded-lg border border-border bg-surface-100 p-5 space-y-4">
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">1. Create Users</h3>
+              <p className="text-xs text-neutral-400">
+                Add users to this pool using the form below. Each user gets an email/password credential managed by Zenith.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">2. Connect to Gateway</h3>
+              <p className="text-xs text-neutral-400">
+                In your <span className="text-white">Gateway</span> settings, attach this auth pool to a route.
+                The gateway will automatically validate JWT tokens on every request — no code changes needed in your app.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">3. Authenticate Users</h3>
+              <p className="text-xs text-neutral-400 mb-2">
+                Your frontend calls the token endpoint to log users in:
+              </p>
+              <div className="rounded-lg bg-surface-200 p-3 font-mono text-[11px] text-neutral-300 overflow-x-auto">
+                <div className="text-neutral-500">POST /api/v1/auth-pools/{pool?.id}/token</div>
+                <div className="mt-1 text-neutral-400">{'{'} &quot;username&quot;: &quot;user@example.com&quot;, &quot;password&quot;: &quot;...&quot; {'}'}</div>
+                <div className="mt-2 text-neutral-500">→ Returns: access_token, refresh_token, expires_in</div>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">4. Use Roles for Authorization</h3>
+              <p className="text-xs text-neutral-400">
+                The JWT token contains user roles from Keycloak. Use these roles in your app logic for fine-grained authorization.
+                The gateway handles authentication — your app only needs to read the roles from the validated token.
+              </p>
+            </div>
+            <div className="rounded-lg bg-accent-500/5 border border-accent-500/20 px-3 py-2">
+              <p className="text-[11px] text-accent-400">
+                Your app never talks to Keycloak directly. Zenith handles the entire auth infrastructure —
+                token issuance, validation, and user management.
+              </p>
+            </div>
+          </div>
         </section>
 
         {/* Users */}

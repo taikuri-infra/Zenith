@@ -75,6 +75,7 @@ type Config struct {
 
 	// Keycloak Admin (realm provisioning)
 	KeycloakURL           string
+	KeycloakExternalURL   string // public-facing Keycloak URL for issuer URLs
 	KeycloakAdminUser     string
 	KeycloakAdminPassword string
 
@@ -162,6 +163,7 @@ func Load() *Config {
 		TemporalHost:          getEnv("TEMPORAL_HOST", "temporal.temporal.svc.cluster.local:7233"),
 		TemporalNamespace:     getEnv("TEMPORAL_NAMESPACE", "default"),
 		KeycloakURL:           getEnv("KEYCLOAK_URL", ""),
+		KeycloakExternalURL:   getEnv("KEYCLOAK_EXTERNAL_URL", ""),
 		KeycloakAdminUser:     getEnv("KEYCLOAK_ADMIN_USER", "admin"),
 		KeycloakAdminPassword: getEnv("KEYCLOAK_ADMIN_PASSWORD", ""),
 		S3Endpoint:            getEnv("S3_ENDPOINT", ""),

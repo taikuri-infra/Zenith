@@ -16,6 +16,7 @@ env:
   BASE_DOMAIN: "apps.stage.freezenith.com"
   GATEWAY_DOMAIN: "gw.stage.freezenith.com"
   KEYCLOAK_URL: "http://keycloak.keycloak.svc.cluster.local"
+  KEYCLOAK_EXTERNAL_URL: "https://auth.stage.freezenith.com"
   TEMPORAL_ENABLED: "true"
   TEMPORAL_HOST: "temporal-frontend.temporal.svc.cluster.local:7233"
   TEMPORAL_NAMESPACE: "default"

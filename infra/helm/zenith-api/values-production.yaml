@@ -15,6 +15,7 @@ env:
   REGISTRY: ""  # set via Terraform
   BASE_DOMAIN: "apps.freezenith.com"
   KEYCLOAK_URL: "http://keycloak.keycloak.svc.cluster.local"
+  KEYCLOAK_EXTERNAL_URL: "https://auth.freezenith.com"
   TEMPORAL_ENABLED: "true"
   TEMPORAL_HOST: "temporal-frontend.temporal.svc.cluster.local:7233"
   TEMPORAL_NAMESPACE: "default"

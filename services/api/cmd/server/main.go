@@ -814,10 +814,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		keycloakIDP = keycloakclient.NewMemoryClient()
 	}
 
-	authPoolSvc := services.NewAuthPoolService(authPoolRepo, planRepo, keycloakIDP, cfg.KeycloakURL)
+	authPoolSvc := services.NewAuthPoolService(authPoolRepo, planRepo, keycloakIDP, cfg.KeycloakURL, cfg.KeycloakExternalURL)
 	gwSvc.SetAuthPoolRepo(authPoolRepo)
 	authPoolSvc.SetGatewayDependencies(gwRepo, gwSvc)
-	authPoolHandler := handlers.NewAuthPoolHandler(authPoolSvc, authPoolRepo)
+	authPoolHandler := handlers.NewAuthPoolHandler(authPoolSvc, authPoolRepo, cfg.KeycloakURL)
 
 	authPools := protected.Group("/auth-pools")
 	authPools.Post("/", handlers.CheckLimit(planRepo, "auth_pools", func(c *fiber.Ctx, userID string) (int, error) {

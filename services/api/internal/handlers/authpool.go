@@ -16,13 +16,14 @@ import (
 
 // AuthPoolHandler manages auth pool HTTP endpoints.
 type AuthPoolHandler struct {
-	poolSvc  *services.AuthPoolService
-	poolRepo ports.AuthPoolRepository
+	poolSvc     *services.AuthPoolService
+	poolRepo    ports.AuthPoolRepository
+	keycloakURL string // internal URL for proxying token requests
 }
 
 // NewAuthPoolHandler creates a new AuthPoolHandler.
-func NewAuthPoolHandler(poolSvc *services.AuthPoolService, poolRepo ports.AuthPoolRepository) *AuthPoolHandler {
-	return &AuthPoolHandler{poolSvc: poolSvc, poolRepo: poolRepo}
+func NewAuthPoolHandler(poolSvc *services.AuthPoolService, poolRepo ports.AuthPoolRepository, keycloakURL string) *AuthPoolHandler {
+	return &AuthPoolHandler{poolSvc: poolSvc, poolRepo: poolRepo, keycloakURL: keycloakURL}
 }
 
 // CreatePool creates a new auth pool.
@@ -63,14 +64,14 @@ func (h *AuthPoolHandler) ListPools(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// GetPool returns a single pool.
+// GetPool returns a single pool (includes secret for the owner).
 // GET /api/v1/auth-pools/:poolId
 func (h *AuthPoolHandler) GetPool(c *fiber.Ctx) error {
 	pool, err := h.requirePool(c)
 	if err != nil {
 		return err
 	}
-	return c.JSON(toAuthPoolInfo(pool, false))
+	return c.JSON(toAuthPoolInfo(pool, true))
 }
 
 // DeletePool deletes a pool and its Keycloak realm.
@@ -221,7 +222,8 @@ func (h *AuthPoolHandler) TokenExchange(c *fiber.Ctx) error {
 		input.GrantType = "password"
 	}
 
-	tokenURL := pool.IssuerURL + "/protocol/openid-connect/token"
+	// Use internal Keycloak URL for the actual HTTP call (issuerURL may be external)
+	tokenURL := h.keycloakURL + "/realms/" + pool.RealmName + "/protocol/openid-connect/token"
 
 	form := url.Values{}
 	form.Set("client_id", pool.ClientID)
