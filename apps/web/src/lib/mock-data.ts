@@ -68,7 +68,7 @@ export interface Deployment {
   duration: string;
 }
 
-// Auth Service (Keycloak-like) data
+// Auth Service (ZenAuth) data
 export interface AuthRealm {
   name: string;
   users: number;

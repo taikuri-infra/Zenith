@@ -324,7 +324,7 @@ export default function PoolDetailPage() {
             )}
           </div>
           <p className="mt-2 text-[11px] text-neutral-600">
-            Test authentication with a pool user&apos;s credentials. Tokens are issued by Keycloak via the OIDC password grant.
+            Test authentication with a pool user&apos;s credentials. Tokens are issued via the OIDC password grant.
           </p>
         </section>
 
@@ -362,13 +362,13 @@ export default function PoolDetailPage() {
             <div>
               <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">4. Use Roles for Authorization</h3>
               <p className="text-xs text-neutral-400">
-                The JWT token contains user roles from Keycloak. Use these roles in your app logic for fine-grained authorization.
+                The JWT token contains user roles. Use these roles in your app logic for fine-grained authorization.
                 The gateway handles authentication — your app only needs to read the roles from the validated token.
               </p>
             </div>
             <div className="rounded-lg bg-accent-500/5 border border-accent-500/20 px-3 py-2">
               <p className="text-[11px] text-accent-400">
-                Your app never talks to Keycloak directly. Zenith handles the entire auth infrastructure —
+                Your app never talks to the identity provider directly. Zenith handles the entire auth infrastructure —
                 token issuance, validation, and user management.
               </p>
             </div>

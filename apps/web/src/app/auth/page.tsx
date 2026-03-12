@@ -226,7 +226,7 @@ export default function AuthPage() {
                 autoFocus
               />
               <p className="mt-1.5 text-[11px] text-neutral-500">
-                A Keycloak realm and OIDC client will be provisioned automatically.
+                A ZenAuth realm and OIDC client will be provisioned automatically.
               </p>
             </div>
             {createError && (
@@ -261,7 +261,7 @@ export default function AuthPage() {
           <div className="space-y-4">
             <p className="text-sm text-neutral-300">
               Delete <span className="font-medium text-white">{deleteTarget.name}</span>?
-              This will remove the Keycloak realm and all users in it.
+              This will remove the auth realm and all users in it.
             </p>
             <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-400">
               This action cannot be undone. All users and OIDC clients will be permanently deleted.
