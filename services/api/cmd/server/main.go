@@ -1282,6 +1282,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	admin.Get("/events", userEventHandler.ListEvents)
 	admin.Get("/events/funnel", userEventHandler.GetFunnel)
 	admin.Get("/events/user/:id", userEventHandler.GetUserActivity)
+	admin.Get("/surveys", userEventHandler.SurveyInsights)
 
 	// Exit Survey (admin analytics)
 	admin.Get("/exit-surveys", exitSurveyHandler.AdminList)

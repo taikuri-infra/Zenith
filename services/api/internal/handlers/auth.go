@@ -411,8 +411,9 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 func (h *AuthHandler) UpdateOnboarding(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(string)
 	var req struct {
-		Step      int  `json:"step"`
-		Completed bool `json:"completed"`
+		Step       int                    `json:"step"`
+		Completed  bool                   `json:"completed"`
+		SurveyData map[string]interface{} `json:"survey_data,omitempty"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
@@ -422,7 +423,7 @@ func (h *AuthHandler) UpdateOnboarding(c *fiber.Ctx) error {
 
 	// Track onboarding events
 	if req.Completed {
-		h.trackEvent(c, entities.EventOnboardingDone, nil)
+		h.trackEvent(c, entities.EventOnboardingDone, req.SurveyData)
 	} else {
 		h.trackEvent(c, entities.EventOnboardingStep, map[string]interface{}{"step": req.Step})
 	}

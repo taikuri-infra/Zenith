@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -107,4 +108,128 @@ func (h *UserEventHandler) GetUserActivity(c *fiber.Ctx) error {
 		events = []entities.UserEvent{}
 	}
 	return c.JSON(fiber.Map{"items": events, "user_id": userID})
+}
+
+// SurveyInsights aggregates onboarding survey responses.
+// GET /api/v1/admin/surveys
+func (h *UserEventHandler) SurveyInsights(c *fiber.Ctx) error {
+	// Fetch all onboarding.done events (large limit to get everything).
+	events, err := h.eventRepo.ListByType(c.Context(), "onboarding.done", 10000, 0)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to list survey events")
+	}
+	if events == nil {
+		events = []entities.UserEvent{}
+	}
+
+	// Sort by most recent first.
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].CreatedAt.After(events[j].CreatedAt)
+	})
+
+	// Fields to aggregate (single-value).
+	singleFields := []string{
+		"use_case", "role", "team_size", "current_provider",
+		"monthly_spend", "biggest_pain", "expected_traffic",
+		"timeline", "most_important", "discovery",
+	}
+
+	breakdowns := make(map[string]map[string]int)
+	for _, f := range singleFields {
+		breakdowns[f] = make(map[string]int)
+	}
+	breakdowns["stack"] = make(map[string]int)
+
+	type surveyResponse struct {
+		UserID          string      `json:"user_id"`
+		CreatedAt       time.Time   `json:"created_at"`
+		UseCase         string      `json:"use_case,omitempty"`
+		Role            string      `json:"role,omitempty"`
+		TeamSize        string      `json:"team_size,omitempty"`
+		CompanyName     string      `json:"company_name,omitempty"`
+		CurrentProvider string      `json:"current_provider,omitempty"`
+		MonthlySpend    string      `json:"monthly_spend,omitempty"`
+		BiggestPain     string      `json:"biggest_pain,omitempty"`
+		ExpectedTraffic string      `json:"expected_traffic,omitempty"`
+		Timeline        string      `json:"timeline,omitempty"`
+		MostImportant   string      `json:"most_important,omitempty"`
+		Stack           []string    `json:"stack,omitempty"`
+		Discovery       string      `json:"discovery,omitempty"`
+	}
+
+	responses := make([]surveyResponse, 0, len(events))
+
+	for _, ev := range events {
+		props := ev.Properties
+		resp := surveyResponse{
+			UserID:    ev.UserID,
+			CreatedAt: ev.CreatedAt,
+		}
+
+		// Extract single-value fields.
+		for _, f := range singleFields {
+			if v, ok := props[f]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					breakdowns[f][s]++
+					switch f {
+					case "use_case":
+						resp.UseCase = s
+					case "role":
+						resp.Role = s
+					case "team_size":
+						resp.TeamSize = s
+					case "current_provider":
+						resp.CurrentProvider = s
+					case "monthly_spend":
+						resp.MonthlySpend = s
+					case "biggest_pain":
+						resp.BiggestPain = s
+					case "expected_traffic":
+						resp.ExpectedTraffic = s
+					case "timeline":
+						resp.Timeline = s
+					case "most_important":
+						resp.MostImportant = s
+					case "discovery":
+						resp.Discovery = s
+					}
+				}
+			}
+		}
+
+		// Extract company_name (not aggregated, just included in response).
+		if v, ok := props["company_name"]; ok {
+			if s, ok := v.(string); ok {
+				resp.CompanyName = s
+			}
+		}
+
+		// Extract stack (array field).
+		if v, ok := props["stack"]; ok {
+			switch arr := v.(type) {
+			case []interface{}:
+				for _, item := range arr {
+					if s, ok := item.(string); ok && s != "" {
+						resp.Stack = append(resp.Stack, s)
+						breakdowns["stack"][s]++
+					}
+				}
+			case []string:
+				for _, s := range arr {
+					if s != "" {
+						resp.Stack = append(resp.Stack, s)
+						breakdowns["stack"][s]++
+					}
+				}
+			}
+		}
+
+		responses = append(responses, resp)
+	}
+
+	return c.JSON(fiber.Map{
+		"total_responses": len(responses),
+		"responses":       responses,
+		"breakdowns":      breakdowns,
+	})
 }

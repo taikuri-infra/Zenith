@@ -9,6 +9,7 @@ import {
   Building2,
   CreditCard,
   Target,
+  ClipboardList,
   LifeBuoy,
   Award,
   Server,
@@ -58,6 +59,7 @@ const navGroups: NavGroup[] = [
       { name: "Customers", href: "/customers", icon: Building2 },
       { name: "Plans & Pricing", href: "/plans", icon: CreditCard },
       { name: "CRM Pipeline", href: "/crm", icon: Target },
+      { name: "Survey Insights", href: "/surveys", icon: ClipboardList },
     ],
   },
   {

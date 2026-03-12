@@ -1985,10 +1985,10 @@ export interface OnboardingStatus {
 
 export const onboarding = {
   getMe: () => apiFetch<{ id: string; email: string; name: string; role: string; onboarding_completed: boolean; onboarding_step: number }>("/api/v1/auth/me"),
-  update: (step: number, completed: boolean) =>
+  update: (step: number, completed: boolean, surveyData?: Record<string, unknown>) =>
     apiFetch<{ message: string }>("/api/v1/auth/onboarding", {
       method: "PUT",
-      body: JSON.stringify({ step, completed }),
+      body: JSON.stringify({ step, completed, ...(surveyData ? { survey_data: surveyData } : {}) }),
     }),
 };
 

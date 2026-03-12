@@ -404,6 +404,33 @@ export const demoApi = {
     },
   },
 
+  surveys: {
+    insights: async () => {
+      await delay();
+      return {
+        total_responses: 47,
+        responses: [
+          { user_id: "u-001", created_at: "2026-03-12T10:00:00Z", use_case: "saas", role: "fullstack", team_size: "small", company_name: "IndieApp", current_provider: "heroku", monthly_spend: "50_200", biggest_pain: "cost", expected_traffic: "10k_100k", timeline: "this_month", most_important: "auto_scaling", stack: ["Node.js", "React", "PostgreSQL"], discovery: "google" },
+          { user_id: "u-002", created_at: "2026-03-11T15:00:00Z", use_case: "startup", role: "cto", team_size: "medium", company_name: "TechCorp", current_provider: "aws", monthly_spend: "500_2000", biggest_pain: "complexity", expected_traffic: "100k_1m", timeline: "next_quarter", most_important: "security", stack: ["Go", "React", "PostgreSQL", "Kubernetes"], discovery: "linkedin" },
+          { user_id: "u-003", created_at: "2026-03-10T09:00:00Z", use_case: "migrate", role: "devops", team_size: "large", company_name: "ScaleUp GmbH", current_provider: "vercel", monthly_spend: "200_500", biggest_pain: "lock_in", expected_traffic: "10k_100k", timeline: "this_month", most_important: "cost_control", stack: ["Next.js", "Python", "PostgreSQL"], discovery: "reddit" },
+        ],
+        breakdowns: {
+          use_case: { saas: 15, startup: 10, side_project: 8, migrate: 6, learn: 4, agency: 2, evaluate: 2 },
+          role: { developer: 14, fullstack: 12, cto: 8, devops: 6, founder: 4, student: 3 },
+          team_size: { solo: 12, small: 15, medium: 10, large: 6, enterprise: 4 },
+          current_provider: { heroku: 10, aws: 8, vercel: 7, nowhere: 6, railway: 5, digitalocean: 4, self_hosted: 3, gcp: 2, azure: 1, other: 1 },
+          monthly_spend: { "0": 8, under_50: 10, "50_200": 12, "200_500": 8, "500_2000": 5, over_2000: 4 },
+          biggest_pain: { cost: 15, complexity: 10, speed: 6, scaling: 5, lock_in: 4, support: 3, compliance: 2, none: 2 },
+          expected_traffic: { starting: 12, under_10k: 15, "10k_100k": 10, "100k_1m": 6, over_1m: 4 },
+          timeline: { exploring: 8, this_week: 5, this_month: 15, next_quarter: 12, already_live: 7 },
+          most_important: { auto_scaling: 10, managed_db: 8, cicd: 7, cost_control: 6, security: 6, monitoring: 4, custom_domains: 3, team_collab: 3 },
+          stack: { "Node.js": 25, React: 22, PostgreSQL: 20, "Next.js": 15, Python: 12, Docker: 10, Go: 8, Redis: 7, Vue: 5, Kubernetes: 5, TypeScript: 4, MySQL: 3 },
+          discovery: { google: 14, friend: 8, reddit: 6, twitter: 5, linkedin: 4, youtube: 3, github: 3, blog: 2, producthunt: 1, conference: 1 },
+        },
+      };
+    },
+  },
+
   crm: {
     pipeline: async (): Promise<CrmPipeline> => {
       await delay();

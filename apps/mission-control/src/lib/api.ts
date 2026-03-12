@@ -341,6 +341,31 @@ export interface CohortData {
   percentage: number;
 }
 
+// --- Surveys ---
+
+export interface SurveyResponse {
+  user_id: string;
+  created_at: string;
+  use_case: string;
+  role: string;
+  team_size: string;
+  company_name: string;
+  current_provider: string;
+  monthly_spend: string;
+  biggest_pain: string;
+  expected_traffic: string;
+  timeline: string;
+  most_important: string;
+  stack: string[];
+  discovery: string;
+}
+
+export interface SurveyInsights {
+  total_responses: number;
+  responses: SurveyResponse[];
+  breakdowns: Record<string, Record<string, number>>;
+}
+
 // --- CRM ---
 
 export interface CRMPipeline {
@@ -1205,6 +1230,11 @@ class ApiClient {
     growth: () => this.request<GrowthStats>("/api/v1/admin/analytics/growth"),
     usage: () => this.request<UsageAnalytics>("/api/v1/admin/analytics/usage"),
     cohorts: () => this.request<CohortData[]>("/api/v1/admin/analytics/cohorts"),
+  };
+
+  // Survey Insights
+  surveys = {
+    insights: () => this.request<SurveyInsights>("/api/v1/admin/surveys"),
   };
 
   // CRM
