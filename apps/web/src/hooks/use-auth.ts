@@ -23,10 +23,20 @@ interface AuthState {
  * register() returns "verify_email" when email verification is required,
  * or true when the user is auto-logged in (e.g. demo mode).
  */
+export interface RegisterOptions {
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  referrer_url?: string;
+  referral_code?: string;
+}
+
 export function useAuth(): AuthState & {
   login: (email: string, password: string) => Promise<boolean | "mfa_required">;
   mfaLogin: (mfaToken: string, code: string) => Promise<boolean>;
-  register: (email: string, password: string, name: string) => Promise<boolean | "verify_email">;
+  register: (email: string, password: string, name: string, options?: RegisterOptions) => Promise<boolean | "verify_email">;
   logout: () => void;
   mfaToken: string | null;
 } {
@@ -121,10 +131,10 @@ export function useAuth(): AuthState & {
   }, [demo]);
 
   const register = useCallback(
-    async (email: string, password: string, name: string): Promise<boolean | "verify_email"> => {
+    async (email: string, password: string, name: string, options?: RegisterOptions): Promise<boolean | "verify_email"> => {
       if (demo) return true;
       try {
-        const response = await auth.register({ email, password, name });
+        const response = await auth.register({ email, password, name, ...options });
 
         // If the response has a message (no tokens), email verification is required
         if (response.message && !response.access_token) {

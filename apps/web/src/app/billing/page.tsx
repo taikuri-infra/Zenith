@@ -169,6 +169,9 @@ function BillingContent() {
 
   const [upgrading, setUpgrading] = useState<string | null>(null);
   const [showCancel, setShowCancel] = useState(false);
+  const [exitReason, setExitReason] = useState("");
+  const [exitDetails, setExitDetails] = useState("");
+  const [canceling, setCanceling] = useState(false);
 
   const handleUpgrade = async (tier: string) => {
     if (!status?.stripe_enabled) return;
@@ -191,12 +194,25 @@ function BillingContent() {
   };
 
   const handleCancel = async () => {
+    if (!exitReason) return;
+    setCanceling(true);
     try {
-      await api.billing.cancel(false);
+      await api.exitSurvey.submit({ reason: exitReason, details: exitDetails });
       setShowCancel(false);
+      setExitReason("");
+      setExitDetails("");
       refetch();
     } catch {
-      // Cancel failed
+      // Fallback: try direct cancel if exit survey endpoint fails
+      try {
+        await api.billing.cancel(false);
+        setShowCancel(false);
+        refetch();
+      } catch {
+        // Cancel failed
+      }
+    } finally {
+      setCanceling(false);
     }
   };
 
@@ -567,31 +583,73 @@ function BillingContent() {
         </section>
       </div>
 
-      {/* Cancel Confirmation Modal */}
+      {/* Exit Survey + Cancel Modal */}
       {showCancel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="mx-4 w-full max-w-sm rounded-lg border border-border bg-surface-100 p-6">
+          <div className="mx-4 w-full max-w-md rounded-lg border border-border bg-surface-100 p-6">
             <h3 className="text-sm font-medium text-white">
-              Cancel Subscription
+              We&apos;re sorry to see you go
             </h3>
             <p className="mt-2 text-xs text-neutral-400">
-              Your subscription will remain active until the end of the current
-              billing period. After that, you&apos;ll be downgraded to the Free
-              plan. Existing resources won&apos;t be deleted, but you won&apos;t
-              be able to create new ones beyond Free limits.
+              What&apos;s the main reason for canceling?
+            </p>
+            <div className="mt-4 space-y-2">
+              {[
+                { value: "too_expensive", label: "Too expensive" },
+                { value: "missing_features", label: "Missing features I need" },
+                { value: "found_alternative", label: "Found a better alternative" },
+                { value: "not_using", label: "Not using it enough" },
+                { value: "technical_issues", label: "Technical issues / reliability" },
+                { value: "temporary", label: "Taking a break (temporary)" },
+                { value: "other", label: "Other" },
+              ].map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm cursor-pointer transition-colors ${
+                    exitReason === opt.value
+                      ? "border-accent-500 bg-accent-500/10 text-accent-400"
+                      : "border-border bg-surface-200 text-neutral-300 hover:border-neutral-600"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="exit_reason"
+                    value={opt.value}
+                    checked={exitReason === opt.value}
+                    onChange={() => setExitReason(opt.value)}
+                    className="sr-only"
+                  />
+                  <span className={`h-3 w-3 rounded-full border ${exitReason === opt.value ? "border-accent-500 bg-accent-500" : "border-neutral-600"}`} />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+            <div className="mt-4">
+              <label className="text-xs text-neutral-500">Tell us more (optional)</label>
+              <textarea
+                value={exitDetails}
+                onChange={(e) => setExitDetails(e.target.value)}
+                placeholder="Any additional feedback..."
+                rows={3}
+                className="mt-1 w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              />
+            </div>
+            <p className="mt-3 text-xs text-neutral-500">
+              Your subscription will remain active until the end of the current billing period.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
-                onClick={() => setShowCancel(false)}
+                onClick={() => { setShowCancel(false); setExitReason(""); setExitDetails(""); }}
                 className="rounded-md border border-border px-3 py-1.5 text-xs text-neutral-400 hover:text-white transition-colors"
               >
-                Keep Plan
+                Keep My Plan
               </button>
               <button
                 onClick={handleCancel}
-                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors"
+                disabled={!exitReason || canceling}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Cancel at Period End
+                {canceling ? "Canceling..." : "Cancel Subscription"}
               </button>
             </div>
           </div>

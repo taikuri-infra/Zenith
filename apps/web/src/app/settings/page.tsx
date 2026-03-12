@@ -34,9 +34,11 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   Activity,
+  Gift,
 } from "lucide-react";
+import { ReferralCard } from "@/components/referral-card";
 
-type SettingsTab = "api-keys" | "sessions" | "mfa" | "webhooks" | "security" | "infrastructure" | "general";
+type SettingsTab = "api-keys" | "sessions" | "mfa" | "webhooks" | "security" | "referral" | "infrastructure" | "general";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api-keys");
@@ -47,6 +49,7 @@ export default function SettingsPage() {
     { key: "webhooks", label: "Webhooks", icon: Webhook },
     { key: "sessions", label: "Sessions", icon: Shield },
     { key: "security", label: "Security", icon: Lock },
+    { key: "referral", label: "Referral", icon: Gift },
     { key: "infrastructure", label: "Infra", icon: Server },
     { key: "general", label: "General", icon: Settings },
   ];
@@ -81,6 +84,7 @@ export default function SettingsPage() {
         {activeTab === "webhooks" && <WebhooksTab />}
         {activeTab === "sessions" && <SessionsTab />}
         {activeTab === "security" && <SecurityTab />}
+        {activeTab === "referral" && <ReferralTab />}
         {activeTab === "infrastructure" && <InfrastructureTab />}
         {activeTab === "general" && <GeneralTab />}
       </div>
@@ -1241,6 +1245,23 @@ function InfrastructureTab() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ReferralTab() {
+  return (
+    <div className="space-y-4">
+      <ReferralCard />
+      <div className="rounded-lg border border-border bg-surface-100 p-5">
+        <h3 className="text-sm font-medium text-white">How it works</h3>
+        <ol className="mt-3 space-y-2 text-xs text-neutral-400 list-decimal list-inside">
+          <li>Share your unique referral link with friends or colleagues</li>
+          <li>When they sign up and deploy their first app, you both get rewarded</li>
+          <li>You get 1 month of Pro free, they get an extended 14-day trial</li>
+          <li>Maximum 12 referral rewards per year</li>
+        </ol>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { PageWithTableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { DeployWizard } from "@/components/deploy-wizard";
+import { UpgradeNudge } from "@/components/upgrade-nudge";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type App, type DeployApp } from "@/lib/api";
@@ -143,6 +144,15 @@ export default function AppsPage() {
             Deploy App
           </button>
         </div>
+
+        {/* Upgrade nudge for plan limit */}
+        {planData && tier === "free" && (
+          <UpgradeNudge
+            resource="apps"
+            current={deployApps.length}
+            limit={planData.limits.max_apps}
+          />
+        )}
 
         {/* Search / filter bar */}
         <div className="flex items-center gap-3">

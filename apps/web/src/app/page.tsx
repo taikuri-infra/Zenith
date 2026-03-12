@@ -1,11 +1,13 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { ProgressBar } from "@/components/progress-bar";
 import { DashboardSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type App, type AppDatabase, type DeployApp, type Project, type UserPlanResponse } from "@/lib/api";
@@ -60,6 +62,19 @@ export default function OverviewPage() {
   const {
     data: planData,
   } = useApi(() => userPlan.get(), []);
+
+  const { onboarding } = getApi();
+  const {
+    data: meData,
+  } = useApi(() => onboarding.getMe(), []);
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (meData?.user && !meData.user.onboarding_completed) {
+      setShowOnboarding(true);
+    }
+  }, [meData]);
 
   const loading = projectLoading || appsLoading || deployLoading || dbsLoading;
   const error = projectError || appsError || deployError || dbsError;
@@ -144,6 +159,13 @@ export default function OverviewPage() {
 
   return (
     <Shell>
+      {showOnboarding && (
+        <OnboardingWizard
+          userName={meData?.user?.name || ""}
+          onComplete={() => setShowOnboarding(false)}
+          onDismiss={() => setShowOnboarding(false)}
+        />
+      )}
       <div className="space-y-6">
         <div>
           <h1 className="text-lg font-semibold text-white">

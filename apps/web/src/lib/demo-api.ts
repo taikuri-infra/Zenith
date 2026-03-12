@@ -1719,4 +1719,16 @@ export const demoApi = {
   waf: demoWaf,
   networkPolicies: demoNetworkPolicies,
   alerts: demoAlerts,
+  onboarding: {
+    getMe: async () => ({ user: { id: "demo-1", email: "demo@zenith.dev", name: "Demo User", role: "admin", onboarding_completed: true, onboarding_step: 4 } }),
+    update: async () => ({ message: "ok" }),
+  },
+  referral: {
+    getSummary: async () => ({ code: "DEMO1234", link: "https://zenith.dev/r/DEMO1234", total_referrals: 3, credited: 2, pending: 1 }),
+    listRewards: async () => [],
+    trackShare: async () => ({ message: "ok" }),
+  },
+  exitSurvey: {
+    submit: async () => ({ message: "ok" }),
+  },
 };

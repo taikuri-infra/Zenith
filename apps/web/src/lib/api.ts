@@ -155,6 +155,13 @@ export interface RegisterRequest {
   email: string;
   password: string;
   name: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  referrer_url?: string;
+  referral_code?: string;
 }
 
 export interface RegisterResponse {
@@ -1967,6 +1974,63 @@ export const alerts = {
     apiFetch<CustomMetric>(`/api/v1/apps/${appId}/custom-metrics`, { method: "POST", body: JSON.stringify(data) }),
   deleteMetric: (appId: string, metricId: string) =>
     apiFetch<{ message: string }>(`/api/v1/apps/${appId}/custom-metrics/${metricId}`, { method: "DELETE" }),
+};
+
+// ---- Onboarding API ----
+
+export interface OnboardingStatus {
+  onboarding_completed: boolean;
+  onboarding_step: number;
+}
+
+export const onboarding = {
+  getMe: () => apiFetch<{ user: { id: string; email: string; name: string; role: string; onboarding_completed: boolean; onboarding_step: number } }>("/api/v1/auth/me"),
+  update: (step: number, completed: boolean) =>
+    apiFetch<{ message: string }>("/api/v1/auth/onboarding", {
+      method: "PUT",
+      body: JSON.stringify({ step, completed }),
+    }),
+};
+
+// ---- Referral API ----
+
+export interface ReferralSummary {
+  code: string;
+  link: string;
+  total_referrals: number;
+  credited: number;
+  pending: number;
+}
+
+export interface ReferralReward {
+  id: string;
+  referred_email: string;
+  status: string;
+  reward_type: string;
+  created_at: string;
+  credited_at?: string;
+}
+
+export const referral = {
+  getSummary: () => apiFetch<ReferralSummary>("/api/v1/referral"),
+  listRewards: () => apiFetch<ReferralReward[]>("/api/v1/referral/rewards"),
+  trackShare: () =>
+    apiFetch<{ message: string }>("/api/v1/referral/share", { method: "POST" }),
+};
+
+// ---- Exit Survey API ----
+
+export interface ExitSurveyRequest {
+  reason: string;
+  details?: string;
+}
+
+export const exitSurvey = {
+  submit: (data: ExitSurveyRequest) =>
+    apiFetch<{ message: string }>("/api/v1/billing/exit-survey", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // ---- WebSocket for real-time updates ----

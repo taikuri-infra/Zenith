@@ -72,7 +72,16 @@ function LoginPageInner() {
           setLoading(false);
           return;
         }
-        const result = await register(email, password, name);
+        const utmOptions = {
+          utm_source: searchParams.get("utm_source") || undefined,
+          utm_medium: searchParams.get("utm_medium") || undefined,
+          utm_campaign: searchParams.get("utm_campaign") || undefined,
+          utm_content: searchParams.get("utm_content") || undefined,
+          utm_term: searchParams.get("utm_term") || undefined,
+          referrer_url: typeof document !== "undefined" ? document.referrer || undefined : undefined,
+          referral_code: searchParams.get("ref") || undefined,
+        };
+        const result = await register(email, password, name, utmOptions);
         if (result === "verify_email") {
           setVerifyEmailSent(true);
         } else if (result === true) {
