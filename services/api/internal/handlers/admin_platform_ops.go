@@ -420,6 +420,9 @@ func (h *AdminPlatformOpsHandler) ListDNSRecords(c *fiber.Ctx) error {
 			}
 		}
 	}
+	if records == nil {
+		records = []entities.AdminDNSRecord{}
+	}
 	return c.JSON(records)
 }
 
@@ -478,6 +481,9 @@ func (h *AdminPlatformOpsHandler) ListRoutes(c *fiber.Ctx) error {
 			})
 		}
 	}
+	if routes == nil {
+		routes = []entities.AdminRoute{}
+	}
 	return c.JSON(routes)
 }
 
@@ -491,6 +497,9 @@ func (h *AdminPlatformOpsHandler) ListCertificates(c *fiber.Ctx) error {
 		for _, crd := range crds {
 			certs = append(certs, certFromCRD(crd))
 		}
+	}
+	if certs == nil {
+		certs = []entities.AdminCertificate{}
 	}
 	return c.JSON(certs)
 }

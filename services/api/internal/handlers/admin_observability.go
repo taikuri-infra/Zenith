@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,6 +43,11 @@ func (h *AdminObservabilityHandler) ListDashboards(c *fiber.Ctx) error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+	// Verify response is valid JSON array; fallback to empty array
+	var raw json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil || (len(raw) > 0 && raw[0] != '[') {
+		return c.JSON([]entities.GrafanaDashboard{})
+	}
 	c.Set("Content-Type", "application/json")
 	return c.Send(body)
 }
@@ -122,8 +128,19 @@ func (h *AdminObservabilityHandler) ListAlerts(c *fiber.Ctx) error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	c.Set("Content-Type", "application/json")
-	return c.Send(body)
+
+	// Prometheus returns {status, data: {alerts: [...]}} — extract the alerts array
+	var promResp struct {
+		Data struct {
+			Alerts json.RawMessage `json:"alerts"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &promResp); err == nil && len(promResp.Data.Alerts) > 0 {
+		c.Set("Content-Type", "application/json")
+		return c.Send(promResp.Data.Alerts)
+	}
+
+	return c.JSON([]entities.AlertInfo{})
 }
 
 // ListAlertRules returns Prometheus alert rules.
@@ -167,8 +184,17 @@ func (h *AdminObservabilityHandler) SearchTraces(c *fiber.Ctx) error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	c.Set("Content-Type", "application/json")
-	return c.Send(body)
+
+	// Tempo returns {traces: [...]} — extract the traces array
+	var tempoResp struct {
+		Traces json.RawMessage `json:"traces"`
+	}
+	if err := json.Unmarshal(body, &tempoResp); err == nil && len(tempoResp.Traces) > 0 {
+		c.Set("Content-Type", "application/json")
+		return c.Send(tempoResp.Traces)
+	}
+
+	return c.JSON([]entities.TraceInfo{})
 }
 
 // GetTrace returns a single trace by ID.
