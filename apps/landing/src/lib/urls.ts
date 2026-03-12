@@ -13,8 +13,8 @@ import { APP_URL } from "./runtime-env";
 /** Full URL to the web dashboard login page */
 export const loginUrl = `${APP_URL}/login`;
 
-/** Full URL to the web dashboard register page */
-export const registerUrl = `${APP_URL}/register`;
+/** Full URL to the web dashboard login/register page */
+export const registerUrl = `${APP_URL}/login`;
 
 /**
  * Register URL with UTM and referral params forwarded from the current page URL.
