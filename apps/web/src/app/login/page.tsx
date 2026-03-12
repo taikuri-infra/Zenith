@@ -19,7 +19,8 @@ function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, mfaLogin, register, mfaToken } = useAuth();
-  const [mode, setMode] = useState<"login" | "register" | "mfa">("login");
+  const initialMode = searchParams.get("mode") === "register" ? "register" : "login";
+  const [mode, setMode] = useState<"login" | "register" | "mfa">(initialMode);
   const [verifyEmailSent, setVerifyEmailSent] = useState(false);
 
   // In demo mode, skip login entirely
@@ -85,7 +86,7 @@ function LoginPageInner() {
         if (result === "verify_email") {
           setVerifyEmailSent(true);
         } else if (result === true) {
-          router.push("/");
+          router.push("/onboarding");
         } else {
           setError("Registration failed. Please try again.");
         }
