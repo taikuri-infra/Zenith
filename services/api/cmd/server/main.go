@@ -840,9 +840,20 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	poolByID.Post("/roles", authPoolHandler.CreateRole)
 	poolByID.Get("/roles", authPoolHandler.ListRoles)
 	poolByID.Delete("/roles/:roleName", authPoolHandler.DeleteRole)
+	poolByID.Post("/reveal-secret", authPoolHandler.RevealSecret)
 
-	// Public token exchange endpoint (no JWT required — used by pool end-users)
-	api.Post("/auth-pools/:poolId/token", authPoolHandler.TokenExchange)
+	// Public auth endpoints (no JWT required — Supabase-style)
+	poolPublic := api.Group("/auth-pools/:poolId")
+	poolPublic.Post("/signup", authPoolHandler.Signup)
+	poolPublic.Post("/login", authPoolHandler.Login)
+	poolPublic.Post("/logout", authPoolHandler.Logout)
+	poolPublic.Post("/refresh", authPoolHandler.Refresh)
+	poolPublic.Post("/forgot-password", authPoolHandler.ForgotPassword)
+	poolPublic.Post("/reset-password", authPoolHandler.ResetPassword)
+	poolPublic.Get("/user", authPoolHandler.GetCurrentUser)
+	poolPublic.Put("/user", authPoolHandler.UpdateCurrentUser)
+	poolPublic.Post("/user/password", authPoolHandler.ChangePassword)
+	poolPublic.Post("/token", authPoolHandler.TokenExchange) // backward compat
 
 	// Monitoring (Prometheus + Loki + k8s pod metrics)
 	var promClient *promclient.Client

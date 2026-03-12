@@ -1723,6 +1723,34 @@ export const authPools = {
     apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/enable`, { method: "POST" }),
   disableUser: (poolId: string, userId: string) =>
     apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/disable`, { method: "POST" }),
+  // Public auth endpoints (Supabase-style)
+  signup: (poolId: string, email: string, password: string, firstName?: string, lastName?: string) =>
+    apiFetch<{ user: AuthPoolUser; access_token?: string; refresh_token?: string; expires_in?: number }>(`/api/v1/auth-pools/${poolId}/signup`, {
+      method: "POST", body: JSON.stringify({ email, password, first_name: firstName || "", last_name: lastName || "" }),
+    }),
+  login: (poolId: string, email: string, password: string) =>
+    apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(`/api/v1/auth-pools/${poolId}/login`, {
+      method: "POST", body: JSON.stringify({ email, password }),
+    }),
+  logout: (poolId: string, refreshToken: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/logout`, {
+      method: "POST", body: JSON.stringify({ refresh_token: refreshToken }),
+    }),
+  refresh: (poolId: string, refreshToken: string) =>
+    apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(`/api/v1/auth-pools/${poolId}/refresh`, {
+      method: "POST", body: JSON.stringify({ refresh_token: refreshToken }),
+    }),
+  forgotPassword: (poolId: string, email: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/forgot-password`, {
+      method: "POST", body: JSON.stringify({ email }),
+    }),
+  resetPassword: (poolId: string, email: string, newPassword: string, resetToken?: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/reset-password`, {
+      method: "POST", body: JSON.stringify({ email, new_password: newPassword, reset_token: resetToken || "" }),
+    }),
+  revealSecret: (poolId: string) =>
+    apiFetch<{ client_secret: string }>(`/api/v1/auth-pools/${poolId}/reveal-secret`, { method: "POST" }),
+  // Legacy token endpoint (backward compat)
   token: (poolId: string, username: string, password: string) =>
     apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(
       `/api/v1/auth-pools/${poolId}/token`,

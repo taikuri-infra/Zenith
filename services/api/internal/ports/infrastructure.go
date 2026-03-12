@@ -233,6 +233,12 @@ type IdentityProvider interface {
 	EnableUser(ctx context.Context, realmName, userID string) error
 	CountUsers(ctx context.Context, realmName string) (int, error)
 
+	// User self-service (auth pools)
+	UpdateUser(ctx context.Context, realmName, userID, firstName, lastName string) error
+	SetPassword(ctx context.Context, realmName, userID, password string) error
+	SendPasswordResetEmail(ctx context.Context, realmName, email string) error
+	ResetPasswordByEmail(ctx context.Context, realmName, email, newPassword string) error
+
 	// Role management (auth pools)
 	CreateRole(ctx context.Context, realmName, roleName, description string) error
 	ListRoles(ctx context.Context, realmName string) ([]IdentityRole, error)

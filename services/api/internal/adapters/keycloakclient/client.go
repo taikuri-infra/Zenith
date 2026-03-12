@@ -201,6 +201,81 @@ func (c *Client) CountUsers(ctx context.Context, realmName string) (int, error) 
 	return c.gc.GetUserCount(ctx, token, realmName, gocloak.GetUsersParams{})
 }
 
+// UpdateUser updates a user's first name and last name.
+func (c *Client) UpdateUser(ctx context.Context, realmName, userID, firstName, lastName string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+
+	u, err := c.gc.GetUserByID(ctx, token, realmName, userID)
+	if err != nil {
+		return fmt.Errorf("get user %s: %w", userID, err)
+	}
+
+	u.FirstName = &firstName
+	u.LastName = &lastName
+	return c.gc.UpdateUser(ctx, token, realmName, *u)
+}
+
+// SetPassword sets a user's password.
+func (c *Client) SetPassword(ctx context.Context, realmName, userID, password string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	return c.gc.SetPassword(ctx, token, userID, realmName, password, false)
+}
+
+// SendPasswordResetEmail triggers Keycloak's built-in password reset email.
+func (c *Client) SendPasswordResetEmail(ctx context.Context, realmName, email string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Find user by email
+	users, err := c.gc.GetUsers(ctx, token, realmName, gocloak.GetUsersParams{
+		Email: &email,
+		Max:   gocloak.IntP(1),
+	})
+	if err != nil || len(users) == 0 {
+		return nil // Don't reveal if user exists
+	}
+
+	if users[0].ID == nil {
+		return nil
+	}
+
+	// Execute UPDATE_PASSWORD required action
+	return c.gc.ExecuteActionsEmail(ctx, token, realmName, gocloak.ExecuteActionsEmail{
+		UserID:  users[0].ID,
+		Actions: &[]string{"UPDATE_PASSWORD"},
+	})
+}
+
+// ResetPasswordByEmail resets a user's password by email (admin action).
+func (c *Client) ResetPasswordByEmail(ctx context.Context, realmName, email, newPassword string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+
+	users, err := c.gc.GetUsers(ctx, token, realmName, gocloak.GetUsersParams{
+		Email: &email,
+		Max:   gocloak.IntP(1),
+	})
+	if err != nil || len(users) == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	if users[0].ID == nil {
+		return fmt.Errorf("user not found")
+	}
+
+	return c.gc.SetPassword(ctx, token, *users[0].ID, realmName, newPassword, false)
+}
+
 // CreateRole creates a realm-level role.
 func (c *Client) CreateRole(ctx context.Context, realmName, roleName, description string) error {
 	token, err := c.token(ctx)
@@ -460,6 +535,15 @@ func (m *MemoryKeycloakClient) CountUsers(_ context.Context, realmName string) (
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.users[realmName]), nil
+}
+
+func (m *MemoryKeycloakClient) UpdateUser(_ context.Context, _, _, _, _ string) error { return nil }
+func (m *MemoryKeycloakClient) SetPassword(_ context.Context, _, _, _ string) error { return nil }
+func (m *MemoryKeycloakClient) SendPasswordResetEmail(_ context.Context, _, _ string) error {
+	return nil
+}
+func (m *MemoryKeycloakClient) ResetPasswordByEmail(_ context.Context, _, _, _ string) error {
+	return nil
 }
 
 func (m *MemoryKeycloakClient) CreateRole(_ context.Context, _, _, _ string) error { return nil }

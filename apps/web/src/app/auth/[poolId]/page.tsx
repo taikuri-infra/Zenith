@@ -80,6 +80,9 @@ export default function PoolDetailPage() {
   const [tokenResult, setTokenResult] = useState<{ access_token: string; refresh_token: string; expires_in: number; token_type: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
 
+  // Secret reveal
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+
   // Roles
   const [roles, setRoles] = useState<AuthPoolRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
@@ -252,7 +255,7 @@ export default function PoolDetailPage() {
     setTokenError(null);
     setTokenResult(null);
     try {
-      const result = await api.token(poolId, testEmail.trim(), testPassword);
+      const result = await api.login(poolId, testEmail.trim(), testPassword);
       setTokenResult(result);
     } catch (e) {
       setTokenError(e instanceof Error ? e.message : "Authentication failed");
@@ -328,7 +331,20 @@ export default function PoolDetailPage() {
           <div className="space-y-2">
             <CredentialRow label="Issuer URL" value={pool.issuer_url || "Provisioning..."} />
             <CredentialRow label="Client ID" value={pool.client_id} />
-            <CredentialRow label="Client Secret" value={pool.client_secret || "Hidden — shown only on creation"} secret />
+            <CredentialRow label="Client Secret" value={revealedSecret || pool.client_secret || "Click reveal to show"} secret />
+            {!revealedSecret && !pool.client_secret && (
+              <button
+                onClick={async () => {
+                  try {
+                    const data = await api.revealSecret(poolId);
+                    setRevealedSecret(data.client_secret);
+                  } catch { /* ignore */ }
+                }}
+                className="mt-1 text-[11px] text-accent-400 hover:text-accent-300 transition-colors"
+              >
+                Reveal Secret
+              </button>
+            )}
           </div>
           <p className="mt-2 text-[11px] text-neutral-600">
             Use these credentials to configure OIDC in your application. Attach this pool to a Gateway route for automatic JWT validation.
@@ -498,41 +514,43 @@ export default function PoolDetailPage() {
           </h2>
           <div className="rounded-lg border border-border bg-surface-100 p-5 space-y-4">
             <div>
-              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">1. Create Users</h3>
-              <p className="text-xs text-neutral-400">
-                Add users to this pool using the form below. Each user gets an email/password credential managed by Zenith.
-              </p>
-            </div>
-            <div>
-              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">2. Connect to Gateway</h3>
-              <p className="text-xs text-neutral-400">
-                In your <span className="text-white">Gateway</span> settings, attach this auth pool to a route.
-                The gateway will automatically validate JWT tokens on every request — no code changes needed in your app.
-              </p>
-            </div>
-            <div>
-              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">3. Authenticate Users</h3>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">API Endpoints</h3>
               <p className="text-xs text-neutral-400 mb-2">
-                Your frontend calls the token endpoint to log users in:
+                Use these endpoints from your frontend — no server SDK needed:
               </p>
-              <div className="rounded-lg bg-surface-200 p-3 font-mono text-[11px] text-neutral-300 overflow-x-auto">
-                <div className="text-neutral-500">POST /api/v1/auth-pools/{pool?.id}/token</div>
-                <div className="mt-1 text-neutral-400">{'{'} &quot;username&quot;: &quot;user@example.com&quot;, &quot;password&quot;: &quot;...&quot; {'}'}</div>
-                <div className="mt-2 text-neutral-500">→ Returns: access_token, refresh_token, expires_in</div>
+              <div className="rounded-lg bg-surface-200 p-3 font-mono text-[11px] text-neutral-300 overflow-x-auto space-y-1">
+                <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/signup</span> — register a new user (returns tokens)</div>
+                <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/login</span> — authenticate (email + password → tokens)</div>
+                <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/refresh</span> — exchange refresh token for new tokens</div>
+                <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/logout</span> — revoke refresh token</div>
+                <div><span className="text-blue-400">POST</span> <span className="text-neutral-500">/forgot-password</span> — send password reset email</div>
+                <div><span className="text-blue-400">POST</span> <span className="text-neutral-500">/reset-password</span> — set new password</div>
+                <div><span className="text-amber-400">GET</span>&nbsp; <span className="text-neutral-500">/user</span> — get current user profile (Bearer token)</div>
+                <div><span className="text-amber-400">PUT</span>&nbsp; <span className="text-neutral-500">/user</span> — update profile (first/last name)</div>
+                <div><span className="text-amber-400">POST</span> <span className="text-neutral-500">/user/password</span> — change password</div>
               </div>
+              <p className="mt-2 text-[11px] text-neutral-500">
+                Base URL: <code className="text-neutral-400">/api/v1/auth-pools/{pool?.id}</code>
+              </p>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">4. Authorize with Roles</h3>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Gateway Integration</h3>
               <p className="text-xs text-neutral-400">
-                Create roles (e.g. admin, editor, viewer) and assign them to users. The JWT token includes user roles in the{" "}
+                Attach this pool to a <span className="text-white">Gateway</span> route — the gateway validates JWTs automatically.
+                Your app receives only authenticated requests.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Roles &amp; Authorization</h3>
+              <p className="text-xs text-neutral-400">
+                Create roles and assign them to users. The JWT includes roles in the{" "}
                 <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">realm_access.roles</code> claim.
-                Your app reads these roles from the validated token to control access.
               </p>
             </div>
             <div className="rounded-lg bg-accent-500/5 border border-accent-500/20 px-3 py-2">
               <p className="text-[11px] text-accent-400">
-                Your app never talks to the identity provider directly. Zenith handles the entire auth infrastructure —
-                token issuance, validation, and user management.
+                Your app never talks to the identity provider directly. Zenith handles everything —
+                signup, login, tokens, password resets, and user management.
               </p>
             </div>
           </div>
