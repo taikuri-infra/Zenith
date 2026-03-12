@@ -41,7 +41,7 @@ func (r *PostgresUserEventRepository) Track(ctx context.Context, event *entities
 
 func (r *PostgresUserEventRepository) ListByUser(ctx context.Context, userID string, limit, offset int) ([]entities.UserEvent, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, event_type, properties, ip_address, user_agent, created_at
+		`SELECT id, user_id, event_type, properties, ip_address::text, user_agent, created_at
 		 FROM user_events WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
 		userID, limit, offset,
 	)
@@ -54,7 +54,7 @@ func (r *PostgresUserEventRepository) ListByUser(ctx context.Context, userID str
 
 func (r *PostgresUserEventRepository) ListByType(ctx context.Context, eventType string, limit, offset int) ([]entities.UserEvent, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, event_type, properties, ip_address, user_agent, created_at
+		`SELECT id, user_id, event_type, properties, ip_address::text, user_agent, created_at
 		 FROM user_events WHERE event_type = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
 		eventType, limit, offset,
 	)
@@ -76,7 +76,7 @@ func (r *PostgresUserEventRepository) CountByType(ctx context.Context, eventType
 
 func (r *PostgresUserEventRepository) GetUserActivity(ctx context.Context, userID string, since time.Time) ([]entities.UserEvent, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, event_type, properties, ip_address, user_agent, created_at
+		`SELECT id, user_id, event_type, properties, ip_address::text, user_agent, created_at
 		 FROM user_events WHERE user_id = $1 AND created_at >= $2 ORDER BY created_at DESC`,
 		userID, since,
 	)
