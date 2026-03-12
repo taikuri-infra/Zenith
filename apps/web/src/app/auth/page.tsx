@@ -86,7 +86,7 @@ export default function AuthPage() {
           <div>
             <h1 className="text-lg font-semibold text-white">Auth Pools</h1>
             <p className="text-sm text-neutral-500">
-              Managed authentication for your applications — like AWS Cognito
+              Managed authentication and authorization for your applications
             </p>
           </div>
           <button
