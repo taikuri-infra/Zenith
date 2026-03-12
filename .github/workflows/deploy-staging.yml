@@ -168,6 +168,15 @@ jobs:
               echo "Updated ${VALUES_FILE} -> ${IMAGE_NAME}:${TAG}"
             fi
 
+            # Also update zenith-demo values (MC and web are deployed via zenith-demo chart)
+            local DEMO_VALUES="infra/helm/zenith-demo/values-staging.yaml"
+            if [ -f "$DEMO_VALUES" ]; then
+              if grep -q "image: ${IMAGE_NAME}:" "$DEMO_VALUES"; then
+                sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${TAG}|" "$DEMO_VALUES"
+                echo "Updated ${DEMO_VALUES} -> ${IMAGE_NAME}:${TAG}"
+              fi
+            fi
+
             echo "Done: ${IMAGE_NAME}:${TAG}"
           }
 
