@@ -986,6 +986,19 @@ class ApiClient {
       this.token = res.access_token;
       return res;
     },
+    exchangeOAuthCode: async (code: string): Promise<LoginResponse> => {
+      const res = await this.request<LoginResponse>("/api/v1/auth/exchange", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+      setTokens(res.access_token, res.refresh_token);
+      this.token = res.access_token;
+      return res;
+    },
+    getGoogleOAuthUrl: (): string => {
+      const mcOrigin = typeof window !== "undefined" ? window.location.origin : "";
+      return `${API_BASE_URL}/api/v1/auth/oauth/google?redirect=${encodeURIComponent(mcOrigin)}`;
+    },
     logout: () => {
       this.clearToken();
       if (typeof window !== "undefined") {

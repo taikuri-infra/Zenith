@@ -258,6 +258,8 @@ func (h *AuthHandler) ResendVerification(c *fiber.Ctx) error {
 }
 
 // OAuthRedirect initiates an OAuth flow by redirecting the user to the provider.
+// Accepts optional ?redirect= query param to override the frontend redirect URL
+// (e.g. Mission Control can pass its own URL so the callback goes there).
 func (h *AuthHandler) OAuthRedirect(c *fiber.Ctx) error {
 	provider := c.Params("provider")
 	if provider != "google" && provider != "github" {
@@ -285,6 +287,19 @@ func (h *AuthHandler) OAuthRedirect(c *fiber.Ctx) error {
 		Path:     "/",
 	})
 
+	// Store custom redirect target (for MC or other frontends)
+	if redirect := c.Query("redirect"); redirect != "" {
+		c.Cookie(&fiber.Cookie{
+			Name:     "oauth_redirect",
+			Value:    redirect,
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: "Lax",
+			MaxAge:   600,
+			Path:     "/",
+		})
+	}
+
 	return c.Redirect(redirectURL, fiber.StatusFound)
 }
 
@@ -294,15 +309,32 @@ func (h *AuthHandler) OAuthCallback(c *fiber.Ctx) error {
 	code := c.Query("code")
 	state := c.Query("state")
 
+	// Determine redirect target: custom (MC) or default (web app)
+	targetURL := h.appURL
+	if redirect := c.Cookies("oauth_redirect"); redirect != "" {
+		targetURL = redirect
+		// Clear the redirect cookie
+		c.Cookie(&fiber.Cookie{
+			Name:     "oauth_redirect",
+			Value:    "",
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: "Lax",
+			MaxAge:   -1,
+			Path:     "/",
+			Expires:  time.Now().Add(-1 * time.Hour),
+		})
+	}
+
 	if code == "" || state == "" {
 		errorMsg := url.QueryEscape(c.Query("error", "missing code or state"))
-		return c.Redirect(h.appURL+"/login?error="+errorMsg, fiber.StatusFound)
+		return c.Redirect(targetURL+"/login?error="+errorMsg, fiber.StatusFound)
 	}
 
 	// Validate state against cookie
 	cookieState := c.Cookies("oauth_state")
 	if cookieState == "" || cookieState != state {
-		return c.Redirect(h.appURL+"/login?error=invalid_state", fiber.StatusFound)
+		return c.Redirect(targetURL+"/login?error=invalid_state", fiber.StatusFound)
 	}
 
 	// Clear the state cookie
@@ -323,10 +355,10 @@ func (h *AuthHandler) OAuthCallback(c *fiber.Ctx) error {
 
 	oneTimeCode, err := h.svc.HandleOAuthCallbackWithURL(c.Context(), provider, code, callbackURL)
 	if err != nil {
-		return c.Redirect(h.appURL+"/login?error=oauth_failed", fiber.StatusFound)
+		return c.Redirect(targetURL+"/login?error=oauth_failed", fiber.StatusFound)
 	}
 
-	return c.Redirect(h.appURL+"/auth/callback?code="+oneTimeCode, fiber.StatusFound)
+	return c.Redirect(targetURL+"/auth/callback?code="+oneTimeCode, fiber.StatusFound)
 }
 
 // ExchangeOAuthCode exchanges a one-time code for JWT tokens.
