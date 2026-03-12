@@ -6,7 +6,7 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/loading-skeleton";
 import { getApi } from "@/lib/get-api";
-import type { CrmPipeline, CrmCustomerCard } from "@/lib/api";
+import type { CrmPipeline, CrmCustomerCard, CrmPipelineStage } from "@/lib/api";
 import { useApi } from "@/hooks/use-api";
 import Link from "next/link";
 import { Users, ArrowRight } from "lucide-react";
@@ -42,8 +42,6 @@ export default function CrmPage() {
   const apiClient = getApi();
   const pipeline = useApi<CrmPipeline>(() => apiClient.crm.pipeline());
 
-  const stages = ["trial", "active", "at_risk", "churned"];
-
   return (
     <Shell>
       <div className="space-y-6">
@@ -59,7 +57,7 @@ export default function CrmPage() {
 
         {pipeline.loading ? (
           <div className="grid grid-cols-4 gap-4">
-            {stages.map((stage) => (
+            {["trial", "active", "at_risk", "churned"].map((stage) => (
               <div key={stage} className="rounded-lg border border-border bg-surface-100 p-4">
                 <Skeleton className="mb-4 h-4 w-20" />
                 <div className="space-y-3">
@@ -74,16 +72,17 @@ export default function CrmPage() {
           <ErrorState error={pipeline.error} onRetry={pipeline.refetch} />
         ) : pipeline.data ? (
           <div className="grid grid-cols-4 gap-4">
-            {stages.map((stage) => {
-              const customers: CrmCustomerCard[] = pipeline.data?.stages[stage] ?? [];
+            {(pipeline.data.stages ?? []).map((stageData: CrmPipelineStage) => {
+              const customers: CrmCustomerCard[] = stageData.customers ?? [];
+              const stage = stageData.name;
               return (
-                <div key={stage} className={`rounded-lg border ${stageColors[stage]} bg-surface-100 p-4`}>
+                <div key={stage} className={`rounded-lg border ${stageColors[stage] ?? "border-border"} bg-surface-100 p-4`}>
                   <div className="mb-4 flex items-center justify-between">
-                    <h2 className={`text-sm font-medium ${stageHeaderColors[stage]}`}>
-                      {stageLabels[stage]}
+                    <h2 className={`text-sm font-medium ${stageHeaderColors[stage] ?? "text-neutral-400"}`}>
+                      {stageLabels[stage] ?? stage}
                     </h2>
                     <span className="rounded-full bg-surface-300 px-2 py-0.5 text-xs text-neutral-400">
-                      {customers.length}
+                      {stageData.count}
                     </span>
                   </div>
 

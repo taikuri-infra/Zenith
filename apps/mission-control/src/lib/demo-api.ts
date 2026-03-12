@@ -435,13 +435,12 @@ export const demoApi = {
     pipeline: async (): Promise<CrmPipeline> => {
       await delay();
       return {
-        stages: {
-          "Lead": [{ id: "c1", name: "Acme Corp", email: "acme@test.com", healthScore: 60, plan: "Free", mrr: 0 }],
-          "Trial": [{ id: "c2", name: "TechStart", email: "tech@test.com", healthScore: 75, plan: "Pro", mrr: 29 }],
-          "Active": [{ id: "c3", name: "BigCo", email: "big@test.com", healthScore: 90, plan: "Business", mrr: 149 }],
-          "At Risk": [],
-          "Churned": [],
-        },
+        stages: [
+          { name: "trial", count: 1, customers: [{ id: "c1", name: "Acme Corp", email: "acme@test.com", healthScore: 60, plan: "Free", mrr: 0 }] },
+          { name: "active", count: 1, customers: [{ id: "c3", name: "BigCo", email: "big@test.com", healthScore: 90, plan: "Business", mrr: 149 }] },
+          { name: "at_risk", count: 0, customers: [] },
+          { name: "churned", count: 0, customers: [] },
+        ],
       };
     },
     healthScores: async (): Promise<HealthScoreItem[]> => {

@@ -642,8 +642,14 @@ export interface SecurityOverview {
   certsExpiringSoon: number;
 }
 
+export interface CrmPipelineStage {
+  name: string;
+  count: number;
+  customers: CrmCustomerCard[];
+}
+
 export interface CrmPipeline {
-  stages: Record<string, CrmCustomerCard[]>;
+  stages: CrmPipelineStage[];
 }
 
 export interface CrmCustomerCard {

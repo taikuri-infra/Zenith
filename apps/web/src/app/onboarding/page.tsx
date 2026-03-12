@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Rocket, User, Server, Target, Code, Megaphone, PartyPopper, ChevronLeft } from "lucide-react";
 import { getApi } from "@/lib/get-api";
-import Link from "next/link";
 
 const steps = [
   { title: "Welcome", icon: Rocket },
@@ -473,52 +472,60 @@ export default function OnboardingPage() {
             <div className="text-center space-y-4">
               <PartyPopper className="mx-auto h-12 w-12 text-amber-400" />
               <h2 className="text-xl font-semibold text-white">You&apos;re All Set!</h2>
-              <p className="text-sm text-neutral-400">Your workspace is ready. Deploy your first app now.</p>
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                <Link
-                  href="/apps"
-                  onClick={() => trackStep(steps.length, true)}
-                  className="rounded-lg border border-border bg-surface-100 p-4 text-center text-sm text-neutral-300 hover:border-accent-500/40 transition-colors"
+              <p className="text-sm text-neutral-400">Thanks for telling us about yourself. Your workspace is ready!</p>
+              <div className="mt-6">
+                <button
+                  onClick={finish}
+                  className="w-full rounded-lg bg-accent-500 px-6 py-3 text-sm font-semibold text-white hover:bg-accent-600 transition-colors"
                 >
-                  <Code className="mx-auto mb-1.5 h-5 w-5 text-blue-400" />
-                  Deploy App
-                </Link>
-                <Link
-                  href="/databases"
-                  onClick={() => trackStep(steps.length, true)}
-                  className="rounded-lg border border-border bg-surface-100 p-4 text-center text-sm text-neutral-300 hover:border-accent-500/40 transition-colors"
-                >
-                  <svg className="mx-auto mb-1.5 h-5 w-5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
-                  Add Database
-                </Link>
+                  Go to Dashboard
+                </button>
               </div>
-              <div className="mt-4 rounded-lg border border-accent-500/20 bg-accent-500/5 px-4 py-3">
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <button
+                  onClick={async () => { await finish(); router.push("/apps"); }}
+                  className="rounded-lg border border-border bg-surface-100 p-3 text-center text-sm text-neutral-400 hover:border-accent-500/40 hover:text-neutral-300 transition-colors"
+                >
+                  <Code className="mx-auto mb-1 h-4 w-4 text-blue-400" />
+                  Deploy an App
+                </button>
+                <button
+                  onClick={async () => { await finish(); router.push("/databases"); }}
+                  className="rounded-lg border border-border bg-surface-100 p-3 text-center text-sm text-neutral-400 hover:border-accent-500/40 hover:text-neutral-300 transition-colors"
+                >
+                  <svg className="mx-auto mb-1 h-4 w-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+                  Add Database
+                </button>
+              </div>
+              <div className="mt-3 rounded-lg border border-accent-500/20 bg-accent-500/5 px-4 py-3">
                 <p className="text-sm text-accent-400 font-medium">Share Zenith, get 1 month Pro free</p>
-                <Link href="/settings?tab=referral" className="text-xs text-accent-300 hover:text-accent-200 mt-1 inline-block">
+                <button onClick={() => router.push("/settings?tab=referral")} className="text-xs text-accent-300 hover:text-accent-200 mt-1 inline-block">
                   Get your referral link
-                </Link>
+                </button>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer — no skip, Continue disabled until selection made */}
-        <div className="flex items-center justify-between border-t border-border px-6 py-4">
-          <button
-            onClick={prev}
-            disabled={step === 0}
-            className="flex items-center gap-1 text-sm text-neutral-500 hover:text-white disabled:invisible"
-          >
-            <ChevronLeft className="h-4 w-4" /> Back
-          </button>
-          <button
-            onClick={next}
-            disabled={!canProceed()}
-            className="rounded-lg bg-accent-500 px-6 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {step === steps.length - 1 ? "Go to Dashboard" : "Continue"}
-          </button>
-        </div>
+        {step < steps.length - 1 && (
+          <div className="flex items-center justify-between border-t border-border px-6 py-4">
+            <button
+              onClick={prev}
+              disabled={step === 0}
+              className="flex items-center gap-1 text-sm text-neutral-500 hover:text-white disabled:invisible"
+            >
+              <ChevronLeft className="h-4 w-4" /> Back
+            </button>
+            <button
+              onClick={next}
+              disabled={!canProceed()}
+              className="rounded-lg bg-accent-500 px-6 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Continue
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
