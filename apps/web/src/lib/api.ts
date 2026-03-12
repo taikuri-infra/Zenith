@@ -1984,7 +1984,7 @@ export interface OnboardingStatus {
 }
 
 export const onboarding = {
-  getMe: () => apiFetch<{ user: { id: string; email: string; name: string; role: string; onboarding_completed: boolean; onboarding_step: number } }>("/api/v1/auth/me"),
+  getMe: () => apiFetch<{ id: string; email: string; name: string; role: string; onboarding_completed: boolean; onboarding_step: number }>("/api/v1/auth/me"),
   update: (step: number, completed: boolean) =>
     apiFetch<{ message: string }>("/api/v1/auth/onboarding", {
       method: "PUT",

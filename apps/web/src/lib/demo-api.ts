@@ -1720,7 +1720,7 @@ export const demoApi = {
   networkPolicies: demoNetworkPolicies,
   alerts: demoAlerts,
   onboarding: {
-    getMe: async () => ({ user: { id: "demo-1", email: "demo@zenith.dev", name: "Demo User", role: "admin", onboarding_completed: true, onboarding_step: 4 } }),
+    getMe: async () => ({ id: "demo-1", email: "demo@zenith.dev", name: "Demo User", role: "admin", onboarding_completed: true, onboarding_step: 4 }),
     update: async () => ({ message: "ok" }),
   },
   referral: {

@@ -71,7 +71,7 @@ export default function OverviewPage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    if (meData?.user && !meData.user.onboarding_completed) {
+    if (meData && meData.onboarding_completed === false) {
       setShowOnboarding(true);
     }
   }, [meData]);
@@ -161,7 +161,7 @@ export default function OverviewPage() {
     <Shell>
       {showOnboarding && (
         <OnboardingWizard
-          userName={meData?.user?.name || ""}
+          userName={meData?.name || ""}
           onComplete={() => setShowOnboarding(false)}
           onDismiss={() => setShowOnboarding(false)}
         />
@@ -367,6 +367,20 @@ export default function OverviewPage() {
             )}
           </div>
         </section>
+
+        {/* Referral banner */}
+        <div className="rounded-lg border border-accent-500/20 bg-accent-500/5 p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-accent-400">Share Zenith, get 1 month Pro free</p>
+            <p className="text-xs text-neutral-500 mt-0.5">Invite a friend — when they deploy their first app, you both get rewarded.</p>
+          </div>
+          <Link
+            href="/settings?tab=referral"
+            className="shrink-0 rounded-lg bg-accent-500/10 border border-accent-500/30 px-4 py-2 text-sm font-medium text-accent-400 hover:bg-accent-500/20 transition-colors"
+          >
+            Get your link
+          </Link>
+        </div>
 
         {/* Legacy Apps table */}
         {appList.length > 0 && (
