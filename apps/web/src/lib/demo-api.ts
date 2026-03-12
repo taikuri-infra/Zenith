@@ -1465,6 +1465,13 @@ export const demoGateways = {
 const demoAuthPools = {
   list: async () => { await delay(300); return []; },
   get: async (id: string) => { await delay(300); return { id, user_id: "demo", project_id: "proj-1", name: "My Pool", realm_name: "zp-" + id, client_id: "zenith-pool-" + id, client_secret: "secret", issuer_url: "https://auth.example.com/realms/zp-" + id, status: "active" as const, user_count: 0, max_users: 1000, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" }; },
+  create: async (name: string) => { await delay(500); const id = "pool-" + Date.now(); return { id, user_id: "demo", project_id: "", name, realm_name: "zp-" + id, client_id: "zenith-pool-" + id, client_secret: "demo-secret", issuer_url: "https://auth.example.com/realms/zp-" + id, status: "active" as const, user_count: 0, max_users: 1000, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }; },
+  delete: async () => { await delay(300); return { message: "deleted" }; },
+  listUsers: async () => { await delay(300); return []; },
+  createUser: async () => { await delay(300); return { id: "u-" + Date.now() }; },
+  deleteUser: async () => { await delay(300); return { message: "deleted" }; },
+  enableUser: async () => { await delay(300); return { message: "enabled" }; },
+  disableUser: async () => { await delay(300); return { message: "disabled" }; },
 };
 
 // ---- Team Demo ----
