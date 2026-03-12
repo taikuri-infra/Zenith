@@ -199,6 +199,125 @@ func (h *AuthPoolHandler) EnableUser(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "user enabled"})
 }
 
+// CreateRole creates a role in a pool.
+// POST /api/v1/auth-pools/:poolId/roles
+func (h *AuthPoolHandler) CreateRole(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Name == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "name is required")
+	}
+
+	if err := h.poolSvc.CreateRole(c.Context(), pool, input.Name, input.Description); err != nil {
+		return fiber.NewError(fiber.StatusConflict, err.Error())
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "role created", "name": input.Name})
+}
+
+// ListRoles returns all custom roles in a pool.
+// GET /api/v1/auth-pools/:poolId/roles
+func (h *AuthPoolHandler) ListRoles(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	roles, err := h.poolSvc.ListRoles(c.Context(), pool)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if roles == nil {
+		roles = []ports.IdentityRole{}
+	}
+
+	return c.JSON(roles)
+}
+
+// DeleteRole removes a role from a pool.
+// DELETE /api/v1/auth-pools/:poolId/roles/:roleName
+func (h *AuthPoolHandler) DeleteRole(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	if err := h.poolSvc.DeleteRole(c.Context(), pool, c.Params("roleName")); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "role deleted"})
+}
+
+// GetUserRoles returns roles assigned to a user.
+// GET /api/v1/auth-pools/:poolId/users/:userId/roles
+func (h *AuthPoolHandler) GetUserRoles(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	roles, err := h.poolSvc.GetUserRoles(c.Context(), pool, c.Params("userId"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if roles == nil {
+		roles = []ports.IdentityRole{}
+	}
+
+	return c.JSON(roles)
+}
+
+// AssignRoleToUser assigns a role to a user.
+// POST /api/v1/auth-pools/:poolId/users/:userId/roles
+func (h *AuthPoolHandler) AssignRoleToUser(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		RoleName string `json:"role_name"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.RoleName == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "role_name is required")
+	}
+
+	if err := h.poolSvc.AssignRoleToUser(c.Context(), pool, c.Params("userId"), input.RoleName); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "role assigned"})
+}
+
+// RemoveRoleFromUser removes a role from a user.
+// DELETE /api/v1/auth-pools/:poolId/users/:userId/roles/:roleName
+func (h *AuthPoolHandler) RemoveRoleFromUser(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	if err := h.poolSvc.RemoveRoleFromUser(c.Context(), pool, c.Params("userId"), c.Params("roleName")); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "role removed"})
+}
+
 // TokenExchange proxies token requests to Keycloak for a pool's realm.
 // POST /api/v1/auth-pools/:poolId/token (PUBLIC — no JWT required)
 func (h *AuthPoolHandler) TokenExchange(c *fiber.Ctx) error {

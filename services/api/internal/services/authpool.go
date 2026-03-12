@@ -175,3 +175,33 @@ func (s *AuthPoolService) DisableUser(ctx context.Context, pool *entities.AuthPo
 func (s *AuthPoolService) EnableUser(ctx context.Context, pool *entities.AuthPool, userID string) error {
 	return s.idp.EnableUser(ctx, pool.RealmName, userID)
 }
+
+// CreateRole creates a realm-level role in a pool.
+func (s *AuthPoolService) CreateRole(ctx context.Context, pool *entities.AuthPool, roleName, description string) error {
+	return s.idp.CreateRole(ctx, pool.RealmName, roleName, description)
+}
+
+// ListRoles returns all custom roles in a pool.
+func (s *AuthPoolService) ListRoles(ctx context.Context, pool *entities.AuthPool) ([]ports.IdentityRole, error) {
+	return s.idp.ListRoles(ctx, pool.RealmName)
+}
+
+// DeleteRole removes a role from a pool.
+func (s *AuthPoolService) DeleteRole(ctx context.Context, pool *entities.AuthPool, roleName string) error {
+	return s.idp.DeleteRole(ctx, pool.RealmName, roleName)
+}
+
+// GetUserRoles returns roles assigned to a user.
+func (s *AuthPoolService) GetUserRoles(ctx context.Context, pool *entities.AuthPool, userID string) ([]ports.IdentityRole, error) {
+	return s.idp.GetUserRoles(ctx, pool.RealmName, userID)
+}
+
+// AssignRoleToUser assigns a role to a user.
+func (s *AuthPoolService) AssignRoleToUser(ctx context.Context, pool *entities.AuthPool, userID, roleName string) error {
+	return s.idp.AssignRoleToUser(ctx, pool.RealmName, userID, roleName)
+}
+
+// RemoveRoleFromUser removes a role from a user.
+func (s *AuthPoolService) RemoveRoleFromUser(ctx context.Context, pool *entities.AuthPool, userID, roleName string) error {
+	return s.idp.RemoveRoleFromUser(ctx, pool.RealmName, userID, roleName)
+}

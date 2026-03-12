@@ -232,6 +232,14 @@ type IdentityProvider interface {
 	DisableUser(ctx context.Context, realmName, userID string) error
 	EnableUser(ctx context.Context, realmName, userID string) error
 	CountUsers(ctx context.Context, realmName string) (int, error)
+
+	// Role management (auth pools)
+	CreateRole(ctx context.Context, realmName, roleName, description string) error
+	ListRoles(ctx context.Context, realmName string) ([]IdentityRole, error)
+	DeleteRole(ctx context.Context, realmName, roleName string) error
+	GetUserRoles(ctx context.Context, realmName, userID string) ([]IdentityRole, error)
+	AssignRoleToUser(ctx context.Context, realmName, userID, roleName string) error
+	RemoveRoleFromUser(ctx context.Context, realmName, userID, roleName string) error
 }
 
 // IdentityUser represents a user in an identity provider realm.
@@ -243,6 +251,13 @@ type IdentityUser struct {
 	Enabled       bool   `json:"enabled"`
 	EmailVerified bool   `json:"email_verified"`
 	CreatedAt     int64  `json:"created_at"`
+}
+
+// IdentityRole represents a role in an identity provider realm.
+type IdentityRole struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 // ---------------------------------------------------------------------------

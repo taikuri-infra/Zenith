@@ -6,10 +6,10 @@ import { Modal } from "@/components/modal";
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getApi } from "@/lib/get-api";
-import type { AuthPool, AuthPoolUser } from "@/lib/api";
+import type { AuthPool, AuthPoolUser, AuthPoolRole } from "@/lib/api";
 import {
   Shield, Users, Key, Copy, Check, ChevronLeft, Plus,
-  Trash2, Loader2, UserCheck, UserX, Eye, EyeOff, LogIn, BookOpen,
+  Trash2, Loader2, UserCheck, UserX, Eye, EyeOff, LogIn, BookOpen, Tag, X,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -80,6 +80,16 @@ export default function PoolDetailPage() {
   const [tokenResult, setTokenResult] = useState<{ access_token: string; refresh_token: string; expires_in: number; token_type: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
 
+  // Roles
+  const [roles, setRoles] = useState<AuthPoolRole[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleDesc, setNewRoleDesc] = useState("");
+  const [creatingRole, setCreatingRole] = useState(false);
+  // User roles: userId → role names
+  const [userRolesMap, setUserRolesMap] = useState<Record<string, AuthPoolRole[]>>({});
+  const [assigningRole, setAssigningRole] = useState<string | null>(null);
+
   const fetchPool = useCallback(async () => {
     try {
       setLoading(true);
@@ -107,10 +117,86 @@ export default function PoolDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poolId]);
 
+  const fetchRoles = useCallback(async () => {
+    try {
+      setRolesLoading(true);
+      const data = await api.listRoles(poolId);
+      setRoles(Array.isArray(data) ? data : []);
+    } catch {
+      setRoles([]);
+    } finally {
+      setRolesLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolId]);
+
+  const fetchUserRoles = useCallback(async (userId: string) => {
+    try {
+      const data = await api.getUserRoles(poolId, userId);
+      setUserRolesMap(prev => ({ ...prev, [userId]: Array.isArray(data) ? data : [] }));
+    } catch {
+      setUserRolesMap(prev => ({ ...prev, [userId]: [] }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolId]);
+
   useEffect(() => {
     fetchPool();
     fetchUsers();
-  }, [fetchPool, fetchUsers]);
+    fetchRoles();
+  }, [fetchPool, fetchUsers, fetchRoles]);
+
+  // Fetch roles for each user when users load
+  useEffect(() => {
+    users.forEach(u => fetchUserRoles(u.id));
+  }, [users, fetchUserRoles]);
+
+  const handleCreateRole = async () => {
+    if (!newRoleName.trim()) return;
+    setCreatingRole(true);
+    try {
+      await api.createRole(poolId, newRoleName.trim(), newRoleDesc.trim());
+      setNewRoleName("");
+      setNewRoleDesc("");
+      await fetchRoles();
+    } catch {
+      // ignore
+    } finally {
+      setCreatingRole(false);
+    }
+  };
+
+  const handleDeleteRole = async (roleName: string) => {
+    try {
+      await api.deleteRole(poolId, roleName);
+      await fetchRoles();
+      // Refresh user roles
+      users.forEach(u => fetchUserRoles(u.id));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleAssignRole = async (userId: string, roleName: string) => {
+    setAssigningRole(userId + roleName);
+    try {
+      await api.assignRole(poolId, userId, roleName);
+      await fetchUserRoles(userId);
+    } catch {
+      // ignore
+    } finally {
+      setAssigningRole(null);
+    }
+  };
+
+  const handleRemoveRole = async (userId: string, roleName: string) => {
+    try {
+      await api.removeRole(poolId, userId, roleName);
+      await fetchUserRoles(userId);
+    } catch {
+      // ignore
+    }
+  };
 
   const handleAddUser = async () => {
     if (!newEmail.trim() || !newPassword.trim()) return;
@@ -249,6 +335,82 @@ export default function PoolDetailPage() {
           </p>
         </section>
 
+        {/* Roles */}
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
+            <Tag className="h-4 w-4 text-neutral-500" />
+            Roles
+            <span className="rounded-full bg-surface-300 px-2 py-0.5 text-[11px] text-neutral-400">
+              {roles.length}
+            </span>
+          </h2>
+
+          {/* Create Role */}
+          <div className="mb-3 flex items-end gap-2">
+            <div className="flex-1">
+              <label className="mb-1 block text-[11px] font-medium text-neutral-500">Role Name</label>
+              <input
+                type="text"
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                placeholder="e.g. admin, editor, viewer"
+                className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-[11px] font-medium text-neutral-500">Description</label>
+              <input
+                type="text"
+                value={newRoleDesc}
+                onChange={(e) => setNewRoleDesc(e.target.value)}
+                placeholder="Optional description"
+                className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+              />
+            </div>
+            <button
+              onClick={handleCreateRole}
+              disabled={creatingRole || !newRoleName.trim()}
+              className="flex items-center gap-1.5 rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50"
+            >
+              {creatingRole ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Add
+            </button>
+          </div>
+
+          {/* Role List */}
+          {rolesLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-accent-500" />
+            </div>
+          ) : roles.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border bg-surface-100 py-6 text-center">
+              <Tag className="mx-auto h-6 w-6 text-neutral-600 mb-2" />
+              <p className="text-xs text-neutral-400">No roles yet — create roles to control access in your app</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {roles.map((role) => (
+                <div
+                  key={role.name}
+                  className="group flex items-center gap-2 rounded-lg border border-border bg-surface-100 px-3 py-2"
+                >
+                  <Tag className="h-3 w-3 text-accent-400" />
+                  <span className="text-sm font-medium text-white">{role.name}</span>
+                  {role.description && (
+                    <span className="text-[11px] text-neutral-500">{role.description}</span>
+                  )}
+                  <button
+                    onClick={() => handleDeleteRole(role.name)}
+                    className="ml-1 rounded p-0.5 text-neutral-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Test Login */}
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
@@ -360,13 +522,11 @@ export default function PoolDetailPage() {
               </div>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">4. Authorize Requests</h3>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">4. Authorize with Roles</h3>
               <p className="text-xs text-neutral-400">
-                The gateway validates every JWT automatically — unauthorized requests are blocked before reaching your app.
-                Your app receives only authenticated requests and can read user info (email, ID) from the validated token claims.
-              </p>
-              <p className="mt-1.5 text-xs text-neutral-500">
-                Role-based access control (RBAC) is coming soon — you&apos;ll be able to assign roles to users and enforce them at the gateway level.
+                Create roles (e.g. admin, editor, viewer) and assign them to users. The JWT token includes user roles in the{" "}
+                <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">realm_access.roles</code> claim.
+                Your app reads these roles from the validated token to control access.
               </p>
             </div>
             <div className="rounded-lg bg-accent-500/5 border border-accent-500/20 px-3 py-2">
@@ -416,6 +576,7 @@ export default function PoolDetailPage() {
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Email</th>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Name</th>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Status</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Roles</th>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-neutral-500">Created</th>
                     <th className="px-4 py-2.5 text-right text-xs font-medium text-neutral-500">Actions</th>
                   </tr>
@@ -439,6 +600,41 @@ export default function PoolDetailPage() {
                             Disabled
                           </span>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {(userRolesMap[user.id] || []).map((r) => (
+                            <span
+                              key={r.name}
+                              className="group/role inline-flex items-center gap-1 rounded-full bg-accent-500/10 px-2 py-0.5 text-[11px] text-accent-400"
+                            >
+                              {r.name}
+                              <button
+                                onClick={() => handleRemoveRole(user.id, r.name)}
+                                className="opacity-0 group-hover/role:opacity-100 transition-opacity"
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </span>
+                          ))}
+                          {roles.length > 0 && (
+                            <select
+                              className="rounded bg-surface-300 px-1.5 py-0.5 text-[11px] text-neutral-400 border-0 focus:outline-none cursor-pointer"
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) handleAssignRole(user.id, e.target.value);
+                              }}
+                              disabled={assigningRole === user.id}
+                            >
+                              <option value="">+ role</option>
+                              {roles
+                                .filter((r) => !(userRolesMap[user.id] || []).some((ur) => ur.name === r.name))
+                                .map((r) => (
+                                  <option key={r.name} value={r.name}>{r.name}</option>
+                                ))}
+                            </select>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-neutral-500">
                         {user.createdTimestamp

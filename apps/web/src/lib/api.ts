@@ -1694,6 +1694,12 @@ export interface AuthPoolUser {
   createdTimestamp: number;
 }
 
+export interface AuthPoolRole {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export const authPools = {
   list: () => apiFetch<AuthPool[]>("/api/v1/auth-pools"),
   get: (id: string) => apiFetch<AuthPool>(`/api/v1/auth-pools/${id}`),
@@ -1727,6 +1733,22 @@ export const authPools = {
       `/api/v1/auth-pools/${poolId}/token`,
       { method: "POST", body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refreshToken }) }
     ),
+  listRoles: (poolId: string) =>
+    apiFetch<AuthPoolRole[]>(`/api/v1/auth-pools/${poolId}/roles`),
+  createRole: (poolId: string, name: string, description?: string) =>
+    apiFetch<{ message: string; name: string }>(`/api/v1/auth-pools/${poolId}/roles`, {
+      method: "POST", body: JSON.stringify({ name, description: description || "" }),
+    }),
+  deleteRole: (poolId: string, roleName: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/roles/${roleName}`, { method: "DELETE" }),
+  getUserRoles: (poolId: string, userId: string) =>
+    apiFetch<AuthPoolRole[]>(`/api/v1/auth-pools/${poolId}/users/${userId}/roles`),
+  assignRole: (poolId: string, userId: string, roleName: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/roles`, {
+      method: "POST", body: JSON.stringify({ role_name: roleName }),
+    }),
+  removeRole: (poolId: string, userId: string, roleName: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/roles/${roleName}`, { method: "DELETE" }),
 };
 
 // ---- Support Tickets ----

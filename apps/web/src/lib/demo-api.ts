@@ -1474,6 +1474,12 @@ const demoAuthPools = {
   disableUser: async () => { await delay(300); return { message: "disabled" }; },
   token: async () => { await delay(300); return { access_token: "demo-token", refresh_token: "demo-refresh", expires_in: 300, token_type: "Bearer" }; },
   refreshToken: async () => { await delay(300); return { access_token: "demo-token", refresh_token: "demo-refresh", expires_in: 300, token_type: "Bearer" }; },
+  listRoles: async () => { await delay(300); return []; },
+  createRole: async () => { await delay(300); return { message: "created", name: "demo-role" }; },
+  deleteRole: async () => { await delay(300); return { message: "deleted" }; },
+  getUserRoles: async () => { await delay(300); return []; },
+  assignRole: async () => { await delay(300); return { message: "assigned" }; },
+  removeRole: async () => { await delay(300); return { message: "removed" }; },
 };
 
 // ---- Team Demo ----

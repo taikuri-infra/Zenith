@@ -201,6 +201,120 @@ func (c *Client) CountUsers(ctx context.Context, realmName string) (int, error) 
 	return c.gc.GetUserCount(ctx, token, realmName, gocloak.GetUsersParams{})
 }
 
+// CreateRole creates a realm-level role.
+func (c *Client) CreateRole(ctx context.Context, realmName, roleName, description string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = c.gc.CreateRealmRole(ctx, token, realmName, gocloak.Role{
+		Name:        &roleName,
+		Description: &description,
+	})
+	if err != nil {
+		return fmt.Errorf("create role %s in realm %s: %w", roleName, realmName, err)
+	}
+	return nil
+}
+
+// ListRoles returns all realm-level roles (excluding built-in ones).
+func (c *Client) ListRoles(ctx context.Context, realmName string) ([]ports.IdentityRole, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := c.gc.GetRealmRoles(ctx, token, realmName, gocloak.GetRoleParams{})
+	if err != nil {
+		return nil, fmt.Errorf("list roles in realm %s: %w", realmName, err)
+	}
+	var result []ports.IdentityRole
+	for _, r := range roles {
+		name := ""
+		if r.Name != nil {
+			name = *r.Name
+		}
+		// Skip Keycloak built-in roles
+		if name == "uma_authorization" || name == "offline_access" || name == "default-roles-"+realmName {
+			continue
+		}
+		role := ports.IdentityRole{Name: name}
+		if r.ID != nil {
+			role.ID = *r.ID
+		}
+		if r.Description != nil {
+			role.Description = *r.Description
+		}
+		result = append(result, role)
+	}
+	return result, nil
+}
+
+// DeleteRole deletes a realm-level role.
+func (c *Client) DeleteRole(ctx context.Context, realmName, roleName string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	return c.gc.DeleteRealmRole(ctx, token, realmName, roleName)
+}
+
+// GetUserRoles returns realm-level roles assigned to a user.
+func (c *Client) GetUserRoles(ctx context.Context, realmName, userID string) ([]ports.IdentityRole, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := c.gc.GetRealmRolesByUserID(ctx, token, realmName, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get roles for user %s: %w", userID, err)
+	}
+	var result []ports.IdentityRole
+	for _, r := range roles {
+		name := ""
+		if r.Name != nil {
+			name = *r.Name
+		}
+		if name == "uma_authorization" || name == "offline_access" || name == "default-roles-"+realmName {
+			continue
+		}
+		role := ports.IdentityRole{Name: name}
+		if r.ID != nil {
+			role.ID = *r.ID
+		}
+		if r.Description != nil {
+			role.Description = *r.Description
+		}
+		result = append(result, role)
+	}
+	return result, nil
+}
+
+// AssignRoleToUser assigns a realm-level role to a user.
+func (c *Client) AssignRoleToUser(ctx context.Context, realmName, userID, roleName string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	role, err := c.gc.GetRealmRole(ctx, token, realmName, roleName)
+	if err != nil {
+		return fmt.Errorf("get role %s: %w", roleName, err)
+	}
+	return c.gc.AddRealmRoleToUser(ctx, token, realmName, userID, []gocloak.Role{*role})
+}
+
+// RemoveRoleFromUser removes a realm-level role from a user.
+func (c *Client) RemoveRoleFromUser(ctx context.Context, realmName, userID, roleName string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	role, err := c.gc.GetRealmRole(ctx, token, realmName, roleName)
+	if err != nil {
+		return fmt.Errorf("get role %s: %w", roleName, err)
+	}
+	return c.gc.DeleteRealmRoleFromUser(ctx, token, realmName, userID, []gocloak.Role{*role})
+}
+
 func (c *Client) setUserEnabled(ctx context.Context, realmName, userID string, enabled bool) error {
 	token, err := c.token(ctx)
 	if err != nil {
@@ -346,4 +460,19 @@ func (m *MemoryKeycloakClient) CountUsers(_ context.Context, realmName string) (
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.users[realmName]), nil
+}
+
+func (m *MemoryKeycloakClient) CreateRole(_ context.Context, _, _, _ string) error { return nil }
+func (m *MemoryKeycloakClient) ListRoles(_ context.Context, _ string) ([]ports.IdentityRole, error) {
+	return []ports.IdentityRole{}, nil
+}
+func (m *MemoryKeycloakClient) DeleteRole(_ context.Context, _, _ string) error { return nil }
+func (m *MemoryKeycloakClient) GetUserRoles(_ context.Context, _, _ string) ([]ports.IdentityRole, error) {
+	return []ports.IdentityRole{}, nil
+}
+func (m *MemoryKeycloakClient) AssignRoleToUser(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (m *MemoryKeycloakClient) RemoveRoleFromUser(_ context.Context, _, _, _ string) error {
+	return nil
 }
