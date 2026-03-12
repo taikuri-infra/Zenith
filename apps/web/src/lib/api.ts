@@ -1685,9 +1685,38 @@ export interface AuthPool {
   updated_at: string;
 }
 
+export interface AuthPoolUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  enabled: boolean;
+  createdTimestamp: number;
+}
+
 export const authPools = {
   list: () => apiFetch<AuthPool[]>("/api/v1/auth-pools"),
   get: (id: string) => apiFetch<AuthPool>(`/api/v1/auth-pools/${id}`),
+  create: (name: string, projectId?: string) =>
+    apiFetch<AuthPool>("/api/v1/auth-pools", {
+      method: "POST",
+      body: JSON.stringify({ name, project_id: projectId || "" }),
+    }),
+  delete: (id: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${id}`, { method: "DELETE" }),
+  listUsers: (poolId: string) =>
+    apiFetch<AuthPoolUser[]>(`/api/v1/auth-pools/${poolId}/users`),
+  createUser: (poolId: string, email: string, password: string, firstName?: string, lastName?: string) =>
+    apiFetch<{ id: string }>(`/api/v1/auth-pools/${poolId}/users`, {
+      method: "POST",
+      body: JSON.stringify({ email, password, first_name: firstName || "", last_name: lastName || "" }),
+    }),
+  deleteUser: (poolId: string, userId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}`, { method: "DELETE" }),
+  enableUser: (poolId: string, userId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/enable`, { method: "POST" }),
+  disableUser: (poolId: string, userId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/disable`, { method: "POST" }),
 };
 
 // ---- Support Tickets ----
