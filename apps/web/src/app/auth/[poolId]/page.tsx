@@ -9,7 +9,7 @@ import { getApi } from "@/lib/get-api";
 import type { AuthPool, AuthPoolUser } from "@/lib/api";
 import {
   Shield, Users, Key, Copy, Check, ChevronLeft, Plus,
-  Trash2, Loader2, UserCheck, UserX, Eye, EyeOff,
+  Trash2, Loader2, UserCheck, UserX, Eye, EyeOff, LogIn,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -72,6 +72,13 @@ export default function PoolDetailPage() {
   // Delete user confirm
   const [deleteUserTarget, setDeleteUserTarget] = useState<AuthPoolUser | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
+
+  // Test login
+  const [testEmail, setTestEmail] = useState("");
+  const [testPassword, setTestPassword] = useState("");
+  const [testingLogin, setTestingLogin] = useState(false);
+  const [tokenResult, setTokenResult] = useState<{ access_token: string; refresh_token: string; expires_in: number; token_type: string } | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   const fetchPool = useCallback(async () => {
     try {
@@ -151,6 +158,21 @@ export default function PoolDetailPage() {
     }
   };
 
+  const handleTestLogin = async () => {
+    if (!testEmail.trim() || !testPassword.trim()) return;
+    setTestingLogin(true);
+    setTokenError(null);
+    setTokenResult(null);
+    try {
+      const result = await api.token(poolId, testEmail.trim(), testPassword);
+      setTokenResult(result);
+    } catch (e) {
+      setTokenError(e instanceof Error ? e.message : "Authentication failed");
+    } finally {
+      setTestingLogin(false);
+    }
+  };
+
   if (loading) {
     return (
       <Shell>
@@ -222,6 +244,85 @@ export default function PoolDetailPage() {
           </div>
           <p className="mt-2 text-[11px] text-neutral-600">
             Use these credentials to configure OIDC in your application. Attach this pool to a Gateway route for automatic JWT validation.
+          </p>
+        </section>
+
+        {/* Test Login */}
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
+            <LogIn className="h-4 w-4 text-neutral-500" />
+            Test Login
+          </h2>
+          <div className="rounded-lg border border-border bg-surface-100 p-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleTestLogin();
+              }}
+              className="flex items-end gap-3"
+            >
+              <div className="flex-1">
+                <label className="mb-1 block text-[11px] font-medium text-neutral-500">Email</label>
+                <input
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                  required
+                />
+              </div>
+              <div className="flex-1">
+                <label className="mb-1 block text-[11px] font-medium text-neutral-500">Password</label>
+                <input
+                  type="password"
+                  value={testPassword}
+                  onChange={(e) => setTestPassword(e.target.value)}
+                  placeholder="Password"
+                  className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={testingLogin || !testEmail.trim() || !testPassword.trim()}
+                className="flex items-center gap-1.5 rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50"
+              >
+                {testingLogin ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
+                Login
+              </button>
+            </form>
+            {tokenError && (
+              <div className="mt-3 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-400">
+                {tokenError}
+              </div>
+            )}
+            {tokenResult && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-emerald-400" />
+                  <span className="text-sm font-medium text-emerald-400">Authentication successful</span>
+                  <span className="text-xs text-neutral-500">Expires in {tokenResult.expires_in}s</span>
+                </div>
+                <div className="rounded-lg bg-surface-200 p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-medium text-neutral-500 uppercase tracking-wide">Access Token</span>
+                    <CopyButton value={tokenResult.access_token} />
+                  </div>
+                  <p className="font-mono text-[11px] text-neutral-400 break-all line-clamp-3">{tokenResult.access_token}</p>
+                </div>
+                <div className="rounded-lg bg-surface-200 p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-medium text-neutral-500 uppercase tracking-wide">Refresh Token</span>
+                    <CopyButton value={tokenResult.refresh_token} />
+                  </div>
+                  <p className="font-mono text-[11px] text-neutral-400 break-all line-clamp-2">{tokenResult.refresh_token}</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-neutral-600">
+            Test authentication with a pool user&apos;s credentials. Tokens are issued by Keycloak via the OIDC password grant.
           </p>
         </section>
 

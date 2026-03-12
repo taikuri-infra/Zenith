@@ -835,6 +835,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	poolByID.Post("/users/:userId/disable", authPoolHandler.DisableUser)
 	poolByID.Post("/users/:userId/enable", authPoolHandler.EnableUser)
 
+	// Public token exchange endpoint (no JWT required — used by pool end-users)
+	api.Post("/auth-pools/:poolId/token", authPoolHandler.TokenExchange)
+
 	// Monitoring (Prometheus + Loki + k8s pod metrics)
 	var promClient *promclient.Client
 	var lokiClient *lokiclient.Client

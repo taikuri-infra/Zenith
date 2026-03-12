@@ -470,3 +470,12 @@ type CreateAuthPoolUserInput struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 }
+
+// TokenExchangeInput is the request body for token exchange (login/refresh).
+type TokenExchangeInput struct {
+	GrantType    string `json:"grant_type"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	RefreshToken string `json:"refresh_token"`
+	Scope        string `json:"scope"`
+}

@@ -1,6 +1,10 @@
 package handlers
 
 import (
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -192,6 +196,73 @@ func (h *AuthPoolHandler) EnableUser(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "user enabled"})
+}
+
+// TokenExchange proxies token requests to Keycloak for a pool's realm.
+// POST /api/v1/auth-pools/:poolId/token (PUBLIC — no JWT required)
+func (h *AuthPoolHandler) TokenExchange(c *fiber.Ctx) error {
+	poolID := c.Params("poolId")
+
+	pool, err := h.poolRepo.GetPool(c.Context(), poolID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "auth pool not found")
+	}
+	if pool.Status != entities.AuthPoolStatusActive {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "auth pool is not active")
+	}
+
+	var input dto.TokenExchangeInput
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	// Default grant type
+	if input.GrantType == "" {
+		input.GrantType = "password"
+	}
+
+	tokenURL := pool.IssuerURL + "/protocol/openid-connect/token"
+
+	form := url.Values{}
+	form.Set("client_id", pool.ClientID)
+	form.Set("client_secret", pool.ClientSecret)
+	form.Set("grant_type", input.GrantType)
+
+	switch input.GrantType {
+	case "password":
+		if input.Username == "" || input.Password == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "username and password are required")
+		}
+		form.Set("username", input.Username)
+		form.Set("password", input.Password)
+		if input.Scope != "" {
+			form.Set("scope", input.Scope)
+		} else {
+			form.Set("scope", "openid")
+		}
+	case "refresh_token":
+		if input.RefreshToken == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "refresh_token is required")
+		}
+		form.Set("refresh_token", input.RefreshToken)
+	default:
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("unsupported grant_type: %s", input.GrantType))
+	}
+
+	resp, err := http.PostForm(tokenURL, form)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, "failed to reach identity provider")
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, "failed to read identity provider response")
+	}
+
+	// Forward Keycloak response as-is (includes error details on failure)
+	c.Set("Content-Type", "application/json")
+	return c.Status(resp.StatusCode).Send(body)
 }
 
 // requirePool loads the pool and verifies ownership.

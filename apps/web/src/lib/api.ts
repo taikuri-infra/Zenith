@@ -1717,6 +1717,16 @@ export const authPools = {
     apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/enable`, { method: "POST" }),
   disableUser: (poolId: string, userId: string) =>
     apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/disable`, { method: "POST" }),
+  token: (poolId: string, username: string, password: string) =>
+    apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(
+      `/api/v1/auth-pools/${poolId}/token`,
+      { method: "POST", body: JSON.stringify({ grant_type: "password", username, password }) }
+    ),
+  refreshToken: (poolId: string, refreshToken: string) =>
+    apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(
+      `/api/v1/auth-pools/${poolId}/token`,
+      { method: "POST", body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refreshToken }) }
+    ),
 };
 
 // ---- Support Tickets ----

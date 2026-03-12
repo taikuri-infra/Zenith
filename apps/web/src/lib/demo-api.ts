@@ -1472,6 +1472,8 @@ const demoAuthPools = {
   deleteUser: async () => { await delay(300); return { message: "deleted" }; },
   enableUser: async () => { await delay(300); return { message: "enabled" }; },
   disableUser: async () => { await delay(300); return { message: "disabled" }; },
+  token: async () => { await delay(300); return { access_token: "demo-token", refresh_token: "demo-refresh", expires_in: 300, token_type: "Bearer" }; },
+  refreshToken: async () => { await delay(300); return { access_token: "demo-token", refresh_token: "demo-refresh", expires_in: 300, token_type: "Bearer" }; },
 };
 
 // ---- Team Demo ----
