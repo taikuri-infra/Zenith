@@ -360,10 +360,13 @@ export default function PoolDetailPage() {
               </div>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">4. Use Roles for Authorization</h3>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">4. Authorize Requests</h3>
               <p className="text-xs text-neutral-400">
-                The JWT token contains user roles. Use these roles in your app logic for fine-grained authorization.
-                The gateway handles authentication — your app only needs to read the roles from the validated token.
+                The gateway validates every JWT automatically — unauthorized requests are blocked before reaching your app.
+                Your app receives only authenticated requests and can read user info (email, ID) from the validated token claims.
+              </p>
+              <p className="mt-1.5 text-xs text-neutral-500">
+                Role-based access control (RBAC) is coming soon — you&apos;ll be able to assign roles to users and enforce them at the gateway level.
               </p>
             </div>
             <div className="rounded-lg bg-accent-500/5 border border-accent-500/20 px-3 py-2">
