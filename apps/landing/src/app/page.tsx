@@ -24,7 +24,7 @@ import {
   Users,
   ChevronRight,
 } from "lucide-react";
-import { registerUrl } from "@/lib/urls";
+import { registerUrl, registerUrlWithParams } from "@/lib/urls";
 
 export default function LandingPage() {
   return (
@@ -211,7 +211,7 @@ function HeroSection() {
             className="mt-10 flex flex-col gap-3 sm:flex-row sm:gap-4"
           >
             <Link
-              href={registerUrl}
+              href={registerUrlWithParams()}
               className="group inline-flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-7 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/25 hover:scale-[1.02]"
             >
               Start Free
@@ -365,7 +365,7 @@ function CTASection() {
 
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
             <Link
-              href={registerUrl}
+              href={registerUrlWithParams()}
               className="group inline-flex items-center gap-2 rounded-xl bg-accent-500 px-7 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/25"
             >
               Start Free on Cloud
