@@ -8,7 +8,7 @@ imagePullSecret: "harbor-registry"
 mc:
   enabled: true
   replicas: 1
-  image: zenith-mc:sha-c79a7b8
+  image: zenith-mc:sha-9a507a7
   port: 3100
   env:
     NEXT_PUBLIC_API_URL: "https://api.stage.freezenith.com"
