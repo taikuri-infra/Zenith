@@ -69,6 +69,28 @@ type User struct {
 	AuthProvider     string     `json:"auth_provider"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
+
+	// Signup source / UTM tracking
+	SignupSource string `json:"signup_source,omitempty"`
+	UTMSource    string `json:"utm_source,omitempty"`
+	UTMMedium    string `json:"utm_medium,omitempty"`
+	UTMCampaign  string `json:"utm_campaign,omitempty"`
+	UTMContent   string `json:"utm_content,omitempty"`
+	UTMTerm      string `json:"utm_term,omitempty"`
+	ReferrerURL  string `json:"referrer_url,omitempty"`
+	SignupIP     string `json:"signup_ip,omitempty"`
+
+	// Onboarding
+	OnboardingCompleted   bool       `json:"onboarding_completed"`
+	OnboardingStep        int        `json:"onboarding_step"`
+	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at,omitempty"`
+
+	// Referral
+	ReferralCode string `json:"referral_code,omitempty"`
+	ReferredBy   string `json:"referred_by,omitempty"`
+
+	// Activity
+	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 }
 
 // TeamMemberStatus represents the status of a team member invite.

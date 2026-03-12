@@ -1,0 +1,14 @@
+ALTER TABLE users DROP COLUMN IF EXISTS signup_source;
+ALTER TABLE users DROP COLUMN IF EXISTS utm_source;
+ALTER TABLE users DROP COLUMN IF EXISTS utm_medium;
+ALTER TABLE users DROP COLUMN IF EXISTS utm_campaign;
+ALTER TABLE users DROP COLUMN IF EXISTS utm_content;
+ALTER TABLE users DROP COLUMN IF EXISTS utm_term;
+ALTER TABLE users DROP COLUMN IF EXISTS referrer_url;
+ALTER TABLE users DROP COLUMN IF EXISTS signup_ip;
+ALTER TABLE users DROP COLUMN IF EXISTS referral_code;
+ALTER TABLE users DROP COLUMN IF EXISTS referred_by;
+ALTER TABLE users DROP COLUMN IF EXISTS onboarding_completed;
+ALTER TABLE users DROP COLUMN IF EXISTS onboarding_step;
+ALTER TABLE users DROP COLUMN IF EXISTS onboarding_completed_at;
+ALTER TABLE users DROP COLUMN IF EXISTS last_login_at;

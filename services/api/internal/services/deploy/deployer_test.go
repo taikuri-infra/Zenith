@@ -22,26 +22,26 @@ func TestDeployAppFreeTier(t *testing.T) {
 	planRepo.SetUserPlan(ctx, "user-1", entities.PlanFree)
 
 	// Create an app
-	app := createTestApp(t, ctx, appRepo, "user-1", "sleepy-app")
+	app := createTestApp(t, ctx, appRepo, "user-1", "free-app")
 
 	deployer := NewDeployer(k8sClient, appRepo, planRepo, "freezenith.com")
-	if err := deployer.DeployApp(ctx, app, "sleepy-app:v1"); err != nil {
+	if err := deployer.DeployApp(ctx, app, "free-app:v1"); err != nil {
 		t.Fatalf("DeployApp failed: %v", err)
 	}
 
-	// Verify HTTPScaledObject was created
-	_, err := k8sClient.GetCRD(ctx, "HTTPScaledObject", "zenith-apps", "sleepy-app")
-	if err != nil {
-		t.Errorf("HTTPScaledObject not found: %v", err)
+	// Free tier is always-on — no HTTPScaledObject
+	_, err := k8sClient.GetCRD(ctx, "HTTPScaledObject", "zenith-apps", "free-app")
+	if err == nil {
+		t.Error("HTTPScaledObject should not exist for always-on free tier")
 	}
 
-	// Verify app status is sleeping
+	// Verify app status is running (always-on)
 	updated, err := appRepo.GetApp(ctx, app.ID)
 	if err != nil {
 		t.Fatalf("GetApp failed: %v", err)
 	}
-	if updated.Status != entities.AppStatusSleeping {
-		t.Errorf("app status = %v, want sleeping", updated.Status)
+	if updated.Status != entities.AppStatusRunning {
+		t.Errorf("app status = %v, want running", updated.Status)
 	}
 }
 
@@ -78,7 +78,7 @@ func TestDeployAppPaidTier(t *testing.T) {
 	}
 }
 
-func TestDeleteAppCleansUpHTTPScaledObject(t *testing.T) {
+func TestDeleteAppCleansUpResources(t *testing.T) {
 	k8sClient := k8sclient.NewMemoryClient()
 	appRepo := memory.NewMemoryAppRepository()
 	planRepo := memory.NewMemoryUserPlanRepository()
@@ -94,21 +94,9 @@ func TestDeleteAppCleansUpHTTPScaledObject(t *testing.T) {
 		t.Fatalf("DeployApp failed: %v", err)
 	}
 
-	// Confirm HTTPScaledObject exists
-	_, err := k8sClient.GetCRD(ctx, "HTTPScaledObject", "zenith-apps", "delete-me")
-	if err != nil {
-		t.Fatalf("HTTPScaledObject should exist before delete: %v", err)
-	}
-
-	// Delete app
+	// Delete app should succeed even without HTTPScaledObject
 	if err := deployer.DeleteApp(ctx, app); err != nil {
 		t.Fatalf("DeleteApp failed: %v", err)
-	}
-
-	// Verify HTTPScaledObject was cleaned up
-	_, err = k8sClient.GetCRD(ctx, "HTTPScaledObject", "zenith-apps", "delete-me")
-	if err == nil {
-		t.Error("HTTPScaledObject should not exist after DeleteApp")
 	}
 }
 

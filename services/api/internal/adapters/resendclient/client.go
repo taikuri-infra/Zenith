@@ -136,6 +136,36 @@ func (c *Client) SendSupportReplyNotification(_ context.Context, to, userName, t
 	return nil
 }
 
+// SendGenericEmail sends an email with custom subject and HTML body.
+func (c *Client) SendGenericEmail(_ context.Context, to, subject, htmlBody string) error {
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #e5e5e5; background-color: #0a0a0a;">
+  <div style="text-align: center; margin-bottom: 32px;">
+    <h1 style="color: #10b981; font-size: 24px; margin: 0;">Zenith</h1>
+  </div>
+  <div style="background-color: #171717; border: 1px solid #262626; border-radius: 12px; padding: 32px;">
+    %s
+  </div>
+  <div style="text-align: center; margin-top: 24px;">
+    <p style="color: #525252; font-size: 11px;">Zenith Cloud Platform · <a href="https://zenith.dev" style="color: #525252;">zenith.dev</a></p>
+  </div>
+</body>
+</html>`, htmlBody)
+
+	_, err := c.client.Emails.Send(&resend.SendEmailRequest{
+		From:    c.from,
+		To:      []string{to},
+		Subject: subject,
+		Html:    html,
+	})
+	if err != nil {
+		return fmt.Errorf("send generic email: %w", err)
+	}
+	return nil
+}
+
 // SendTeamInviteEmail sends a team invitation email.
 func (c *Client) SendTeamInviteEmail(_ context.Context, to, inviterName, teamName, inviteURL string) error {
 	subject := fmt.Sprintf("%s invited you to %s on Zenith", inviterName, teamName)

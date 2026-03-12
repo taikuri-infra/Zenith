@@ -49,6 +49,7 @@ type TokenPair struct {
 type RegisterResult struct {
 	Tokens  *TokenPair
 	Message string
+	UserID  string // populated on successful registration
 }
 
 // OAuthConfig holds OAuth provider credentials.
@@ -142,6 +143,96 @@ func (s *AuthService) SetOAuthConfig(cfg OAuthConfig) {
 func (s *AuthService) SetEmailSender(sender ports.EmailSender, appURL string) {
 	s.emailSender = sender
 	s.appURL = appURL
+}
+
+// UpdateSignupSource stores UTM and signup source data on the user record.
+// This is a fire-and-forget operation — errors are logged but not returned.
+func (s *AuthService) UpdateSignupSource(ctx context.Context, userID, utmSource, utmMedium, utmCampaign, utmContent, utmTerm, referrerURL, signupIP string) {
+	// Determine signup source from UTM
+	source := "direct"
+	if utmSource != "" {
+		source = utmSource
+	} else if referrerURL != "" {
+		source = "referral"
+	}
+	type updater interface {
+		UpdateSignupSource(ctx context.Context, userID, source, utmSource, utmMedium, utmCampaign, utmContent, utmTerm, referrerURL, signupIP string) error
+	}
+	if u, ok := s.users.(updater); ok {
+		if err := u.UpdateSignupSource(ctx, userID, source, utmSource, utmMedium, utmCampaign, utmContent, utmTerm, referrerURL, signupIP); err != nil {
+			slog.Warn("failed to update signup source", "user_id", userID, "error", err)
+		}
+	}
+}
+
+// ProcessReferralCode handles referral code on signup.
+func (s *AuthService) ProcessReferralCode(ctx context.Context, userID, referralCode string) {
+	if referralCode == "" {
+		return
+	}
+	type referralLookup interface {
+		GetByReferralCode(ctx context.Context, code string) (*ports.StoredUser, error)
+		SetReferredBy(ctx context.Context, userID, referrerID string) error
+	}
+	if u, ok := s.users.(referralLookup); ok {
+		referrer, err := u.GetByReferralCode(ctx, referralCode)
+		if err != nil || referrer == nil {
+			return
+		}
+		_ = u.SetReferredBy(ctx, userID, referrer.ID)
+	}
+}
+
+// GenerateReferralCode creates and sets a unique referral code for the user.
+func (s *AuthService) GenerateReferralCode(ctx context.Context, userID string) string {
+	code := generateShortCode(8)
+	type codeSetter interface {
+		SetReferralCode(ctx context.Context, userID, code string) error
+	}
+	if u, ok := s.users.(codeSetter); ok {
+		_ = u.SetReferralCode(ctx, userID, code)
+	}
+	return code
+}
+
+// UpdateOnboarding updates onboarding progress for a user.
+func (s *AuthService) UpdateOnboarding(ctx context.Context, userID string, step int, completed bool) {
+	type onboardingUpdater interface {
+		UpdateOnboarding(ctx context.Context, userID string, step int, completed bool) error
+	}
+	if u, ok := s.users.(onboardingUpdater); ok {
+		_ = u.UpdateOnboarding(ctx, userID, step, completed)
+	}
+}
+
+// GetUser returns the user entity by ID.
+func (s *AuthService) GetUser(ctx context.Context, userID string) (*entities.User, error) {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &u.User, nil
+}
+
+// UpdateLastLogin updates the last login timestamp.
+func (s *AuthService) UpdateLastLogin(ctx context.Context, userID string) {
+	type lastLoginUpdater interface {
+		UpdateLastLogin(ctx context.Context, userID string) error
+	}
+	if u, ok := s.users.(lastLoginUpdater); ok {
+		_ = u.UpdateLastLogin(ctx, userID)
+	}
+}
+
+// generateShortCode creates a random alphanumeric code of the given length.
+func generateShortCode(length int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, length)
+	_, _ = rand.Read(b)
+	for i := range b {
+		b[i] = chars[b[i]%byte(len(chars))]
+	}
+	return string(b)
 }
 
 // Login validates credentials and returns a LoginResult.
@@ -287,6 +378,7 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 	}
 
 	return &RegisterResult{
+		UserID:  user.ID,
 		Message: "Please check your email to verify your account",
 	}, nil
 }

@@ -28,8 +28,8 @@ func PerAppResources(tier entities.PlanTier) (cpuLimit, memLimit, cpuReq, memReq
 		return "2000m", "2Gi", "500m", "512Mi"
 	case entities.PlanEnterprise:
 		return "4000m", "4Gi", "1000m", "1Gi"
-	default: // Free
-		return "250m", "256Mi", "50m", "64Mi"
+	default: // Free — low resources, always-on
+		return "100m", "128Mi", "50m", "64Mi"
 	}
 }
 
@@ -73,7 +73,7 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 		if useApisix {
 			res.IngressRoute = generateIngressRouteViaApisix(app, namespace, labels, baseDomain, customDomains)
 		} else {
-			res.IngressRoute = generateIngressRoute(app, namespace, labels, baseDomain, customDomains)
+			res.IngressRoute = generateIngressRoute(app, namespace, labels, baseDomain, customDomains, tier)
 		}
 	}
 
@@ -237,12 +237,34 @@ func generateService(app *entities.App, namespace string, labels map[string]stri
 	}
 }
 
-func generateIngressRoute(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string) map[string]interface{} {
+func generateIngressRoute(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string, tier entities.PlanTier) map[string]interface{} {
 	matchRule := buildHostMatchRule(app.Subdomain+"."+baseDomain, customDomains)
 
 	tls := map[string]interface{}{}
 	if len(customDomains) > 0 {
 		tls["secretName"] = app.Subdomain + "-custom-tls"
+	}
+
+	route := map[string]interface{}{
+		"match": matchRule,
+		"kind":  "Rule",
+		"services": []map[string]interface{}{
+			{
+				"name": app.Subdomain,
+				"port": 80,
+			},
+		},
+	}
+
+	// Free-tier apps get the "Powered by Zenith" banner injection middleware.
+	// The Middleware CRD is deployed as a static resource via Helm.
+	if tier == entities.PlanFree {
+		route["middlewares"] = []map[string]interface{}{
+			{
+				"name":      "powered-by-zenith",
+				"namespace": namespace,
+			},
+		}
 	}
 
 	return map[string]interface{}{
@@ -255,19 +277,8 @@ func generateIngressRoute(app *entities.App, namespace string, labels map[string
 		},
 		"spec": map[string]interface{}{
 			"entryPoints": []string{"websecure"},
-			"routes": []map[string]interface{}{
-				{
-					"match": matchRule,
-					"kind":  "Rule",
-					"services": []map[string]interface{}{
-						{
-							"name": app.Subdomain,
-							"port": 80,
-						},
-					},
-				},
-			},
-			"tls": tls,
+			"routes":      []map[string]interface{}{route},
+			"tls":         tls,
 		},
 	}
 }

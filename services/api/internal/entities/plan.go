@@ -81,15 +81,15 @@ func DefaultPlanLimits(tier PlanTier) PlanLimits {
 			MaxRedisInstances: 1000, MaxRabbitMQInstances: 1000, MaxMongoDBInstances: 1000, MaxKafkaInstances: 1000,
 			BackupsEnabled: true, CustomDomain: true, AlwaysOn: true, SleepAfterMins: 0,
 		}
-	default: // Free
+	default: // Free — always-on with low resources, no scale-to-zero
 		return PlanLimits{
 			MaxApps: 1, MaxDatabases: 1, MaxDBSizeMB: 100,
 			MaxAuthUsers: 1000, MaxStorageMB: 1024, MaxBuckets: 0,
-			MaxCPUMillis: 500, MaxRAMMB: 512, MaxTeamMembers: 1,
+			MaxCPUMillis: 50, MaxRAMMB: 128, MaxTeamMembers: 1,
 			MaxGateways: 1, MaxGatewayRoutes: 3,
 			MaxAuthPools: 1, MaxAuthPoolUsers: 1000,
 			MaxRedisInstances: 0, MaxRabbitMQInstances: 0, MaxMongoDBInstances: 0, MaxKafkaInstances: 0,
-			BackupsEnabled: false, CustomDomain: false, AlwaysOn: false, SleepAfterMins: 15,
+			BackupsEnabled: false, CustomDomain: false, AlwaysOn: true, SleepAfterMins: 0,
 		}
 	}
 }

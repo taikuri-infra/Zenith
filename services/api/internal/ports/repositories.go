@@ -413,3 +413,41 @@ type PodExecSessionRepository interface {
 	ListByUser(ctx context.Context, userID string, limit, offset int) ([]entities.PodExecSession, int, error)
 	ListAll(ctx context.Context, limit, offset int) ([]entities.PodExecSession, int, error)
 }
+
+// UserEventRepository defines user event tracking operations.
+type UserEventRepository interface {
+	Track(ctx context.Context, event *entities.UserEvent) error
+	ListByUser(ctx context.Context, userID string, limit, offset int) ([]entities.UserEvent, error)
+	CountByType(ctx context.Context, eventType string, since time.Time) (int, error)
+	GetUserActivity(ctx context.Context, userID string, since time.Time) ([]entities.UserEvent, error)
+	GetFunnelData(ctx context.Context, steps []string, since time.Time) (map[string]int, error)
+	PurgeOlderThan(ctx context.Context, before time.Time) (int64, error)
+	ListByType(ctx context.Context, eventType string, limit, offset int) ([]entities.UserEvent, error)
+}
+
+// EmailSendRepository defines drip campaign email tracking operations.
+type EmailSendRepository interface {
+	Record(ctx context.Context, send *entities.EmailSend) error
+	HasSent(ctx context.Context, userID, templateKey string) (bool, error)
+	MarkOpened(ctx context.Context, id string) error
+	MarkClicked(ctx context.Context, id string) error
+	GetStats(ctx context.Context) (*entities.EmailStats, error)
+	ListByUser(ctx context.Context, userID string) ([]entities.EmailSend, error)
+}
+
+// ExitSurveyRepository defines exit survey persistence operations.
+type ExitSurveyRepository interface {
+	Create(ctx context.Context, survey *entities.ExitSurvey) error
+	List(ctx context.Context, limit, offset int) ([]entities.ExitSurvey, error)
+	GetStats(ctx context.Context) (*entities.ExitSurveyStats, error)
+}
+
+// ReferralRepository defines referral reward operations.
+type ReferralRepository interface {
+	CreateReward(ctx context.Context, reward *entities.ReferralReward) error
+	ListByReferrer(ctx context.Context, referrerID string) ([]entities.ReferralReward, error)
+	CountByReferrer(ctx context.Context, referrerID string, since time.Time) (int, error)
+	CreditReward(ctx context.Context, id string) error
+	GetSummary(ctx context.Context, userID, baseURL string) (*entities.ReferralSummary, error)
+	ListAll(ctx context.Context, limit, offset int) ([]entities.ReferralReward, error)
+}

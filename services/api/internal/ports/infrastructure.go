@@ -334,6 +334,7 @@ type EmailSender interface {
 	SendTeamInviteEmail(ctx context.Context, to, inviterName, teamName, inviteURL string) error
 	SendSupportTicketNotification(ctx context.Context, to, ticketSubject, ticketURL string) error
 	SendSupportReplyNotification(ctx context.Context, to, userName, ticketSubject, ticketURL string) error
+	SendGenericEmail(ctx context.Context, to, subject, htmlBody string) error
 }
 
 // ---------------------------------------------------------------------------

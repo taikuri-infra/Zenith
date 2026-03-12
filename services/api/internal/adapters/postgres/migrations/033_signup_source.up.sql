@@ -1,0 +1,14 @@
+ALTER TABLE users ADD COLUMN signup_source TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN utm_source TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN utm_medium TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN utm_campaign TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN utm_content TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN utm_term TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN referrer_url TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN signup_ip INET;
+ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE;
+ALTER TABLE users ADD COLUMN referred_by TEXT REFERENCES users(id);
+ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN onboarding_step INT DEFAULT 0;
+ALTER TABLE users ADD COLUMN onboarding_completed_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN last_login_at TIMESTAMPTZ;

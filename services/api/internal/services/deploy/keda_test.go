@@ -12,7 +12,7 @@ func TestShouldScaleToZero(t *testing.T) {
 		tier   entities.PlanTier
 		expect bool
 	}{
-		{"free tier scales to zero", entities.PlanFree, true},
+		{"free tier always on", entities.PlanFree, false},
 		{"pro tier always on", entities.PlanPro, false},
 		{"team tier always on", entities.PlanTeam, false},
 		{"business tier always on", entities.PlanBusiness, false},
@@ -107,21 +107,16 @@ func TestK8sResourcesWithPlan_FreeTier(t *testing.T) {
 
 	resources := GenerateK8sResources(app, "freeapp:v1", "freezenith.com", nil, &limits, entities.PlanFree, nil)
 
-	// Free tier: replicas should be 0 (KEDA manages scaling)
+	// Free tier: always-on with 1 replica (no scale-to-zero)
 	deploy := resources.Deployment
 	spec := deploy["spec"].(map[string]interface{})
-	if spec["replicas"] != int32(0) {
-		t.Errorf("free tier replicas = %v, want 0", spec["replicas"])
+	if spec["replicas"] != int32(1) {
+		t.Errorf("free tier replicas = %v, want 1", spec["replicas"])
 	}
 
-	// HTTPScaledObject should be set
-	if resources.HTTPScaledObject == nil {
-		t.Error("free tier HTTPScaledObject should not be nil")
-	}
-
-	hso := resources.HTTPScaledObject
-	if hso["kind"] != "HTTPScaledObject" {
-		t.Errorf("HTTPScaledObject kind = %v, want HTTPScaledObject", hso["kind"])
+	// No HTTPScaledObject for free tier (always-on)
+	if resources.HTTPScaledObject != nil {
+		t.Error("free tier HTTPScaledObject should be nil (always-on)")
 	}
 }
 

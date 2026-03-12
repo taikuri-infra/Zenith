@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/mail"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/middleware"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
@@ -16,10 +19,16 @@ type AuthHandler struct {
 	svc       *services.AuthService
 	appURL    string // frontend URL for OAuth redirect
 	blacklist *middleware.TokenBlacklist
+	eventRepo ports.UserEventRepository
 }
 
 func NewAuthHandler(svc *services.AuthService, blacklist *middleware.TokenBlacklist) *AuthHandler {
 	return &AuthHandler{svc: svc, blacklist: blacklist}
+}
+
+// SetEventRepo enables event tracking on auth actions.
+func (h *AuthHandler) SetEventRepo(repo ports.UserEventRepository) {
+	h.eventRepo = repo
 }
 
 // SetAppURL configures the frontend URL for OAuth callback redirects.
@@ -33,9 +42,16 @@ type loginRequest struct {
 }
 
 type registerRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Name     string `json:"name"`
+	Email        string `json:"email"`
+	Password     string `json:"password"`
+	Name         string `json:"name"`
+	UTMSource    string `json:"utm_source"`
+	UTMMedium    string `json:"utm_medium"`
+	UTMCampaign  string `json:"utm_campaign"`
+	UTMContent   string `json:"utm_content"`
+	UTMTerm      string `json:"utm_term"`
+	ReferrerURL  string `json:"referrer_url"`
+	ReferralCode string `json:"referral_code"`
 }
 
 type refreshRequest struct {
@@ -100,6 +116,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
+	// Track login event
+	h.trackEvent(c, entities.EventLogin, nil)
+
 	return c.JSON(tokenResponse{
 		AccessToken:  result.Tokens.AccessToken,
 		RefreshToken: result.Tokens.RefreshToken,
@@ -157,6 +176,28 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	if err != nil {
 		// Generic message to prevent user enumeration
 		return fiber.NewError(fiber.StatusConflict, "registration failed")
+	}
+
+	// Track signup event with UTM properties
+	props := map[string]interface{}{}
+	if req.UTMSource != "" {
+		props["utm_source"] = req.UTMSource
+	}
+	if req.UTMMedium != "" {
+		props["utm_medium"] = req.UTMMedium
+	}
+	if req.UTMCampaign != "" {
+		props["utm_campaign"] = req.UTMCampaign
+	}
+	if req.ReferralCode != "" {
+		props["referral_code"] = req.ReferralCode
+	}
+
+	// Store UTM data on user record via service
+	if result.UserID != "" {
+		h.svc.UpdateSignupSource(c.Context(), result.UserID, req.UTMSource, req.UTMMedium, req.UTMCampaign, req.UTMContent, req.UTMTerm, req.ReferrerURL, c.IP())
+		h.svc.ProcessReferralCode(c.Context(), result.UserID, req.ReferralCode)
+		h.trackEventForUser(c, result.UserID, entities.EventSignup, props)
 	}
 
 	// Email/password registration returns a message (verify email first)
@@ -363,4 +404,68 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "logged out"})
+}
+
+// UpdateOnboarding updates the current user's onboarding progress.
+// PUT /api/v1/auth/onboarding
+func (h *AuthHandler) UpdateOnboarding(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+	var req struct {
+		Step      int  `json:"step"`
+		Completed bool `json:"completed"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	h.svc.UpdateOnboarding(c.Context(), userID, req.Step, req.Completed)
+
+	// Track onboarding events
+	if req.Completed {
+		h.trackEvent(c, entities.EventOnboardingDone, nil)
+	} else {
+		h.trackEvent(c, entities.EventOnboardingStep, map[string]interface{}{"step": req.Step})
+	}
+
+	return c.JSON(fiber.Map{"message": "onboarding updated"})
+}
+
+// GetMe returns the authenticated user's profile with onboarding status.
+// GET /api/v1/auth/me
+func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+	user, err := h.svc.GetUser(c.Context(), userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "user not found")
+	}
+	return c.JSON(user)
+}
+
+// trackEvent fires a user event in the background for the currently authenticated user.
+func (h *AuthHandler) trackEvent(c *fiber.Ctx, eventType string, props map[string]interface{}) {
+	if h.eventRepo == nil {
+		return
+	}
+	userID, _ := c.Locals("user_id").(string)
+	if userID == "" {
+		return
+	}
+	h.trackEventForUser(c, userID, eventType, props)
+}
+
+// trackEventForUser fires a user event for a specific user.
+func (h *AuthHandler) trackEventForUser(c *fiber.Ctx, userID, eventType string, props map[string]interface{}) {
+	if h.eventRepo == nil {
+		return
+	}
+	if props == nil {
+		props = make(map[string]interface{})
+	}
+	go h.eventRepo.Track(context.Background(), &entities.UserEvent{
+		UserID:     userID,
+		EventType:  eventType,
+		Properties: props,
+		IPAddress:  c.IP(),
+		UserAgent:  c.Get("User-Agent"),
+	})
 }

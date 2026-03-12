@@ -73,11 +73,13 @@ type AppGatewayService interface {
 type AppHandlerV2 struct {
 	appRepo      ports.AppRepository
 	projectRepo  ports.ProjectRepository
+	planRepo     ports.UserPlanRepository
 	baseDomain   string
 	deployer     AppDeleter
 	pipeline     AppImageDeployer
 	gwService    AppGatewayService
 	onAppDeleted func(ctx context.Context, appID string) // callback for cascade (e.g. stop gateway routes)
+	eventRepo    ports.UserEventRepository
 }
 
 // NewAppHandlerV2 creates a new AppHandlerV2.
@@ -98,6 +100,16 @@ func (h *AppHandlerV2) SetOnAppDeleted(fn func(ctx context.Context, appID string
 // SetGatewayService configures the gateway service for auto-gateway creation.
 func (h *AppHandlerV2) SetGatewayService(svc AppGatewayService) {
 	h.gwService = svc
+}
+
+// SetPlanRepo enables plan limit checking on app creation.
+func (h *AppHandlerV2) SetPlanRepo(repo ports.UserPlanRepository) {
+	h.planRepo = repo
+}
+
+// SetEventRepo enables event tracking on app actions.
+func (h *AppHandlerV2) SetEventRepo(repo ports.UserEventRepository) {
+	h.eventRepo = repo
 }
 
 // wellKnownPorts maps popular base image names to their default listening port.
@@ -272,6 +284,36 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		return NewBadRequest("app_type must be 'web', 'worker', or 'cron'")
 	}
 
+	// Check plan app limit before creating
+	if h.planRepo != nil {
+		plan, planErr := h.planRepo.GetUserPlan(c.Context(), userID.(string))
+		if planErr == nil {
+			currentApps, _ := h.appRepo.ListAppsByUser(c.Context(), userID.(string))
+			if len(currentApps) >= plan.Limits.MaxApps {
+				// Track the feature-gated event
+				if h.eventRepo != nil {
+					go h.eventRepo.Track(context.Background(), &entities.UserEvent{
+						UserID:    userID.(string),
+						EventType: entities.EventFeatureGated,
+						Properties: map[string]interface{}{
+							"resource": "apps",
+							"current":  len(currentApps),
+							"limit":    plan.Limits.MaxApps,
+						},
+					})
+				}
+				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+					"error":        "app limit reached",
+					"code":         "PLAN_LIMIT_REACHED",
+					"resource":     "apps",
+					"current":      len(currentApps),
+					"limit":        plan.Limits.MaxApps,
+					"upgrade_tier": "pro",
+				})
+			}
+		}
+	}
+
 	// Resolve project_id: use provided or fall back to default project
 	projectID := req.ProjectID
 	if projectID == "" && h.projectRepo != nil {
@@ -364,6 +406,20 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		}
 	}
 
+	// Track app creation event
+	if h.eventRepo != nil {
+		go h.eventRepo.Track(context.Background(), &entities.UserEvent{
+			UserID:    app.UserID,
+			EventType: entities.EventAppCreate,
+			Properties: map[string]interface{}{
+				"app_id":   app.ID,
+				"app_name": app.Name,
+			},
+			IPAddress: c.IP(),
+			UserAgent: c.Get("User-Agent"),
+		})
+	}
+
 	return c.Status(fiber.StatusCreated).JSON(h.appToResponse(app))
 }
 
@@ -439,6 +495,19 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 	// Cascade: stop gateway routes pointing to this app
 	if h.onAppDeleted != nil {
 		go h.onAppDeleted(context.Background(), appID)
+	}
+
+	// Track app deletion event
+	if h.eventRepo != nil {
+		userID, _ := c.Locals("user_id").(string)
+		go h.eventRepo.Track(context.Background(), &entities.UserEvent{
+			UserID:    userID,
+			EventType: entities.EventAppDelete,
+			Properties: map[string]interface{}{
+				"app_id":   app.ID,
+				"app_name": app.Name,
+			},
+		})
 	}
 
 	return c.JSON(fiber.Map{"message": "app deleted"})

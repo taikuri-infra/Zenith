@@ -447,7 +447,40 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		}
 	}
 
+	// User Event Tracking (business growth — all features depend on this)
+	var eventRepo ports.UserEventRepository
+	if pool != nil {
+		eventRepo = postgres.NewPostgresUserEventRepository(pool)
+	} else {
+		eventRepo = memory.NewMemoryUserEventRepository()
+	}
+
+	// Email Sends (drip campaign tracking)
+	var emailSendRepo ports.EmailSendRepository
+	if pool != nil {
+		emailSendRepo = postgres.NewPostgresEmailSendRepository(pool)
+	} else {
+		emailSendRepo = memory.NewMemoryEmailSendRepository()
+	}
+
+	// Exit Surveys
+	var exitSurveyRepo ports.ExitSurveyRepository
+	if pool != nil {
+		exitSurveyRepo = postgres.NewPostgresExitSurveyRepository(pool)
+	} else {
+		exitSurveyRepo = memory.NewMemoryExitSurveyRepository()
+	}
+
+	// Referral Rewards
+	var referralRepo ports.ReferralRepository
+	if pool != nil {
+		referralRepo = postgres.NewPostgresReferralRepository(pool)
+	} else {
+		referralRepo = memory.NewMemoryReferralRepository()
+	}
+
 	authHandler := handlers.NewAuthHandler(authSvc, tokenBlacklist)
+	authHandler.SetEventRepo(eventRepo)
 
 	// App Auth (created early so public routes can be registered before protected group)
 	var appAuthRepo ports.AppAuthRepository
@@ -467,6 +500,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, deployer, pipeline)
 	appHandlerV2.SetProjectRepo(projectRepo)
+	appHandlerV2.SetPlanRepo(planRepo)
+	appHandlerV2.SetEventRepo(eventRepo)
 	projectHandlerV2 := handlers.NewProjectHandlerV2(projectRepo, appRepo, deployer)
 	deployHandler := handlers.NewDeployHandler(appRepo, pipeline)
 	logHandler := handlers.NewLogHandler(appRepo, logHub)
@@ -505,6 +540,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		return c.Next()
 	}
 	authRoutes := api.Group("/auth", authLimiter, authBodyLimit)
+	authRoutes.Get("/me", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist), authHandler.GetMe)
+	authRoutes.Put("/onboarding", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist), authHandler.UpdateOnboarding)
 	authRoutes.Post("/login", authHandler.Login)
 	authRoutes.Post("/login/mfa", authHandler.MFALogin)
 	authRoutes.Post("/register", authHandler.Register)
@@ -837,6 +874,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/plan", planHandler.GetMyPlan)
 	protected.Post("/plan/upgrade", planHandler.UpgradePlan)
 
+	// Referral System
+	referralHandler := handlers.NewReferralHandler(referralRepo, eventRepo, cfg.AppURL)
+	protected.Get("/referral", referralHandler.GetSummary)
+	protected.Get("/referral/rewards", referralHandler.ListRewards)
+	protected.Post("/referral/share", referralHandler.TrackShare)
+
 	// Stripe Billing (Phase 6)
 	var billingRepo ports.BillingRepository
 	if pool != nil {
@@ -863,6 +906,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Post("/billing/portal", billingHandler.CreatePortalSession)
 	protected.Post("/billing/cancel", billingHandler.CancelSubscription)
 	protected.Get("/billing/invoices", billingHandler.ListInvoices)
+
+	// Exit Survey (captures feedback before cancellation)
+	exitSurveyHandler := handlers.NewExitSurveyHandler(exitSurveyRepo, eventRepo, planRepo)
+	protected.Post("/billing/exit-survey", exitSurveyHandler.SubmitAndCancel)
 
 	// Stripe webhook (unauthenticated — uses Stripe signature verification)
 	if stripeAPI != nil {
@@ -1228,6 +1275,25 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	admin.Put("/settings", adminHandler.UpdateSettings)
 	admin.Patch("/settings", adminHandler.UpdateSettings)
 
+	// ── Business Growth Engine ──
+
+	// User Event Tracking (admin analytics)
+	userEventHandler := handlers.NewUserEventHandler(eventRepo)
+	admin.Get("/events", userEventHandler.ListEvents)
+	admin.Get("/events/funnel", userEventHandler.GetFunnel)
+	admin.Get("/events/user/:id", userEventHandler.GetUserActivity)
+
+	// Exit Survey (admin analytics)
+	admin.Get("/exit-surveys", exitSurveyHandler.AdminList)
+	admin.Get("/exit-surveys/stats", exitSurveyHandler.AdminStats)
+
+	// Email Campaign Stats
+	emailStatsHandler := handlers.NewEmailStatsHandler(emailSendRepo)
+	admin.Get("/emails/stats", emailStatsHandler.GetStats)
+
+	// Referral Admin
+	admin.Get("/referrals", referralHandler.AdminList)
+
 	// ── Mission Control v2 handlers ──
 
 	// War Room + Analytics
@@ -1313,6 +1379,21 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		"keycloak": cfg.KeycloakURL,
 	})
 	admin.All("/proxy/:service/*", proxyHandler.Proxy)
+
+	// Email Campaign Worker (drip campaign processor)
+	campaignSvc := services.NewEmailCampaignService(emailSendRepo, eventRepo, userRepo, planRepo, cfg.AppURL)
+	if cfg.ResendAPIKey != "" {
+		emailFrom := cfg.EmailFrom
+		if emailFrom == "" {
+			emailFrom = "Zenith <noreply@freezenith.com>"
+		}
+		campaignSvc.SetEmailSender(resendclient.NewClient(cfg.ResendAPIKey, emailFrom))
+	}
+	campaignSvc.Start()
+
+	// Dormant Account Cleanup Worker
+	dormantSvc := services.NewDormantCleanupService(userRepo, planRepo, appRepo, eventRepo)
+	dormantSvc.Start()
 
 	// Admin RBAC (admin user roles and permissions)
 	rbacHandler := handlers.NewAdminRBACHandler(pool, userRepo)
