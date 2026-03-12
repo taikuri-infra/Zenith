@@ -72,11 +72,11 @@ export default function AuthPage() {
     }
   };
 
-  const statusMap: Record<string, "healthy" | "warning" | "error" | "pending"> = {
-    active: "healthy",
-    provisioning: "pending",
+  const statusMap: Record<string, "active" | "provisioning" | "error" | "deleting"> = {
+    active: "active",
+    provisioning: "provisioning",
     error: "error",
-    deleting: "warning",
+    deleting: "deleting",
   };
 
   return (
@@ -157,7 +157,6 @@ export default function AuthPage() {
                   </div>
                   <StatusBadge
                     status={statusMap[pool.status] || "pending"}
-                    label={pool.status}
                   />
                 </div>
 
