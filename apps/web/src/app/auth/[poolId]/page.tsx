@@ -91,7 +91,8 @@ export default function PoolDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [api, poolId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolId]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -103,7 +104,8 @@ export default function PoolDetailPage() {
     } finally {
       setUsersLoading(false);
     }
-  }, [api, poolId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolId]);
 
   useEffect(() => {
     fetchPool();

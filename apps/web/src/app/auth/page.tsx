@@ -36,7 +36,8 @@ export default function AuthPage() {
     } finally {
       setLoading(false);
     }
-  }, [api]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchPools();
