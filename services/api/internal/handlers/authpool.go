@@ -1179,10 +1179,13 @@ func (h *AuthPoolHandler) SendMagicLink(c *fiber.Ctx) error {
 	}
 
 	// Generate magic link token (HMAC-signed, 15 min expiry)
-	// In production, this token is emailed to the user — never returned in the API response.
-	// exp := time.Now().Add(15 * time.Minute).Unix()
-	// token := magicLinkHMAC(pool.ClientSecret, input.Email, exp)
-	// TODO: Send email with magic link containing token + exp
+	exp := time.Now().Add(15 * time.Minute).Unix()
+	token := magicLinkHMAC(pool.ClientSecret, input.Email, exp)
+
+	// TODO: Send the magic link via email (e.g., Keycloak SMTP or external provider).
+	// The token format for the link is "hmac:expiry" — the recipient verifies at POST /magic-link/verify.
+	_ = token // token is generated but only sent via email, never in API response
+	_ = exp
 
 	// Always return success to prevent email enumeration
 	return c.JSON(fiber.Map{
