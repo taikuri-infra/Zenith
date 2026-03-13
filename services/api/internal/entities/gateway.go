@@ -81,6 +81,26 @@ type GatewayRoute struct {
 	Timestamps
 }
 
+// GatewayCustomDomainStatus represents the lifecycle state of a custom domain.
+type GatewayCustomDomainStatus string
+
+const (
+	GatewayCustomDomainStatusPending GatewayCustomDomainStatus = "pending"
+	GatewayCustomDomainStatusActive  GatewayCustomDomainStatus = "active"
+	GatewayCustomDomainStatusFailed  GatewayCustomDomainStatus = "failed"
+)
+
+// GatewayCustomDomain represents a custom domain attached to a gateway.
+type GatewayCustomDomain struct {
+	ID        string                    `json:"id"`
+	GatewayID string                    `json:"gateway_id"`
+	UserID    string                    `json:"user_id"`
+	Domain    string                    `json:"domain"`
+	Status    GatewayCustomDomainStatus `json:"status"`
+	TLSReady  bool                      `json:"tls_ready"`
+	Timestamps
+}
+
 // GatewayGroup represents a service abstraction that bundles routes pointing to the same app.
 type GatewayGroup struct {
 	ID           string               `json:"id"`

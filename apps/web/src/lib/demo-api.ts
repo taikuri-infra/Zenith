@@ -1458,6 +1458,18 @@ export const demoGateways = {
   },
   updateGroup: async (_gwId: string, groupId: string, data: Record<string, unknown>) => { await delay(300); return { id: groupId, gateway_id: "gw-1", name: "group", app_id: "app-1", app_subdomain: "my-app", plugins: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...data }; },
   deleteGroup: async () => { await delay(300); },
+  // Custom Domains
+  listDomains: async () => { await delay(300); return [{ id: "cd-demo-1", gateway_id: "gw-demo-001", user_id: "demo", domain: "api.example.com", status: "active" as const, tls_ready: true, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-04T12:00:00Z" }]; },
+  addDomain: async (_gwId: string, domain: string) => { await delay(500); return { id: "cd-" + Date.now(), gateway_id: "gw-demo-001", user_id: "demo", domain, status: "pending" as const, tls_ready: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }; },
+  deleteDomain: async () => { await delay(300); },
+  // Analytics
+  getAnalytics: async () => { await delay(300); return { request_rate: 42.5, error_rate: 0.8, p95_latency: 0.045, total_requests_24h: 156420 }; },
+  getAnalyticsTimeSeries: async (_gwId: string, metric: string, range: string) => {
+    await delay(300);
+    const now = Date.now() / 1000;
+    const points = Array.from({ length: 30 }, (_, i) => ({ timestamp: now - (29 - i) * 120, value: Math.random() * 100 }));
+    return { metric, range, points };
+  },
 };
 
 // ---- Auth Pools Demo ----

@@ -7,8 +7,11 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
+	"github.com/dotechhq/zenith/services/api/internal/adapters/promclient"
+	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
@@ -20,6 +23,7 @@ type GatewayService struct {
 	planRepo     ports.UserPlanRepository
 	authPoolRepo ports.AuthPoolRepository
 	k8sClient    k8sclient.Client
+	promClient   *promclient.Client
 	gwDomain     string // e.g. "gw.stage.freezenith.com"
 	appsDomain   string // e.g. "apps.stage.freezenith.com" — for auto-route host matching
 	namespace    string // e.g. "zenith-apps"
@@ -28,6 +32,11 @@ type GatewayService struct {
 // SetAuthPoolRepo wires the auth pool repo (breaks import cycle).
 func (s *GatewayService) SetAuthPoolRepo(repo ports.AuthPoolRepository) {
 	s.authPoolRepo = repo
+}
+
+// SetPromClient wires the Prometheus client for analytics.
+func (s *GatewayService) SetPromClient(client *promclient.Client) {
+	s.promClient = client
 }
 
 // NewGatewayService creates a new GatewayService.
@@ -643,16 +652,41 @@ func (s *GatewayService) ensureExternalNameBridge(ctx context.Context) error {
 	return s.k8sClient.PatchCRD(ctx, svc)
 }
 
-// createIngressRoute creates a Traefik IngressRoute for the gateway hostname.
+// createIngressRoute creates a Traefik IngressRoute for the gateway hostname + custom domains.
 func (s *GatewayService) createIngressRoute(ctx context.Context, gw *entities.Gateway) error {
 	host := gw.Slug + "." + s.gwDomain
 	name := "gw-" + gw.Slug
+
+	// Build Host match rule including custom domains
+	matchRule := fmt.Sprintf("Host(`%s`)", host)
+
+	customDomains, _ := s.gwRepo.ListGatewayDomains(ctx, gw.ID)
+	for _, cd := range customDomains {
+		matchRule += fmt.Sprintf(" || Host(`%s`)", cd.Domain)
+	}
+
+	tlsConfig := map[string]interface{}{}
+
+	// If there are custom domains with certificates, reference their TLS secrets
+	if len(customDomains) > 0 {
+		var tlsDomains []map[string]interface{}
+		for _, cd := range customDomains {
+			certName := "gw-" + gw.Slug + "-" + strings.ReplaceAll(cd.Domain, ".", "-")
+			tlsDomains = append(tlsDomains, map[string]interface{}{
+				"secretName": certName,
+				"main":       cd.Domain,
+			})
+		}
+		if len(tlsDomains) > 0 {
+			tlsConfig["domains"] = tlsDomains
+		}
+	}
 
 	spec, _ := json.Marshal(map[string]interface{}{
 		"entryPoints": []string{"websecure"},
 		"routes": []map[string]interface{}{
 			{
-				"match": fmt.Sprintf("Host(`%s`)", host),
+				"match": matchRule,
 				"kind":  "Rule",
 				"services": []map[string]interface{}{
 					{
@@ -662,7 +696,7 @@ func (s *GatewayService) createIngressRoute(ctx context.Context, gw *entities.Ga
 				},
 			},
 		},
-		"tls": map[string]interface{}{},
+		"tls": tlsConfig,
 	})
 
 	crd := &k8sclient.CRDObject{
@@ -878,4 +912,228 @@ func validatePlugins(plugins []entities.GatewayRoutePlugin) error {
 		}
 	}
 	return nil
+}
+
+// --- Custom Domain Operations ---
+
+// AddGatewayDomain adds a custom domain to a gateway, generates a Certificate CRD, and rebuilds IngressRoute.
+func (s *GatewayService) AddGatewayDomain(ctx context.Context, gwID, userID, domain string) (*entities.GatewayCustomDomain, error) {
+	gw, err := s.gwRepo.GetGateway(ctx, gwID)
+	if err != nil {
+		return nil, err
+	}
+	if gw.UserID != userID {
+		return nil, fmt.Errorf("not your gateway")
+	}
+
+	cd, err := s.gwRepo.AddGatewayDomain(ctx, gwID, userID, domain)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate cert-manager Certificate CRD for the custom domain
+	if err := s.ensureGatewayDomainCertificate(ctx, gw, domain); err != nil {
+		slog.Warn("failed to create Certificate for gateway domain", "domain", domain, "error", err)
+	}
+
+	// Rebuild IngressRoute with the new domain
+	if err := s.createIngressRoute(ctx, gw); err != nil {
+		slog.Warn("failed to rebuild IngressRoute after domain add", "slug", gw.Slug, "error", err)
+	}
+
+	return cd, nil
+}
+
+// ListGatewayDomains lists custom domains for a gateway.
+func (s *GatewayService) ListGatewayDomains(ctx context.Context, gwID string) ([]entities.GatewayCustomDomain, error) {
+	domains, err := s.gwRepo.ListGatewayDomains(ctx, gwID)
+	if err != nil {
+		return nil, err
+	}
+	if domains == nil {
+		domains = []entities.GatewayCustomDomain{}
+	}
+	return domains, nil
+}
+
+// DeleteGatewayDomain removes a custom domain and rebuilds IngressRoute.
+func (s *GatewayService) DeleteGatewayDomain(ctx context.Context, gwID, domainID string) error {
+	gw, err := s.gwRepo.GetGateway(ctx, gwID)
+	if err != nil {
+		return err
+	}
+
+	// Get domain info before deletion for cleanup
+	domains, _ := s.gwRepo.ListGatewayDomains(ctx, gwID)
+	var domainName string
+	for _, d := range domains {
+		if d.ID == domainID {
+			domainName = d.Domain
+			break
+		}
+	}
+
+	if err := s.gwRepo.DeleteGatewayDomain(ctx, domainID); err != nil {
+		return err
+	}
+
+	// Delete the Certificate CRD
+	if domainName != "" {
+		certName := "gw-" + gw.Slug + "-" + strings.ReplaceAll(domainName, ".", "-")
+		if err := s.k8sClient.DeleteCRD(ctx, "Certificate", s.namespace, certName); err != nil {
+			slog.Warn("failed to delete Certificate for gateway domain", "domain", domainName, "error", err)
+		}
+	}
+
+	// Rebuild IngressRoute without the deleted domain
+	if err := s.createIngressRoute(ctx, gw); err != nil {
+		slog.Warn("failed to rebuild IngressRoute after domain delete", "slug", gw.Slug, "error", err)
+	}
+
+	return nil
+}
+
+// ensureGatewayDomainCertificate creates a cert-manager Certificate CRD for a gateway custom domain.
+func (s *GatewayService) ensureGatewayDomainCertificate(ctx context.Context, gw *entities.Gateway, domain string) error {
+	certName := "gw-" + gw.Slug + "-" + strings.ReplaceAll(domain, ".", "-")
+
+	spec, _ := json.Marshal(map[string]interface{}{
+		"secretName": certName,
+		"issuerRef": map[string]interface{}{
+			"name": "letsencrypt-prod",
+			"kind": "ClusterIssuer",
+		},
+		"dnsNames": []string{domain},
+	})
+
+	crd := &k8sclient.CRDObject{
+		APIVersion: "cert-manager.io/v1",
+		Kind:       "Certificate",
+		Metadata: k8sclient.ObjectMeta{
+			Name:      certName,
+			Namespace: s.namespace,
+			Labels: map[string]string{
+				"zenith.io/gateway": gw.ID,
+				"zenith.io/user":    gw.UserID,
+			},
+		},
+		Spec: spec,
+	}
+
+	if err := s.k8sClient.CreateCRD(ctx, crd); err != nil {
+		return s.k8sClient.PatchCRD(ctx, crd)
+	}
+	return nil
+}
+
+// --- Gateway Analytics ---
+
+// GatewayAnalyticsOverview holds key gateway metrics.
+type GatewayAnalyticsOverview struct {
+	RequestRate     float64 `json:"request_rate"`
+	ErrorRate       float64 `json:"error_rate"`
+	P95Latency      float64 `json:"p95_latency"`
+	TotalRequests24h float64 `json:"total_requests_24h"`
+}
+
+// GetGatewayAnalytics returns overview stats for a gateway.
+func (s *GatewayService) GetGatewayAnalytics(ctx context.Context, gwID string) (*GatewayAnalyticsOverview, error) {
+	gw, err := s.gwRepo.GetGateway(ctx, gwID)
+	if err != nil {
+		return nil, err
+	}
+
+	overview := &GatewayAnalyticsOverview{}
+
+	if s.promClient == nil {
+		return overview, nil
+	}
+
+	slug := gw.Slug
+
+	// Request rate (req/s)
+	reqRate, _ := s.promClient.QueryInstant(ctx, fmt.Sprintf(
+		`sum(rate(apisix_http_status{matched_route=~"gw-%s.*"}[5m]))`, slug))
+	overview.RequestRate = reqRate
+
+	// Error rate (%)
+	errRate, _ := s.promClient.QueryInstant(ctx, fmt.Sprintf(
+		`sum(rate(apisix_http_status{matched_route=~"gw-%s.*",code=~"5.."}[5m])) / clamp_min(sum(rate(apisix_http_status{matched_route=~"gw-%s.*"}[5m])), 1) * 100`, slug, slug))
+	overview.ErrorRate = errRate
+
+	// P95 latency (seconds)
+	p95, _ := s.promClient.QueryInstant(ctx, fmt.Sprintf(
+		`histogram_quantile(0.95, sum(rate(apisix_http_latency_bucket{matched_route=~"gw-%s.*",type="request"}[5m])) by (le)) / 1000`, slug))
+	overview.P95Latency = p95
+
+	// Total requests in last 24h
+	total24h, _ := s.promClient.QueryInstant(ctx, fmt.Sprintf(
+		`sum(increase(apisix_http_status{matched_route=~"gw-%s.*"}[24h]))`, slug))
+	overview.TotalRequests24h = total24h
+
+	return overview, nil
+}
+
+// GetGatewayTimeSeries returns time series data for a specific gateway metric.
+func (s *GatewayService) GetGatewayTimeSeries(ctx context.Context, gwID, metric, timeRange string) (*dto.TimeSeriesResponse, error) {
+	gw, err := s.gwRepo.GetGateway(ctx, gwID)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.promClient == nil {
+		return &dto.TimeSeriesResponse{Metric: metric, Range: timeRange, Points: []dto.TimeSeriesPoint{}}, nil
+	}
+
+	start, step := gwTimeRangeParams(timeRange)
+	end := time.Now()
+	slug := gw.Slug
+
+	var promQL string
+	switch metric {
+	case "requests":
+		promQL = fmt.Sprintf(`sum(rate(apisix_http_status{matched_route=~"gw-%s.*"}[5m])) * 60`, slug)
+	case "latency":
+		promQL = fmt.Sprintf(`histogram_quantile(0.95, sum(rate(apisix_http_latency_bucket{matched_route=~"gw-%s.*",type="request"}[5m])) by (le)) / 1000`, slug)
+	case "errors":
+		promQL = fmt.Sprintf(`sum(rate(apisix_http_status{matched_route=~"gw-%s.*",code=~"5.."}[5m])) * 60`, slug)
+	default:
+		return nil, fmt.Errorf("unknown metric: %s (allowed: requests, latency, errors)", metric)
+	}
+
+	points, err := s.promClient.QueryRange(ctx, promQL, start, end, step)
+	if err != nil {
+		return nil, fmt.Errorf("prometheus query failed: %w", err)
+	}
+
+	tsPoints := make([]dto.TimeSeriesPoint, 0, len(points))
+	for _, p := range points {
+		tsPoints = append(tsPoints, dto.TimeSeriesPoint{
+			Timestamp: p.Timestamp,
+			Value:     p.Value,
+		})
+	}
+
+	return &dto.TimeSeriesResponse{
+		Metric: metric,
+		Range:  timeRange,
+		Points: tsPoints,
+	}, nil
+}
+
+// gwTimeRangeParams parses a range string to start time and step for gateway analytics.
+func gwTimeRangeParams(rangeStr string) (start time.Time, step time.Duration) {
+	now := time.Now()
+	switch rangeStr {
+	case "1h":
+		return now.Add(-1 * time.Hour), 30 * time.Second
+	case "6h":
+		return now.Add(-6 * time.Hour), 2 * time.Minute
+	case "24h":
+		return now.Add(-24 * time.Hour), 5 * time.Minute
+	case "7d":
+		return now.Add(-7 * 24 * time.Hour), 30 * time.Minute
+	default:
+		return now.Add(-1 * time.Hour), 30 * time.Second
+	}
 }

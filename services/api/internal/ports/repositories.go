@@ -315,6 +315,12 @@ type GatewayRepository interface {
 	ClearAuthPoolFromRoutes(ctx context.Context, authPoolID string) ([]string, error) // returns affected gateway IDs
 	ListRoutesByAuthPool(ctx context.Context, authPoolID string) ([]entities.GatewayRoute, error)
 
+	// Custom Domains
+	AddGatewayDomain(ctx context.Context, gatewayID, userID, domain string) (*entities.GatewayCustomDomain, error)
+	ListGatewayDomains(ctx context.Context, gatewayID string) ([]entities.GatewayCustomDomain, error)
+	DeleteGatewayDomain(ctx context.Context, id string) error
+	UpdateGatewayDomainStatus(ctx context.Context, id string, status entities.GatewayCustomDomainStatus, tlsReady bool) error
+
 	// Groups
 	CreateGroup(ctx context.Context, group *entities.GatewayGroup) (*entities.GatewayGroup, error)
 	GetGroup(ctx context.Context, id string) (*entities.GatewayGroup, error)

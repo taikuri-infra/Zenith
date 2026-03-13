@@ -13,18 +13,20 @@ import (
 
 // MemoryGatewayRepository is an in-memory GatewayRepository for dev/testing.
 type MemoryGatewayRepository struct {
-	mu       sync.RWMutex
-	gateways map[string]*entities.Gateway
-	routes   map[string]*entities.GatewayRoute
-	groups   map[string]*entities.GatewayGroup
+	mu            sync.RWMutex
+	gateways      map[string]*entities.Gateway
+	routes        map[string]*entities.GatewayRoute
+	groups        map[string]*entities.GatewayGroup
+	customDomains map[string]*entities.GatewayCustomDomain
 }
 
 // NewMemoryGatewayRepository creates a new in-memory GatewayRepository.
 func NewMemoryGatewayRepository() *MemoryGatewayRepository {
 	return &MemoryGatewayRepository{
-		gateways: make(map[string]*entities.Gateway),
-		routes:   make(map[string]*entities.GatewayRoute),
-		groups:   make(map[string]*entities.GatewayGroup),
+		gateways:      make(map[string]*entities.Gateway),
+		routes:        make(map[string]*entities.GatewayRoute),
+		groups:        make(map[string]*entities.GatewayGroup),
+		customDomains: make(map[string]*entities.GatewayCustomDomain),
 	}
 }
 
@@ -395,6 +397,70 @@ func (r *MemoryGatewayRepository) ListRoutesByAuthPool(_ context.Context, authPo
 		}
 	}
 	return routes, nil
+}
+
+// --- Custom Domain CRUD ---
+
+func (r *MemoryGatewayRepository) AddGatewayDomain(_ context.Context, gatewayID, userID, domain string) (*entities.GatewayCustomDomain, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, d := range r.customDomains {
+		if d.Domain == domain {
+			return nil, fmt.Errorf("domain '%s' is already in use", domain)
+		}
+	}
+
+	now := time.Now()
+	cd := &entities.GatewayCustomDomain{
+		ID:         uuid.New().String(),
+		GatewayID:  gatewayID,
+		UserID:     userID,
+		Domain:     domain,
+		Status:     entities.GatewayCustomDomainStatusPending,
+		TLSReady:   false,
+		Timestamps: entities.Timestamps{CreatedAt: now, UpdatedAt: now},
+	}
+	r.customDomains[cd.ID] = cd
+	return cd, nil
+}
+
+func (r *MemoryGatewayRepository) ListGatewayDomains(_ context.Context, gatewayID string) ([]entities.GatewayCustomDomain, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var domains []entities.GatewayCustomDomain
+	for _, d := range r.customDomains {
+		if d.GatewayID == gatewayID {
+			domains = append(domains, *d)
+		}
+	}
+	return domains, nil
+}
+
+func (r *MemoryGatewayRepository) DeleteGatewayDomain(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.customDomains[id]; !ok {
+		return fmt.Errorf("gateway domain not found: %s", id)
+	}
+	delete(r.customDomains, id)
+	return nil
+}
+
+func (r *MemoryGatewayRepository) UpdateGatewayDomainStatus(_ context.Context, id string, status entities.GatewayCustomDomainStatus, tlsReady bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	d, ok := r.customDomains[id]
+	if !ok {
+		return fmt.Errorf("gateway domain not found: %s", id)
+	}
+	d.Status = status
+	d.TLSReady = tlsReady
+	d.UpdatedAt = time.Now()
+	return nil
 }
 
 // --- Group CRUD ---

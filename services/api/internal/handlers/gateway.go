@@ -7,16 +7,30 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// requireProPlan checks that the user is on Pro plan or higher.
+func requireProPlan(planRepo ports.UserPlanRepository, c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	plan, err := planRepo.GetUserPlan(c.Context(), userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusForbidden, "could not determine plan")
+	}
+	if plan.Tier == entities.PlanFree {
+		return fiber.NewError(fiber.StatusForbidden, "custom domains require Pro plan or higher")
+	}
+	return nil
+}
+
 // GatewayHandler manages API gateway HTTP endpoints.
 type GatewayHandler struct {
 	gwSvc       *services.GatewayService
 	gwRepo      ports.GatewayRepository
 	projectRepo ports.ProjectRepository
+	planRepo    ports.UserPlanRepository
 }
 
 // NewGatewayHandler creates a new GatewayHandler.
-func NewGatewayHandler(gwSvc *services.GatewayService, gwRepo ports.GatewayRepository, projectRepo ports.ProjectRepository) *GatewayHandler {
-	return &GatewayHandler{gwSvc: gwSvc, gwRepo: gwRepo, projectRepo: projectRepo}
+func NewGatewayHandler(gwSvc *services.GatewayService, gwRepo ports.GatewayRepository, projectRepo ports.ProjectRepository, planRepo ports.UserPlanRepository) *GatewayHandler {
+	return &GatewayHandler{gwSvc: gwSvc, gwRepo: gwRepo, projectRepo: projectRepo, planRepo: planRepo}
 }
 
 // CreateGateway creates a new API gateway.
@@ -472,4 +486,135 @@ func (h *GatewayHandler) DeleteGroup(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "group deleted"})
+}
+
+// --- Custom Domain Handlers ---
+
+// AddDomain adds a custom domain to a gateway (Pro+ only).
+// POST /api/v1/gateways/:gwId/domains
+func (h *GatewayHandler) AddDomain(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+
+	if err := requireProPlan(h.planRepo, c); err != nil {
+		return err
+	}
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	var input struct {
+		Domain string `json:"domain"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Domain == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "domain is required")
+	}
+
+	cd, err := h.gwSvc.AddGatewayDomain(c.Context(), gwID, userID, input.Domain)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(cd)
+}
+
+// ListDomains lists custom domains for a gateway.
+// GET /api/v1/gateways/:gwId/domains
+func (h *GatewayHandler) ListDomains(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	domains, err := h.gwSvc.ListGatewayDomains(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(domains)
+}
+
+// DeleteDomain deletes a custom domain from a gateway.
+// DELETE /api/v1/gateways/:gwId/domains/:domainId
+func (h *GatewayHandler) DeleteDomain(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+	domainID := c.Params("domainId")
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	if err := h.gwSvc.DeleteGatewayDomain(c.Context(), gwID, domainID); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.JSON(fiber.Map{"message": "domain deleted"})
+}
+
+// --- Analytics Handlers ---
+
+// GetAnalytics returns gateway analytics overview.
+// GET /api/v1/gateways/:gwId/analytics
+func (h *GatewayHandler) GetAnalytics(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	overview, err := h.gwSvc.GetGatewayAnalytics(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(overview)
+}
+
+// GetAnalyticsTimeSeries returns gateway analytics time series.
+// GET /api/v1/gateways/:gwId/analytics/timeseries?metric=requests|latency|errors&range=1h|6h|24h|7d
+func (h *GatewayHandler) GetAnalyticsTimeSeries(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	gwID := c.Params("gwId")
+
+	gw, err := h.gwRepo.GetGateway(c.Context(), gwID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "gateway not found")
+	}
+	if gw.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your gateway")
+	}
+
+	metric := c.Query("metric", "requests")
+	timeRange := c.Query("range", "1h")
+
+	ts, err := h.gwSvc.GetGatewayTimeSeries(c.Context(), gwID, metric, timeRange)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	return c.JSON(ts)
 }

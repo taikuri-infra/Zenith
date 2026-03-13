@@ -54,6 +54,33 @@ spec:
             rejected_code: 429
             key_type: var
             key: remote_addr
+        - name: uri-blocker
+          enable: true
+          config:
+            block_rules:
+              - \.\./
+              - \.\.\\
+              - "\\;"
+              - select.*from
+              - union.*select
+              - "<script"
+              - "\\bor\\b.*=.*"
+              - "\\band\\b.*=.*"
+            rejected_code: 403
+            rejected_msg: "Blocked by WAF"
+        - name: ua-restriction
+          enable: true
+          config:
+            denylist:
+              - sqlmap
+              - nikto
+              - nmap
+              - masscan
+              - dirbuster
+              - gobuster
+              - wpscan
+              - nuclei
+              - zgrab
 ---
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
@@ -89,4 +116,31 @@ spec:
             rejected_code: 429
             key_type: var
             key: remote_addr
+        - name: uri-blocker
+          enable: true
+          config:
+            block_rules:
+              - \.\./
+              - \.\.\\
+              - "\\;"
+              - select.*from
+              - union.*select
+              - "<script"
+              - "\\bor\\b.*=.*"
+              - "\\band\\b.*=.*"
+            rejected_code: 403
+            rejected_msg: "Blocked by WAF"
+        - name: ua-restriction
+          enable: true
+          config:
+            denylist:
+              - sqlmap
+              - nikto
+              - nmap
+              - masscan
+              - dirbuster
+              - gobuster
+              - wpscan
+              - nuclei
+              - zgrab
 {{- end }}

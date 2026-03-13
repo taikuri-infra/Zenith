@@ -11,9 +11,9 @@ import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
-import { type ApiGateway, type GatewayRouteInfo, type GatewayGroup, type GatewayRoutePlugin, type DeployApp, type AuthPool, type CreateRouteInput, type UpdateRouteInput } from "@/lib/api";
+import { type ApiGateway, type GatewayRouteInfo, type GatewayGroup, type GatewayRoutePlugin, type GatewayCustomDomain, type GatewayAnalyticsOverview, type GatewayTimeSeriesResponse, type DeployApp, type AuthPool, type CreateRouteInput, type UpdateRouteInput } from "@/lib/api";
 import { useState, useCallback } from "react";
-import { Pencil, Trash2, AlertTriangle, Power } from "lucide-react";
+import { Pencil, Trash2, AlertTriangle, Power, Globe, BarChart3, Plus } from "lucide-react";
 
 /* ── method badge colors ── */
 const methodColors: Record<string, string> = {
@@ -258,6 +258,21 @@ export default function GatewayPage() {
   const routeList: GatewayRouteInfo[] = routes ?? [];
   const groupList: GatewayGroup[] = groups ?? [];
 
+  // Custom Domains
+  const { data: domains, refetch: domainsRefetch } = useApi(
+    () => activeGw ? gateways.listDomains(activeGw.id) : Promise.resolve([]), [activeGw?.id]);
+  const domainList: GatewayCustomDomain[] = domains ?? [];
+
+  // Analytics
+  const { data: analyticsData } = useApi(
+    () => activeGw ? gateways.getAnalytics(activeGw.id) : Promise.resolve(null), [activeGw?.id]);
+  const analytics: GatewayAnalyticsOverview | null = analyticsData ?? null;
+
+  const [analyticsRange, setAnalyticsRange] = useState("1h");
+  const { data: timeSeriesData } = useApi(
+    () => activeGw ? gateways.getAnalyticsTimeSeries(activeGw.id, "requests", analyticsRange) : Promise.resolve(null), [activeGw?.id, analyticsRange]);
+  const timeSeries: GatewayTimeSeriesResponse | null = timeSeriesData ?? null;
+
   /* expanded group cards */
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const toggleExpand = (id: string) => setExpandedGroups(prev => {
@@ -310,6 +325,35 @@ export default function GatewayPage() {
       toast("error", "Failed to sync");
     }
   }, [activeGw, gateways, routesRefetch, groupsRefetch, toast]);
+
+  /* ── Custom Domains ── */
+  const [showAddDomain, setShowAddDomain] = useState(false);
+  const [newDomain, setNewDomain] = useState("");
+  const [addingDomain, setAddingDomain] = useState(false);
+
+  const handleAddDomain = useCallback(async () => {
+    if (!activeGw || !newDomain.trim()) return;
+    setAddingDomain(true);
+    try {
+      await gateways.addDomain(activeGw.id, newDomain.trim());
+      setShowAddDomain(false); setNewDomain("");
+      domainsRefetch();
+      toast("success", "Domain added");
+    } catch {
+      toast("error", "Failed to add domain");
+    } finally { setAddingDomain(false); }
+  }, [activeGw, newDomain, gateways, domainsRefetch, toast]);
+
+  const handleDeleteDomain = useCallback(async (domainId: string) => {
+    if (!activeGw) return;
+    try {
+      await gateways.deleteDomain(activeGw.id, domainId);
+      domainsRefetch();
+      toast("success", "Domain deleted");
+    } catch {
+      toast("error", "Failed to delete domain");
+    }
+  }, [activeGw, gateways, domainsRefetch, toast]);
 
   /* ── Add Route (pre-selects group when opened from group card) ── */
   const [showAddRoute, setShowAddRoute] = useState(false);
@@ -902,6 +946,86 @@ export default function GatewayPage() {
               </div>
             )}
 
+            {/* ── Analytics Dashboard ── */}
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-medium text-white flex items-center gap-1.5"><BarChart3 className="h-4 w-4 text-accent-400" /> Analytics</h2>
+                <div className="flex gap-1">
+                  {["1h", "6h", "24h", "7d"].map(r => (
+                    <button key={r} onClick={() => setAnalyticsRange(r)}
+                      className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${analyticsRange === r ? "bg-accent-500 text-white" : "bg-surface-200 text-neutral-400 hover:text-white"}`}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-3 mb-4">
+                <StatCard label="Requests/min" value={analytics ? (analytics.request_rate * 60).toFixed(1) : "—"} />
+                <StatCard label="Error Rate" value={analytics ? `${analytics.error_rate.toFixed(1)}%` : "—"} />
+                <StatCard label="P95 Latency" value={analytics ? `${(analytics.p95_latency * 1000).toFixed(0)}ms` : "—"} />
+                <StatCard label="Total 24h" value={analytics ? Math.round(analytics.total_requests_24h).toLocaleString() : "—"} />
+              </div>
+              {timeSeries && timeSeries.points.length > 0 && (
+                <div className="rounded-lg border border-border bg-surface-100 p-4">
+                  <p className="text-xs text-neutral-500 mb-2">Request Rate Over Time ({analyticsRange})</p>
+                  <div className="flex items-end gap-px h-20">
+                    {(() => {
+                      const maxVal = Math.max(...timeSeries.points.map(p => p.value), 1);
+                      return timeSeries.points.map((p, i) => (
+                        <div key={i} className="flex-1 bg-accent-500/60 rounded-t-sm hover:bg-accent-500 transition-colors"
+                          style={{ height: `${(p.value / maxVal) * 100}%`, minHeight: "2px" }}
+                          title={`${p.value.toFixed(1)} req/min`} />
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* ── Custom Domains ── */}
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-medium text-white flex items-center gap-1.5"><Globe className="h-4 w-4 text-accent-400" /> Custom Domains</h2>
+                <button onClick={() => { setNewDomain(""); setShowAddDomain(true); }}
+                  className="flex items-center gap-1 rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-600 transition-colors">
+                  <Plus className="h-3 w-3" /> Add Domain
+                </button>
+              </div>
+              {domainList.length === 0 ? (
+                <div className="rounded-lg border border-border p-6 text-center">
+                  <p className="text-sm text-neutral-500">No custom domains</p>
+                  <p className="mt-1 text-xs text-neutral-600">Add a custom domain to serve your gateway from your own hostname (Pro+ required).</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-border bg-surface-100/50">
+                        <th className="px-4 py-2 text-xs font-medium text-neutral-500">Domain</th>
+                        <th className="px-4 py-2 text-xs font-medium text-neutral-500">Status</th>
+                        <th className="px-4 py-2 text-xs font-medium text-neutral-500">TLS</th>
+                        <th className="px-4 py-2 text-xs font-medium text-neutral-500">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {domainList.map(d => (
+                        <tr key={d.id} className="border-b border-border last:border-0 hover:bg-surface-200/50">
+                          <td className="px-4 py-2.5 text-sm font-mono text-white">{d.domain}</td>
+                          <td className="px-4 py-2.5"><StatusBadge status={d.status === "active" ? "running" : d.status === "failed" ? "error" : "building"} /></td>
+                          <td className="px-4 py-2.5 text-xs text-neutral-400">{d.tls_ready ? "Ready" : "Provisioning..."}</td>
+                          <td className="px-4 py-2.5">
+                            <button onClick={() => handleDeleteDomain(d.id)} className="p-1 text-red-400 hover:text-red-300 rounded transition-colors" title="Delete domain">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
             {/* Consumers — Coming Soon */}
             <section>
               <h2 className="mb-3 text-sm font-medium text-white">Consumers</h2>
@@ -1073,6 +1197,27 @@ export default function GatewayPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Add Domain Modal ── */}
+      {showAddDomain && (
+        <Modal title="Add Custom Domain" onClose={() => setShowAddDomain(false)}>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Domain</label>
+              <input type="text" value={newDomain} onChange={e => setNewDomain(e.target.value)} placeholder="api.example.com" autoFocus
+                className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" />
+              <p className="mt-1 text-[10px] text-neutral-500">Point a CNAME record to your gateway endpoint before adding.</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowAddDomain(false)} className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors">Cancel</button>
+              <button onClick={handleAddDomain} disabled={addingDomain || !newDomain.trim()}
+                className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50">
+                {addingDomain ? "Adding..." : "Add Domain"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ── Delete Group Confirmation ── */}

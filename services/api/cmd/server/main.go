@@ -694,7 +694,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 	gwSvc := services.NewGatewayService(gwRepo, appRepo, planRepo, k8sClient, cfg.GatewayDomain, "zenith-apps")
 	gwSvc.SetAppsDomain(cfg.BaseDomain)
-	gwHandler := handlers.NewGatewayHandler(gwSvc, gwRepo, projectRepo)
+	gwHandler := handlers.NewGatewayHandler(gwSvc, gwRepo, projectRepo, planRepo)
 	onAppDeleted := func(ctx context.Context, appID string) {
 		gwSvc.HandleAppDeleted(ctx, appID)
 	}
@@ -726,6 +726,13 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	gwByID.Get("/groups", gwHandler.ListGroups)
 	gwByID.Put("/groups/:groupId", gwHandler.UpdateGroup)
 	gwByID.Delete("/groups/:groupId", gwHandler.DeleteGroup)
+
+	gwByID.Post("/domains", gwHandler.AddDomain)
+	gwByID.Get("/domains", gwHandler.ListDomains)
+	gwByID.Delete("/domains/:domainId", gwHandler.DeleteDomain)
+
+	gwByID.Get("/analytics", gwHandler.GetAnalytics)
+	gwByID.Get("/analytics/timeseries", gwHandler.GetAnalyticsTimeSeries)
 
 	// Database Backups (Phase 3 — per-database backup/restore, Pro+ only)
 	var backupRepo ports.BackupRepository
@@ -897,6 +904,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		promClient = promclient.New(cfg.PrometheusURL)
 		slog.Info("Prometheus client configured", "url", cfg.PrometheusURL)
 	}
+	gwSvc.SetPromClient(promClient)
 	if cfg.LokiURL != "" {
 		lokiClient = lokiclient.New(cfg.LokiURL)
 		slog.Info("Loki client configured", "url", cfg.LokiURL)

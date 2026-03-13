@@ -1610,6 +1610,35 @@ export interface UpdateRouteInput {
   status?: string;
 }
 
+export interface GatewayCustomDomain {
+  id: string;
+  gateway_id: string;
+  user_id: string;
+  domain: string;
+  status: "pending" | "active" | "failed";
+  tls_ready: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GatewayAnalyticsOverview {
+  request_rate: number;
+  error_rate: number;
+  p95_latency: number;
+  total_requests_24h: number;
+}
+
+export interface GatewayTimeSeriesPoint {
+  timestamp: number;
+  value: number;
+}
+
+export interface GatewayTimeSeriesResponse {
+  metric: string;
+  range: string;
+  points: GatewayTimeSeriesPoint[];
+}
+
 export const gateways = {
   list: (projectId?: string) =>
     apiFetch<ApiGateway[]>(
@@ -1665,6 +1694,23 @@ export const gateways = {
     apiFetch<void>(`/api/v1/gateways/${gwId}/groups/${groupId}`, {
       method: "DELETE",
     }),
+  // Custom Domains
+  listDomains: (gwId: string) =>
+    apiFetch<GatewayCustomDomain[]>(`/api/v1/gateways/${gwId}/domains`),
+  addDomain: (gwId: string, domain: string) =>
+    apiFetch<GatewayCustomDomain>(`/api/v1/gateways/${gwId}/domains`, {
+      method: "POST",
+      body: JSON.stringify({ domain }),
+    }),
+  deleteDomain: (gwId: string, domainId: string) =>
+    apiFetch<void>(`/api/v1/gateways/${gwId}/domains/${domainId}`, {
+      method: "DELETE",
+    }),
+  // Analytics
+  getAnalytics: (gwId: string) =>
+    apiFetch<GatewayAnalyticsOverview>(`/api/v1/gateways/${gwId}/analytics`),
+  getAnalyticsTimeSeries: (gwId: string, metric: string, range: string) =>
+    apiFetch<GatewayTimeSeriesResponse>(`/api/v1/gateways/${gwId}/analytics/timeseries?metric=${metric}&range=${range}`),
 };
 
 // ---- Auth Pools ----

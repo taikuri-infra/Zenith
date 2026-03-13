@@ -520,6 +520,82 @@ func (r *PostgresGatewayRepository) ListRoutesByAuthPool(ctx context.Context, au
 	return routes, nil
 }
 
+// --- Custom Domain CRUD ---
+
+func (r *PostgresGatewayRepository) AddGatewayDomain(ctx context.Context, gatewayID, userID, domain string) (*entities.GatewayCustomDomain, error) {
+	id := uuid.New().String()
+	now := time.Now()
+
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO gateway_custom_domains (id, gateway_id, user_id, domain, status, tls_ready, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		id, gatewayID, userID, domain, string(entities.GatewayCustomDomainStatusPending), false, now, now,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "gateway_custom_domains_domain_key") {
+			return nil, fmt.Errorf("domain '%s' is already in use", domain)
+		}
+		return nil, fmt.Errorf("add gateway domain: %w", err)
+	}
+
+	return &entities.GatewayCustomDomain{
+		ID:         id,
+		GatewayID:  gatewayID,
+		UserID:     userID,
+		Domain:     domain,
+		Status:     entities.GatewayCustomDomainStatusPending,
+		TLSReady:   false,
+		Timestamps: entities.Timestamps{CreatedAt: now, UpdatedAt: now},
+	}, nil
+}
+
+func (r *PostgresGatewayRepository) ListGatewayDomains(ctx context.Context, gatewayID string) ([]entities.GatewayCustomDomain, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, gateway_id, user_id, domain, status, tls_ready, created_at, updated_at
+		 FROM gateway_custom_domains WHERE gateway_id = $1 ORDER BY created_at ASC`, gatewayID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list gateway domains: %w", err)
+	}
+	defer rows.Close()
+
+	var domains []entities.GatewayCustomDomain
+	for rows.Next() {
+		var d entities.GatewayCustomDomain
+		if err := rows.Scan(&d.ID, &d.GatewayID, &d.UserID, &d.Domain, &d.Status, &d.TLSReady, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan gateway domain: %w", err)
+		}
+		domains = append(domains, d)
+	}
+	return domains, nil
+}
+
+func (r *PostgresGatewayRepository) DeleteGatewayDomain(ctx context.Context, id string) error {
+	ct, err := r.pool.Exec(ctx, `DELETE FROM gateway_custom_domains WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete gateway domain: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("gateway domain not found: %s", id)
+	}
+	return nil
+}
+
+func (r *PostgresGatewayRepository) UpdateGatewayDomainStatus(ctx context.Context, id string, status entities.GatewayCustomDomainStatus, tlsReady bool) error {
+	now := time.Now()
+	ct, err := r.pool.Exec(ctx,
+		`UPDATE gateway_custom_domains SET status = $1, tls_ready = $2, updated_at = $3 WHERE id = $4`,
+		string(status), tlsReady, now, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update gateway domain status: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("gateway domain not found: %s", id)
+	}
+	return nil
+}
+
 // --- Group CRUD ---
 
 func (r *PostgresGatewayRepository) CreateGroup(ctx context.Context, group *entities.GatewayGroup) (*entities.GatewayGroup, error) {

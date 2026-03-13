@@ -59,7 +59,7 @@ resource "helm_release" "apisix" {
 
   # Plugins (must be a YAML array, not object)
   values = [yamlencode({
-    plugins = ["jwt-auth", "cors", "limit-count", "openid-connect", "opentelemetry", "prometheus"]
+    plugins = ["jwt-auth", "cors", "limit-count", "openid-connect", "opentelemetry", "prometheus", "uri-blocker", "ua-restriction", "referer-restriction"]
   })]
 
   # Resources
