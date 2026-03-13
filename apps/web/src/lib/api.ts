@@ -1845,7 +1845,7 @@ export const authPools = {
     }),
   // Magic link
   sendMagicLink: (poolId: string, email: string) =>
-    apiFetch<{ message: string; token: string; expires_at: number }>(`/api/v1/auth-pools/${poolId}/magic-link`, {
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/magic-link`, {
       method: "POST", body: JSON.stringify({ email }),
     }),
   verifyMagicLink: (poolId: string, email: string, token: string) =>
