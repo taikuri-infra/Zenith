@@ -841,6 +841,22 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	poolByID.Get("/roles", authPoolHandler.ListRoles)
 	poolByID.Delete("/roles/:roleName", authPoolHandler.DeleteRole)
 	poolByID.Post("/reveal-secret", authPoolHandler.RevealSecret)
+	// Email verification
+	poolByID.Post("/users/:userId/verify-email", authPoolHandler.SendVerificationEmail)
+	// User metadata (admin)
+	poolByID.Get("/users/:userId/metadata", authPoolHandler.GetUserMetadata)
+	poolByID.Put("/users/:userId/metadata", authPoolHandler.SetUserMetadata)
+	// MFA / credentials
+	poolByID.Get("/users/:userId/credentials", authPoolHandler.GetUserCredentials)
+	poolByID.Delete("/users/:userId/credentials/:credentialId", authPoolHandler.DeleteUserCredential)
+	// Session management
+	poolByID.Get("/users/:userId/sessions", authPoolHandler.GetUserSessions)
+	poolByID.Delete("/users/:userId/sessions/:sessionId", authPoolHandler.RevokeUserSession)
+	poolByID.Delete("/users/:userId/sessions", authPoolHandler.RevokeAllUserSessions)
+	// Social login providers
+	poolByID.Post("/providers", authPoolHandler.CreateSocialProvider)
+	poolByID.Get("/providers", authPoolHandler.ListSocialProviders)
+	poolByID.Delete("/providers/:alias", authPoolHandler.DeleteSocialProvider)
 
 	// Public auth endpoints (no JWT required — Supabase-style)
 	poolPublic := api.Group("/auth-pools/:poolId")
@@ -853,6 +869,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	poolPublic.Get("/user", authPoolHandler.GetCurrentUser)
 	poolPublic.Put("/user", authPoolHandler.UpdateCurrentUser)
 	poolPublic.Post("/user/password", authPoolHandler.ChangePassword)
+	poolPublic.Get("/user/metadata", authPoolHandler.GetCurrentUserMetadata)
+	poolPublic.Put("/user/metadata", authPoolHandler.SetCurrentUserMetadata)
 	poolPublic.Post("/token", authPoolHandler.TokenExchange) // backward compat
 
 	// Monitoring (Prometheus + Loki + k8s pod metrics)

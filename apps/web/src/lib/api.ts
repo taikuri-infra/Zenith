@@ -1700,6 +1700,31 @@ export interface AuthPoolRole {
   description: string;
 }
 
+export interface AuthPoolCredential {
+  id: string;
+  type: string;
+  user_label: string;
+  created_at: number;
+}
+
+export interface AuthPoolSession {
+  id: string;
+  ip_address: string;
+  start: number;
+  last_access: number;
+  user_id: string;
+  username: string;
+}
+
+export interface AuthPoolSocialProvider {
+  alias: string;
+  provider_id: string;
+  display_name: string;
+  enabled: boolean;
+  client_id: string;
+  trust_email: boolean;
+}
+
 export const authPools = {
   list: () => apiFetch<AuthPool[]>("/api/v1/auth-pools"),
   get: (id: string) => apiFetch<AuthPool>(`/api/v1/auth-pools/${id}`),
@@ -1777,6 +1802,37 @@ export const authPools = {
     }),
   removeRole: (poolId: string, userId: string, roleName: string) =>
     apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/roles/${roleName}`, { method: "DELETE" }),
+  // Email verification
+  sendVerifyEmail: (poolId: string, userId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/verify-email`, { method: "POST" }),
+  // User metadata (admin)
+  getUserMetadata: (poolId: string, userId: string) =>
+    apiFetch<Record<string, string[]>>(`/api/v1/auth-pools/${poolId}/users/${userId}/metadata`),
+  setUserMetadata: (poolId: string, userId: string, metadata: Record<string, string[]>) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/metadata`, {
+      method: "PUT", body: JSON.stringify({ metadata }),
+    }),
+  // MFA / credentials
+  getUserCredentials: (poolId: string, userId: string) =>
+    apiFetch<AuthPoolCredential[]>(`/api/v1/auth-pools/${poolId}/users/${userId}/credentials`),
+  deleteUserCredential: (poolId: string, userId: string, credentialId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/credentials/${credentialId}`, { method: "DELETE" }),
+  // Session management
+  getUserSessions: (poolId: string, userId: string) =>
+    apiFetch<AuthPoolSession[]>(`/api/v1/auth-pools/${poolId}/users/${userId}/sessions`),
+  revokeUserSession: (poolId: string, userId: string, sessionId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/sessions/${sessionId}`, { method: "DELETE" }),
+  revokeAllUserSessions: (poolId: string, userId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/users/${userId}/sessions`, { method: "DELETE" }),
+  // Social login providers
+  listProviders: (poolId: string) =>
+    apiFetch<AuthPoolSocialProvider[]>(`/api/v1/auth-pools/${poolId}/providers`),
+  createProvider: (poolId: string, providerId: string, clientId: string, clientSecret: string, displayName?: string) =>
+    apiFetch<{ message: string; alias: string }>(`/api/v1/auth-pools/${poolId}/providers`, {
+      method: "POST", body: JSON.stringify({ provider_id: providerId, client_id: clientId, client_secret: clientSecret, display_name: displayName || "" }),
+    }),
+  deleteProvider: (poolId: string, alias: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/providers/${alias}`, { method: "DELETE" }),
 };
 
 // ---- Support Tickets ----

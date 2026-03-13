@@ -1487,6 +1487,17 @@ const demoAuthPools = {
   getUserRoles: async () => { await delay(300); return []; },
   assignRole: async () => { await delay(300); return { message: "assigned" }; },
   removeRole: async () => { await delay(300); return { message: "removed" }; },
+  sendVerifyEmail: async () => { await delay(300); return { message: "sent" }; },
+  getUserMetadata: async () => { await delay(200); return {}; },
+  setUserMetadata: async () => { await delay(300); return { message: "updated" }; },
+  getUserCredentials: async () => { await delay(200); return []; },
+  deleteUserCredential: async () => { await delay(300); return { message: "deleted" }; },
+  getUserSessions: async () => { await delay(200); return []; },
+  revokeUserSession: async () => { await delay(300); return { message: "revoked" }; },
+  revokeAllUserSessions: async () => { await delay(300); return { message: "revoked" }; },
+  listProviders: async () => { await delay(200); return []; },
+  createProvider: async () => { await delay(300); return { message: "created", alias: "google" }; },
+  deleteProvider: async () => { await delay(300); return { message: "deleted" }; },
 };
 
 // ---- Team Demo ----

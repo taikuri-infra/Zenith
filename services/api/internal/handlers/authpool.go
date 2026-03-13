@@ -719,6 +719,313 @@ func (h *AuthPoolHandler) ChangePassword(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "password changed"})
 }
 
+// ---------------------------------------------------------------------------
+// Email verification (authenticated — pool owner)
+// ---------------------------------------------------------------------------
+
+// SendVerificationEmail sends an email verification to a user.
+// POST /api/v1/auth-pools/:poolId/users/:userId/verify-email
+func (h *AuthPoolHandler) SendVerificationEmail(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	if err := h.poolSvc.SendVerifyEmail(c.Context(), pool, c.Params("userId")); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to send verification email")
+	}
+	return c.JSON(fiber.Map{"message": "verification email sent"})
+}
+
+// ---------------------------------------------------------------------------
+// User metadata (authenticated — pool owner)
+// ---------------------------------------------------------------------------
+
+// GetUserMetadata returns custom attributes for a user.
+// GET /api/v1/auth-pools/:poolId/users/:userId/metadata
+func (h *AuthPoolHandler) GetUserMetadata(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	metadata, err := h.poolSvc.GetUserMetadata(c.Context(), pool, c.Params("userId"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get user metadata")
+	}
+	return c.JSON(metadata)
+}
+
+// SetUserMetadata sets custom attributes on a user.
+// PUT /api/v1/auth-pools/:poolId/users/:userId/metadata
+func (h *AuthPoolHandler) SetUserMetadata(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		Metadata map[string][]string `json:"metadata"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Metadata == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "metadata is required")
+	}
+	// Limit: max 20 keys, each value max 256 chars
+	if len(input.Metadata) > 20 {
+		return fiber.NewError(fiber.StatusBadRequest, "maximum 20 metadata keys allowed")
+	}
+	for k, vals := range input.Metadata {
+		if !safeNamePattern.MatchString(k) {
+			return fiber.NewError(fiber.StatusBadRequest, "metadata key must be alphanumeric")
+		}
+		for _, v := range vals {
+			if len(v) > 256 {
+				return fiber.NewError(fiber.StatusBadRequest, "metadata values must be at most 256 characters")
+			}
+		}
+	}
+
+	if err := h.poolSvc.SetUserMetadata(c.Context(), pool, c.Params("userId"), input.Metadata); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to set user metadata")
+	}
+	return c.JSON(fiber.Map{"message": "metadata updated"})
+}
+
+// ---------------------------------------------------------------------------
+// MFA / Credentials (authenticated — pool owner)
+// ---------------------------------------------------------------------------
+
+// GetUserCredentials returns all credentials (password, TOTP) for a user.
+// GET /api/v1/auth-pools/:poolId/users/:userId/credentials
+func (h *AuthPoolHandler) GetUserCredentials(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	creds, err := h.poolSvc.GetUserCredentials(c.Context(), pool, c.Params("userId"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get credentials")
+	}
+	if creds == nil {
+		creds = []ports.IdentityCredential{}
+	}
+	return c.JSON(creds)
+}
+
+// DeleteUserCredential removes a specific credential (e.g., remove TOTP).
+// DELETE /api/v1/auth-pools/:poolId/users/:userId/credentials/:credentialId
+func (h *AuthPoolHandler) DeleteUserCredential(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	if err := h.poolSvc.DeleteUserCredential(c.Context(), pool, c.Params("userId"), c.Params("credentialId")); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to delete credential")
+	}
+	return c.JSON(fiber.Map{"message": "credential deleted"})
+}
+
+// ---------------------------------------------------------------------------
+// Session management (authenticated — pool owner)
+// ---------------------------------------------------------------------------
+
+// GetUserSessions returns all active sessions for a user.
+// GET /api/v1/auth-pools/:poolId/users/:userId/sessions
+func (h *AuthPoolHandler) GetUserSessions(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	sessions, err := h.poolSvc.GetUserSessions(c.Context(), pool, c.Params("userId"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get sessions")
+	}
+	if sessions == nil {
+		sessions = []ports.IdentitySession{}
+	}
+	return c.JSON(sessions)
+}
+
+// RevokeUserSession revokes a single session.
+// DELETE /api/v1/auth-pools/:poolId/users/:userId/sessions/:sessionId
+func (h *AuthPoolHandler) RevokeUserSession(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	if err := h.poolSvc.RevokeUserSession(c.Context(), pool, c.Params("sessionId")); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to revoke session")
+	}
+	return c.JSON(fiber.Map{"message": "session revoked"})
+}
+
+// RevokeAllUserSessions revokes all sessions for a user.
+// DELETE /api/v1/auth-pools/:poolId/users/:userId/sessions
+func (h *AuthPoolHandler) RevokeAllUserSessions(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	if err := h.poolSvc.RevokeAllUserSessions(c.Context(), pool, c.Params("userId")); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to revoke sessions")
+	}
+	return c.JSON(fiber.Map{"message": "all sessions revoked"})
+}
+
+// ---------------------------------------------------------------------------
+// Social / Identity Provider management (authenticated — pool owner)
+// ---------------------------------------------------------------------------
+
+// CreateSocialProvider adds a social login provider (Google, GitHub, Apple, etc.).
+// POST /api/v1/auth-pools/:poolId/providers
+func (h *AuthPoolHandler) CreateSocialProvider(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input ports.IdentityProviderConfig
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.ProviderID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "provider_id is required (google, github, apple, etc.)")
+	}
+	if input.ClientID == "" || input.ClientSecret == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "client_id and client_secret are required")
+	}
+	// Auto-generate alias from provider_id if empty
+	if input.Alias == "" {
+		input.Alias = input.ProviderID
+	}
+	if input.DisplayName == "" {
+		input.DisplayName = strings.ToUpper(input.ProviderID[:1]) + input.ProviderID[1:]
+	}
+	input.Enabled = true
+
+	if err := h.poolSvc.CreateIdentityProvider(c.Context(), pool, input); err != nil {
+		return fiber.NewError(fiber.StatusConflict, "failed to create provider")
+	}
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "provider created", "alias": input.Alias})
+}
+
+// ListSocialProviders returns all configured social login providers.
+// GET /api/v1/auth-pools/:poolId/providers
+func (h *AuthPoolHandler) ListSocialProviders(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	providers, err := h.poolSvc.ListIdentityProviders(c.Context(), pool)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to list providers")
+	}
+	if providers == nil {
+		providers = []ports.IdentityProviderConfig{}
+	}
+	return c.JSON(providers)
+}
+
+// DeleteSocialProvider removes a social login provider.
+// DELETE /api/v1/auth-pools/:poolId/providers/:alias
+func (h *AuthPoolHandler) DeleteSocialProvider(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	if err := h.poolSvc.DeleteIdentityProvider(c.Context(), pool, c.Params("alias")); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to delete provider")
+	}
+	return c.JSON(fiber.Map{"message": "provider deleted"})
+}
+
+// ---------------------------------------------------------------------------
+// Public: user metadata self-service (requires Bearer token)
+// ---------------------------------------------------------------------------
+
+// GetCurrentUserMetadata returns the current user's custom metadata.
+// GET /api/v1/auth-pools/:poolId/user/metadata
+func (h *AuthPoolHandler) GetCurrentUserMetadata(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+	bearerToken := c.Get("Authorization")
+	if bearerToken == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "authorization header required")
+	}
+	bearerToken = strings.TrimPrefix(bearerToken, "Bearer ")
+	bearerToken = strings.TrimPrefix(bearerToken, "bearer ")
+
+	userInfo, err := h.getUserInfoFromToken(c, pool, bearerToken)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
+	}
+	userID, _ := userInfo["sub"].(string)
+	if userID == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid token")
+	}
+
+	metadata, err := h.poolSvc.GetUserMetadata(c.Context(), pool, userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get metadata")
+	}
+	return c.JSON(metadata)
+}
+
+// SetCurrentUserMetadata updates the current user's custom metadata.
+// PUT /api/v1/auth-pools/:poolId/user/metadata
+func (h *AuthPoolHandler) SetCurrentUserMetadata(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+	bearerToken := c.Get("Authorization")
+	if bearerToken == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "authorization header required")
+	}
+	bearerToken = strings.TrimPrefix(bearerToken, "Bearer ")
+	bearerToken = strings.TrimPrefix(bearerToken, "bearer ")
+
+	userInfo, err := h.getUserInfoFromToken(c, pool, bearerToken)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
+	}
+	userID, _ := userInfo["sub"].(string)
+	if userID == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid token")
+	}
+
+	var input struct {
+		Metadata map[string][]string `json:"metadata"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Metadata == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "metadata is required")
+	}
+	if len(input.Metadata) > 20 {
+		return fiber.NewError(fiber.StatusBadRequest, "maximum 20 metadata keys allowed")
+	}
+	for k, vals := range input.Metadata {
+		if !safeNamePattern.MatchString(k) {
+			return fiber.NewError(fiber.StatusBadRequest, "metadata key must be alphanumeric")
+		}
+		for _, v := range vals {
+			if len(v) > 256 {
+				return fiber.NewError(fiber.StatusBadRequest, "metadata values must be at most 256 characters")
+			}
+		}
+	}
+
+	if err := h.poolSvc.SetUserMetadata(c.Context(), pool, userID, input.Metadata); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to set metadata")
+	}
+	return c.JSON(fiber.Map{"message": "metadata updated"})
+}
+
 // TokenExchange is kept for backward compatibility.
 // POST /api/v1/auth-pools/:poolId/token
 func (h *AuthPoolHandler) TokenExchange(c *fiber.Ctx) error {

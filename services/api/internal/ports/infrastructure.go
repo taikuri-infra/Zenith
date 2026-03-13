@@ -246,17 +246,40 @@ type IdentityProvider interface {
 	GetUserRoles(ctx context.Context, realmName, userID string) ([]IdentityRole, error)
 	AssignRoleToUser(ctx context.Context, realmName, userID, roleName string) error
 	RemoveRoleFromUser(ctx context.Context, realmName, userID, roleName string) error
+
+	// Email verification
+	SendVerifyEmail(ctx context.Context, realmName, userID string) error
+
+	// User metadata (custom attributes)
+	GetUserMetadata(ctx context.Context, realmName, userID string) (map[string][]string, error)
+	SetUserMetadata(ctx context.Context, realmName, userID string, metadata map[string][]string) error
+
+	// MFA / credentials
+	GetUserCredentials(ctx context.Context, realmName, userID string) ([]IdentityCredential, error)
+	DeleteUserCredential(ctx context.Context, realmName, userID, credentialID string) error
+
+	// Session management
+	GetUserSessions(ctx context.Context, realmName, userID string) ([]IdentitySession, error)
+	RevokeUserSession(ctx context.Context, realmName, sessionID string) error
+	RevokeAllUserSessions(ctx context.Context, realmName, userID string) error
+
+	// Social / identity provider configuration
+	CreateIdentityProvider(ctx context.Context, realmName string, provider IdentityProviderConfig) error
+	ListIdentityProviders(ctx context.Context, realmName string) ([]IdentityProviderConfig, error)
+	DeleteIdentityProvider(ctx context.Context, realmName, alias string) error
 }
 
 // IdentityUser represents a user in an identity provider realm.
 type IdentityUser struct {
-	ID            string `json:"id"`
-	Email         string `json:"email"`
-	FirstName     string `json:"first_name"`
-	LastName      string `json:"last_name"`
-	Enabled       bool   `json:"enabled"`
-	EmailVerified bool   `json:"email_verified"`
-	CreatedAt     int64  `json:"created_at"`
+	ID            string              `json:"id"`
+	Email         string              `json:"email"`
+	FirstName     string              `json:"first_name"`
+	LastName      string              `json:"last_name"`
+	Enabled       bool                `json:"enabled"`
+	EmailVerified bool                `json:"email_verified"`
+	CreatedAt     int64               `json:"created_at"`
+	Metadata      map[string][]string `json:"metadata,omitempty"`
+	TOTPEnabled   bool                `json:"totp_enabled"`
 }
 
 // IdentityRole represents a role in an identity provider realm.
@@ -264,6 +287,35 @@ type IdentityRole struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+// IdentityCredential represents a user credential (password, TOTP, etc.).
+type IdentityCredential struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"`
+	UserLabel string `json:"user_label"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+// IdentitySession represents an active user session.
+type IdentitySession struct {
+	ID         string `json:"id"`
+	IPAddress  string `json:"ip_address"`
+	Start      int64  `json:"start"`
+	LastAccess int64  `json:"last_access"`
+	UserID     string `json:"user_id"`
+	Username   string `json:"username"`
+}
+
+// IdentityProviderConfig represents a social login provider configuration.
+type IdentityProviderConfig struct {
+	Alias       string `json:"alias"`
+	ProviderID  string `json:"provider_id"` // google, github, apple, etc.
+	DisplayName string `json:"display_name"`
+	Enabled     bool   `json:"enabled"`
+	ClientID    string `json:"client_id"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	TrustEmail  bool   `json:"trust_email"`
 }
 
 // ---------------------------------------------------------------------------

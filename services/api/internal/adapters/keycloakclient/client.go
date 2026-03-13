@@ -50,10 +50,12 @@ func (c *Client) CreateRealm(ctx context.Context, realmName, displayName string)
 	}
 
 	enabled := true
+	verifyEmail := true
 	_, err = c.gc.CreateRealm(ctx, token, gocloak.RealmRepresentation{
 		Realm:       &realmName,
 		DisplayName: &displayName,
 		Enabled:     &enabled,
+		VerifyEmail: &verifyEmail,
 	})
 	if err != nil {
 		return fmt.Errorf("create realm %s: %w", realmName, err)
@@ -390,6 +392,211 @@ func (c *Client) RemoveRoleFromUser(ctx context.Context, realmName, userID, role
 	return c.gc.DeleteRealmRoleFromUser(ctx, token, realmName, userID, []gocloak.Role{*role})
 }
 
+// SendVerifyEmail sends a verification email to a user.
+func (c *Client) SendVerifyEmail(ctx context.Context, realmName, userID string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	return c.gc.SendVerifyEmail(ctx, token, userID, realmName)
+}
+
+// GetUserMetadata returns a user's custom attributes.
+func (c *Client) GetUserMetadata(ctx context.Context, realmName, userID string) (map[string][]string, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	u, err := c.gc.GetUserByID(ctx, token, realmName, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get user %s: %w", userID, err)
+	}
+	if u.Attributes == nil {
+		return map[string][]string{}, nil
+	}
+	return *u.Attributes, nil
+}
+
+// SetUserMetadata sets custom attributes on a user.
+func (c *Client) SetUserMetadata(ctx context.Context, realmName, userID string, metadata map[string][]string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	u, err := c.gc.GetUserByID(ctx, token, realmName, userID)
+	if err != nil {
+		return fmt.Errorf("get user %s: %w", userID, err)
+	}
+	u.Attributes = &metadata
+	return c.gc.UpdateUser(ctx, token, realmName, *u)
+}
+
+// GetUserCredentials returns all credentials for a user (password, totp, etc.).
+func (c *Client) GetUserCredentials(ctx context.Context, realmName, userID string) ([]ports.IdentityCredential, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	creds, err := c.gc.GetCredentials(ctx, token, realmName, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get credentials for user %s: %w", userID, err)
+	}
+	var result []ports.IdentityCredential
+	for _, cr := range creds {
+		ic := ports.IdentityCredential{}
+		if cr.ID != nil {
+			ic.ID = *cr.ID
+		}
+		if cr.Type != nil {
+			ic.Type = *cr.Type
+		}
+		if cr.UserLabel != nil {
+			ic.UserLabel = *cr.UserLabel
+		}
+		if cr.CreatedDate != nil {
+			ic.CreatedAt = *cr.CreatedDate
+		}
+		result = append(result, ic)
+	}
+	return result, nil
+}
+
+// DeleteUserCredential deletes a specific credential (e.g., remove TOTP).
+func (c *Client) DeleteUserCredential(ctx context.Context, realmName, userID, credentialID string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	return c.gc.DeleteCredentials(ctx, token, realmName, userID, credentialID)
+}
+
+// GetUserSessions returns all active sessions for a user.
+func (c *Client) GetUserSessions(ctx context.Context, realmName, userID string) ([]ports.IdentitySession, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sessions, err := c.gc.GetUserSessions(ctx, token, realmName, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get sessions for user %s: %w", userID, err)
+	}
+	var result []ports.IdentitySession
+	for _, s := range sessions {
+		is := ports.IdentitySession{}
+		if s.ID != nil {
+			is.ID = *s.ID
+		}
+		if s.IPAddress != nil {
+			is.IPAddress = *s.IPAddress
+		}
+		if s.Start != nil {
+			is.Start = *s.Start
+		}
+		if s.LastAccess != nil {
+			is.LastAccess = *s.LastAccess
+		}
+		if s.UserID != nil {
+			is.UserID = *s.UserID
+		}
+		if s.Username != nil {
+			is.Username = *s.Username
+		}
+		result = append(result, is)
+	}
+	return result, nil
+}
+
+// RevokeUserSession revokes a single session.
+func (c *Client) RevokeUserSession(ctx context.Context, realmName, sessionID string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	return c.gc.LogoutUserSession(ctx, token, realmName, sessionID)
+}
+
+// RevokeAllUserSessions revokes all sessions for a user.
+func (c *Client) RevokeAllUserSessions(ctx context.Context, realmName, userID string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	return c.gc.LogoutAllSessions(ctx, token, realmName, userID)
+}
+
+// CreateIdentityProvider creates a social login provider in a realm.
+func (c *Client) CreateIdentityProvider(ctx context.Context, realmName string, provider ports.IdentityProviderConfig) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	enabled := provider.Enabled
+	config := map[string]string{
+		"clientId":     provider.ClientID,
+		"clientSecret": provider.ClientSecret,
+	}
+	_, err = c.gc.CreateIdentityProvider(ctx, token, realmName, gocloak.IdentityProviderRepresentation{
+		Alias:       &provider.Alias,
+		ProviderID:  &provider.ProviderID,
+		DisplayName: &provider.DisplayName,
+		Enabled:     &enabled,
+		TrustEmail:  &provider.TrustEmail,
+		Config:      &config,
+	})
+	if err != nil {
+		return fmt.Errorf("create identity provider %s: %w", provider.Alias, err)
+	}
+	return nil
+}
+
+// ListIdentityProviders returns all identity providers in a realm.
+func (c *Client) ListIdentityProviders(ctx context.Context, realmName string) ([]ports.IdentityProviderConfig, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	providers, err := c.gc.GetIdentityProviders(ctx, token, realmName)
+	if err != nil {
+		return nil, fmt.Errorf("list identity providers in realm %s: %w", realmName, err)
+	}
+	var result []ports.IdentityProviderConfig
+	for _, p := range providers {
+		ipc := ports.IdentityProviderConfig{Enabled: true}
+		if p.Alias != nil {
+			ipc.Alias = *p.Alias
+		}
+		if p.ProviderID != nil {
+			ipc.ProviderID = *p.ProviderID
+		}
+		if p.DisplayName != nil {
+			ipc.DisplayName = *p.DisplayName
+		}
+		if p.Enabled != nil {
+			ipc.Enabled = *p.Enabled
+		}
+		if p.TrustEmail != nil {
+			ipc.TrustEmail = *p.TrustEmail
+		}
+		if p.Config != nil {
+			if cid, ok := (*p.Config)["clientId"]; ok {
+				ipc.ClientID = cid
+			}
+		}
+		// Never expose client secret on list
+		result = append(result, ipc)
+	}
+	return result, nil
+}
+
+// DeleteIdentityProvider removes a social login provider from a realm.
+func (c *Client) DeleteIdentityProvider(ctx context.Context, realmName, alias string) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	return c.gc.DeleteIdentityProvider(ctx, token, realmName, alias)
+}
+
 func (c *Client) setUserEnabled(ctx context.Context, realmName, userID string, enabled bool) error {
 	token, err := c.token(ctx)
 	if err != nil {
@@ -429,6 +636,12 @@ func toIdentityUser(u *gocloak.User) *ports.IdentityUser {
 	}
 	if u.CreatedTimestamp != nil {
 		iu.CreatedAt = *u.CreatedTimestamp
+	}
+	if u.Totp != nil {
+		iu.TOTPEnabled = *u.Totp
+	}
+	if u.Attributes != nil {
+		iu.Metadata = *u.Attributes
 	}
 	return iu
 }
@@ -558,5 +771,34 @@ func (m *MemoryKeycloakClient) AssignRoleToUser(_ context.Context, _, _, _ strin
 	return nil
 }
 func (m *MemoryKeycloakClient) RemoveRoleFromUser(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (m *MemoryKeycloakClient) SendVerifyEmail(_ context.Context, _, _ string) error { return nil }
+func (m *MemoryKeycloakClient) GetUserMetadata(_ context.Context, _, _ string) (map[string][]string, error) {
+	return map[string][]string{}, nil
+}
+func (m *MemoryKeycloakClient) SetUserMetadata(_ context.Context, _, _ string, _ map[string][]string) error {
+	return nil
+}
+func (m *MemoryKeycloakClient) GetUserCredentials(_ context.Context, _, _ string) ([]ports.IdentityCredential, error) {
+	return []ports.IdentityCredential{}, nil
+}
+func (m *MemoryKeycloakClient) DeleteUserCredential(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (m *MemoryKeycloakClient) GetUserSessions(_ context.Context, _, _ string) ([]ports.IdentitySession, error) {
+	return []ports.IdentitySession{}, nil
+}
+func (m *MemoryKeycloakClient) RevokeUserSession(_ context.Context, _, _ string) error { return nil }
+func (m *MemoryKeycloakClient) RevokeAllUserSessions(_ context.Context, _, _ string) error {
+	return nil
+}
+func (m *MemoryKeycloakClient) CreateIdentityProvider(_ context.Context, _ string, _ ports.IdentityProviderConfig) error {
+	return nil
+}
+func (m *MemoryKeycloakClient) ListIdentityProviders(_ context.Context, _ string) ([]ports.IdentityProviderConfig, error) {
+	return []ports.IdentityProviderConfig{}, nil
+}
+func (m *MemoryKeycloakClient) DeleteIdentityProvider(_ context.Context, _, _ string) error {
 	return nil
 }

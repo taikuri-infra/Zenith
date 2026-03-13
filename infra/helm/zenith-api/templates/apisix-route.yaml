@@ -25,6 +25,7 @@ spec:
           - /api/v1/auth-pools/*/reset-password
           - /api/v1/auth-pools/*/user
           - /api/v1/auth-pools/*/user/password
+          - /api/v1/auth-pools/*/user/metadata
           - /api/v1/auth-pools/*/token
       backends:
         - serviceName: zenith-api

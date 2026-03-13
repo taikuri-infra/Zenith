@@ -227,3 +227,58 @@ func (s *AuthPoolService) ResetPassword(ctx context.Context, pool *entities.Auth
 	// In production, we'd validate the reset token first
 	return s.idp.ResetPasswordByEmail(ctx, pool.RealmName, email, newPassword)
 }
+
+// SendVerifyEmail sends an email verification email to a user.
+func (s *AuthPoolService) SendVerifyEmail(ctx context.Context, pool *entities.AuthPool, userID string) error {
+	return s.idp.SendVerifyEmail(ctx, pool.RealmName, userID)
+}
+
+// GetUserMetadata returns custom attributes for a user.
+func (s *AuthPoolService) GetUserMetadata(ctx context.Context, pool *entities.AuthPool, userID string) (map[string][]string, error) {
+	return s.idp.GetUserMetadata(ctx, pool.RealmName, userID)
+}
+
+// SetUserMetadata sets custom attributes on a user.
+func (s *AuthPoolService) SetUserMetadata(ctx context.Context, pool *entities.AuthPool, userID string, metadata map[string][]string) error {
+	return s.idp.SetUserMetadata(ctx, pool.RealmName, userID, metadata)
+}
+
+// GetUserCredentials returns all credentials (password, TOTP, etc.) for a user.
+func (s *AuthPoolService) GetUserCredentials(ctx context.Context, pool *entities.AuthPool, userID string) ([]ports.IdentityCredential, error) {
+	return s.idp.GetUserCredentials(ctx, pool.RealmName, userID)
+}
+
+// DeleteUserCredential deletes a specific credential (e.g., remove TOTP factor).
+func (s *AuthPoolService) DeleteUserCredential(ctx context.Context, pool *entities.AuthPool, userID, credentialID string) error {
+	return s.idp.DeleteUserCredential(ctx, pool.RealmName, userID, credentialID)
+}
+
+// GetUserSessions returns all active sessions for a user.
+func (s *AuthPoolService) GetUserSessions(ctx context.Context, pool *entities.AuthPool, userID string) ([]ports.IdentitySession, error) {
+	return s.idp.GetUserSessions(ctx, pool.RealmName, userID)
+}
+
+// RevokeUserSession revokes a single user session.
+func (s *AuthPoolService) RevokeUserSession(ctx context.Context, pool *entities.AuthPool, sessionID string) error {
+	return s.idp.RevokeUserSession(ctx, pool.RealmName, sessionID)
+}
+
+// RevokeAllUserSessions revokes all sessions for a user.
+func (s *AuthPoolService) RevokeAllUserSessions(ctx context.Context, pool *entities.AuthPool, userID string) error {
+	return s.idp.RevokeAllUserSessions(ctx, pool.RealmName, userID)
+}
+
+// CreateIdentityProvider creates a social login provider (Google, GitHub, Apple, etc.).
+func (s *AuthPoolService) CreateIdentityProvider(ctx context.Context, pool *entities.AuthPool, provider ports.IdentityProviderConfig) error {
+	return s.idp.CreateIdentityProvider(ctx, pool.RealmName, provider)
+}
+
+// ListIdentityProviders returns all configured social login providers.
+func (s *AuthPoolService) ListIdentityProviders(ctx context.Context, pool *entities.AuthPool) ([]ports.IdentityProviderConfig, error) {
+	return s.idp.ListIdentityProviders(ctx, pool.RealmName)
+}
+
+// DeleteIdentityProvider removes a social login provider.
+func (s *AuthPoolService) DeleteIdentityProvider(ctx context.Context, pool *entities.AuthPool, alias string) error {
+	return s.idp.DeleteIdentityProvider(ctx, pool.RealmName, alias)
+}

@@ -6,10 +6,11 @@ import { Modal } from "@/components/modal";
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getApi } from "@/lib/get-api";
-import type { AuthPool, AuthPoolUser, AuthPoolRole } from "@/lib/api";
+import type { AuthPool, AuthPoolUser, AuthPoolRole, AuthPoolSocialProvider, AuthPoolSession, AuthPoolCredential } from "@/lib/api";
 import {
   Shield, Users, Key, Copy, Check, ChevronLeft, Plus,
   Trash2, Loader2, UserCheck, UserX, Eye, EyeOff, LogIn, BookOpen, Tag, X,
+  Globe, Monitor, Mail, ShieldCheck, Fingerprint,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -93,6 +94,21 @@ export default function PoolDetailPage() {
   const [userRolesMap, setUserRolesMap] = useState<Record<string, AuthPoolRole[]>>({});
   const [assigningRole, setAssigningRole] = useState<string | null>(null);
 
+  // Social providers
+  const [providers, setProviders] = useState<AuthPoolSocialProvider[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(true);
+  const [showAddProvider, setShowAddProvider] = useState(false);
+  const [newProviderType, setNewProviderType] = useState("google");
+  const [newProviderClientId, setNewProviderClientId] = useState("");
+  const [newProviderClientSecret, setNewProviderClientSecret] = useState("");
+  const [addingProvider, setAddingProvider] = useState(false);
+
+  // Sessions (per user expandable)
+  const [expandedUserSessions, setExpandedUserSessions] = useState<string | null>(null);
+  const [userSessions, setUserSessions] = useState<AuthPoolSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [userCredentials, setUserCredentials] = useState<AuthPoolCredential[]>([]);
+
   const fetchPool = useCallback(async () => {
     try {
       setLoading(true);
@@ -133,6 +149,19 @@ export default function PoolDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poolId]);
 
+  const fetchProviders = useCallback(async () => {
+    try {
+      setProvidersLoading(true);
+      const data = await api.listProviders(poolId);
+      setProviders(Array.isArray(data) ? data : []);
+    } catch {
+      setProviders([]);
+    } finally {
+      setProvidersLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolId]);
+
   const fetchUserRoles = useCallback(async (userId: string) => {
     try {
       const data = await api.getUserRoles(poolId, userId);
@@ -147,7 +176,8 @@ export default function PoolDetailPage() {
     fetchPool();
     fetchUsers();
     fetchRoles();
-  }, [fetchPool, fetchUsers, fetchRoles]);
+    fetchProviders();
+  }, [fetchPool, fetchUsers, fetchRoles, fetchProviders]);
 
   // Fetch roles for each user when users load
   useEffect(() => {
@@ -196,6 +226,88 @@ export default function PoolDetailPage() {
     try {
       await api.removeRole(poolId, userId, roleName);
       await fetchUserRoles(userId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleAddProvider = async () => {
+    if (!newProviderClientId.trim() || !newProviderClientSecret.trim()) return;
+    setAddingProvider(true);
+    try {
+      await api.createProvider(poolId, newProviderType, newProviderClientId.trim(), newProviderClientSecret.trim());
+      setShowAddProvider(false);
+      setNewProviderClientId("");
+      setNewProviderClientSecret("");
+      await fetchProviders();
+    } catch {
+      // ignore
+    } finally {
+      setAddingProvider(false);
+    }
+  };
+
+  const handleDeleteProvider = async (alias: string) => {
+    try {
+      await api.deleteProvider(poolId, alias);
+      await fetchProviders();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleExpandSessions = async (userId: string) => {
+    if (expandedUserSessions === userId) {
+      setExpandedUserSessions(null);
+      return;
+    }
+    setExpandedUserSessions(userId);
+    setSessionsLoading(true);
+    try {
+      const [sessions, creds] = await Promise.all([
+        api.getUserSessions(poolId, userId),
+        api.getUserCredentials(poolId, userId),
+      ]);
+      setUserSessions(Array.isArray(sessions) ? sessions : []);
+      setUserCredentials(Array.isArray(creds) ? creds : []);
+    } catch {
+      setUserSessions([]);
+      setUserCredentials([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const handleRevokeSession = async (userId: string, sessionId: string) => {
+    try {
+      await api.revokeUserSession(poolId, userId, sessionId);
+      handleExpandSessions(userId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRevokeAllSessions = async (userId: string) => {
+    try {
+      await api.revokeAllUserSessions(poolId, userId);
+      handleExpandSessions(userId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDeleteCredential = async (userId: string, credentialId: string) => {
+    try {
+      await api.deleteUserCredential(poolId, userId, credentialId);
+      handleExpandSessions(userId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSendVerifyEmail = async (userId: string) => {
+    try {
+      await api.sendVerifyEmail(poolId, userId);
     } catch {
       // ignore
     }
@@ -427,6 +539,60 @@ export default function PoolDetailPage() {
           )}
         </section>
 
+        {/* Social Login Providers */}
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-sm font-medium text-white">
+              <Globe className="h-4 w-4 text-neutral-500" />
+              Social Login Providers
+              <span className="rounded-full bg-surface-300 px-2 py-0.5 text-[11px] text-neutral-400">
+                {providers.length}
+              </span>
+            </h2>
+            <button
+              onClick={() => setShowAddProvider(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Provider
+            </button>
+          </div>
+
+          {providersLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-accent-500" />
+            </div>
+          ) : providers.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border bg-surface-100 py-6 text-center">
+              <Globe className="mx-auto h-6 w-6 text-neutral-600 mb-2" />
+              <p className="text-xs text-neutral-400">No social providers configured — add Google, GitHub, or Apple to enable social login</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {providers.map((p) => (
+                <div key={p.alias} className="group flex items-center justify-between rounded-lg border border-border bg-surface-100 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <Globe className="h-4 w-4 text-accent-400" />
+                    <div>
+                      <p className="text-sm font-medium text-white">{p.display_name || p.alias}</p>
+                      <p className="text-[11px] text-neutral-500">
+                        {p.provider_id} · Client ID: {p.client_id}
+                        {p.enabled ? "" : " · Disabled"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteProvider(p.alias)}
+                    className="rounded p-1.5 text-neutral-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Test Login */}
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
@@ -519,7 +685,7 @@ export default function PoolDetailPage() {
                 Use these endpoints from your frontend — no server SDK needed:
               </p>
               <div className="rounded-lg bg-surface-200 p-3 font-mono text-[11px] text-neutral-300 overflow-x-auto space-y-1">
-                <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/signup</span> — register a new user (returns tokens)</div>
+                <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/signup</span> — register + auto-login (returns tokens)</div>
                 <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/login</span> — authenticate (email + password → tokens)</div>
                 <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/refresh</span> — exchange refresh token for new tokens</div>
                 <div><span className="text-emerald-400">POST</span> <span className="text-neutral-500">/logout</span> — revoke refresh token</div>
@@ -528,6 +694,8 @@ export default function PoolDetailPage() {
                 <div><span className="text-amber-400">GET</span>&nbsp; <span className="text-neutral-500">/user</span> — get current user profile (Bearer token)</div>
                 <div><span className="text-amber-400">PUT</span>&nbsp; <span className="text-neutral-500">/user</span> — update profile (first/last name)</div>
                 <div><span className="text-amber-400">POST</span> <span className="text-neutral-500">/user/password</span> — change password</div>
+                <div><span className="text-amber-400">GET</span>&nbsp; <span className="text-neutral-500">/user/metadata</span> — get custom user metadata</div>
+                <div><span className="text-amber-400">PUT</span>&nbsp; <span className="text-neutral-500">/user/metadata</span> — set custom user metadata</div>
               </div>
               <p className="mt-2 text-[11px] text-neutral-500">
                 Base URL: <code className="text-neutral-400">/api/v1/auth-pools/{pool?.id}</code>
@@ -541,16 +709,37 @@ export default function PoolDetailPage() {
               </p>
             </div>
             <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Social Login</h3>
+              <p className="text-xs text-neutral-400">
+                Add Google, GitHub, or Apple providers above. Users can sign in with their social accounts
+                alongside email/password.
+              </p>
+            </div>
+            <div>
               <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Roles &amp; Authorization</h3>
               <p className="text-xs text-neutral-400">
                 Create roles and assign them to users. The JWT includes roles in the{" "}
                 <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">realm_access.roles</code> claim.
               </p>
             </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">User Metadata</h3>
+              <p className="text-xs text-neutral-400">
+                Store custom key-value metadata on users via the <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">/user/metadata</code> endpoint.
+                Max 20 keys, 256 chars per value.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Sessions &amp; MFA</h3>
+              <p className="text-xs text-neutral-400">
+                View and revoke user sessions from the user table. Email verification is enabled by default.
+                Users can set up TOTP — manage their MFA factors from the admin panel.
+              </p>
+            </div>
             <div className="rounded-lg bg-accent-500/5 border border-accent-500/20 px-3 py-2">
               <p className="text-[11px] text-accent-400">
                 Your app never talks to the identity provider directly. Zenith handles everything —
-                signup, login, tokens, password resets, and user management.
+                signup, login, tokens, social login, password resets, sessions, and user management.
               </p>
             </div>
           </div>
@@ -662,6 +851,20 @@ export default function PoolDetailPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
                           <button
+                            onClick={() => handleSendVerifyEmail(user.id)}
+                            title="Send verification email"
+                            className="rounded p-1.5 text-neutral-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                          >
+                            <Mail className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleExpandSessions(user.id)}
+                            title="Sessions & MFA"
+                            className={`rounded p-1.5 transition-colors ${expandedUserSessions === user.id ? "text-accent-400 bg-accent-500/10" : "text-neutral-500 hover:text-white hover:bg-surface-300"}`}
+                          >
+                            <Monitor className="h-3.5 w-3.5" />
+                          </button>
+                          <button
                             onClick={() => handleToggleUser(user)}
                             title={user.enabled ? "Disable user" : "Enable user"}
                             className="rounded p-1.5 text-neutral-500 hover:text-white hover:bg-surface-300 transition-colors"
@@ -678,6 +881,97 @@ export default function PoolDetailPage() {
                         </div>
                       </td>
                     </tr>
+                    {/* Sessions & MFA expansion */}
+                    {expandedUserSessions === user.id && (
+                      <tr className="bg-surface-200/50">
+                        <td colSpan={6} className="px-4 py-3">
+                          {sessionsLoading ? (
+                            <div className="flex items-center justify-center py-2">
+                              <Loader2 className="h-4 w-4 animate-spin text-accent-500" />
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {/* Active Sessions */}
+                              <div>
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className="text-xs font-medium text-neutral-400 flex items-center gap-1.5">
+                                    <Monitor className="h-3 w-3" /> Active Sessions ({userSessions.length})
+                                  </h4>
+                                  {userSessions.length > 0 && (
+                                    <button
+                                      onClick={() => handleRevokeAllSessions(user.id)}
+                                      className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                                    >
+                                      Revoke All
+                                    </button>
+                                  )}
+                                </div>
+                                {userSessions.length === 0 ? (
+                                  <p className="text-[11px] text-neutral-500">No active sessions</p>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {userSessions.map((s) => (
+                                      <div key={s.id} className="flex items-center justify-between rounded bg-surface-300 px-3 py-2 text-[11px]">
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-neutral-300">{s.ip_address}</span>
+                                          <span className="text-neutral-500">
+                                            Started {new Date(s.start * 1000).toLocaleString()}
+                                          </span>
+                                          <span className="text-neutral-500">
+                                            Last: {new Date(s.last_access * 1000).toLocaleString()}
+                                          </span>
+                                        </div>
+                                        <button
+                                          onClick={() => handleRevokeSession(user.id, s.id)}
+                                          className="text-red-400 hover:text-red-300"
+                                        >
+                                          Revoke
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              {/* MFA / Credentials */}
+                              <div>
+                                <h4 className="text-xs font-medium text-neutral-400 flex items-center gap-1.5 mb-2">
+                                  <Fingerprint className="h-3 w-3" /> Credentials & MFA
+                                </h4>
+                                {userCredentials.length === 0 ? (
+                                  <p className="text-[11px] text-neutral-500">No credentials found</p>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {userCredentials.map((c) => (
+                                      <div key={c.id} className="flex items-center justify-between rounded bg-surface-300 px-3 py-2 text-[11px]">
+                                        <div className="flex items-center gap-3">
+                                          <span className={`rounded px-1.5 py-0.5 font-medium ${c.type === "otp" || c.type === "totp" ? "bg-amber-500/10 text-amber-400" : "bg-neutral-500/10 text-neutral-400"}`}>
+                                            {c.type.toUpperCase()}
+                                          </span>
+                                          <span className="text-neutral-300">{c.user_label || "—"}</span>
+                                          {c.created_at > 0 && (
+                                            <span className="text-neutral-500">
+                                              Added {new Date(c.created_at).toLocaleDateString()}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {c.type !== "password" && (
+                                          <button
+                                            onClick={() => handleDeleteCredential(user.id, c.id)}
+                                            className="text-red-400 hover:text-red-300"
+                                          >
+                                            Remove
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
                   ))}
                 </tbody>
               </table>
@@ -762,6 +1056,76 @@ export default function PoolDetailPage() {
               >
                 {addingUser && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Add User
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Add Social Provider Modal */}
+      {showAddProvider && (
+        <Modal title="Add Social Login Provider" onClose={() => setShowAddProvider(false)}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAddProvider();
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Provider</label>
+              <select
+                value={newProviderType}
+                onChange={(e) => setNewProviderType(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none"
+              >
+                <option value="google">Google</option>
+                <option value="github">GitHub</option>
+                <option value="apple">Apple</option>
+                <option value="microsoft">Microsoft</option>
+                <option value="facebook">Facebook</option>
+                <option value="twitter">Twitter / X</option>
+                <option value="discord">Discord</option>
+                <option value="gitlab">GitLab</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Client ID</label>
+              <input
+                type="text"
+                value={newProviderClientId}
+                onChange={(e) => setNewProviderClientId(e.target.value)}
+                placeholder="OAuth client ID from the provider"
+                className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-neutral-400">Client Secret</label>
+              <input
+                type="password"
+                value={newProviderClientSecret}
+                onChange={(e) => setNewProviderClientSecret(e.target.value)}
+                placeholder="OAuth client secret"
+                className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAddProvider(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={addingProvider || !newProviderClientId.trim() || !newProviderClientSecret.trim()}
+                className="flex items-center gap-1.5 rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50"
+              >
+                {addingProvider && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Add Provider
               </button>
             </div>
           </form>
