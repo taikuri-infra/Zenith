@@ -3,7 +3,7 @@
 import { Shell } from "@/components/shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Modal } from "@/components/modal";
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getApi } from "@/lib/get-api";
 import type { AuthPool, AuthPoolUser, AuthPoolRole, AuthPoolSocialProvider, AuthPoolSession, AuthPoolCredential } from "@/lib/api";
@@ -790,7 +790,8 @@ export default function PoolDetailPage() {
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.id} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
+                    <React.Fragment key={user.id}>
+                    <tr className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
                       <td className="px-4 py-3 font-medium text-white">{user.email}</td>
                       <td className="px-4 py-3 text-neutral-300">
                         {[user.firstName, user.lastName].filter(Boolean).join(" ") || "—"}
@@ -972,6 +973,7 @@ export default function PoolDetailPage() {
                         </td>
                       </tr>
                     )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
