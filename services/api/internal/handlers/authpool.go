@@ -2,16 +2,19 @@ package handlers
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -19,10 +22,24 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 // Max response body size from Keycloak (1MB).
 const maxKeycloakResponseSize = 1 << 20
+
+// In-memory OTP store: key = poolId:phone → {code, exp}
+type otpEntry struct {
+	Code string
+	Exp  time.Time
+}
+
+var (
+	otpStore   = make(map[string]otpEntry)
+	otpMu      sync.Mutex
+	webhooksMu sync.Mutex
+	webhooks   = make(map[string][]ports.WebhookConfig) // poolId → webhooks
+)
 
 // Safe name pattern: alphanumeric, hyphens, underscores, dots, max 64 chars.
 var safeNamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,64}$`)
@@ -1352,6 +1369,342 @@ func (h *AuthPoolHandler) TokenExchange(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(tokens)
+}
+
+// ---------------------------------------------------------------------------
+// Email / SMTP settings (authenticated — pool owner)
+// ---------------------------------------------------------------------------
+
+// GetEmailSettings returns SMTP and email config for a pool.
+// GET /api/v1/auth-pools/:poolId/email-settings
+func (h *AuthPoolHandler) GetEmailSettings(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+	settings, err := h.poolSvc.GetEmailSettings(c.Context(), pool)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get email settings")
+	}
+	// Never expose password
+	settings.Password = ""
+	return c.JSON(settings)
+}
+
+// UpdateEmailSettings updates SMTP and email config for a pool.
+// PUT /api/v1/auth-pools/:poolId/email-settings
+func (h *AuthPoolHandler) UpdateEmailSettings(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input ports.EmailSettings
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Host == "" || input.From == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "host and from are required")
+	}
+
+	if err := h.poolSvc.UpdateEmailSettings(c.Context(), pool, &input); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to update email settings")
+	}
+	return c.JSON(fiber.Map{"message": "email settings updated"})
+}
+
+// ---------------------------------------------------------------------------
+// Phone/SMS OTP (public)
+// ---------------------------------------------------------------------------
+
+// generateOTP generates a 6-digit OTP.
+func generateOTP() string {
+	n, _ := rand.Int(rand.Reader, big.NewInt(999999))
+	return fmt.Sprintf("%06d", n.Int64())
+}
+
+// SendOTP generates and stores a 6-digit OTP for a phone number (public).
+// POST /api/v1/auth-pools/:poolId/otp/send
+func (h *AuthPoolHandler) SendOTP(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		Phone string `json:"phone"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Phone == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "phone is required")
+	}
+
+	code := generateOTP()
+	key := pool.ID + ":" + input.Phone
+
+	otpMu.Lock()
+	otpStore[key] = otpEntry{Code: code, Exp: time.Now().Add(5 * time.Minute)}
+	otpMu.Unlock()
+
+	// In production, send the code via SMS provider (Twilio, etc.)
+	// For now, return it in the response for testing
+	return c.JSON(fiber.Map{
+		"message":    "OTP sent",
+		"expires_in": 300,
+		"code":       code, // Remove in production — only for testing
+	})
+}
+
+// VerifyOTP verifies a phone OTP and returns tokens (public).
+// POST /api/v1/auth-pools/:poolId/otp/verify
+func (h *AuthPoolHandler) VerifyOTP(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		Phone string `json:"phone"`
+		Code  string `json:"code"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Phone == "" || input.Code == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "phone and code are required")
+	}
+
+	key := pool.ID + ":" + input.Phone
+
+	otpMu.Lock()
+	entry, exists := otpStore[key]
+	if exists {
+		delete(otpStore, key)
+	}
+	otpMu.Unlock()
+
+	if !exists || time.Now().After(entry.Exp) || entry.Code != input.Code {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired OTP")
+	}
+
+	// Find or create user by phone-as-email
+	email := input.Phone + "@phone.zenith"
+	user, _ := h.poolSvc.FindUserByEmail(c.Context(), pool, email)
+	if user == nil {
+		// Auto-create user on first OTP verify
+		tmpPwd := uuid.New().String()
+		created, createErr := h.poolSvc.CreateUser(c.Context(), pool, email, tmpPwd, input.Phone, "")
+		if createErr != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to create user")
+		}
+		user = created
+	}
+
+	// Set temp password and login
+	tmpPwd := uuid.New().String()
+	_ = h.poolSvc.SetUserPassword(c.Context(), pool, user.ID, tmpPwd)
+
+	tokens, err := h.doKeycloakTokenRequest(pool, url.Values{
+		"client_id":     {pool.ClientID},
+		"client_secret": {pool.ClientSecret},
+		"grant_type":    {"password"},
+		"username":      {email},
+		"password":      {tmpPwd},
+		"scope":         {"openid"},
+	})
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "authentication failed")
+	}
+
+	return c.JSON(tokens)
+}
+
+// ---------------------------------------------------------------------------
+// Webhooks (authenticated — pool owner, in-memory store)
+// ---------------------------------------------------------------------------
+
+// CreateWebhook registers a webhook for auth events.
+// POST /api/v1/auth-pools/:poolId/webhooks
+func (h *AuthPoolHandler) CreateWebhook(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		URL    string   `json:"url"`
+		Events []string `json:"events"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.URL == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "url is required")
+	}
+	if len(input.Events) == 0 {
+		input.Events = []string{"signup", "login", "logout", "password_reset", "user_deleted"}
+	}
+
+	wh := ports.WebhookConfig{
+		ID:     uuid.New().String()[:8],
+		URL:    input.URL,
+		Events: input.Events,
+		Secret: uuid.New().String(),
+		Active: true,
+	}
+
+	webhooksMu.Lock()
+	webhooks[pool.ID] = append(webhooks[pool.ID], wh)
+	webhooksMu.Unlock()
+
+	return c.Status(fiber.StatusCreated).JSON(wh)
+}
+
+// ListWebhooks returns all webhooks for a pool.
+// GET /api/v1/auth-pools/:poolId/webhooks
+func (h *AuthPoolHandler) ListWebhooks(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	webhooksMu.Lock()
+	whs := webhooks[pool.ID]
+	webhooksMu.Unlock()
+
+	if whs == nil {
+		whs = []ports.WebhookConfig{}
+	}
+	// Don't expose secrets in list
+	result := make([]fiber.Map, len(whs))
+	for i, wh := range whs {
+		result[i] = fiber.Map{
+			"id":     wh.ID,
+			"url":    wh.URL,
+			"events": wh.Events,
+			"active": wh.Active,
+		}
+	}
+	return c.JSON(result)
+}
+
+// DeleteWebhook removes a webhook.
+// DELETE /api/v1/auth-pools/:poolId/webhooks/:webhookId
+func (h *AuthPoolHandler) DeleteWebhook(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	whID := c.Params("webhookId")
+
+	webhooksMu.Lock()
+	whs := webhooks[pool.ID]
+	for i, wh := range whs {
+		if wh.ID == whID {
+			webhooks[pool.ID] = append(whs[:i], whs[i+1:]...)
+			break
+		}
+	}
+	webhooksMu.Unlock()
+
+	return c.JSON(fiber.Map{"message": "webhook deleted"})
+}
+
+// ---------------------------------------------------------------------------
+// Client SDK (public — serves a JS SDK)
+// ---------------------------------------------------------------------------
+
+// GetSDK returns a JavaScript SDK for the pool (public).
+// GET /api/v1/auth-pools/:poolId/sdk.js
+func (h *AuthPoolHandler) GetSDK(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+
+	origin := c.Get("Origin")
+	if origin == "" {
+		origin = c.Get("Referer")
+	}
+	if origin == "" {
+		origin = c.Protocol() + "://" + c.Hostname()
+	}
+
+	sdk := fmt.Sprintf(`// ZenAuth SDK — Auto-generated for pool %s
+(function(global) {
+  'use strict';
+  var BASE = '%s/api/v1/auth-pools/%s';
+
+  function request(path, opts) {
+    opts = opts || {};
+    var headers = { 'Content-Type': 'application/json' };
+    if (opts.token) headers['Authorization'] = 'Bearer ' + opts.token;
+    return fetch(BASE + path, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function(r) { return r.json(); });
+  }
+
+  global.ZenAuth = {
+    signup: function(email, password, firstName, lastName) {
+      return request('/signup', { method: 'POST', body: { email: email, password: password, first_name: firstName || '', last_name: lastName || '' } });
+    },
+    login: function(email, password) {
+      return request('/login', { method: 'POST', body: { email: email, password: password } });
+    },
+    logout: function(refreshToken) {
+      return request('/logout', { method: 'POST', body: { refresh_token: refreshToken } });
+    },
+    refresh: function(refreshToken) {
+      return request('/refresh', { method: 'POST', body: { refresh_token: refreshToken } });
+    },
+    getUser: function(token) {
+      return request('/user', { token: token });
+    },
+    updateUser: function(token, firstName, lastName) {
+      return request('/user', { method: 'PUT', token: token, body: { first_name: firstName, last_name: lastName } });
+    },
+    changePassword: function(token, currentPassword, newPassword) {
+      return request('/user/password', { method: 'POST', token: token, body: { current_password: currentPassword, new_password: newPassword } });
+    },
+    forgotPassword: function(email) {
+      return request('/forgot-password', { method: 'POST', body: { email: email } });
+    },
+    resetPassword: function(email, newPassword, resetToken) {
+      return request('/reset-password', { method: 'POST', body: { email: email, new_password: newPassword, reset_token: resetToken || '' } });
+    },
+    anonymous: function() {
+      return request('/anonymous', { method: 'POST' });
+    },
+    sendMagicLink: function(email) {
+      return request('/magic-link', { method: 'POST', body: { email: email } });
+    },
+    verifyMagicLink: function(email, token) {
+      return request('/magic-link/verify', { method: 'POST', body: { email: email, token: token } });
+    },
+    sendOTP: function(phone) {
+      return request('/otp/send', { method: 'POST', body: { phone: phone } });
+    },
+    verifyOTP: function(phone, code) {
+      return request('/otp/verify', { method: 'POST', body: { phone: phone, code: code } });
+    },
+    getMetadata: function(token) {
+      return request('/user/metadata', { token: token });
+    },
+    setMetadata: function(token, metadata) {
+      return request('/user/metadata', { method: 'PUT', token: token, body: { metadata: metadata } });
+    }
+  };
+})(typeof window !== 'undefined' ? window : this);
+`, pool.Name, origin, pool.ID)
+
+	c.Set("Content-Type", "application/javascript")
+	c.Set("Cache-Control", "public, max-age=3600")
+	return c.SendString(sdk)
 }
 
 // ---------------------------------------------------------------------------

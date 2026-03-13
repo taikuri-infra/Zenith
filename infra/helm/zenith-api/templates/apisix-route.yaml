@@ -32,6 +32,9 @@ spec:
           - /api/v1/auth-pools/*/magic-link/verify
           - /api/v1/auth-pools/*/authorize
           - /api/v1/auth-pools/*/token/code
+          - /api/v1/auth-pools/*/otp/send
+          - /api/v1/auth-pools/*/otp/verify
+          - /api/v1/auth-pools/*/sdk.js
       backends:
         - serviceName: zenith-api
           servicePort: {{ .Values.port }}

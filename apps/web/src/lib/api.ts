@@ -1859,6 +1859,33 @@ export const authPools = {
     apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(`/api/v1/auth-pools/${poolId}/token/code`, {
       method: "POST", body: JSON.stringify({ code, redirect_uri: redirectUri, code_verifier: codeVerifier || "" }),
     }),
+  // Phone OTP
+  sendOTP: (poolId: string, phone: string) =>
+    apiFetch<{ message: string; expires_in: number; code?: string }>(`/api/v1/auth-pools/${poolId}/otp/send`, {
+      method: "POST", body: JSON.stringify({ phone }),
+    }),
+  verifyOTP: (poolId: string, phone: string, code: string) =>
+    apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(`/api/v1/auth-pools/${poolId}/otp/verify`, {
+      method: "POST", body: JSON.stringify({ phone, code }),
+    }),
+  // Email settings
+  getEmailSettings: (poolId: string) =>
+    apiFetch<{ host: string; port: number; from: string; from_display_name: string; username: string; ssl: boolean; starttls: boolean }>(`/api/v1/auth-pools/${poolId}/email-settings`),
+  updateEmailSettings: (poolId: string, settings: { host: string; port: number; from: string; from_display_name?: string; username?: string; password?: string; ssl?: boolean; starttls?: boolean }) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/email-settings`, {
+      method: "PUT", body: JSON.stringify(settings),
+    }),
+  // Webhooks
+  listWebhooks: (poolId: string) =>
+    apiFetch<{ id: string; url: string; events: string[]; active: boolean }[]>(`/api/v1/auth-pools/${poolId}/webhooks`),
+  createWebhook: (poolId: string, url: string, events?: string[]) =>
+    apiFetch<{ id: string; url: string; events: string[]; secret: string; active: boolean }>(`/api/v1/auth-pools/${poolId}/webhooks`, {
+      method: "POST", body: JSON.stringify({ url, events: events || [] }),
+    }),
+  deleteWebhook: (poolId: string, webhookId: string) =>
+    apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/webhooks/${webhookId}`, { method: "DELETE" }),
+  // SDK URL
+  getSDKUrl: (poolId: string) => `${typeof window !== "undefined" ? window.location.origin : ""}/api/v1/auth-pools/${poolId}/sdk.js`,
 };
 
 // ---- Support Tickets ----

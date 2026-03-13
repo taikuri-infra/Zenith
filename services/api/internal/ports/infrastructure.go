@@ -273,6 +273,34 @@ type IdentityProvider interface {
 
 	// Find user by email (for magic link, etc.)
 	FindUserByEmail(ctx context.Context, realmName, email string) (*IdentityUser, error)
+
+	// Email / SMTP settings
+	GetEmailSettings(ctx context.Context, realmName string) (*EmailSettings, error)
+	UpdateEmailSettings(ctx context.Context, realmName string, settings *EmailSettings) error
+}
+
+// EmailSettings represents email/SMTP configuration for a realm.
+type EmailSettings struct {
+	Host            string `json:"host"`
+	Port            string `json:"port"`
+	From            string `json:"from"`
+	FromDisplayName string `json:"from_display_name"`
+	ReplyTo         string `json:"reply_to"`
+	Username        string `json:"username"`
+	Password        string `json:"password,omitempty"`
+	SSL             bool   `json:"ssl"`
+	StartTLS        bool   `json:"starttls"`
+	Auth            bool   `json:"auth"`
+	EmailTheme      string `json:"email_theme"`
+}
+
+// WebhookConfig represents a registered webhook.
+type WebhookConfig struct {
+	ID     string   `json:"id"`
+	URL    string   `json:"url"`
+	Events []string `json:"events"` // signup, login, logout, password_reset, user_deleted, etc.
+	Secret string   `json:"secret,omitempty"`
+	Active bool     `json:"active"`
 }
 
 // IdentityUser represents a user in an identity provider realm.

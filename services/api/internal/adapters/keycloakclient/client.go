@@ -641,6 +641,76 @@ func (c *Client) FindUserByEmail(ctx context.Context, realmName, email string) (
 	return toIdentityUser(users[0]), nil
 }
 
+// GetEmailSettings returns SMTP and email theme config for a realm.
+func (c *Client) GetEmailSettings(ctx context.Context, realmName string) (*ports.EmailSettings, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	realm, err := c.gc.GetRealm(ctx, token, realmName)
+	if err != nil {
+		return nil, fmt.Errorf("get realm %s: %w", realmName, err)
+	}
+
+	settings := &ports.EmailSettings{}
+	if realm.SMTPServer != nil {
+		smtp := *realm.SMTPServer
+		settings.Host = smtp["host"]
+		settings.Port = smtp["port"]
+		settings.From = smtp["from"]
+		settings.FromDisplayName = smtp["fromDisplayName"]
+		settings.ReplyTo = smtp["replyTo"]
+		settings.Username = smtp["user"]
+		settings.SSL = smtp["ssl"] == "true"
+		settings.StartTLS = smtp["starttls"] == "true"
+		settings.Auth = smtp["auth"] == "true"
+	}
+	if realm.EmailTheme != nil {
+		settings.EmailTheme = *realm.EmailTheme
+	}
+	return settings, nil
+}
+
+// UpdateEmailSettings updates SMTP and email theme config for a realm.
+func (c *Client) UpdateEmailSettings(ctx context.Context, realmName string, settings *ports.EmailSettings) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	realm, err := c.gc.GetRealm(ctx, token, realmName)
+	if err != nil {
+		return fmt.Errorf("get realm %s: %w", realmName, err)
+	}
+
+	smtp := map[string]string{
+		"host":            settings.Host,
+		"port":            settings.Port,
+		"from":            settings.From,
+		"fromDisplayName": settings.FromDisplayName,
+		"replyTo":         settings.ReplyTo,
+	}
+	if settings.Auth {
+		smtp["auth"] = "true"
+		smtp["user"] = settings.Username
+		if settings.Password != "" {
+			smtp["password"] = settings.Password
+		}
+	}
+	if settings.SSL {
+		smtp["ssl"] = "true"
+	}
+	if settings.StartTLS {
+		smtp["starttls"] = "true"
+	}
+
+	realm.SMTPServer = &smtp
+	if settings.EmailTheme != "" {
+		realm.EmailTheme = &settings.EmailTheme
+	}
+
+	return c.gc.UpdateRealm(ctx, token, *realm)
+}
+
 func (c *Client) setUserEnabled(ctx context.Context, realmName, userID string, enabled bool) error {
 	token, err := c.token(ctx)
 	if err != nil {
@@ -851,4 +921,10 @@ func (m *MemoryKeycloakClient) InviteUser(_ context.Context, _, email, _, _ stri
 }
 func (m *MemoryKeycloakClient) FindUserByEmail(_ context.Context, _, _ string) (*ports.IdentityUser, error) {
 	return nil, fmt.Errorf("user not found")
+}
+func (m *MemoryKeycloakClient) GetEmailSettings(_ context.Context, _ string) (*ports.EmailSettings, error) {
+	return &ports.EmailSettings{}, nil
+}
+func (m *MemoryKeycloakClient) UpdateEmailSettings(_ context.Context, _ string, _ *ports.EmailSettings) error {
+	return nil
 }

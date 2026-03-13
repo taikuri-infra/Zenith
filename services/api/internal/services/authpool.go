@@ -334,3 +334,13 @@ func (s *AuthPoolService) CreateAnonymousUser(ctx context.Context, pool *entitie
 		Enabled:   true,
 	}, password, nil
 }
+
+// GetEmailSettings returns SMTP and email configuration for a pool.
+func (s *AuthPoolService) GetEmailSettings(ctx context.Context, pool *entities.AuthPool) (*ports.EmailSettings, error) {
+	return s.idp.GetEmailSettings(ctx, pool.RealmName)
+}
+
+// UpdateEmailSettings updates SMTP and email configuration for a pool.
+func (s *AuthPoolService) UpdateEmailSettings(ctx context.Context, pool *entities.AuthPool, settings *ports.EmailSettings) error {
+	return s.idp.UpdateEmailSettings(ctx, pool.RealmName, settings)
+}

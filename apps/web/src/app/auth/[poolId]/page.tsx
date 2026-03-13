@@ -49,6 +49,169 @@ function CredentialRow({ label, value, secret }: { label: string; value: string;
   );
 }
 
+function EmailSettingsSection({ poolId, api }: { poolId: string; api: ReturnType<typeof getApi>["authPools"] }) {
+  const [settings, setSettings] = useState<{ host: string; port: number; from: string; from_display_name: string; username: string; ssl: boolean; starttls: boolean } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ host: "", port: 587, from: "", from_display_name: "", username: "", password: "", ssl: false, starttls: true });
+
+  useEffect(() => {
+    api.getEmailSettings(poolId).then((s) => {
+      if (s) {
+        setSettings(s);
+        setForm({ host: s.host || "", port: s.port || 587, from: s.from || "", from_display_name: s.from_display_name || "", username: s.username || "", password: "", ssl: s.ssl || false, starttls: s.starttls || false });
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [poolId, api]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.updateEmailSettings(poolId, form);
+      setSettings({ host: form.host, port: form.port, from: form.from, from_display_name: form.from_display_name, username: form.username, ssl: form.ssl, starttls: form.starttls });
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  return (
+    <section>
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
+        <Mail className="h-4 w-4 text-neutral-500" />
+        Email Settings (SMTP)
+      </h2>
+      <div className="rounded-lg border border-border bg-surface-100 p-5">
+        {loading ? (
+          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-accent-500" /></div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-neutral-500 mb-1">SMTP Host</label>
+                <input value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="smtp.example.com" className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-neutral-500 mb-1">Port</label>
+                <input type="number" value={form.port} onChange={(e) => setForm({ ...form, port: Number(e.target.value) })} className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-neutral-500 mb-1">From Email</label>
+                <input value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} placeholder="noreply@example.com" className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-neutral-500 mb-1">Display Name</label>
+                <input value={form.from_display_name} onChange={(e) => setForm({ ...form, from_display_name: e.target.value })} placeholder="My App" className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-neutral-500 mb-1">Username</label>
+                <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-neutral-500 mb-1">Password</label>
+                <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={settings?.host ? "••••••••" : ""} className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" />
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer">
+                <input type="checkbox" checked={form.ssl} onChange={(e) => setForm({ ...form, ssl: e.target.checked })} className="rounded border-border" /> SSL
+              </label>
+              <label className="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer">
+                <input type="checkbox" checked={form.starttls} onChange={(e) => setForm({ ...form, starttls: e.target.checked })} className="rounded border-border" /> STARTTLS
+              </label>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={save} disabled={saving || !form.host || !form.from} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {saving ? "Saving..." : "Save Email Settings"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function WebhooksSection({ poolId, api }: { poolId: string; api: ReturnType<typeof getApi>["authPools"] }) {
+  const [webhooks, setWebhooks] = useState<{ id: string; url: string; events: string[]; active: boolean }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newUrl, setNewUrl] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const fetchWebhooks = useCallback(async () => {
+    try {
+      const data = await api.listWebhooks(poolId);
+      setWebhooks(data || []);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [poolId, api]);
+
+  useEffect(() => { fetchWebhooks(); }, [fetchWebhooks]);
+
+  const addWebhook = async () => {
+    if (!newUrl) return;
+    setAdding(true);
+    try {
+      await api.createWebhook(poolId, newUrl);
+      setNewUrl("");
+      fetchWebhooks();
+    } catch { /* ignore */ }
+    setAdding(false);
+  };
+
+  const deleteWebhook = async (id: string) => {
+    try {
+      await api.deleteWebhook(poolId, id);
+      fetchWebhooks();
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <section>
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
+        <Globe className="h-4 w-4 text-neutral-500" />
+        Webhooks
+      </h2>
+      <div className="rounded-lg border border-border bg-surface-100 p-5">
+        {loading ? (
+          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-accent-500" /></div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <input value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="https://example.com/webhook" className="flex-1 rounded-lg border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none" />
+              <button onClick={addWebhook} disabled={adding || !newUrl} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50">
+                {adding ? "Adding..." : "Add"}
+              </button>
+            </div>
+            {webhooks.length === 0 ? (
+              <p className="text-xs text-neutral-500 text-center py-3">No webhooks configured. Add a URL to receive auth event notifications.</p>
+            ) : (
+              <div className="space-y-2">
+                {webhooks.map((wh) => (
+                  <div key={wh.id} className="flex items-center justify-between rounded-lg bg-surface-200 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-xs text-neutral-300 truncate">{wh.url}</p>
+                      <p className="text-[11px] text-neutral-500 mt-0.5">{wh.events.join(", ")}</p>
+                    </div>
+                    <button onClick={() => deleteWebhook(wh.id)} className="ml-3 rounded p-1 text-neutral-500 hover:text-red-400 transition-colors">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[11px] text-neutral-500">
+              Events: signup, login, logout, password_reset, user_deleted. Each webhook receives an HMAC-signed payload.
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function PoolDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -702,6 +865,10 @@ export default function PoolDetailPage() {
                 <div><span className="text-purple-400">POST</span> <span className="text-neutral-500">/magic-link/verify</span> — verify link → tokens</div>
                 <div><span className="text-purple-400">GET</span>&nbsp; <span className="text-neutral-500">/authorize</span> — PKCE authorization URL</div>
                 <div><span className="text-purple-400">POST</span> <span className="text-neutral-500">/token/code</span> — exchange auth code → tokens</div>
+                <div className="border-t border-border/30 pt-1 mt-1"></div>
+                <div><span className="text-orange-400">POST</span> <span className="text-neutral-500">/otp/send</span> — send phone OTP (6-digit code)</div>
+                <div><span className="text-orange-400">POST</span> <span className="text-neutral-500">/otp/verify</span> — verify phone OTP → tokens</div>
+                <div><span className="text-cyan-400">GET</span>&nbsp; <span className="text-neutral-500">/sdk.js</span> — auto-generated JavaScript SDK</div>
               </div>
               <p className="mt-2 text-[11px] text-neutral-500">
                 Base URL: <code className="text-neutral-400">/api/v1/auth-pools/{pool?.id}</code>
@@ -770,6 +937,40 @@ export default function PoolDetailPage() {
               </p>
             </div>
             <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Phone OTP</h3>
+              <p className="text-xs text-neutral-400">
+                Send a 6-digit OTP to a phone number with <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">POST /otp/send</code>.
+                Verify at <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">POST /otp/verify</code> to auto-create a user and get tokens.
+                In production, connect your SMS provider (Twilio, etc.).
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Email Templates &amp; SMTP</h3>
+              <p className="text-xs text-neutral-400">
+                Configure custom SMTP settings for verification, reset, and invite emails from the Email Settings section below.
+                Supports SSL/TLS and custom display names.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Webhooks</h3>
+              <p className="text-xs text-neutral-400">
+                Register webhook URLs to receive real-time notifications for auth events (signup, login, logout, password_reset, user_deleted).
+                Each webhook includes an HMAC secret for verification.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Client SDK</h3>
+              <p className="text-xs text-neutral-400 mb-2">
+                Include the auto-generated JS SDK in any HTML page:
+              </p>
+              <div className="rounded-lg bg-surface-200 p-3 font-mono text-[11px] text-neutral-300 overflow-x-auto">
+                <div>{`<script src="${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/auth-pools/${pool?.id}/sdk.js"></script>`}</div>
+                <div className="text-neutral-500 mt-1">{"// Then use: ZenAuth.signup(email, password)"}</div>
+                <div className="text-neutral-500">{"// ZenAuth.login(email, password)"}</div>
+                <div className="text-neutral-500">{"// ZenAuth.sendOTP(phone), ZenAuth.verifyOTP(phone, code)"}</div>
+              </div>
+            </div>
+            <div>
               <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Quick Start (JavaScript)</h3>
               <div className="rounded-lg bg-surface-200 p-3 font-mono text-[11px] text-neutral-300 overflow-x-auto space-y-1">
                 <div className="text-neutral-500">{"// Signup"}</div>
@@ -795,6 +996,12 @@ export default function PoolDetailPage() {
             </div>
           </div>
         </section>
+
+        {/* Email Settings */}
+        <EmailSettingsSection poolId={poolId} api={api} />
+
+        {/* Webhooks */}
+        <WebhooksSection poolId={poolId} api={api} />
 
         {/* Users */}
         <section>

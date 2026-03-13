@@ -1504,6 +1504,14 @@ const demoAuthPools = {
   verifyMagicLink: async () => { await delay(300); return { access_token: "demo", refresh_token: "demo", expires_in: 300, token_type: "Bearer" }; },
   getAuthorizationURL: async () => { await delay(200); return { authorization_url: "https://auth.example.com/authorize" }; },
   exchangeCode: async () => { await delay(300); return { access_token: "demo", refresh_token: "demo", expires_in: 300, token_type: "Bearer" }; },
+  sendOTP: async () => { await delay(300); return { message: "OTP sent", expires_in: 300, code: "123456" }; },
+  verifyOTP: async () => { await delay(300); return { access_token: "demo", refresh_token: "demo", expires_in: 300, token_type: "Bearer" }; },
+  getEmailSettings: async () => { await delay(200); return { host: "", port: 587, from: "", from_display_name: "", username: "", ssl: false, starttls: true }; },
+  updateEmailSettings: async () => { await delay(300); return { message: "updated" }; },
+  listWebhooks: async () => { await delay(200); return []; },
+  createWebhook: async () => { await delay(300); return { id: "wh-1", url: "https://example.com/hook", events: ["signup", "login"], secret: "demo", active: true }; },
+  deleteWebhook: async () => { await delay(300); return { message: "deleted" }; },
+  getSDKUrl: () => "https://demo.example.com/api/v1/auth-pools/demo/sdk.js",
 };
 
 // ---- Team Demo ----
