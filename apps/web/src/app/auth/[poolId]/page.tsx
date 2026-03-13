@@ -696,6 +696,12 @@ export default function PoolDetailPage() {
                 <div><span className="text-amber-400">POST</span> <span className="text-neutral-500">/user/password</span> — change password</div>
                 <div><span className="text-amber-400">GET</span>&nbsp; <span className="text-neutral-500">/user/metadata</span> — get custom user metadata</div>
                 <div><span className="text-amber-400">PUT</span>&nbsp; <span className="text-neutral-500">/user/metadata</span> — set custom user metadata</div>
+                <div className="border-t border-border/30 pt-1 mt-1"></div>
+                <div><span className="text-purple-400">POST</span> <span className="text-neutral-500">/anonymous</span> — anonymous sign-in (temp user + tokens)</div>
+                <div><span className="text-purple-400">POST</span> <span className="text-neutral-500">/magic-link</span> — send passwordless login link</div>
+                <div><span className="text-purple-400">POST</span> <span className="text-neutral-500">/magic-link/verify</span> — verify link → tokens</div>
+                <div><span className="text-purple-400">GET</span>&nbsp; <span className="text-neutral-500">/authorize</span> — PKCE authorization URL</div>
+                <div><span className="text-purple-400">POST</span> <span className="text-neutral-500">/token/code</span> — exchange auth code → tokens</div>
               </div>
               <p className="mt-2 text-[11px] text-neutral-500">
                 Base URL: <code className="text-neutral-400">/api/v1/auth-pools/{pool?.id}</code>
@@ -730,16 +736,61 @@ export default function PoolDetailPage() {
               </p>
             </div>
             <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Passwordless (Magic Link)</h3>
+              <p className="text-xs text-neutral-400">
+                Send a magic link to a user&apos;s email with <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">POST /magic-link</code>.
+                Verify the token at <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">POST /magic-link/verify</code> to get auth tokens — no password needed.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Anonymous Sign-In</h3>
+              <p className="text-xs text-neutral-400">
+                Call <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">POST /anonymous</code> to create a temporary user and get tokens instantly.
+                Great for guest access or try-before-signup flows.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">PKCE / Authorization Code Flow</h3>
+              <p className="text-xs text-neutral-400">
+                For SPAs and mobile apps: get the authorization URL with <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">GET /authorize</code>,
+                then exchange the code at <code className="rounded bg-surface-300 px-1 py-0.5 text-[11px]">POST /token/code</code> with your code_verifier.
+              </p>
+            </div>
+            <div>
               <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Sessions &amp; MFA</h3>
               <p className="text-xs text-neutral-400">
                 View and revoke user sessions from the user table. Email verification is enabled by default.
                 Users can set up TOTP — manage their MFA factors from the admin panel.
               </p>
             </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Invite Users</h3>
+              <p className="text-xs text-neutral-400">
+                Send invitation emails from the admin panel. Invited users receive a link to verify their email and set a password.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-accent-400 uppercase tracking-wide mb-2">Quick Start (JavaScript)</h3>
+              <div className="rounded-lg bg-surface-200 p-3 font-mono text-[11px] text-neutral-300 overflow-x-auto space-y-1">
+                <div className="text-neutral-500">{"// Signup"}</div>
+                <div>{"const res = await fetch(`${BASE}/signup`, {"}</div>
+                <div>{"  method: 'POST',"}</div>
+                <div>{"  headers: { 'Content-Type': 'application/json' },"}</div>
+                <div>{"  body: JSON.stringify({ email, password })"}</div>
+                <div>{"}); // → { user, access_token, refresh_token }"}</div>
+                <div className="text-neutral-500 mt-2">{"// Authenticated request"}</div>
+                <div>{"const data = await fetch('/api/data', {"}</div>
+                <div>{"  headers: { Authorization: `Bearer ${access_token}` }"}</div>
+                <div>{"});"}</div>
+              </div>
+              <p className="mt-2 text-[11px] text-neutral-500">
+                Base URL: <code className="text-neutral-400">{`${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/auth-pools/${pool?.id}`}</code>
+              </p>
+            </div>
             <div className="rounded-lg bg-accent-500/5 border border-accent-500/20 px-3 py-2">
               <p className="text-[11px] text-accent-400">
                 Your app never talks to the identity provider directly. Zenith handles everything —
-                signup, login, tokens, social login, password resets, sessions, and user management.
+                signup, login, magic links, anonymous sessions, social login, PKCE, password resets, sessions, and user management.
               </p>
             </div>
           </div>
@@ -755,14 +806,33 @@ export default function PoolDetailPage() {
                 {pool.user_count} / {pool.max_users}
               </span>
             </h2>
-            <button
-              onClick={() => setShowAddUser(true)}
-              disabled={pool.status !== "active"}
-              className="flex items-center gap-1.5 rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add User
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  const email = prompt("Enter email to invite:");
+                  if (email) {
+                    try {
+                      await api.inviteUser(poolId, email);
+                      fetchUsers();
+                      fetchPool();
+                    } catch { /* ignore */ }
+                  }
+                }}
+                disabled={pool.status !== "active"}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-neutral-300 hover:text-white hover:border-accent-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                Invite
+              </button>
+              <button
+                onClick={() => setShowAddUser(true)}
+                disabled={pool.status !== "active"}
+                className="flex items-center gap-1.5 rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add User
+              </button>
+            </div>
           </div>
 
           {usersLoading ? (

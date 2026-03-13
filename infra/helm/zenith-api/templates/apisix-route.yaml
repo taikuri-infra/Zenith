@@ -27,6 +27,11 @@ spec:
           - /api/v1/auth-pools/*/user/password
           - /api/v1/auth-pools/*/user/metadata
           - /api/v1/auth-pools/*/token
+          - /api/v1/auth-pools/*/anonymous
+          - /api/v1/auth-pools/*/magic-link
+          - /api/v1/auth-pools/*/magic-link/verify
+          - /api/v1/auth-pools/*/authorize
+          - /api/v1/auth-pools/*/token/code
       backends:
         - serviceName: zenith-api
           servicePort: {{ .Values.port }}

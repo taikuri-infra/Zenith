@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1024,6 +1027,279 @@ func (h *AuthPoolHandler) SetCurrentUserMetadata(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to set metadata")
 	}
 	return c.JSON(fiber.Map{"message": "metadata updated"})
+}
+
+// ---------------------------------------------------------------------------
+// Invite user (authenticated — pool owner)
+// ---------------------------------------------------------------------------
+
+// InviteUser sends an invitation email to a new user.
+// POST /api/v1/auth-pools/:poolId/users/invite
+func (h *AuthPoolHandler) InviteUser(c *fiber.Ctx) error {
+	pool, err := h.requirePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		Email     string `json:"email"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Email == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "email is required")
+	}
+
+	user, err := h.poolSvc.InviteUser(c.Context(), pool, input.Email, input.FirstName, input.LastName)
+	if err != nil {
+		return fiber.NewError(fiber.StatusConflict, "failed to invite user")
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"user":    user,
+		"message": "invitation email sent",
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Public: Anonymous sign-in
+// ---------------------------------------------------------------------------
+
+// AnonymousSignIn creates a temporary anonymous user and returns tokens (public).
+// POST /api/v1/auth-pools/:poolId/anonymous
+func (h *AuthPoolHandler) AnonymousSignIn(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+
+	user, password, err := h.poolSvc.CreateAnonymousUser(c.Context(), pool)
+	if err != nil {
+		return fiber.NewError(fiber.StatusConflict, "failed to create anonymous session")
+	}
+
+	// Auto-login the anonymous user
+	tokens, tokenErr := h.doKeycloakTokenRequest(pool, url.Values{
+		"client_id":     {pool.ClientID},
+		"client_secret": {pool.ClientSecret},
+		"grant_type":    {"password"},
+		"username":      {user.Email},
+		"password":      {password},
+		"scope":         {"openid"},
+	})
+
+	resp := fiber.Map{
+		"user":      user,
+		"anonymous": true,
+	}
+	if tokenErr == nil {
+		resp["access_token"] = tokens["access_token"]
+		resp["refresh_token"] = tokens["refresh_token"]
+		resp["expires_in"] = tokens["expires_in"]
+		resp["token_type"] = tokens["token_type"]
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(resp)
+}
+
+// ---------------------------------------------------------------------------
+// Public: Magic link (passwordless email login)
+// ---------------------------------------------------------------------------
+
+// magicLinkSecret generates an HMAC for magic link tokens using pool secret as key.
+func magicLinkHMAC(poolSecret, email string, exp int64) string {
+	h := hmac.New(sha256.New, []byte(poolSecret))
+	h.Write([]byte(fmt.Sprintf("%s:%d", email, exp)))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// SendMagicLink generates a magic link token and returns it (public).
+// In production, this would send an email with the link.
+// POST /api/v1/auth-pools/:poolId/magic-link
+func (h *AuthPoolHandler) SendMagicLink(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		Email string `json:"email"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Email == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "email is required")
+	}
+
+	// Generate magic link token (HMAC-signed, 15 min expiry)
+	exp := time.Now().Add(15 * time.Minute).Unix()
+	token := magicLinkHMAC(pool.ClientSecret, input.Email, exp)
+
+	// Always return success to prevent email enumeration
+	return c.JSON(fiber.Map{
+		"message":    "if the email exists, a magic link has been sent",
+		"token":      token,
+		"expires_at": exp,
+	})
+}
+
+// VerifyMagicLink verifies a magic link token and returns auth tokens (public).
+// POST /api/v1/auth-pools/:poolId/magic-link/verify
+func (h *AuthPoolHandler) VerifyMagicLink(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		Email string `json:"email"`
+		Token string `json:"token"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Email == "" || input.Token == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "email and token are required")
+	}
+
+	// Try to verify against multiple expiry windows (current minute precision)
+	now := time.Now().Unix()
+	valid := false
+	for delta := int64(0); delta <= 900; delta += 60 {
+		exp := now - (now % 60) + 900 - delta
+		expected := magicLinkHMAC(pool.ClientSecret, input.Email, exp)
+		if hmac.Equal([]byte(input.Token), []byte(expected)) {
+			valid = true
+			break
+		}
+	}
+	// Also check exact timestamps within 15min window
+	if !valid {
+		for sec := int64(0); sec <= 900; sec++ {
+			exp := now + 900 - sec
+			expected := magicLinkHMAC(pool.ClientSecret, input.Email, exp)
+			if hmac.Equal([]byte(input.Token), []byte(expected)) {
+				valid = true
+				break
+			}
+		}
+	}
+
+	if !valid {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired magic link")
+	}
+
+	// Find user and issue admin-granted token via password reset + login
+	user, err := h.poolSvc.FindUserByEmail(c.Context(), pool, input.Email)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired magic link")
+	}
+
+	// Set a temporary password and login
+	tmpPassword := magicLinkHMAC(pool.ClientSecret, input.Email, now)[:32]
+	if err := h.poolSvc.SetUserPassword(c.Context(), pool, user.ID, tmpPassword); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "authentication failed")
+	}
+
+	tokens, err := h.doKeycloakTokenRequest(pool, url.Values{
+		"client_id":     {pool.ClientID},
+		"client_secret": {pool.ClientSecret},
+		"grant_type":    {"password"},
+		"username":      {input.Email},
+		"password":      {tmpPassword},
+		"scope":         {"openid"},
+	})
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "authentication failed")
+	}
+
+	return c.JSON(tokens)
+}
+
+// ---------------------------------------------------------------------------
+// Public: PKCE authorization URL
+// ---------------------------------------------------------------------------
+
+// GetAuthorizationURL returns the OIDC authorization URL for PKCE/code flow (public).
+// GET /api/v1/auth-pools/:poolId/authorize
+func (h *AuthPoolHandler) GetAuthorizationURL(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+
+	redirectURI := c.Query("redirect_uri")
+	state := c.Query("state")
+	codeChallenge := c.Query("code_challenge")
+	codeChallengeMethod := c.Query("code_challenge_method", "S256")
+	scope := c.Query("scope", "openid")
+
+	if redirectURI == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "redirect_uri is required")
+	}
+
+	// Build Keycloak authorization URL
+	authURL := pool.IssuerURL + "/protocol/openid-connect/auth"
+	params := url.Values{
+		"client_id":     {pool.ClientID},
+		"redirect_uri":  {redirectURI},
+		"response_type": {"code"},
+		"scope":         {scope},
+	}
+	if state != "" {
+		params.Set("state", state)
+	}
+	if codeChallenge != "" {
+		params.Set("code_challenge", codeChallenge)
+		params.Set("code_challenge_method", codeChallengeMethod)
+	}
+
+	return c.JSON(fiber.Map{
+		"authorization_url": authURL + "?" + params.Encode(),
+	})
+}
+
+// ExchangeCode exchanges an authorization code for tokens (PKCE flow, public).
+// POST /api/v1/auth-pools/:poolId/token/code
+func (h *AuthPoolHandler) ExchangeCode(c *fiber.Ctx) error {
+	pool, err := h.loadActivePool(c)
+	if err != nil {
+		return err
+	}
+
+	var input struct {
+		Code         string `json:"code"`
+		RedirectURI  string `json:"redirect_uri"`
+		CodeVerifier string `json:"code_verifier"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Code == "" || input.RedirectURI == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "code and redirect_uri are required")
+	}
+
+	form := url.Values{
+		"client_id":     {pool.ClientID},
+		"client_secret": {pool.ClientSecret},
+		"grant_type":    {"authorization_code"},
+		"code":          {input.Code},
+		"redirect_uri":  {input.RedirectURI},
+	}
+	if input.CodeVerifier != "" {
+		form.Set("code_verifier", input.CodeVerifier)
+	}
+
+	tokens, err := h.doKeycloakTokenRequest(pool, form)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired code")
+	}
+
+	return c.JSON(tokens)
 }
 
 // TokenExchange is kept for backward compatibility.

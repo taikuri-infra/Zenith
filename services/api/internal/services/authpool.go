@@ -282,3 +282,55 @@ func (s *AuthPoolService) ListIdentityProviders(ctx context.Context, pool *entit
 func (s *AuthPoolService) DeleteIdentityProvider(ctx context.Context, pool *entities.AuthPool, alias string) error {
 	return s.idp.DeleteIdentityProvider(ctx, pool.RealmName, alias)
 }
+
+// InviteUser creates a user and sends an invitation email with verification + password setup.
+func (s *AuthPoolService) InviteUser(ctx context.Context, pool *entities.AuthPool, email, firstName, lastName string) (*ports.IdentityUser, error) {
+	if pool.UserCount >= pool.MaxUsers {
+		return nil, fmt.Errorf("pool user limit reached (%d/%d)", pool.UserCount, pool.MaxUsers)
+	}
+
+	userID, err := s.idp.InviteUser(ctx, pool.RealmName, email, firstName, lastName)
+	if err != nil {
+		return nil, fmt.Errorf("invite user: %w", err)
+	}
+
+	_ = s.poolRepo.UpdatePoolUserCount(ctx, pool.ID, 1)
+
+	return &ports.IdentityUser{
+		ID:        userID,
+		Email:     email,
+		FirstName: firstName,
+		LastName:  lastName,
+		Enabled:   true,
+	}, nil
+}
+
+// FindUserByEmail looks up a user by email.
+func (s *AuthPoolService) FindUserByEmail(ctx context.Context, pool *entities.AuthPool, email string) (*ports.IdentityUser, error) {
+	return s.idp.FindUserByEmail(ctx, pool.RealmName, email)
+}
+
+// CreateAnonymousUser creates a temporary anonymous user and returns it.
+func (s *AuthPoolService) CreateAnonymousUser(ctx context.Context, pool *entities.AuthPool) (*ports.IdentityUser, string, error) {
+	if pool.UserCount >= pool.MaxUsers {
+		return nil, "", fmt.Errorf("pool user limit reached")
+	}
+
+	anonID := uuid.New().String()[:12]
+	email := "anon-" + anonID + "@anonymous.zenith"
+	password := uuid.New().String() // random password, user never types it
+
+	userID, err := s.idp.CreateUser(ctx, pool.RealmName, email, password, "Anonymous", "")
+	if err != nil {
+		return nil, "", fmt.Errorf("create anonymous user: %w", err)
+	}
+
+	_ = s.poolRepo.UpdatePoolUserCount(ctx, pool.ID, 1)
+
+	return &ports.IdentityUser{
+		ID:        userID,
+		Email:     email,
+		FirstName: "Anonymous",
+		Enabled:   true,
+	}, password, nil
+}

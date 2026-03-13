@@ -1498,6 +1498,12 @@ const demoAuthPools = {
   listProviders: async () => { await delay(200); return []; },
   createProvider: async () => { await delay(300); return { message: "created", alias: "google" }; },
   deleteProvider: async () => { await delay(300); return { message: "deleted" }; },
+  inviteUser: async () => { await delay(300); return { user: {} as any, message: "invitation sent" }; },
+  anonymousSignIn: async () => { await delay(300); return { user: {} as any, anonymous: true, access_token: "demo" }; },
+  sendMagicLink: async () => { await delay(300); return { message: "sent", token: "demo", expires_at: Date.now() / 1000 + 900 }; },
+  verifyMagicLink: async () => { await delay(300); return { access_token: "demo", refresh_token: "demo", expires_in: 300, token_type: "Bearer" }; },
+  getAuthorizationURL: async () => { await delay(200); return { authorization_url: "https://auth.example.com/authorize" }; },
+  exchangeCode: async () => { await delay(300); return { access_token: "demo", refresh_token: "demo", expires_in: 300, token_type: "Bearer" }; },
 };
 
 // ---- Team Demo ----

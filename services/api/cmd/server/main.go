@@ -857,6 +857,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	poolByID.Post("/providers", authPoolHandler.CreateSocialProvider)
 	poolByID.Get("/providers", authPoolHandler.ListSocialProviders)
 	poolByID.Delete("/providers/:alias", authPoolHandler.DeleteSocialProvider)
+	// Invite user
+	poolByID.Post("/users/invite", authPoolHandler.InviteUser)
 
 	// Public auth endpoints (no JWT required — Supabase-style)
 	poolPublic := api.Group("/auth-pools/:poolId")
@@ -872,6 +874,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	poolPublic.Get("/user/metadata", authPoolHandler.GetCurrentUserMetadata)
 	poolPublic.Put("/user/metadata", authPoolHandler.SetCurrentUserMetadata)
 	poolPublic.Post("/token", authPoolHandler.TokenExchange) // backward compat
+	poolPublic.Post("/anonymous", authPoolHandler.AnonymousSignIn)
+	poolPublic.Post("/magic-link", authPoolHandler.SendMagicLink)
+	poolPublic.Post("/magic-link/verify", authPoolHandler.VerifyMagicLink)
+	poolPublic.Get("/authorize", authPoolHandler.GetAuthorizationURL)
+	poolPublic.Post("/token/code", authPoolHandler.ExchangeCode)
 
 	// Monitoring (Prometheus + Loki + k8s pod metrics)
 	var promClient *promclient.Client

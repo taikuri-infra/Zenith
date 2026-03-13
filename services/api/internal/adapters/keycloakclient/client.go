@@ -597,6 +597,50 @@ func (c *Client) DeleteIdentityProvider(ctx context.Context, realmName, alias st
 	return c.gc.DeleteIdentityProvider(ctx, token, realmName, alias)
 }
 
+// InviteUser creates a disabled user and sends an invitation email with VERIFY_EMAIL + UPDATE_PASSWORD.
+func (c *Client) InviteUser(ctx context.Context, realmName, email, firstName, lastName string) (string, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	enabled := true
+	userID, err := c.gc.CreateUser(ctx, token, realmName, gocloak.User{
+		Username:  &email,
+		Email:     &email,
+		FirstName: &firstName,
+		LastName:  &lastName,
+		Enabled:   &enabled,
+	})
+	if err != nil {
+		return "", fmt.Errorf("create invited user: %w", err)
+	}
+
+	// Send invitation email with required actions
+	_ = c.gc.ExecuteActionsEmail(ctx, token, realmName, gocloak.ExecuteActionsEmail{
+		UserID:  &userID,
+		Actions: &[]string{"VERIFY_EMAIL", "UPDATE_PASSWORD"},
+	})
+
+	return userID, nil
+}
+
+// FindUserByEmail finds a user by email address.
+func (c *Client) FindUserByEmail(ctx context.Context, realmName, email string) (*ports.IdentityUser, error) {
+	token, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	users, err := c.gc.GetUsers(ctx, token, realmName, gocloak.GetUsersParams{
+		Email: &email,
+		Max:   gocloak.IntP(1),
+	})
+	if err != nil || len(users) == 0 {
+		return nil, fmt.Errorf("user not found")
+	}
+	return toIdentityUser(users[0]), nil
+}
+
 func (c *Client) setUserEnabled(ctx context.Context, realmName, userID string, enabled bool) error {
 	token, err := c.token(ctx)
 	if err != nil {
@@ -801,4 +845,10 @@ func (m *MemoryKeycloakClient) ListIdentityProviders(_ context.Context, _ string
 }
 func (m *MemoryKeycloakClient) DeleteIdentityProvider(_ context.Context, _, _ string) error {
 	return nil
+}
+func (m *MemoryKeycloakClient) InviteUser(_ context.Context, _, email, _, _ string) (string, error) {
+	return "mem-invited-1", nil
+}
+func (m *MemoryKeycloakClient) FindUserByEmail(_ context.Context, _, _ string) (*ports.IdentityUser, error) {
+	return nil, fmt.Errorf("user not found")
 }

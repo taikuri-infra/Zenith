@@ -1833,6 +1833,32 @@ export const authPools = {
     }),
   deleteProvider: (poolId: string, alias: string) =>
     apiFetch<{ message: string }>(`/api/v1/auth-pools/${poolId}/providers/${alias}`, { method: "DELETE" }),
+  // Invite user
+  inviteUser: (poolId: string, email: string, firstName?: string, lastName?: string) =>
+    apiFetch<{ user: AuthPoolUser; message: string }>(`/api/v1/auth-pools/${poolId}/users/invite`, {
+      method: "POST", body: JSON.stringify({ email, first_name: firstName || "", last_name: lastName || "" }),
+    }),
+  // Anonymous sign-in
+  anonymousSignIn: (poolId: string) =>
+    apiFetch<{ user: AuthPoolUser; anonymous: boolean; access_token?: string; refresh_token?: string; expires_in?: number }>(`/api/v1/auth-pools/${poolId}/anonymous`, {
+      method: "POST",
+    }),
+  // Magic link
+  sendMagicLink: (poolId: string, email: string) =>
+    apiFetch<{ message: string; token: string; expires_at: number }>(`/api/v1/auth-pools/${poolId}/magic-link`, {
+      method: "POST", body: JSON.stringify({ email }),
+    }),
+  verifyMagicLink: (poolId: string, email: string, token: string) =>
+    apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(`/api/v1/auth-pools/${poolId}/magic-link/verify`, {
+      method: "POST", body: JSON.stringify({ email, token }),
+    }),
+  // PKCE / Authorization code flow
+  getAuthorizationURL: (poolId: string, redirectUri: string, codeChallenge?: string, state?: string) =>
+    apiFetch<{ authorization_url: string }>(`/api/v1/auth-pools/${poolId}/authorize?redirect_uri=${encodeURIComponent(redirectUri)}${codeChallenge ? `&code_challenge=${codeChallenge}&code_challenge_method=S256` : ""}${state ? `&state=${state}` : ""}`),
+  exchangeCode: (poolId: string, code: string, redirectUri: string, codeVerifier?: string) =>
+    apiFetch<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }>(`/api/v1/auth-pools/${poolId}/token/code`, {
+      method: "POST", body: JSON.stringify({ code, redirect_uri: redirectUri, code_verifier: codeVerifier || "" }),
+    }),
 };
 
 // ---- Support Tickets ----

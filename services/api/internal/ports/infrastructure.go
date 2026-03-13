@@ -267,6 +267,12 @@ type IdentityProvider interface {
 	CreateIdentityProvider(ctx context.Context, realmName string, provider IdentityProviderConfig) error
 	ListIdentityProviders(ctx context.Context, realmName string) ([]IdentityProviderConfig, error)
 	DeleteIdentityProvider(ctx context.Context, realmName, alias string) error
+
+	// Invite user (send invitation email with VERIFY_EMAIL + UPDATE_PASSWORD actions)
+	InviteUser(ctx context.Context, realmName, email, firstName, lastName string) (userID string, err error)
+
+	// Find user by email (for magic link, etc.)
+	FindUserByEmail(ctx context.Context, realmName, email string) (*IdentityUser, error)
 }
 
 // IdentityUser represents a user in an identity provider realm.
