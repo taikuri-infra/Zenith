@@ -1,2 +1,6 @@
 --secret-file .secrets
 --platform ubuntu-latest=catthehacker/ubuntu:act-latest
+--pull=false
+--reuse
+--action-offline-mode
+--use-new-action-cache
