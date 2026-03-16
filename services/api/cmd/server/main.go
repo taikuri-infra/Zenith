@@ -503,6 +503,28 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appHandlerV2.SetPlanRepo(planRepo)
 	appHandlerV2.SetEventRepo(eventRepo)
 	projectHandlerV2 := handlers.NewProjectHandlerV2(projectRepo, appRepo, deployer)
+
+	// Managed services repo
+	var msRepo ports.ManagedServiceRepository
+	if pool != nil {
+		msRepo = postgres.NewPostgresManagedServiceRepository(pool)
+	} else {
+		msRepo = memory.NewMemoryManagedServiceRepository()
+	}
+
+	// Enhanced env vars repo
+	var envVarRepo ports.EnvVarRepository
+	if pool != nil {
+		envVarRepo = postgres.NewPostgresEnvVarRepository(pool)
+	} else {
+		envVarRepo = memory.NewMemoryEnvVarRepository()
+	}
+
+	composeHandler := handlers.NewComposeHandler(projectRepo)
+	msHandler := handlers.NewManagedServiceHandler(projectRepo, msRepo)
+	envVarHandler := handlers.NewEnvVarHandler(appRepo, envVarRepo)
+	// Image status + project deploy handlers are wired after harborClient is initialized (see below)
+
 	deployHandler := handlers.NewDeployHandler(appRepo, pipeline)
 	logHandler := handlers.NewLogHandler(appRepo, logHub)
 
@@ -602,6 +624,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	projects.Put("/:projectId", projectHandlerV2.Update)
 	projects.Delete("/:projectId", projectHandlerV2.Delete)
 
+	// Compose import + Managed services (under /projects/:projectId)
+	projectByID := projects.Group("/:projectId")
+	projectByID.Post("/import-compose", composeHandler.ImportCompose)
+	projectByID.Post("/managed-services", msHandler.Provision)
+	projectByID.Get("/managed-services", msHandler.List)
+	projectByID.Get("/managed-services/:msId", msHandler.Get)
+	projectByID.Delete("/managed-services/:msId", msHandler.Delete)
+
 	// Apps — legacy CRD-based (under /projects/:id/apps)
 	legacyApps := protected.Group("/projects/:id/apps")
 	legacyApps.Post("/", appHandler.Create)
@@ -629,10 +659,15 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Get("/deployments/:deployId", deployHandler.GetDeployment)
 	appByID.Post("/rollback", deployHandler.Rollback)
 
-	// Env vars (nested under /apps/:appId)
+	// Env vars (nested under /apps/:appId) — legacy simple key-value
 	appByID.Put("/env", deployHandler.SetEnvVars)
 	appByID.Get("/env", deployHandler.GetEnvVars)
 	appByID.Delete("/env/:key", deployHandler.DeleteEnvVar)
+
+	// Enhanced env vars with source tracking (V5)
+	appByID.Post("/env-v2", envVarHandler.Set)
+	appByID.Get("/env-v2", envVarHandler.List)
+	appByID.Delete("/env-v2/:varId", envVarHandler.Delete)
 
 	// Secrets (nested under /apps/:appId) — only if SECRETS_ENCRYPTION_KEY is set
 	if secretHandler != nil {
@@ -917,6 +952,29 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Get("/logs/stream", monitoringHandler.StreamLogs)
 	appByID.Get("/pods", monitoringHandler.GetPods)
 
+	// AI features (Phase 3 — LiteLLM / OpenAI-compatible)
+	aiClient := services.NewAIClient(cfg.AILiteLLMURL, cfg.AIAPIKey, cfg.AIModel, cfg.AIEnabled)
+	if cfg.AIEnabled {
+		slog.Info("AI features enabled", "model", cfg.AIModel, "url", cfg.AILiteLLMURL)
+	}
+	aiErrorAnalyzer := services.NewAIErrorAnalyzer(aiClient, lokiClient)
+
+	var aiUsageRepo ports.AIUsageRepository
+	if pool != nil {
+		aiUsageRepo = postgres.NewPostgresAIUsageRepository(pool)
+	} else {
+		aiUsageRepo = memory.NewMemoryAIUsageRepository()
+	}
+
+	aiHandler := handlers.NewAIHandler(aiErrorAnalyzer, aiUsageRepo, appRepo, planRepo, aiClient)
+	appByID.Post("/ai/analyze-error", aiHandler.AnalyzeError)
+	protected.Get("/ai/usage", aiHandler.GetUsage)
+
+	// CI Templates (Phase 3)
+	ciTemplateHandler := handlers.NewCITemplateHandler()
+	protected.Get("/ci-templates", ciTemplateHandler.ListTemplates)
+	protected.Get("/ci-templates/:framework", ciTemplateHandler.GetTemplate)
+
 	// Business metrics (Prometheus exporter for Grafana dashboards)
 	bizMetrics := handlers.NewBusinessMetrics(userRepo, appRepo, dbRepo, planRepo)
 	bizMetrics.StartCollector(context.Background())
@@ -1116,6 +1174,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	registryHandler := handlers.NewRegistryHandler(harborClient, "zenith-stage")
 	protected.Get("/registry/repos", registryHandler.ListRepositories)
 	protected.Get("/registry/repos/:name", registryHandler.GetRepository)
+
+	// Image status + Project deploy (Phase 2)
+	imageStatusHandler := handlers.NewImageStatusHandler(projectRepo, appRepo, harborClient)
+	projectDeployHandler := handlers.NewProjectDeployHandler(projectRepo, appRepo, msRepo, pipeline)
+	protected.Get("/projects/:projectId/images/status", imageStatusHandler.GetImageStatus)
+	protected.Post("/projects/:projectId/deploy", projectDeployHandler.DeployProject)
 
 	// Pod Exec — SSH-to-pod terminal access (Business+ only)
 	podSessionRepo := memory.NewMemoryPodExecSessionRepository()

@@ -136,3 +136,31 @@ func (r *MemoryProjectRepository) GetDefaultProject(_ context.Context, userID st
 	}
 	return nil, fmt.Errorf("no projects found for user: %s", userID)
 }
+
+func (r *MemoryProjectRepository) SetHarborCredentials(_ context.Context, id, harborProjectName, robotUser, robotPass string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.projects[id]
+	if !ok {
+		return fmt.Errorf("project not found: %s", id)
+	}
+	p.HarborProjectName = harborProjectName
+	p.HarborRobotUser = robotUser
+	p.HarborRobotPass = robotPass
+	p.UpdatedAt = time.Now()
+	return nil
+}
+
+func (r *MemoryProjectRepository) UpdateProjectStatus(_ context.Context, id string, status entities.ProjectStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.projects[id]
+	if !ok {
+		return fmt.Errorf("project not found: %s", id)
+	}
+	p.Status = status
+	p.UpdatedAt = time.Now()
+	return nil
+}

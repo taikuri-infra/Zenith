@@ -75,6 +75,30 @@ type ProjectRepository interface {
 	DeleteProject(ctx context.Context, id string) error
 	CountProjectsByUser(ctx context.Context, userID string) (int, error)
 	GetDefaultProject(ctx context.Context, userID string) (*entities.Project, error)
+
+	// Harbor integration
+	SetHarborCredentials(ctx context.Context, id, harborProjectName, robotUser, robotPass string) error
+	UpdateProjectStatus(ctx context.Context, id string, status entities.ProjectStatus) error
+}
+
+// ManagedServiceRepository defines managed service persistence operations.
+type ManagedServiceRepository interface {
+	CreateManagedService(ctx context.Context, svc *entities.ManagedService) error
+	GetManagedService(ctx context.Context, id string) (*entities.ManagedService, error)
+	ListManagedServicesByProject(ctx context.Context, projectID string) ([]entities.ManagedService, error)
+	ListManagedServicesByUser(ctx context.Context, userID string) ([]entities.ManagedService, error)
+	UpdateManagedServiceStatus(ctx context.Context, id string, status entities.ManagedServiceStatus, statusMsg, connURL, host string, port int) error
+	DeleteManagedService(ctx context.Context, id string) error
+	CountManagedServicesByUser(ctx context.Context, userID string) (int, error)
+}
+
+// EnvVarRepository defines enhanced environment variable operations with source tracking.
+type EnvVarRepository interface {
+	SetEnvVar(ctx context.Context, envVar *entities.AppEnvVar) error
+	GetEnvVars(ctx context.Context, appID string) ([]entities.AppEnvVar, error)
+	DeleteEnvVar(ctx context.Context, id string) error
+	BulkSetEnvVars(ctx context.Context, appID string, vars []entities.AppEnvVar) error
+	DeleteEnvVarsBySource(ctx context.Context, appID string, source entities.EnvVarSource) error
 }
 
 // AppRepository defines app, deployment, and env var persistence operations.
@@ -372,6 +396,12 @@ type AuthPoolRepository interface {
 	UpdatePoolStatus(ctx context.Context, id string, status entities.AuthPoolStatus) error
 	UpdatePoolUserCount(ctx context.Context, id string, delta int) error
 	CountPoolsByUser(ctx context.Context, userID string) (int, error)
+}
+
+// AIUsageRepository tracks AI feature usage per user.
+type AIUsageRepository interface {
+	RecordUsage(ctx context.Context, userID, usageType, model string, tokensIn, tokensOut int, costUSD float64) error
+	GetMonthlyUsage(ctx context.Context, userID string, month time.Time) (int, error)
 }
 
 // SupportRepository defines support ticket persistence operations.

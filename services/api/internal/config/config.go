@@ -103,6 +103,12 @@ type Config struct {
 	NATSServers    string // comma-separated NATS URLs
 	NATSStreamName string // JetStream stream name
 
+	// AI (LiteLLM / OpenAI-compatible)
+	AIEnabled    bool
+	AILiteLLMURL string
+	AIAPIKey     string
+	AIModel      string
+
 	// Hetzner Autoscaler (Phase 5)
 	HetznerToken        string
 	AutoscalerEnabled   bool
@@ -180,6 +186,10 @@ func Load() *Config {
 		NATSEnabled:           getEnvBool("NATS_ENABLED", false),
 		NATSServers:           getEnv("NATS_SERVERS", "nats://nats.nats.svc.cluster.local:4222"),
 		NATSStreamName:        getEnv("NATS_STREAM_NAME", "zenith_events"),
+		AIEnabled:             getEnvBool("AI_ENABLED", false),
+		AILiteLLMURL:          getEnv("AI_LITELLM_URL", "https://api.openai.com/v1"),
+		AIAPIKey:              getEnv("AI_API_KEY", ""),
+		AIModel:               getEnv("AI_MODEL", "gpt-4o-mini"),
 		HetznerToken:          getEnv("HCLOUD_TOKEN", ""),
 		AutoscalerEnabled:   getEnvBool("AUTOSCALER_ENABLED", false),
 		AutoscalerMinNodes:  getEnvInt("AUTOSCALER_MIN_NODES", 2),

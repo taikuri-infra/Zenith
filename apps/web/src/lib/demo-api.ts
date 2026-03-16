@@ -55,6 +55,9 @@ import type {
   CustomMetric,
   CreateRouteInput,
   UpdateRouteInput,
+  ManagedService,
+  ComposeImportResult,
+  AppEnvVar,
 } from "./api";
 
 import {
@@ -121,6 +124,7 @@ const demoProject: Project = {
   name: "My Startup",
   slug: "my-startup",
   description: "Demo project for the Zenith platform",
+  status: "active",
   created_at: "2026-01-15T00:00:00Z",
   updated_at: "2026-01-15T00:00:00Z",
 };
@@ -1789,5 +1793,80 @@ export const demoApi = {
   },
   exitSurvey: {
     submit: async () => ({ message: "ok" }),
+  },
+  managedServices: {
+    list: async () => {
+      await delay();
+      return {
+        items: [
+          { id: "ms-1", project_id: "demo-project", service_type: "postgresql", name: "main-db", version: "16", status: "ready", storage_gb: 10, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:02:00Z" },
+          { id: "ms-2", project_id: "demo-project", service_type: "redis", name: "cache", version: "7", status: "ready", storage_gb: 1, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:01:00Z" },
+        ],
+        total: 2,
+      };
+    },
+    get: async () => {
+      await delay();
+      return { id: "ms-1", project_id: "demo-project", service_type: "postgresql", name: "main-db", version: "16", status: "ready", storage_gb: 10, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:02:00Z" };
+    },
+    provision: async () => { throw new Error("Not available in demo mode"); },
+    delete: async () => { throw new Error("Not available in demo mode"); },
+  },
+  composeImport: {
+    parse: async () => {
+      await delay();
+      return {
+        valid: true,
+        services: [
+          { name: "api", build_context: "./api", port: 8080, is_public: true, url: "https://api-my-saas.apps.stage.freezenith.com", env_vars: [{ key: "DATABASE_URL", original: "postgresql://db:5432/mydb", zenith: "postgresql://main-db-my-saas.zenith-apps.svc:5432/mydb" }], depends_on: ["db"] },
+          { name: "web", build_context: "./web", port: 3000, is_public: true, url: "https://web-my-saas.apps.stage.freezenith.com", env_vars: [{ key: "API_URL", original: "http://api:8080", zenith: "http://api-my-saas.zenith-apps.svc:8080" }], depends_on: ["api"] },
+        ],
+        managed_services: [
+          { name: "db", type: "postgresql", version: "16", detected_from: "postgres:16" },
+        ],
+        warnings: [],
+        errors: [],
+      };
+    },
+  },
+  envVarsV2: {
+    list: async () => {
+      await delay();
+      return {
+        items: [
+          { id: "ev-1", app_id: "demo-app", key: "DATABASE_URL", value: "••••••••", is_secret: true, source: "managed_service", created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
+          { id: "ev-2", app_id: "demo-app", key: "NODE_ENV", value: "production", is_secret: false, source: "manual", created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
+        ],
+        total: 2,
+      };
+    },
+    set: async () => { throw new Error("Not available in demo mode"); },
+    delete: async () => { throw new Error("Not available in demo mode"); },
+  },
+  ai: {
+    analyzeError: async () => {
+      await delay();
+      return {
+        problem: "Application crashes on startup with OOM error",
+        cause: "Memory limit (128Mi) is too low for the Node.js application heap",
+        fix: "1. Increase memory limit to at least 256Mi\n2. Set NODE_OPTIONS=--max-old-space-size=200\n3. Add a readiness probe to detect startup failures",
+        confidence: "high",
+        pii_disclaimer: "Log data was scrubbed of personally identifiable information before AI analysis.",
+      };
+    },
+    getUsage: async () => {
+      await delay();
+      return { monthly_used: 3, monthly_limit: 5, ai_enabled: true };
+    },
+  },
+  ciTemplates: {
+    list: async () => {
+      await delay();
+      return { frameworks: ["go", "nextjs", "python", "nodejs", "rust"] };
+    },
+    get: async () => {
+      await delay();
+      return "name: Deploy to Zenith\non:\n  push:\n    branches: [main]\n# ... template content";
+    },
   },
 };

@@ -247,6 +247,10 @@ export interface Project {
   name: string;
   slug: string;
   description: string;
+  status: string;
+  harbor_robot_user?: string;
+  services?: AppV2[];
+  managed_services?: ManagedService[];
   created_at: string;
   updated_at: string;
 }
@@ -272,6 +276,180 @@ export const projects = {
   delete: (id: string) =>
     apiFetch<void>(`/api/v1/projects/${id}`, { method: "DELETE" }),
 };
+
+// ---- Managed Services API ----
+
+export interface ManagedService {
+  id: string;
+  project_id: string;
+  service_type: string;
+  name: string;
+  version: string;
+  status: string;
+  status_message?: string;
+  internal_host?: string;
+  port?: number;
+  storage_gb: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProvisionManagedServiceRequest {
+  service_type: string;
+  name: string;
+  version: string;
+  storage_gb?: number;
+}
+
+export const managedServices = {
+  list: (projectId: string) =>
+    apiFetch<{ items: ManagedService[]; total: number }>(
+      `/api/v1/projects/${projectId}/managed-services`
+    ),
+  get: (projectId: string, id: string) =>
+    apiFetch<ManagedService>(
+      `/api/v1/projects/${projectId}/managed-services/${id}`
+    ),
+  provision: (projectId: string, data: ProvisionManagedServiceRequest) =>
+    apiFetch<ManagedService>(
+      `/api/v1/projects/${projectId}/managed-services`,
+      { method: "POST", body: JSON.stringify(data) }
+    ),
+  delete: (projectId: string, id: string) =>
+    apiFetch<void>(
+      `/api/v1/projects/${projectId}/managed-services/${id}`,
+      { method: "DELETE" }
+    ),
+};
+
+// ---- Compose Import API ----
+
+export interface ParsedService {
+  name: string;
+  build_context?: string;
+  image?: string;
+  port: number;
+  is_public: boolean;
+  url?: string;
+  env_vars: ParsedEnvVar[];
+  depends_on: string[];
+}
+
+export interface ParsedEnvVar {
+  key: string;
+  original: string;
+  zenith: string;
+}
+
+export interface ParsedManaged {
+  name: string;
+  type: string;
+  version: string;
+  detected_from: string;
+}
+
+export interface ComposeImportResult {
+  valid: boolean;
+  services: ParsedService[];
+  managed_services: ParsedManaged[];
+  warnings: string[];
+  errors: string[];
+}
+
+export const composeImport = {
+  parse: (projectId: string, composeContent: string) =>
+    apiFetch<ComposeImportResult>(
+      `/api/v1/projects/${projectId}/import-compose`,
+      { method: "POST", body: JSON.stringify({ compose_content: composeContent }) }
+    ),
+};
+
+// ---- Enhanced Env Vars API (V2) ----
+
+export interface AppEnvVar {
+  id: string;
+  app_id: string;
+  key: string;
+  value: string;
+  is_secret: boolean;
+  source: string;
+  source_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const envVarsV2 = {
+  list: (appId: string) =>
+    apiFetch<{ items: AppEnvVar[]; total: number }>(
+      `/api/v1/apps/${appId}/env-v2`
+    ),
+  set: (appId: string, vars: { key: string; value: string; is_secret: boolean }[]) =>
+    apiFetch<{ items: AppEnvVar[]; total: number }>(
+      `/api/v1/apps/${appId}/env-v2`,
+      { method: "POST", body: JSON.stringify({ vars }) }
+    ),
+  delete: (appId: string, varId: string) =>
+    apiFetch<void>(`/api/v1/apps/${appId}/env-v2/${varId}`, {
+      method: "DELETE",
+    }),
+};
+
+// ---- AI Features (Phase 3) ----
+
+export interface ErrorAnalysisResult {
+  problem: string;
+  cause: string;
+  fix: string;
+  confidence: string;
+  pii_disclaimer: string;
+}
+
+export interface AIUsageInfo {
+  monthly_used: number;
+  monthly_limit: number;
+  ai_enabled: boolean;
+}
+
+export const ai = {
+  analyzeError: (appId: string, logLines?: number) =>
+    apiFetch<ErrorAnalysisResult>(`/api/v1/apps/${appId}/ai/analyze-error`, {
+      method: "POST",
+      body: JSON.stringify({ log_lines: logLines || 100 }),
+    }),
+  getUsage: () => apiFetch<AIUsageInfo>("/api/v1/ai/usage"),
+};
+
+// ---- CI Templates (Phase 3) ----
+
+export interface CITemplateList {
+  frameworks: string[];
+}
+
+export const ciTemplates = {
+  list: () => apiFetch<CITemplateList>("/api/v1/ci-templates"),
+  get: (framework: string, project?: string, service?: string) => {
+    const params = new URLSearchParams();
+    if (project) params.set("project", project);
+    if (service) params.set("service", service);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return apiFetch<string>(`/api/v1/ci-templates/${framework}${qs}`);
+  },
+};
+
+// ---- App V2 (for compose-imported services) ----
+
+export interface AppV2 {
+  id: string;
+  name: string;
+  project_id: string;
+  status: string;
+  subdomain: string;
+  port: number;
+  app_type: string;
+  exposure: string;
+  created_at: string;
+  updated_at: string;
+}
 
 // ---- Apps API ----
 

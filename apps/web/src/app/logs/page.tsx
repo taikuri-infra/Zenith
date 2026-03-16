@@ -2,6 +2,7 @@
 
 import { Shell } from "@/components/shell";
 import { BuildLogViewer } from "@/components/build-log-viewer";
+import { AIErrorAnalysis } from "@/components/ai-error-analysis";
 import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { getApi, isDemoMode } from "@/lib/get-api";
@@ -273,6 +274,11 @@ export default function LogsPage() {
               Clear all
             </button>
           </div>
+        )}
+
+        {/* AI Error Analysis */}
+        {appFilter !== "all" && (
+          <AIErrorAnalysis appId={appFilter} />
         )}
 
         {/* Log viewer */}

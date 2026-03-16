@@ -32,6 +32,7 @@ import {
   ShieldAlert,
   Wifi,
   Bell,
+  GitBranch,
 } from "lucide-react";
 import { useProjectContext } from "@/hooks/use-project";
 import { IS_STANDALONE } from "@/lib/runtime-env";
@@ -95,6 +96,7 @@ const navSections: NavSection[] = [
       { name: "Monitoring", href: "/monitoring", icon: Activity },
       { name: "Alerts", href: "/alerts", icon: Bell, saasOnly: true },
       { name: "Registry", href: "/registry", icon: Container },
+      { name: "CI/CD", href: "/ci", icon: GitBranch },
     ],
   },
   {

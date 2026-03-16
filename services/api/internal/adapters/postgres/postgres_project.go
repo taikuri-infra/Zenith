@@ -21,11 +21,15 @@ func NewPostgresProjectRepository(pool *pgxpool.Pool) *PostgresProjectRepository
 	return &PostgresProjectRepository{pool: pool}
 }
 
-const projectSelectCols = `id, user_id, name, slug, description, created_at, updated_at`
+const projectSelectCols = `id, user_id, name, slug, description, COALESCE(status, 'active'), COALESCE(harbor_project_name, ''), COALESCE(harbor_robot_user, ''), COALESCE(harbor_robot_pass, ''), created_at, updated_at`
 
 func scanProject(scanner interface{ Scan(dest ...any) error }) (*entities.Project, error) {
 	var p entities.Project
-	err := scanner.Scan(&p.ID, &p.UserID, &p.Name, &p.Slug, &p.Description, &p.CreatedAt, &p.UpdatedAt)
+	err := scanner.Scan(
+		&p.ID, &p.UserID, &p.Name, &p.Slug, &p.Description,
+		&p.Status, &p.HarborProjectName, &p.HarborRobotUser, &p.HarborRobotPass,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -37,9 +41,9 @@ func (r *PostgresProjectRepository) CreateProject(ctx context.Context, userID, n
 	now := time.Now()
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO projects (id, user_id, name, slug, description, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		id, userID, name, slug, description, now, now,
+		`INSERT INTO projects (id, user_id, name, slug, description, status, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		id, userID, name, slug, description, entities.ProjectStatusActive, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_projects_user_slug") {
@@ -54,6 +58,7 @@ func (r *PostgresProjectRepository) CreateProject(ctx context.Context, userID, n
 		Name:        name,
 		Slug:        slug,
 		Description: description,
+		Status:      entities.ProjectStatusActive,
 		Timestamps:  entities.Timestamps{CreatedAt: now, UpdatedAt: now},
 	}, nil
 }
@@ -152,4 +157,32 @@ func (r *PostgresProjectRepository) GetDefaultProject(ctx context.Context, userI
 		}
 	}
 	return p, nil
+}
+
+func (r *PostgresProjectRepository) SetHarborCredentials(ctx context.Context, id, harborProjectName, robotUser, robotPass string) error {
+	ct, err := r.pool.Exec(ctx,
+		`UPDATE projects SET harbor_project_name = $1, harbor_robot_user = $2, harbor_robot_pass = $3, updated_at = now() WHERE id = $4`,
+		harborProjectName, robotUser, robotPass, id,
+	)
+	if err != nil {
+		return fmt.Errorf("set harbor credentials: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("project not found: %s", id)
+	}
+	return nil
+}
+
+func (r *PostgresProjectRepository) UpdateProjectStatus(ctx context.Context, id string, status entities.ProjectStatus) error {
+	ct, err := r.pool.Exec(ctx,
+		`UPDATE projects SET status = $1, updated_at = now() WHERE id = $2`,
+		string(status), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update project status: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("project not found: %s", id)
+	}
+	return nil
 }
