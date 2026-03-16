@@ -523,6 +523,13 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	composeHandler := handlers.NewComposeHandler(projectRepo)
 	msHandler := handlers.NewManagedServiceHandler(projectRepo, msRepo)
 	envVarHandler := handlers.NewEnvVarHandler(appRepo, envVarRepo)
+
+	// Wire K8s provisioning into managed service handler and env var handler
+	k8sProvisioner := services.NewK8sProvisionerAdapter(k8sClient)
+	msSvc := services.NewManagedServiceService(msRepo, k8sProvisioner, "zenith-apps")
+	msHandler.SetService(msSvc)
+	envVarHandler.SetK8sClient(k8sClient)
+
 	// Image status + project deploy handlers are wired after harborClient is initialized (see below)
 
 	deployHandler := handlers.NewDeployHandler(appRepo, pipeline)
@@ -860,6 +867,13 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	gwSvc.SetAuthPoolRepo(authPoolRepo)
 	authPoolSvc.SetGatewayDependencies(gwRepo, gwSvc)
 	authPoolHandler := handlers.NewAuthPoolHandler(authPoolSvc, authPoolRepo, cfg.KeycloakURL)
+	if cfg.ResendAPIKey != "" {
+		poolEmailFrom := cfg.EmailFrom
+		if poolEmailFrom == "" {
+			poolEmailFrom = "Zenith <noreply@freezenith.com>"
+		}
+		authPoolHandler.SetEmailSender(resendclient.NewClient(cfg.ResendAPIKey, poolEmailFrom), cfg.AppURL)
+	}
 
 	authPools := protected.Group("/auth-pools")
 	authPools.Post("/", handlers.CheckLimit(planRepo, "auth_pools", func(c *fiber.Ctx, userID string) (int, error) {

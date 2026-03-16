@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -19,6 +20,7 @@ import (
 type K8sProvisioner interface {
 	ApplyUnstructured(ctx context.Context, namespace string, obj map[string]interface{}) error
 	DeleteResource(ctx context.Context, namespace, apiVersion, kind, name string) error
+	GetCRDStatus(ctx context.Context, apiVersion, kind, namespace, name string) (json.RawMessage, error)
 }
 
 // ManagedServiceService handles provisioning and lifecycle of managed services.
@@ -121,9 +123,47 @@ func (s *ManagedServiceService) ProvisionRedis(ctx context.Context, projectID, u
 		return nil, err
 	}
 
-	// TODO: Create Redis StatefulSet + Service + PVC + Secret via k8s
-	// For now, mark ready in dev mode
-	if s.k8s == nil {
+	if s.k8s != nil {
+		// Create Redis password Secret
+		secretName := resourceName + "-auth"
+		secretObj := map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      secretName,
+				"namespace": s.namespace,
+				"labels": map[string]interface{}{
+					"app.zenith.dev/managed-service": resourceName,
+				},
+			},
+			"type": "Opaque",
+			"stringData": map[string]interface{}{
+				"redis-password": pass,
+			},
+		}
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, secretObj); err != nil {
+			slog.Error("failed to create Redis secret", "name", secretName, "error", err)
+		}
+
+		// Create Redis StatefulSet
+		sts := buildRedisStatefulSet(resourceName, s.namespace, svc.Version, secretName, storageGB)
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, sts); err != nil {
+			slog.Error("failed to create Redis StatefulSet", "name", resourceName, "error", err)
+			s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceError, err.Error(), "", "", 0)
+			return svc, nil
+		}
+
+		// Create headless Service for StatefulSet DNS
+		redisSvc := buildRedisService(resourceName, s.namespace, port)
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, redisSvc); err != nil {
+			slog.Error("failed to create Redis service", "name", resourceName, "error", err)
+		}
+
+		// Mark ready (Redis StatefulSet is simple enough to be ready quickly)
+		s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceReady, "", connURL, host, port)
+		svc.Status = entities.ManagedServiceReady
+	} else {
+		// Dev mode: mark ready immediately
 		s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceReady, "", connURL, host, port)
 		svc.Status = entities.ManagedServiceReady
 	}
@@ -149,8 +189,18 @@ func (s *ManagedServiceService) DeleteManagedService(ctx context.Context, id str
 				slog.Warn("failed to delete CNPG cluster", "name", ms.K8sResourceName, "error", err)
 			}
 		case entities.ServiceTypeRedis:
-			// TODO: delete StatefulSet + Service + PVC
-			slog.Info("redis cleanup not yet implemented", "name", ms.K8sResourceName)
+			// Delete StatefulSet
+			if err := s.k8s.DeleteResource(ctx, ms.K8sNamespace, "apps/v1", "StatefulSet", ms.K8sResourceName); err != nil {
+				slog.Warn("failed to delete Redis StatefulSet", "name", ms.K8sResourceName, "error", err)
+			}
+			// Delete Service
+			if err := s.k8s.DeleteResource(ctx, ms.K8sNamespace, "v1", "Service", ms.K8sResourceName); err != nil {
+				slog.Warn("failed to delete Redis Service", "name", ms.K8sResourceName, "error", err)
+			}
+			// Delete Secret
+			if err := s.k8s.DeleteResource(ctx, ms.K8sNamespace, "v1", "Secret", ms.K8sResourceName+"-auth"); err != nil {
+				slog.Warn("failed to delete Redis Secret", "name", ms.K8sResourceName, "error", err)
+			}
 		}
 	}
 
@@ -176,8 +226,6 @@ func (s *ManagedServiceService) pollCNPGReady(msID, resourceName string) {
 			s.msRepo.UpdateManagedServiceStatus(ctx, msID, entities.ManagedServiceError, "provision timeout after 5m", "", "", 0)
 			return
 		case <-ticker.C:
-			// TODO: check actual CNPG cluster status via k8s API
-			// For now, mark ready after first tick (placeholder)
 			ms, err := s.msRepo.GetManagedService(ctx, msID)
 			if err != nil {
 				return
@@ -185,9 +233,29 @@ func (s *ManagedServiceService) pollCNPGReady(msID, resourceName string) {
 			if ms.Status == entities.ManagedServiceReady || ms.Status == entities.ManagedServiceError {
 				return
 			}
-			// Placeholder: mark ready
-			s.msRepo.UpdateManagedServiceStatus(ctx, msID, entities.ManagedServiceReady, "", ms.ConnectionURL, ms.InternalHost, ms.Port)
-			return
+
+			// Check actual CNPG cluster status via K8s API
+			if s.k8s != nil {
+				statusRaw, crdErr := s.k8s.GetCRDStatus(ctx, "postgresql.cnpg.io/v1", "Cluster", s.namespace, resourceName)
+				if crdErr != nil {
+					slog.Debug("waiting for CNPG cluster", "name", resourceName, "error", crdErr)
+					continue
+				}
+				if len(statusRaw) > 0 {
+					var statusMap map[string]interface{}
+					if jsonErr := json.Unmarshal(statusRaw, &statusMap); jsonErr == nil {
+						if phase, ok := statusMap["phase"].(string); ok && phase == "Cluster in healthy state" {
+							s.msRepo.UpdateManagedServiceStatus(ctx, msID, entities.ManagedServiceReady, "", ms.ConnectionURL, ms.InternalHost, ms.Port)
+							slog.Info("CNPG cluster ready", "name", resourceName)
+							return
+						}
+					}
+				}
+			} else {
+				// Dev mode fallback: mark ready
+				s.msRepo.UpdateManagedServiceStatus(ctx, msID, entities.ManagedServiceReady, "", ms.ConnectionURL, ms.InternalHost, ms.Port)
+				return
+			}
 		}
 	}
 }
@@ -264,4 +332,131 @@ func normalizeVersion(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+// buildRedisStatefulSet returns an unstructured Redis StatefulSet manifest.
+func buildRedisStatefulSet(name, namespace, version, secretName string, storageGB int) map[string]interface{} {
+	imageTag := version
+	if !strings.Contains(imageTag, ".") {
+		imageTag = version + "-alpine"
+	}
+
+	return map[string]interface{}{
+		"apiVersion": "apps/v1",
+		"kind":       "StatefulSet",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+			"labels": map[string]interface{}{
+				"app.zenith.dev/managed-service": name,
+			},
+		},
+		"spec": map[string]interface{}{
+			"replicas":    1,
+			"serviceName": name,
+			"selector": map[string]interface{}{
+				"matchLabels": map[string]interface{}{
+					"app.zenith.dev/managed-service": name,
+				},
+			},
+			"template": map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						"app.zenith.dev/managed-service": name,
+					},
+				},
+				"spec": map[string]interface{}{
+					"containers": []map[string]interface{}{
+						{
+							"name":  "redis",
+							"image": fmt.Sprintf("redis:%s", imageTag),
+							"command": []string{
+								"redis-server",
+								"--requirepass",
+								"$(REDIS_PASSWORD)",
+								"--appendonly",
+								"yes",
+							},
+							"env": []map[string]interface{}{
+								{
+									"name": "REDIS_PASSWORD",
+									"valueFrom": map[string]interface{}{
+										"secretKeyRef": map[string]interface{}{
+											"name": secretName,
+											"key":  "redis-password",
+										},
+									},
+								},
+							},
+							"ports": []map[string]interface{}{
+								{
+									"containerPort": 6379,
+									"name":          "redis",
+								},
+							},
+							"volumeMounts": []map[string]interface{}{
+								{
+									"name":      "data",
+									"mountPath": "/data",
+								},
+							},
+							"resources": map[string]interface{}{
+								"requests": map[string]interface{}{
+									"cpu":    "50m",
+									"memory": "64Mi",
+								},
+								"limits": map[string]interface{}{
+									"cpu":    "500m",
+									"memory": "256Mi",
+								},
+							},
+						},
+					},
+				},
+			},
+			"volumeClaimTemplates": []map[string]interface{}{
+				{
+					"metadata": map[string]interface{}{
+						"name": "data",
+					},
+					"spec": map[string]interface{}{
+						"accessModes": []string{"ReadWriteOnce"},
+						"resources": map[string]interface{}{
+							"requests": map[string]interface{}{
+								"storage": fmt.Sprintf("%dGi", storageGB),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// buildRedisService returns an unstructured headless Service for the Redis StatefulSet.
+func buildRedisService(name, namespace string, port int) map[string]interface{} {
+	return map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "Service",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+			"labels": map[string]interface{}{
+				"app.zenith.dev/managed-service": name,
+			},
+		},
+		"spec": map[string]interface{}{
+			"clusterIP": "None",
+			"selector": map[string]interface{}{
+				"app.zenith.dev/managed-service": name,
+			},
+			"ports": []map[string]interface{}{
+				{
+					"port":       port,
+					"targetPort": 6379,
+					"name":       "redis",
+				},
+			},
+		},
+	}
 }

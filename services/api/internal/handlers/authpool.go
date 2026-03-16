@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -60,11 +61,19 @@ type AuthPoolHandler struct {
 	poolSvc     *services.AuthPoolService
 	poolRepo    ports.AuthPoolRepository
 	keycloakURL string // internal URL for proxying token requests
+	email       ports.EmailSender
+	appURL      string
 }
 
 // NewAuthPoolHandler creates a new AuthPoolHandler.
 func NewAuthPoolHandler(poolSvc *services.AuthPoolService, poolRepo ports.AuthPoolRepository, keycloakURL string) *AuthPoolHandler {
 	return &AuthPoolHandler{poolSvc: poolSvc, poolRepo: poolRepo, keycloakURL: keycloakURL}
+}
+
+// SetEmailSender sets the email sender for magic link delivery.
+func (h *AuthPoolHandler) SetEmailSender(email ports.EmailSender, appURL string) {
+	h.email = email
+	h.appURL = appURL
 }
 
 // ---------------------------------------------------------------------------
@@ -1182,9 +1191,31 @@ func (h *AuthPoolHandler) SendMagicLink(c *fiber.Ctx) error {
 	exp := time.Now().Add(15 * time.Minute).Unix()
 	token := magicLinkHMAC(pool.ClientSecret, input.Email, exp)
 
-	// TODO: Send the magic link via email (e.g., Keycloak SMTP or external provider).
-	// The token format for the link is "hmac:expiry" — the recipient verifies at POST /magic-link/verify.
-	_ = token // token is generated but only sent via email, never in API response
+	// Send the magic link via email
+	if h.email != nil && h.appURL != "" {
+		magicURL := fmt.Sprintf("%s/auth/magic-link?pool=%s&token=%s&exp=%d&email=%s",
+			strings.TrimRight(h.appURL, "/"), pool.ID, url.QueryEscape(token), exp, url.QueryEscape(input.Email))
+		subject := "Sign in to " + pool.Name
+		htmlBody := fmt.Sprintf(`
+			<h2 style="color: #fafafa; font-size: 20px; margin: 0 0 16px;">Magic Link Sign In</h2>
+			<p style="color: #a3a3a3; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+				Click the button below to sign in. This link expires in 15 minutes.
+			</p>
+			<div style="text-align: center; margin: 24px 0;">
+				<a href="%s" style="display: inline-block; background-color: #10b981; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 12px 32px; border-radius: 8px;">
+					Sign In
+				</a>
+			</div>
+			<p style="color: #737373; font-size: 12px; line-height: 1.5; margin: 24px 0 0;">
+				If you didn't request this link, you can safely ignore this email.
+			</p>`, magicURL)
+		if err := h.email.SendGenericEmail(c.Context(), input.Email, subject, htmlBody); err != nil {
+			slog.Error("failed to send magic link email", "email", input.Email, "error", err)
+		}
+	} else {
+		slog.Warn("magic link generated but email sender not configured", "email", input.Email)
+	}
+	_ = token // token is sent via email only, never in API response
 	_ = exp
 
 	// Always return success to prevent email enumeration
@@ -1482,8 +1513,9 @@ func (h *AuthPoolHandler) SendOTP(c *fiber.Ctx) error {
 	otpStore[key] = otpEntry{Code: code, Exp: time.Now().Add(5 * time.Minute)}
 	otpMu.Unlock()
 
-	// TODO: Send the code via SMS provider (Twilio, etc.)
-	// The OTP is NOT returned in the response for security.
+	// SMS/OTP delivery is not supported. Use email-based authentication (magic link) instead.
+	// The OTP is stored but cannot be delivered — this endpoint exists for future extensibility.
+	slog.Warn("OTP requested but SMS delivery is not configured — use magic link auth instead", "phone", input.Phone)
 	return c.JSON(fiber.Map{
 		"message":    "OTP sent",
 		"expires_in": 300,

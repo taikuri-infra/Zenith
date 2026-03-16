@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -9,15 +10,28 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// EnvVarK8sSyncer syncs env vars to K8s Secret/ConfigMap.
+type EnvVarK8sSyncer interface {
+	CreateSecret(ctx context.Context, namespace, name string, data map[string][]byte, labels map[string]string) error
+	CreateConfigMap(ctx context.Context, namespace, name string, data map[string]string) error
+}
+
 // EnvVarHandler handles enhanced environment variable endpoints.
 type EnvVarHandler struct {
 	appRepo    ports.AppRepository
 	envVarRepo ports.EnvVarRepository
+	k8s        EnvVarK8sSyncer
+	namespace  string
 }
 
 // NewEnvVarHandler creates a new EnvVarHandler.
 func NewEnvVarHandler(appRepo ports.AppRepository, envVarRepo ports.EnvVarRepository) *EnvVarHandler {
-	return &EnvVarHandler{appRepo: appRepo, envVarRepo: envVarRepo}
+	return &EnvVarHandler{appRepo: appRepo, envVarRepo: envVarRepo, namespace: "zenith-apps"}
+}
+
+// SetK8sClient sets the K8s client for env var syncing.
+func (h *EnvVarHandler) SetK8sClient(k8s EnvVarK8sSyncer) {
+	h.k8s = k8s
 }
 
 type setEnvVarsRequest struct {
@@ -113,13 +127,16 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 		return NewInternal("failed to set environment variables")
 	}
 
-	// TODO: sync to K8s Secret/ConfigMap
-
 	// Return updated list
 	allVars, err := h.envVarRepo.GetEnvVars(c.Context(), appID)
 	if err != nil {
 		slog.Error("failed to get env vars", "error", err)
 		return NewInternal("failed to retrieve environment variables")
+	}
+
+	// Sync to K8s Secret/ConfigMap (best-effort, don't fail the request)
+	if h.k8s != nil {
+		h.syncEnvVarsToK8s(c.Context(), appID, allVars)
 	}
 
 	items := make([]envVarResponse, 0, len(allVars))
@@ -187,8 +204,47 @@ func (h *EnvVarHandler) Delete(c *fiber.Ctx) error {
 		return NewNotFound("environment variable not found")
 	}
 
-	// TODO: re-sync to K8s
+	// Re-sync remaining env vars to K8s (best-effort)
+	if h.k8s != nil {
+		remaining, rerr := h.envVarRepo.GetEnvVars(c.Context(), appID)
+		if rerr == nil {
+			h.syncEnvVarsToK8s(c.Context(), appID, remaining)
+		}
+	}
 
-	_ = appID // used for ownership check
 	return c.JSON(fiber.Map{"message": "environment variable deleted"})
+}
+
+// syncEnvVarsToK8s syncs all env vars for an app to K8s Secret (secrets) and ConfigMap (plain vars).
+func (h *EnvVarHandler) syncEnvVarsToK8s(ctx context.Context, appID string, vars []entities.AppEnvVar) {
+	secretData := make(map[string][]byte)
+	configData := make(map[string]string)
+
+	for _, v := range vars {
+		if v.IsSecret {
+			secretData[v.Key] = []byte(v.Value)
+		} else {
+			configData[v.Key] = v.Value
+		}
+	}
+
+	labels := map[string]string{
+		"app.zenith.dev/app-id": appID,
+		"app.zenith.dev/type":   "env",
+	}
+
+	secretName := "env-" + appID + "-secrets"
+	configName := "env-" + appID + "-config"
+
+	if len(secretData) > 0 {
+		if err := h.k8s.CreateSecret(ctx, h.namespace, secretName, secretData, labels); err != nil {
+			slog.Warn("failed to sync env secrets to K8s", "app_id", appID, "error", err)
+		}
+	}
+
+	if len(configData) > 0 {
+		if err := h.k8s.CreateConfigMap(ctx, h.namespace, configName, configData); err != nil {
+			slog.Warn("failed to sync env config to K8s", "app_id", appID, "error", err)
+		}
+	}
 }

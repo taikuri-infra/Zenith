@@ -6,6 +6,7 @@ import (
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -14,11 +15,17 @@ import (
 type ManagedServiceHandler struct {
 	projectRepo ports.ProjectRepository
 	msRepo      ports.ManagedServiceRepository
+	msSvc       *services.ManagedServiceService
 }
 
 // NewManagedServiceHandler creates a new ManagedServiceHandler.
 func NewManagedServiceHandler(projectRepo ports.ProjectRepository, msRepo ports.ManagedServiceRepository) *ManagedServiceHandler {
 	return &ManagedServiceHandler{projectRepo: projectRepo, msRepo: msRepo}
+}
+
+// SetService sets the managed service service for K8s provisioning.
+func (h *ManagedServiceHandler) SetService(svc *services.ManagedServiceService) {
+	h.msSvc = svc
 }
 
 type provisionManagedServiceRequest struct {
@@ -100,6 +107,27 @@ func (h *ManagedServiceHandler) Provision(c *fiber.Ctx) error {
 		req.StorageGB = 5
 	}
 
+	// Use service layer for K8s provisioning if available
+	if h.msSvc != nil {
+		var svc *entities.ManagedService
+		var provErr error
+		switch st {
+		case entities.ServiceTypePostgreSQL:
+			svc, provErr = h.msSvc.ProvisionPostgreSQL(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
+		case entities.ServiceTypeRedis:
+			svc, provErr = h.msSvc.ProvisionRedis(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
+		}
+		if provErr != nil {
+			if isAlreadyExists(provErr) {
+				return NewConflict(provErr.Error())
+			}
+			slog.Error("failed to provision managed service", "error", provErr)
+			return NewInternal("failed to provision managed service")
+		}
+		return c.Status(fiber.StatusCreated).JSON(toManagedServiceResponse(svc))
+	}
+
+	// Fallback: create DB record only (no K8s provisioning)
 	svc := &entities.ManagedService{
 		ID:          uuid.New().String(),
 		ProjectID:   projectID,
@@ -119,8 +147,6 @@ func (h *ManagedServiceHandler) Provision(c *fiber.Ctx) error {
 		slog.Error("failed to create managed service", "error", err)
 		return NewInternal("failed to create managed service")
 	}
-
-	// TODO: trigger actual K8s provisioning (CNPG Cluster or Redis StatefulSet) via service layer
 
 	return c.Status(fiber.StatusCreated).JSON(toManagedServiceResponse(svc))
 }
@@ -199,8 +225,16 @@ func (h *ManagedServiceHandler) Delete(c *fiber.Ctx) error {
 		return NewForbidden("not your managed service")
 	}
 
-	// TODO: trigger K8s resource cleanup via service layer
+	// Use service layer for K8s cleanup if available
+	if h.msSvc != nil {
+		if err := h.msSvc.DeleteManagedService(c.Context(), msID); err != nil {
+			slog.Error("failed to delete managed service", "error", err)
+			return NewInternal("failed to delete managed service")
+		}
+		return c.JSON(fiber.Map{"message": "managed service deleted"})
+	}
 
+	// Fallback: DB-only delete
 	if err := h.msRepo.DeleteManagedService(c.Context(), msID); err != nil {
 		slog.Error("failed to delete managed service", "error", err)
 		return NewInternal("failed to delete managed service")
