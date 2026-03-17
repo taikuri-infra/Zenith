@@ -135,21 +135,33 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 
 // DeleteApp removes all K8s resources for an app, including KEDA CRDs.
 func (d *Deployer) DeleteApp(ctx context.Context, app *entities.App) error {
-	slog.Info("deleting K8s resources for app", "app", app.Name)
+	slog.Info("deleting K8s resources for app", "app", app.Name, "subdomain", app.Subdomain)
 
 	namespace := "zenith-apps"
-	for _, kind := range []string{"HTTPScaledObject", "Deployment", "Service", "IngressRoute"} {
-		if err := d.k8sClient.DeleteCRD(ctx, kind, namespace, app.Subdomain); err != nil {
-			slog.Error("failed to delete K8s resource", "kind", kind, "subdomain", app.Subdomain, "error", err)
+
+	// Each resource type has its own apiVersion — must use DeleteCRDWithVersion
+	// to correctly resolve the GroupVersionResource.
+	resources := []struct {
+		apiVersion string
+		kind       string
+		name       string
+	}{
+		{"apps/v1", "Deployment", app.Subdomain},
+		{"v1", "Service", app.Subdomain},
+		{"traefik.io/v1alpha1", "IngressRoute", app.Subdomain},
+		{"keda.sh/v1alpha1", "HTTPScaledObject", app.Subdomain},
+		{"networking.k8s.io/v1", "NetworkPolicy", app.Subdomain + "-netpol"},
+		{"cert-manager.io/v1", "Certificate", app.Subdomain + "-custom-tls"},
+	}
+
+	for _, r := range resources {
+		if err := d.k8sClient.DeleteCRDWithVersion(ctx, r.apiVersion, r.kind, namespace, r.name); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				slog.Error("failed to delete K8s resource", "kind", r.kind, "name", r.name, "error", err)
+			}
+		} else {
+			slog.Info("deleted K8s resource", "kind", r.kind, "name", r.name)
 		}
-	}
-	// Clean up NetworkPolicy (uses -netpol suffix)
-	if err := d.k8sClient.DeleteCRD(ctx, "NetworkPolicy", namespace, app.Subdomain+"-netpol"); err != nil {
-		slog.Error("failed to delete NetworkPolicy", "subdomain", app.Subdomain, "error", err)
-	}
-	// Clean up Certificate CRD for custom domains
-	if err := d.k8sClient.DeleteCRD(ctx, "Certificate", namespace, app.Subdomain+"-custom-tls"); err != nil {
-		slog.Error("failed to delete Certificate", "subdomain", app.Subdomain, "error", err)
 	}
 
 	return nil
