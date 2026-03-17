@@ -25,7 +25,7 @@ mc:
 web:
   enabled: true
   replicas: 1
-  image: zenith-web:sha-1513866
+  image: zenith-web:sha-eede2ff
   port: 3000
   resources:
     requests:
