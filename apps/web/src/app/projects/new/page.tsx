@@ -106,7 +106,7 @@ export default function NewProjectPage() {
         const provisioned: ManagedService[] = [];
         for (const ms of result.managed_services) {
           try {
-            const svc = await api.managedServices.provision(project.id, {
+            const svc = await api.managedServices.provision(pid, {
               service_type: ms.type,
               name: ms.name,
               version: ms.version,
