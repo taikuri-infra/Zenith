@@ -329,22 +329,24 @@ export default function NewProjectPage() {
             {parseResult.services.some((s) => s.env_vars.length > 0) && (
               <div>
                 <h3 className="mb-3 text-sm font-medium text-neutral-300">
-                  Environment Variables (auto-translated)
+                  Environment Variables
                 </h3>
                 <div className="rounded-lg border border-border bg-surface-200 p-4">
                   <div className="space-y-2">
                     {parseResult.services.flatMap((svc) =>
-                      svc.env_vars
-                        .filter((ev) => ev.original !== ev.zenith)
-                        .map((ev) => (
+                      svc.env_vars.map((ev) => (
                           <div key={`${svc.name}-${ev.key}`} className="text-xs">
                             <span className="text-neutral-400">{svc.name}/</span>
                             <span className="font-medium text-white">{ev.key}</span>
-                            <div className="mt-0.5 flex items-center gap-2 text-neutral-500">
-                              <span className="line-through">{ev.original}</span>
-                              <ArrowRight className="h-3 w-3" />
-                              <span className="text-emerald-400">{ev.zenith}</span>
-                            </div>
+                            {ev.original !== ev.zenith ? (
+                              <div className="mt-0.5 flex items-center gap-2 text-neutral-500">
+                                <span className="line-through">{ev.original}</span>
+                                <ArrowRight className="h-3 w-3" />
+                                <span className="text-emerald-400">{ev.zenith}</span>
+                              </div>
+                            ) : (
+                              <div className="mt-0.5 text-neutral-500">{ev.zenith}</div>
+                            )}
                           </div>
                         ))
                     )}
