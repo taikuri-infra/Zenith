@@ -138,6 +138,9 @@ export default function NewProjectPage() {
     }
     setDeployStatus({ ...status });
 
+    // Build a slug from the project name for unique app names
+    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
     let allOk = true;
 
     for (const svc of parseResult.services) {
@@ -157,9 +160,10 @@ export default function NewProjectPage() {
           .filter((ev) => ev.zenith)
           .map((ev) => ({ key: ev.key, value: ev.zenith }));
 
+        const appName = `${slug}-${svc.name}`;
         await api.appsDeploy.create({
           project_id: projectId,
-          name: svc.name,
+          name: appName,
           deploy_source: "image",
           image_url: imageUrl,
           port: svc.port || 8080,
@@ -183,7 +187,7 @@ export default function NewProjectPage() {
       toast("success", "All services deployed successfully!");
     }
     setDeploying(false);
-  }, [parseResult, projectId, api, toast]);
+  }, [parseResult, projectId, name, api, toast]);
 
   return (
     <Shell>
