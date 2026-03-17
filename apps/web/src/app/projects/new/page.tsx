@@ -100,8 +100,13 @@ export default function NewProjectPage() {
       }
 
       setStep(2);
-    } catch (e) {
-      toast("error", `Failed: ${e}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("409") || msg.toLowerCase().includes("conflict") || msg.toLowerCase().includes("already exists")) {
+        toast("error", `A project named "${name.trim()}" already exists. Choose a different name.`);
+      } else {
+        toast("error", msg);
+      }
     } finally {
       setParsing(false);
     }
