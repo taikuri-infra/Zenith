@@ -25,6 +25,9 @@ import {
   AlignLeft,
   Sparkles,
   XCircle,
+  Globe,
+  Lock,
+  Shield,
 } from "lucide-react";
 
 type Step = 1 | 2 | 3;
@@ -56,6 +59,9 @@ export default function NewProjectPage() {
   // Parse errors & AI suggestions (shown inline on step 1)
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [aiSuggestions, setAISuggestions] = useState<string[]>([]);
+
+  // Exposure overrides: user can toggle backend services to public
+  const [exposureOverrides, setExposureOverrides] = useState<Record<string, boolean>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -206,14 +212,15 @@ export default function NewProjectPage() {
           .map((ev) => ({ key: ev.key, value: ev.zenith }));
 
         const appName = `${slug}-${svc.name}`;
+        const isPublic = exposureOverrides[svc.name] ?? svc.is_public;
         await api.appsDeploy.create({
           project_id: projectId,
           name: appName,
           deploy_source: "image",
           image_url: imageUrl,
           port: svc.port || 8080,
-          app_type: svc.is_public ? "web" : "worker",
-          exposure: svc.is_public ? "public" : "public",
+          app_type: isPublic ? "web" : "worker",
+          exposure: isPublic ? "public" : "protected",
           env_vars: envVars.length > 0 ? envVars : undefined,
         });
 
@@ -409,7 +416,18 @@ export default function NewProjectPage() {
               </h3>
               <div className="space-y-3">
                 {(parseResult.services || []).map((svc) => (
-                  <ServiceCard key={svc.name} service={svc} projectId={projectId} />
+                  <ServiceCard
+                    key={svc.name}
+                    service={svc}
+                    projectId={projectId}
+                    isPublic={exposureOverrides[svc.name] ?? svc.is_public}
+                    onToggleExposure={() =>
+                      setExposureOverrides((prev) => ({
+                        ...prev,
+                        [svc.name]: !(prev[svc.name] ?? svc.is_public),
+                      }))
+                    }
+                  />
                 ))}
               </div>
             </div>
@@ -498,7 +516,9 @@ export default function NewProjectPage() {
             {/* Deploy status per service */}
             {parseResult && (
               <div className="space-y-3">
-                {(parseResult.services || []).map((svc) => (
+                {(parseResult.services || []).map((svc) => {
+                  const svcIsPublic = exposureOverrides[svc.name] ?? svc.is_public;
+                  return (
                   <div
                     key={svc.name}
                     className="flex items-center justify-between rounded-lg border border-border bg-surface-200 px-4 py-3"
@@ -508,6 +528,15 @@ export default function NewProjectPage() {
                       <span className="text-sm font-medium text-white">{svc.name}</span>
                       {svc.port > 0 && (
                         <span className="text-xs text-neutral-500">:{svc.port}</span>
+                      )}
+                      {svcIsPublic ? (
+                        <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                          <Globe className="h-2.5 w-2.5" /> Public
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">
+                          <Lock className="h-2.5 w-2.5" /> Private
+                        </span>
                       )}
                     </div>
                     {deployStatus[svc.name] === "done" ? (
@@ -526,7 +555,8 @@ export default function NewProjectPage() {
                       <span className="text-xs text-neutral-500">Pending</span>
                     )}
                   </div>
-                ))}
+                  );
+                })}
 
                 {/* Managed services status */}
                 {(parseResult.managed_services || []).length > 0 && (
@@ -653,9 +683,13 @@ function StepDot({
 function ServiceCard({
   service,
   projectId,
+  isPublic,
+  onToggleExposure,
 }: {
   service: ParsedService;
   projectId: string;
+  isPublic: boolean;
+  onToggleExposure: () => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -677,16 +711,61 @@ function ServiceCard({
               :{service.port}
             </span>
           )}
-          {service.is_public && (
-            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-400">
-              public
-            </span>
-          )}
         </div>
         {service.url && (
           <span className="text-xs text-neutral-400">{service.url}</span>
         )}
       </div>
+
+      {/* Exposure toggle */}
+      <div className="mt-3 flex items-center justify-between rounded-lg border border-border/50 bg-neutral-900/50 px-3 py-2">
+        <div className="flex items-center gap-2">
+          {isPublic ? (
+            <>
+              <Globe className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs font-medium text-emerald-400">Public</span>
+              <span className="text-[10px] text-neutral-500">— accessible via URL</span>
+            </>
+          ) : (
+            <>
+              <Lock className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-xs font-medium text-amber-400">Private</span>
+              <span className="text-[10px] text-neutral-500">— internal only</span>
+            </>
+          )}
+        </div>
+        <button
+          onClick={onToggleExposure}
+          className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-medium transition-colors ${
+            isPublic
+              ? "border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+              : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+          }`}
+        >
+          {isPublic ? (
+            <>
+              <Lock className="h-3 w-3" />
+              Make Private
+            </>
+          ) : (
+            <>
+              <Globe className="h-3 w-3" />
+              Make Public
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* API Gateway note for public services */}
+      {isPublic && !service.is_public && (
+        <div className="mt-2 flex items-center gap-2 rounded-md bg-blue-500/10 px-3 py-1.5">
+          <Shield className="h-3 w-3 text-blue-400 shrink-0" />
+          <span className="text-[10px] text-blue-300">
+            Routed through API Gateway with rate limiting & security
+          </span>
+        </div>
+      )}
+
       {service.build_context && (
         <div className="mt-3">
           <p className="mb-1 text-[11px] text-neutral-500">Push command:</p>
