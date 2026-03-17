@@ -22,6 +22,9 @@ import {
   Database,
   Server,
   Rocket,
+  AlignLeft,
+  Sparkles,
+  XCircle,
 } from "lucide-react";
 
 type Step = 1 | 2 | 3;
@@ -50,7 +53,13 @@ export default function NewProjectPage() {
   const [deployDone, setDeployDone] = useState(false);
   const [deployStatus, setDeployStatus] = useState<Record<string, "pending" | "deploying" | "done" | "error">>({});
 
+  // Parse errors & AI suggestions (shown inline on step 1)
+  const [parseErrors, setParseErrors] = useState<string[]>([]);
+  const [aiSuggestions, setAISuggestions] = useState<string[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   // Step 1 → Step 2: Create project + parse compose
   const handleStep1Next = useCallback(async () => {
@@ -64,19 +73,31 @@ export default function NewProjectPage() {
     }
 
     setParsing(true);
+    setParseErrors([]);
+    setAISuggestions([]);
     try {
-      // Create project via API directly (not context — avoids provider dependency)
-      const project = await api.projects.create({ name: name.trim() });
-      setProjectId(project.id);
+      // Create project (or reuse existing)
+      let pid = projectId;
+      if (!pid) {
+        const project = await api.projects.create({ name: name.trim() });
+        pid = project.id;
+        setProjectId(pid);
+      }
 
       // Parse compose
-      const result = await api.composeImport.parse(project.id, composeContent);
+      const result = await api.composeImport.parse(pid, composeContent);
       setParseResult(result);
 
       if (!result.valid) {
-        toast("error", "Compose file has errors. Fix them and try again.");
+        setParseErrors(result.errors || []);
+        setAISuggestions(result.ai_suggestions || []);
         setParsing(false);
         return;
+      }
+
+      // Store AI suggestions even on success
+      if (result.ai_suggestions?.length) {
+        setAISuggestions(result.ai_suggestions);
       }
 
       // Auto-provision managed services
@@ -110,7 +131,33 @@ export default function NewProjectPage() {
     } finally {
       setParsing(false);
     }
-  }, [name, composeContent, api, toast]);
+  }, [name, composeContent, projectId, api, toast]);
+
+  // Format YAML: fix common indentation issues
+  const handleFormatYaml = useCallback(() => {
+    const lines = composeContent.split("\n");
+    // Simple fix: if "services:" is indented, dedent it and everything below
+    const formatted = lines.map((line) => {
+      // Remove leading spaces from top-level keys (version, services, volumes, networks)
+      if (/^\s+(version|services|volumes|networks):/.test(line)) {
+        return line.trimStart();
+      }
+      return line;
+    });
+    setComposeContent(formatted.join("\n"));
+    setParseErrors([]);
+    setAISuggestions([]);
+    toast("success", "YAML formatted");
+  }, [composeContent, toast]);
+
+  // Sync line numbers scroll with textarea
+  const handleTextareaScroll = useCallback(() => {
+    if (textareaRef.current && lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  }, []);
+
+  const lineCount = composeContent.split("\n").length || 1;
 
   // File upload handler
   const handleFileUpload = useCallback(
@@ -235,29 +282,84 @@ export default function NewProjectPage() {
                 <label className="text-sm font-medium text-neutral-300">
                   docker-compose.yml
                 </label>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 text-xs text-brand hover:text-brand/80"
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleFormatYaml}
+                    className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white"
+                    title="Format YAML"
+                  >
+                    <AlignLeft className="h-3.5 w-3.5" />
+                    Format
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 text-xs text-brand hover:text-brand/80"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload file
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".yml,.yaml"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+              <div className={`flex rounded-lg border bg-surface-200 ${parseErrors.length > 0 ? "border-red-500/50" : "border-border"} focus-within:border-brand`}>
+                {/* Line numbers */}
+                <div
+                  ref={lineNumbersRef}
+                  className="select-none overflow-hidden border-r border-border/50 py-3 text-right font-mono text-[11px] leading-[18px] text-neutral-600"
+                  style={{ minWidth: "3rem" }}
                 >
-                  <Upload className="h-3.5 w-3.5" />
-                  Upload file
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".yml,.yaml"
-                  onChange={handleFileUpload}
-                  className="hidden"
+                  {Array.from({ length: lineCount }, (_, i) => (
+                    <div key={i} className="px-2">{i + 1}</div>
+                  ))}
+                </div>
+                <textarea
+                  ref={textareaRef}
+                  value={composeContent}
+                  onChange={(e) => { setComposeContent(e.target.value); setParseErrors([]); setAISuggestions([]); }}
+                  onScroll={handleTextareaScroll}
+                  placeholder={`version: "3.8"\nservices:\n  api:\n    build: ./api\n    ports:\n      - "8080:8080"\n  db:\n    image: postgres:16`}
+                  rows={14}
+                  spellCheck={false}
+                  className="flex-1 resize-none bg-transparent px-3 py-3 font-mono text-xs leading-[18px] text-white placeholder:text-neutral-600 focus:outline-none"
                 />
               </div>
-              <textarea
-                value={composeContent}
-                onChange={(e) => setComposeContent(e.target.value)}
-                placeholder={`version: "3.8"\nservices:\n  api:\n    build: ./api\n    ports:\n      - "8080:8080"\n  db:\n    image: postgres:16`}
-                rows={14}
-                className="w-full rounded-lg border border-border bg-surface-200 px-4 py-3 font-mono text-xs text-white placeholder:text-neutral-600 focus:border-brand focus:outline-none"
-              />
             </div>
+
+            {/* Parse errors (inline) */}
+            {parseErrors.length > 0 && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-red-400">
+                  <XCircle className="h-4 w-4" />
+                  Compose Errors
+                </div>
+                <ul className="mt-2 space-y-1 text-xs text-red-300/80">
+                  {parseErrors.map((err, i) => (
+                    <li key={i}>• {err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* AI suggestions */}
+            {aiSuggestions.length > 0 && (
+              <div className="rounded-lg border border-accent-500/30 bg-accent-500/10 p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-accent-400">
+                  <Sparkles className="h-4 w-4" />
+                  AI Suggestions
+                </div>
+                <ul className="mt-2 space-y-1 text-xs text-accent-300/80">
+                  {aiSuggestions.map((s, i) => (
+                    <li key={i}>• {s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="flex justify-end">
               <button

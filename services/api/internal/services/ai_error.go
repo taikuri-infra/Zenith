@@ -33,15 +33,7 @@ func NewAIErrorAnalyzer(aiClient *AIClient, lokiClient *lokiclient.Client) *AIEr
 	}
 }
 
-const errorAnalysisSystemPrompt = `You are a DevOps expert analyzing application error logs from a Kubernetes-hosted app.
-Analyze the provided log lines and return a JSON object with these fields:
-- "problem": A concise description of what went wrong (1-2 sentences)
-- "cause": The most likely root cause (1-2 sentences)
-- "fix": Actionable steps to fix the issue (2-3 bullet points as a single string)
-- "confidence": Your confidence level: "high", "medium", or "low"
-
-Return ONLY valid JSON, no markdown, no explanation.
-Example: {"problem":"Application crashes on startup with OOM","cause":"Memory limit is too low for the Java heap size configured","fix":"1. Increase memory limit to at least 512Mi\n2. Set -Xmx to match container memory limit\n3. Add readiness probe to detect startup failures","confidence":"high"}`
+// ErrorAnalysisSystemPrompt is defined in ai_prompts.go as ErrorAnalysisSystemPrompt
 
 // AnalyzeError fetches recent logs and sends them to AI for analysis.
 func (a *AIErrorAnalyzer) AnalyzeError(ctx context.Context, appSlug, namespace string, logLines int) (*ErrorAnalysis, *AIResponse, error) {
@@ -78,7 +70,7 @@ func (a *AIErrorAnalyzer) AnalyzeError(ctx context.Context, appSlug, namespace s
 	// Scrub PII before sending to AI
 	scrubbedLogs := ScrubPII(rawLogs)
 
-	resp, err := a.aiClient.Complete(ctx, errorAnalysisSystemPrompt, scrubbedLogs)
+	resp, err := a.aiClient.Complete(ctx, ErrorAnalysisSystemPrompt, scrubbedLogs)
 	if err != nil || resp == nil {
 		return nil, nil, nil
 	}

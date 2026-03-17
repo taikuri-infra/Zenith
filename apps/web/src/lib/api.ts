@@ -354,6 +354,7 @@ export interface ComposeImportResult {
   managed_services: ParsedManaged[];
   warnings: string[];
   errors: string[];
+  ai_suggestions?: string[];
 }
 
 export const composeImport = {

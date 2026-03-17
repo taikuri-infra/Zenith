@@ -16,16 +16,7 @@ func NewAIComposeValidator(aiClient *AIClient) *AIComposeValidator {
 	return &AIComposeValidator{aiClient: aiClient}
 }
 
-const composeSystemPrompt = `You are a DevOps expert reviewing docker-compose.yml files for production deployment on Kubernetes.
-Analyze the compose file and return a JSON array of suggestion strings.
-Focus on:
-- Security issues (running as root, exposed debug ports, hardcoded secrets)
-- Performance (missing resource limits, inefficient configurations)
-- Reliability (missing health checks, restart policies, logging)
-- Kubernetes compatibility (unsupported features like network_mode: host)
-Return ONLY a JSON array of strings, no markdown, no explanation.
-Example: ["Add health checks to your API service","Use environment variables instead of hardcoded database passwords","Consider adding resource limits"]
-If everything looks good, return: ["Your compose file looks production-ready!"]`
+// ComposeSystemPrompt is defined in ai_prompts.go as ComposeSystemPrompt
 
 type aiComposeResponse []string
 
@@ -36,7 +27,7 @@ func (v *AIComposeValidator) ValidateCompose(ctx context.Context, composeContent
 		return nil
 	}
 
-	resp, err := v.aiClient.Complete(ctx, composeSystemPrompt, composeContent)
+	resp, err := v.aiClient.Complete(ctx, ComposeSystemPrompt, composeContent)
 	if err != nil || resp == nil {
 		return nil
 	}
@@ -56,7 +47,7 @@ func (v *AIComposeValidator) ValidateComposeWithUsage(ctx context.Context, compo
 		return nil, nil
 	}
 
-	resp, err := v.aiClient.Complete(ctx, composeSystemPrompt, composeContent)
+	resp, err := v.aiClient.Complete(ctx, ComposeSystemPrompt, composeContent)
 	if err != nil || resp == nil {
 		return nil, nil
 	}

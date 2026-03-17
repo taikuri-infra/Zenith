@@ -11,11 +11,17 @@ import (
 // ComposeHandler handles docker-compose import endpoints.
 type ComposeHandler struct {
 	projectRepo ports.ProjectRepository
+	aiValidator *services.AIComposeValidator
 }
 
 // NewComposeHandler creates a new ComposeHandler.
 func NewComposeHandler(projectRepo ports.ProjectRepository) *ComposeHandler {
 	return &ComposeHandler{projectRepo: projectRepo}
+}
+
+// SetAIValidator sets the AI compose validator for smart suggestions.
+func (h *ComposeHandler) SetAIValidator(v *services.AIComposeValidator) {
+	h.aiValidator = v
 }
 
 type importComposeRequest struct {
@@ -28,6 +34,7 @@ type importComposeResponse struct {
 	ManagedServices []parsedManagedResponse     `json:"managed_services"`
 	Warnings        []string                    `json:"warnings"`
 	Errors          []string                    `json:"errors"`
+	AISuggestions   []string                    `json:"ai_suggestions,omitempty"`
 }
 
 type parsedServiceResponse struct {
@@ -124,6 +131,14 @@ func (h *ComposeHandler) ImportCompose(c *fiber.Ctx) error {
 			Version:      ms.Version,
 			DetectedFrom: ms.DetectedFrom,
 		})
+	}
+
+	// Layer 3: AI suggestions (non-blocking — errors silently return empty)
+	if h.aiValidator != nil {
+		suggestions := h.aiValidator.ValidateCompose(c.Context(), req.ComposeContent)
+		if len(suggestions) > 0 {
+			resp.AISuggestions = suggestions
+		}
 	}
 
 	return c.JSON(resp)

@@ -972,6 +972,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		slog.Info("AI features enabled", "model", cfg.AIModel, "url", cfg.AILiteLLMURL)
 	}
 	aiErrorAnalyzer := services.NewAIErrorAnalyzer(aiClient, lokiClient)
+	composeHandler.SetAIValidator(services.NewAIComposeValidator(aiClient))
 
 	var aiUsageRepo ports.AIUsageRepository
 	if pool != nil {
