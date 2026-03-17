@@ -33,6 +33,10 @@ env:
   S3_SECRET_KEY: "true"  # actual value stored in zenith-secrets Secret
   S3_REGION: "fsn1"
   S3_PLATFORM_BUCKET: "zenith-user-storage"
+  AI_ENABLED: "true"
+  AI_LITELLM_URL: "https://api.openai.com/v1"
+  AI_API_KEY: "true"  # actual value stored in zenith-secrets Secret
+  AI_MODEL: "gpt-4o-mini"
 
 cnpgAdminSecret: "cnpg-admin-dsn"
 keycloakAdminSecret: "keycloak-admin"

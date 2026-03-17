@@ -213,6 +213,25 @@ spec:
                   name: zenith-secrets
                   key: s3-secret-key
             {{- end }}
+            {{- if .Values.env.AI_ENABLED }}
+            - name: AI_ENABLED
+              value: {{ .Values.env.AI_ENABLED | quote }}
+            {{- end }}
+            {{- if .Values.env.AI_LITELLM_URL }}
+            - name: AI_LITELLM_URL
+              value: {{ .Values.env.AI_LITELLM_URL | quote }}
+            {{- end }}
+            {{- if .Values.env.AI_MODEL }}
+            - name: AI_MODEL
+              value: {{ .Values.env.AI_MODEL | quote }}
+            {{- end }}
+            {{- if .Values.env.AI_API_KEY }}
+            - name: AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: zenith-secrets
+                  key: ai-api-key
+            {{- end }}
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:
