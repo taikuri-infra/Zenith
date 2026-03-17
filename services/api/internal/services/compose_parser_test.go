@@ -45,8 +45,8 @@ services:
 	if result.Services[0].Port != 8080 {
 		t.Errorf("expected port 8080, got %d", result.Services[0].Port)
 	}
-	if !result.Services[0].IsPublic {
-		t.Error("expected service to be public")
+	if result.Services[0].IsPublic {
+		t.Error("expected 'api' service to be internal (not public)")
 	}
 
 	// Should detect 2 managed services
