@@ -136,7 +136,9 @@ func ParseCompose(content string, projectSlug, namespace string) (*ParsedCompose
 			})
 		}
 
-		isPublic := port > 0
+		// Only mark as public if it looks like a frontend service.
+		// Services named "api", "backend", "worker", "server", "grpc" etc. stay internal.
+		isPublic := port > 0 && isFrontendService(name, svc.Image, port)
 		var url string
 		if isPublic && projectSlug != "" {
 			url = fmt.Sprintf("https://%s-%s.apps.stage.freezenith.com", name, projectSlug)
@@ -309,4 +311,40 @@ var hardcodedPasswordPattern = regexp.MustCompile(`(?i)(password|passwd|secret)=
 // containsHardcodedPassword checks if a value looks like it contains a hardcoded password.
 func containsHardcodedPassword(value string) bool {
 	return hardcodedPasswordPattern.MatchString(value)
+}
+
+// backendNames lists service name patterns that should NOT be public.
+var backendNames = []string{"api", "backend", "server", "worker", "grpc", "queue", "cron", "scheduler", "internal"}
+
+// frontendImages lists image names that are always public.
+var frontendImages = []string{"nginx", "httpd", "apache", "caddy", "traefik"}
+
+// isFrontendService determines if a service should be publicly exposed.
+// Public: services on port 80/443/3000 with frontend-like names/images.
+// Internal: services named api/backend/worker/server, or on non-web ports.
+func isFrontendService(name, image string, port int) bool {
+	nameLower := strings.ToLower(name)
+	imageLower := strings.ToLower(image)
+
+	// Explicit backend names → internal
+	for _, bn := range backendNames {
+		if strings.Contains(nameLower, bn) {
+			return false
+		}
+	}
+
+	// Known frontend images → public
+	for _, fi := range frontendImages {
+		if strings.Contains(imageLower, fi) {
+			return true
+		}
+	}
+
+	// Common frontend ports → public (NOT 8080 — too ambiguous, could be backend API)
+	if port == 80 || port == 443 || port == 3000 {
+		return true
+	}
+
+	// Default: internal (safe default — user can change in dashboard)
+	return false
 }

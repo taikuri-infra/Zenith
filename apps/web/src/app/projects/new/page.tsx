@@ -97,11 +97,12 @@ export default function NewProjectPage() {
 
       // AI suggestions only shown when there are errors (not generic tips on success)
 
-      // Auto-provision managed services
-      if ((result.managed_services || []).length > 0) {
+      // Auto-provision managed services (only PostgreSQL — Redis not supported yet)
+      const provisionable = (result.managed_services || []).filter((ms) => ms.type === "postgresql");
+      if (provisionable.length > 0) {
         setProvisioning(true);
         const provisioned: ManagedService[] = [];
-        for (const ms of result.managed_services) {
+        for (const ms of provisionable) {
           try {
             const svc = await api.managedServices.provision(pid, {
               service_type: ms.type,
@@ -526,6 +527,35 @@ export default function NewProjectPage() {
                     )}
                   </div>
                 ))}
+
+                {/* Managed services status */}
+                {(parseResult.managed_services || []).length > 0 && (
+                  <>
+                    <div className="mt-4 mb-2 text-xs font-medium text-neutral-400 uppercase tracking-wider">Managed Services</div>
+                    {(parseResult.managed_services || []).map((ms) => {
+                      const provisioned = provisionedServices.find((p) => p.name === ms.name);
+                      return (
+                        <div key={ms.name} className="flex items-center justify-between rounded-lg border border-border bg-surface-200 px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <Database className="h-4 w-4 text-blue-400" />
+                            <span className="text-sm font-medium text-white">{ms.name}</span>
+                            <span className="text-xs text-neutral-500">{ms.type} {ms.version}</span>
+                          </div>
+                          {ms.type !== "postgresql" ? (
+                            <span className="text-xs text-yellow-400">Not supported</span>
+                          ) : provisioned ? (
+                            <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+                              <Check className="h-3.5 w-3.5" />
+                              {provisioned.status}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-neutral-500">Pending</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
               </div>
             )}
 
@@ -712,7 +742,9 @@ function ManagedServiceCard({
         </div>
       </div>
       <div>
-        {provisioned ? (
+        {managed.type !== "postgresql" ? (
+          <span className="text-xs text-yellow-400">Not supported yet</span>
+        ) : provisioned ? (
           <span className="flex items-center gap-1.5 text-xs text-emerald-400">
             <Check className="h-3.5 w-3.5" />
             {provisioned.status}

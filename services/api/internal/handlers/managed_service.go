@@ -107,16 +107,14 @@ func (h *ManagedServiceHandler) Provision(c *fiber.Ctx) error {
 		req.StorageGB = 5
 	}
 
+	// Redis: not supported yet (no operator). Only PostgreSQL via CNPG.
+	if st == entities.ServiceTypeRedis {
+		return NewBadRequest("Redis provisioning is not available yet. Only PostgreSQL is supported as a managed service.")
+	}
+
 	// Use service layer for K8s provisioning if available
 	if h.msSvc != nil {
-		var svc *entities.ManagedService
-		var provErr error
-		switch st {
-		case entities.ServiceTypePostgreSQL:
-			svc, provErr = h.msSvc.ProvisionPostgreSQL(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
-		case entities.ServiceTypeRedis:
-			svc, provErr = h.msSvc.ProvisionRedis(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
-		}
+		svc, provErr := h.msSvc.ProvisionPostgreSQL(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
 		if provErr != nil {
 			if isAlreadyExists(provErr) {
 				return NewConflict(provErr.Error())
