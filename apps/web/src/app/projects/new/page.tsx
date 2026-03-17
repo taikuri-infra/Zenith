@@ -2,7 +2,6 @@
 
 import { Shell } from "@/components/shell";
 import { useToast } from "@/components/toast";
-import { useProjectContext } from "@/hooks/use-project";
 import { getApi } from "@/lib/get-api";
 import type {
   ComposeImportResult,
@@ -11,7 +10,7 @@ import type {
   ParsedManaged,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -30,7 +29,6 @@ type Step = 1 | 2 | 3;
 export default function NewProjectPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { createProject, setCurrentProject } = useProjectContext();
   const api = getApi();
 
   // Step state
@@ -67,10 +65,9 @@ export default function NewProjectPage() {
 
     setParsing(true);
     try {
-      // Create project
-      const project = await createProject(name.trim());
+      // Create project via API directly (not context — avoids provider dependency)
+      const project = await api.projects.create({ name: name.trim() });
       setProjectId(project.id);
-      setCurrentProject(project);
 
       // Parse compose
       const result = await api.composeImport.parse(project.id, composeContent);
@@ -108,7 +105,7 @@ export default function NewProjectPage() {
     } finally {
       setParsing(false);
     }
-  }, [name, composeContent, createProject, setCurrentProject, api, toast]);
+  }, [name, composeContent, api, toast]);
 
   // File upload handler
   const handleFileUpload = useCallback(
