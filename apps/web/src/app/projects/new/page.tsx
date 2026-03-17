@@ -54,7 +54,9 @@ export default function NewProjectPage() {
   // Step 3: Deploy
   const [deploying, setDeploying] = useState(false);
   const [deployDone, setDeployDone] = useState(false);
-  const [deployStatus, setDeployStatus] = useState<Record<string, "pending" | "deploying" | "done" | "error">>({});
+  const [deployPhase, setDeployPhase] = useState<"managed" | "backend" | "frontend" | "done">("managed");
+  const [deployStatus, setDeployStatus] = useState<Record<string, { state: "pending" | "creating" | "waiting" | "running" | "error"; url?: string; error?: string }>>({});
+  const [deployLog, setDeployLog] = useState<string[]>([]);
 
   // Parse errors & AI suggestions (shown inline on step 1)
   const [parseErrors, setParseErrors] = useState<string[]>([]);
@@ -177,43 +179,113 @@ export default function NewProjectPage() {
     []
   );
 
-  // Step 3: Deploy each parsed service via the real API
+  const addLog = useCallback((msg: string) => {
+    setDeployLog((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  }, []);
+
+  // Poll app until running or error (max 60s)
+  const waitForApp = useCallback(async (appId: string, appName: string): Promise<{ ok: boolean; url?: string; error?: string }> => {
+    const maxAttempts = 20;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const app = await api.appsDeploy.get(appId);
+        if (app.status === "running" || app.status === "active") {
+          return { ok: true, url: app.url };
+        }
+        if (app.status === "error" || app.status === "failed" || app.status === "crash_loop") {
+          return { ok: false, error: `App entered ${app.status} state` };
+        }
+        // Still deploying...
+      } catch {
+        // Ignore transient errors during polling
+      }
+    }
+    return { ok: false, error: "Timed out waiting for app to start (60s)" };
+  }, [api]);
+
+  // Step 3: Deploy with phases: managed → backend → frontend
   const handleDeploy = useCallback(async () => {
     if (!parseResult || !projectId) return;
     setDeploying(true);
+    setDeployLog([]);
 
-    // Initialize status for all services
-    const status: Record<string, "pending" | "deploying" | "done" | "error"> = {};
-    for (const svc of (parseResult.services || [])) {
-      status[svc.name] = "pending";
-    }
-    setDeployStatus({ ...status });
-
-    // Build a slug from the project name for unique app names
     const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const services = parseResult.services || [];
+    const managed = (parseResult.managed_services || []).filter((ms) => ms.type === "postgresql");
+
+    // Categorize services
+    const backends = services.filter((s) => !(exposureOverrides[s.name] ?? s.is_public));
+    const frontends = services.filter((s) => exposureOverrides[s.name] ?? s.is_public);
+
+    // Init status
+    const status: Record<string, { state: "pending" | "creating" | "waiting" | "running" | "error"; url?: string; error?: string }> = {};
+    for (const ms of managed) status[`db:${ms.name}`] = { state: "pending" };
+    for (const svc of backends) status[svc.name] = { state: "pending" };
+    for (const svc of frontends) status[svc.name] = { state: "pending" };
+    setDeployStatus({ ...status });
 
     let allOk = true;
 
-    for (const svc of (parseResult.services || [])) {
-      status[svc.name] = "deploying";
+    // ── Phase 1: Managed Services (Database) ──
+    if (managed.length > 0) {
+      setDeployPhase("managed");
+      addLog(`Phase 1: Provisioning ${managed.length} managed service(s)...`);
+
+      for (const ms of managed) {
+        const key = `db:${ms.name}`;
+        status[key] = { state: "creating" };
+        setDeployStatus({ ...status });
+        addLog(`Provisioning ${ms.type} "${ms.name}" v${ms.version}...`);
+
+        // Already provisioned in step 1, just mark done
+        const existing = provisionedServices.find((p) => p.name === ms.name);
+        if (existing) {
+          status[key] = { state: "running" };
+          setDeployStatus({ ...status });
+          addLog(`✓ ${ms.name} already provisioned (${existing.status})`);
+        } else {
+          try {
+            await api.managedServices.provision(projectId, {
+              service_type: ms.type,
+              name: ms.name,
+              version: ms.version,
+            });
+            status[key] = { state: "running" };
+            setDeployStatus({ ...status });
+            addLog(`✓ ${ms.name} provisioned`);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            status[key] = { state: "error", error: msg };
+            setDeployStatus({ ...status });
+            addLog(`✗ ${ms.name} failed: ${msg}`);
+            allOk = false;
+          }
+        }
+      }
+    }
+
+    // Helper to deploy a service
+    const deploySvc = async (svc: ParsedService) => {
+      status[svc.name] = { state: "creating" };
       setDeployStatus({ ...status });
 
+      let imageUrl = svc.image || "";
+      if (svc.build_context && !imageUrl) {
+        imageUrl = `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`;
+      }
+
+      const envVars = svc.env_vars
+        .filter((ev) => ev.zenith)
+        .map((ev) => ({ key: ev.key, value: ev.zenith }));
+
+      const appName = `${slug}-${svc.name}`;
+      const isPublic = exposureOverrides[svc.name] ?? svc.is_public;
+
+      addLog(`Creating ${appName} (${isPublic ? "public" : "private"}, port ${svc.port || 8080})...`);
+
       try {
-        // Determine image URL
-        let imageUrl = svc.image || "";
-        if (svc.build_context && !imageUrl) {
-          // User must push their image; use the registry path shown in Step 2
-          imageUrl = `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`;
-        }
-
-        // Collect env vars from compose translation
-        const envVars = svc.env_vars
-          .filter((ev) => ev.zenith)
-          .map((ev) => ({ key: ev.key, value: ev.zenith }));
-
-        const appName = `${slug}-${svc.name}`;
-        const isPublic = exposureOverrides[svc.name] ?? svc.is_public;
-        await api.appsDeploy.create({
+        const app = await api.appsDeploy.create({
           project_id: projectId,
           name: appName,
           deploy_source: "image",
@@ -224,22 +296,59 @@ export default function NewProjectPage() {
           env_vars: envVars.length > 0 ? envVars : undefined,
         });
 
-        status[svc.name] = "done";
+        status[svc.name] = { state: "waiting" };
         setDeployStatus({ ...status });
+        addLog(`Waiting for ${appName} to start...`);
+
+        const result = await waitForApp(app.id, appName);
+        if (result.ok) {
+          status[svc.name] = { state: "running", url: result.url };
+          setDeployStatus({ ...status });
+          addLog(`✓ ${appName} is running${result.url ? ` → ${result.url}` : ""}`);
+        } else {
+          status[svc.name] = { state: "error", error: result.error };
+          setDeployStatus({ ...status });
+          addLog(`✗ ${appName} failed: ${result.error}`);
+          allOk = false;
+        }
       } catch (e) {
-        status[svc.name] = "error";
+        const msg = e instanceof Error ? e.message : String(e);
+        status[svc.name] = { state: "error", error: msg };
         setDeployStatus({ ...status });
-        toast("error", `Failed to deploy ${svc.name}: ${e}`);
+        addLog(`✗ ${appName} failed: ${msg}`);
         allOk = false;
+      }
+    };
+
+    // ── Phase 2: Backend services ──
+    if (backends.length > 0) {
+      setDeployPhase("backend");
+      addLog(`Phase 2: Deploying ${backends.length} backend service(s)...`);
+      for (const svc of backends) {
+        await deploySvc(svc);
+      }
+    }
+
+    // ── Phase 3: Frontend services ──
+    if (frontends.length > 0) {
+      setDeployPhase("frontend");
+      addLog(`Phase 3: Deploying ${frontends.length} frontend service(s)...`);
+      for (const svc of frontends) {
+        await deploySvc(svc);
       }
     }
 
     if (allOk) {
+      setDeployPhase("done");
       setDeployDone(true);
+      addLog("All services deployed successfully!");
       toast("success", "All services deployed successfully!");
+    } else {
+      addLog("Deployment completed with errors.");
+      toast("error", "Some services failed to deploy.");
     }
     setDeploying(false);
-  }, [parseResult, projectId, name, api, toast]);
+  }, [parseResult, projectId, name, api, toast, exposureOverrides, provisionedServices, addLog, waitForApp]);
 
   return (
     <Shell>
@@ -502,110 +611,152 @@ export default function NewProjectPage() {
         )}
 
         {/* Step 3: Deploy */}
-        {step === 3 && (
+        {step === 3 && parseResult && (
           <div className="space-y-6">
             <div>
               <h2 className="text-base font-medium text-white">Step 3: Deploy</h2>
               <p className="mt-1 text-sm text-neutral-400">
                 {deployDone
                   ? "All services are running!"
-                  : "Click deploy to launch all services."}
+                  : deploying
+                  ? "Deploying your services..."
+                  : "Click deploy to launch all services in order: Database → Backend → Frontend"}
               </p>
             </div>
 
-            {/* Deploy status per service */}
-            {parseResult && (
-              <div className="space-y-3">
-                {(parseResult.services || []).map((svc) => {
-                  const svcIsPublic = exposureOverrides[svc.name] ?? svc.is_public;
+            {/* Phase progress bar */}
+            {deploying && (
+              <div className="flex items-center gap-2">
+                {[
+                  { key: "managed", label: "Database", icon: <Database className="h-3 w-3" /> },
+                  { key: "backend", label: "Backend", icon: <Lock className="h-3 w-3" /> },
+                  { key: "frontend", label: "Frontend", icon: <Globe className="h-3 w-3" /> },
+                ].map((phase, i) => {
+                  const phases = ["managed", "backend", "frontend", "done"];
+                  const currentIdx = phases.indexOf(deployPhase);
+                  const phaseIdx = phases.indexOf(phase.key);
+                  const isDone = currentIdx > phaseIdx;
+                  const isActive = currentIdx === phaseIdx;
                   return (
-                  <div
-                    key={svc.name}
-                    className="flex items-center justify-between rounded-lg border border-border bg-surface-200 px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Server className="h-4 w-4 text-neutral-400" />
-                      <span className="text-sm font-medium text-white">{svc.name}</span>
-                      {svc.port > 0 && (
-                        <span className="text-xs text-neutral-500">:{svc.port}</span>
-                      )}
-                      {svcIsPublic ? (
-                        <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-400">
-                          <Globe className="h-2.5 w-2.5" /> Public
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">
-                          <Lock className="h-2.5 w-2.5" /> Private
-                        </span>
-                      )}
+                    <div key={phase.key} className="flex items-center gap-2 flex-1">
+                      <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-medium transition-all ${
+                        isDone ? "bg-emerald-500/20 text-emerald-400" :
+                        isActive ? "bg-brand/20 text-brand" :
+                        "bg-surface-200 text-neutral-500"
+                      }`}>
+                        {isDone ? <Check className="h-3 w-3" /> : isActive ? <Loader2 className="h-3 w-3 animate-spin" /> : phase.icon}
+                        {phase.label}
+                      </div>
+                      {i < 2 && <div className={`flex-1 h-px ${isDone ? "bg-emerald-500/40" : "bg-neutral-700"}`} />}
                     </div>
-                    {deployStatus[svc.name] === "done" ? (
-                      <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-                        <Check className="h-3.5 w-3.5" />
-                        Deployed
-                      </span>
-                    ) : deployStatus[svc.name] === "deploying" ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-brand" />
-                    ) : deployStatus[svc.name] === "error" ? (
-                      <span className="flex items-center gap-1.5 text-xs text-red-400">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        Failed
-                      </span>
-                    ) : (
-                      <span className="text-xs text-neutral-500">Pending</span>
-                    )}
-                  </div>
                   );
                 })}
-
-                {/* Managed services status */}
-                {(parseResult.managed_services || []).length > 0 && (
-                  <>
-                    <div className="mt-4 mb-2 text-xs font-medium text-neutral-400 uppercase tracking-wider">Managed Services</div>
-                    {(parseResult.managed_services || []).map((ms) => {
-                      const provisioned = provisionedServices.find((p) => p.name === ms.name);
-                      return (
-                        <div key={ms.name} className="flex items-center justify-between rounded-lg border border-border bg-surface-200 px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <Database className="h-4 w-4 text-blue-400" />
-                            <span className="text-sm font-medium text-white">{ms.name}</span>
-                            <span className="text-xs text-neutral-500">{ms.type} {ms.version}</span>
-                          </div>
-                          {ms.type !== "postgresql" ? (
-                            <span className="text-xs text-yellow-400">Not supported</span>
-                          ) : provisioned ? (
-                            <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-                              <Check className="h-3.5 w-3.5" />
-                              {provisioned.status}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-neutral-500">Pending</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
               </div>
             )}
 
-            {deployDone && parseResult && (
+            {/* Service cards */}
+            <div className="space-y-2">
+              {/* Managed services */}
+              {(parseResult.managed_services || []).filter((ms) => ms.type === "postgresql").length > 0 && (
+                <>
+                  <div className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider pt-2">Database</div>
+                  {(parseResult.managed_services || []).filter((ms) => ms.type === "postgresql").map((ms) => {
+                    const st = deployStatus[`db:${ms.name}`];
+                    return (
+                      <DeployItemCard
+                        key={ms.name}
+                        icon={<Database className="h-4 w-4 text-blue-400" />}
+                        name={ms.name}
+                        meta={`${ms.type} ${ms.version}`}
+                        state={st?.state || "pending"}
+                        error={st?.error}
+                      />
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Backend services */}
+              {(parseResult.services || []).filter((s) => !(exposureOverrides[s.name] ?? s.is_public)).length > 0 && (
+                <>
+                  <div className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider pt-3">Backend (Private)</div>
+                  {(parseResult.services || []).filter((s) => !(exposureOverrides[s.name] ?? s.is_public)).map((svc) => {
+                    const st = deployStatus[svc.name];
+                    return (
+                      <DeployItemCard
+                        key={svc.name}
+                        icon={<Lock className="h-4 w-4 text-amber-400" />}
+                        name={svc.name}
+                        meta={svc.port > 0 ? `:${svc.port}` : undefined}
+                        state={st?.state || "pending"}
+                        url={st?.url}
+                        error={st?.error}
+                      />
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Frontend services */}
+              {(parseResult.services || []).filter((s) => exposureOverrides[s.name] ?? s.is_public).length > 0 && (
+                <>
+                  <div className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider pt-3">Frontend (Public)</div>
+                  {(parseResult.services || []).filter((s) => exposureOverrides[s.name] ?? s.is_public).map((svc) => {
+                    const st = deployStatus[svc.name];
+                    return (
+                      <DeployItemCard
+                        key={svc.name}
+                        icon={<Globe className="h-4 w-4 text-emerald-400" />}
+                        name={svc.name}
+                        meta={svc.port > 0 ? `:${svc.port}` : undefined}
+                        state={st?.state || "pending"}
+                        url={st?.url}
+                        error={st?.error}
+                      />
+                    );
+                  })}
+                </>
+              )}
+            </div>
+
+            {/* Deploy log */}
+            {deployLog.length > 0 && (
+              <div className="rounded-lg border border-border bg-neutral-950 p-4 max-h-48 overflow-y-auto">
+                <div className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider mb-2">Deploy Log</div>
+                <div className="space-y-0.5 font-mono text-[11px]">
+                  {deployLog.map((line, i) => (
+                    <div key={i} className={
+                      line.includes("✓") ? "text-emerald-400" :
+                      line.includes("✗") ? "text-red-400" :
+                      line.includes("Phase") ? "text-brand font-semibold" :
+                      "text-neutral-400"
+                    }>
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Success banner with real URLs */}
+            {deployDone && (
               <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
                 <p className="text-sm font-medium text-emerald-400">
                   Your project is live!
                 </p>
                 <div className="mt-2 space-y-1">
-                  {parseResult.services
-                    .filter((s) => s.url)
-                    .map((s) => (
+                  {Object.entries(deployStatus)
+                    .filter(([, st]) => st.url)
+                    .map(([name, st]) => (
                       <a
-                        key={s.name}
-                        href={s.url}
+                        key={name}
+                        href={st.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block text-xs text-emerald-300 underline hover:text-emerald-200"
+                        className="flex items-center gap-2 text-xs text-emerald-300 underline hover:text-emerald-200"
                       >
-                        {s.url}
+                        <Globe className="h-3 w-3" />
+                        {name}: {st.url}
                       </a>
                     ))}
                 </div>
@@ -613,7 +764,7 @@ export default function NewProjectPage() {
             )}
 
             <div className="flex justify-between">
-              {!deployDone && (
+              {!deployDone && !deploying && (
                 <button
                   onClick={() => setStep(2)}
                   className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm text-neutral-300 hover:text-white"
@@ -622,6 +773,7 @@ export default function NewProjectPage() {
                   Back
                 </button>
               )}
+              {deploying && <div />}
               <div className="ml-auto">
                 {deployDone ? (
                   <button
@@ -837,6 +989,76 @@ function ManagedServiceCard({
           <span className="text-xs text-neutral-500">Detected</span>
         )}
       </div>
+    </div>
+  );
+}
+
+// Deploy item card for Step 3
+function DeployItemCard({
+  icon,
+  name,
+  meta,
+  state,
+  url,
+  error,
+}: {
+  icon: React.ReactNode;
+  name: string;
+  meta?: string;
+  state: "pending" | "creating" | "waiting" | "running" | "error";
+  url?: string;
+  error?: string;
+}) {
+  return (
+    <div className={`rounded-lg border px-4 py-3 transition-all ${
+      state === "running" ? "border-emerald-500/30 bg-emerald-500/5" :
+      state === "error" ? "border-red-500/30 bg-red-500/5" :
+      state === "creating" || state === "waiting" ? "border-brand/30 bg-brand/5" :
+      "border-border bg-surface-200"
+    }`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {icon}
+          <span className="text-sm font-medium text-white">{name}</span>
+          {meta && <span className="text-xs text-neutral-500">{meta}</span>}
+        </div>
+        <div>
+          {state === "running" ? (
+            <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+              <Check className="h-3.5 w-3.5" />
+              Running
+            </span>
+          ) : state === "creating" ? (
+            <span className="flex items-center gap-1.5 text-xs text-brand">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Creating...
+            </span>
+          ) : state === "waiting" ? (
+            <span className="flex items-center gap-1.5 text-xs text-brand">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Starting...
+            </span>
+          ) : state === "error" ? (
+            <span className="flex items-center gap-1.5 text-xs text-red-400">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Failed
+            </span>
+          ) : (
+            <span className="text-xs text-neutral-500">Pending</span>
+          )}
+        </div>
+      </div>
+      {url && state === "running" && (
+        <a href={url} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center gap-1.5 text-xs text-emerald-300 hover:text-emerald-200 underline">
+          <Globe className="h-3 w-3" />
+          {url}
+        </a>
+      )}
+      {error && state === "error" && (
+        <div className="mt-2 rounded bg-red-500/10 px-3 py-2 text-xs text-red-300 font-mono">
+          {error}
+        </div>
+      )}
     </div>
   );
 }
