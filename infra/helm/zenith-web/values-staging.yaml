@@ -1,7 +1,7 @@
 # Staging values for zenith-web
 namespace: zenith-staging
 replicas: 1
-image: zenith-web:sha-00884b4
+image: zenith-web:sha-fd32743
 imageRegistry: ""  # set via ArgoCD/Terraform
 imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via ArgoCD/Terraform
