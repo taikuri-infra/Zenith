@@ -50,6 +50,7 @@ export default function NewProjectPage() {
   // Step 3: Deploy
   const [deploying, setDeploying] = useState(false);
   const [deployDone, setDeployDone] = useState(false);
+  const [deployStatus, setDeployStatus] = useState<Record<string, "pending" | "deploying" | "done" | "error">>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -123,21 +124,64 @@ export default function NewProjectPage() {
     []
   );
 
-  // Step 3: Deploy
+  // Step 3: Deploy each parsed service via the real API
   const handleDeploy = useCallback(async () => {
+    if (!parseResult || !projectId) return;
     setDeploying(true);
-    try {
-      // TODO: call deploy endpoint when backend is ready
-      // For now, simulate
-      await new Promise((r) => setTimeout(r, 2000));
+
+    // Initialize status for all services
+    const status: Record<string, "pending" | "deploying" | "done" | "error"> = {};
+    for (const svc of parseResult.services) {
+      status[svc.name] = "pending";
+    }
+    setDeployStatus({ ...status });
+
+    let allOk = true;
+
+    for (const svc of parseResult.services) {
+      status[svc.name] = "deploying";
+      setDeployStatus({ ...status });
+
+      try {
+        // Determine image URL
+        let imageUrl = svc.image || "";
+        if (svc.build_context && !imageUrl) {
+          // User must push their image; use the registry path shown in Step 2
+          imageUrl = `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`;
+        }
+
+        // Collect env vars from compose translation
+        const envVars = svc.env_vars
+          .filter((ev) => ev.zenith)
+          .map((ev) => ({ key: ev.key, value: ev.zenith }));
+
+        await api.appsDeploy.create({
+          project_id: projectId,
+          name: svc.name,
+          deploy_source: "image",
+          image_url: imageUrl,
+          port: svc.port || 8080,
+          app_type: svc.is_public ? "web" : "worker",
+          exposure: svc.is_public ? "public" : "public",
+          env_vars: envVars.length > 0 ? envVars : undefined,
+        });
+
+        status[svc.name] = "done";
+        setDeployStatus({ ...status });
+      } catch (e) {
+        status[svc.name] = "error";
+        setDeployStatus({ ...status });
+        toast("error", `Failed to deploy ${svc.name}: ${e}`);
+        allOk = false;
+      }
+    }
+
+    if (allOk) {
       setDeployDone(true);
       toast("success", "All services deployed successfully!");
-    } catch (e) {
-      toast("error", `Deploy failed: ${e}`);
-    } finally {
-      setDeploying(false);
     }
-  }, [toast]);
+    setDeploying(false);
+  }, [parseResult, projectId, api, toast]);
 
   return (
     <Shell>
@@ -358,13 +402,18 @@ export default function NewProjectPage() {
                         <span className="text-xs text-neutral-500">:{svc.port}</span>
                       )}
                     </div>
-                    {deployDone ? (
+                    {deployStatus[svc.name] === "done" ? (
                       <span className="flex items-center gap-1.5 text-xs text-emerald-400">
                         <Check className="h-3.5 w-3.5" />
-                        Running
+                        Deployed
                       </span>
-                    ) : deploying ? (
+                    ) : deployStatus[svc.name] === "deploying" ? (
                       <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                    ) : deployStatus[svc.name] === "error" ? (
+                      <span className="flex items-center gap-1.5 text-xs text-red-400">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Failed
+                      </span>
                     ) : (
                       <span className="text-xs text-neutral-500">Pending</span>
                     )}
