@@ -346,14 +346,18 @@ export default function OverviewPage() {
             })}
 
             {totalServices === 0 && (
-              <div className="col-span-full rounded-lg border border-border bg-surface-100 p-8 text-center">
-                <Activity className="mx-auto mb-2 h-6 w-6 text-neutral-600" />
-                <p className="text-sm text-neutral-500">No services provisioned yet</p>
+              <div className="col-span-full rounded-lg border border-dashed border-accent-500/30 bg-surface-100 p-10 text-center">
+                <Rocket className="mx-auto mb-3 h-8 w-8 text-accent-400" />
+                <h3 className="text-base font-semibold text-white">Deploy your first project</h3>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Import a docker-compose.yml and launch your services in minutes.
+                </p>
                 <Link
-                  href="/apps"
-                  className="mt-2 inline-block text-sm text-accent-400 hover:text-accent-300"
+                  href="/projects/new"
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-600 transition-colors"
                 >
-                  Deploy your first app
+                  <Rocket className="h-4 w-4" />
+                  New Project
                 </Link>
               </div>
             )}

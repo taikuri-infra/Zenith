@@ -33,6 +33,7 @@ import {
   Wifi,
   Bell,
   GitBranch,
+  Rocket,
 } from "lucide-react";
 import { useProjectContext } from "@/hooks/use-project";
 import { IS_STANDALONE } from "@/lib/runtime-env";
@@ -214,6 +215,17 @@ export function Sidebar() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* New Project button */}
+      <div className="px-3 pt-3 pb-1">
+        <Link
+          href="/projects/new"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-600"
+        >
+          <Rocket className="h-4 w-4" />
+          New Project
+        </Link>
       </div>
 
       {/* Main nav with sections */}

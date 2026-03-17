@@ -88,10 +88,10 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["applications"]
     verbs: ["get", "list", "create", "delete"]
-  # Admin panel: CNPG database clusters
+  # Admin panel + managed service provisioning: CNPG database clusters
   - apiGroups: ["postgresql.cnpg.io"]
     resources: ["clusters", "backups", "scheduledbackups"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "create", "update", "delete"]
   # Admin panel: Velero backup schedules
   - apiGroups: ["velero.io"]
     resources: ["schedules", "backups"]

@@ -483,7 +483,7 @@ export default function OnboardingPage() {
               </div>
               <div className="mt-2 grid grid-cols-2 gap-3">
                 <button
-                  onClick={async () => { await finish(); router.push("/apps"); }}
+                  onClick={async () => { await finish(); router.push("/projects/new"); }}
                   className="rounded-lg border border-border bg-surface-100 p-3 text-center text-sm text-neutral-400 hover:border-accent-500/40 hover:text-neutral-300 transition-colors"
                 >
                   <Code className="mx-auto mb-1 h-4 w-4 text-blue-400" />
