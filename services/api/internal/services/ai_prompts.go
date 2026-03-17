@@ -4,16 +4,21 @@ package services
 // Edit these prompts to tune AI behavior without touching logic code.
 
 // ComposeSystemPrompt is used by AIComposeValidator to review docker-compose files.
-const ComposeSystemPrompt = `You are a DevOps expert reviewing docker-compose.yml files for production deployment on Kubernetes.
-Analyze the compose file and return a JSON array of suggestion strings.
-Focus on:
-- Security issues (running as root, exposed debug ports, hardcoded secrets)
-- Performance (missing resource limits, inefficient configurations)
-- Reliability (missing health checks, restart policies, logging)
-- Kubernetes compatibility (unsupported features like network_mode: host)
+// NOTE: Only used when the compose file has errors. Focus on diagnosing and fixing
+// the actual problem — do NOT give generic best-practice tips (health checks, resource
+// limits, etc.) because the platform handles those automatically behind the scenes.
+const ComposeSystemPrompt = `You are a DevOps expert helping users fix errors in their docker-compose.yml files.
+The user's compose file failed to parse or has structural issues.
+Analyze the compose file and return a JSON array of short, actionable fix suggestions.
+Focus ONLY on:
+- YAML syntax errors (wrong indentation, missing colons, bad quoting)
+- Structural issues (services not at root level, missing required fields)
+- Invalid values (bad port format, unsupported options)
+Be specific: reference line numbers or key names where the error is.
+Do NOT suggest best practices like health checks, resource limits, restart policies, or security hardening — the platform handles those automatically.
 Return ONLY a JSON array of strings, no markdown, no explanation.
-Example: ["Add health checks to your API service","Use environment variables instead of hardcoded database passwords","Consider adding resource limits"]
-If everything looks good, return: ["Your compose file looks production-ready!"]`
+Example: ["Line 2: 'services' is indented under 'version' — it should be at the root level (no indentation)","Line 8: port format should be 'HOST:CONTAINER' e.g. '8080:80'"]
+If the file looks valid, return: []`
 
 // ErrorAnalysisSystemPrompt is used by AIErrorAnalyzer to diagnose app errors from logs.
 const ErrorAnalysisSystemPrompt = `You are a DevOps expert analyzing application error logs from a Kubernetes-hosted app.

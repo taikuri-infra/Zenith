@@ -95,13 +95,10 @@ export default function NewProjectPage() {
         return;
       }
 
-      // Store AI suggestions even on success
-      if (result.ai_suggestions?.length) {
-        setAISuggestions(result.ai_suggestions);
-      }
+      // AI suggestions only shown when there are errors (not generic tips on success)
 
       // Auto-provision managed services
-      if (result.managed_services.length > 0) {
+      if ((result.managed_services || []).length > 0) {
         setProvisioning(true);
         const provisioned: ManagedService[] = [];
         for (const ms of result.managed_services) {
@@ -180,7 +177,7 @@ export default function NewProjectPage() {
 
     // Initialize status for all services
     const status: Record<string, "pending" | "deploying" | "done" | "error"> = {};
-    for (const svc of parseResult.services) {
+    for (const svc of (parseResult.services || [])) {
       status[svc.name] = "pending";
     }
     setDeployStatus({ ...status });
@@ -190,7 +187,7 @@ export default function NewProjectPage() {
 
     let allOk = true;
 
-    for (const svc of parseResult.services) {
+    for (const svc of (parseResult.services || [])) {
       status[svc.name] = "deploying";
       setDeployStatus({ ...status });
 
@@ -285,7 +282,7 @@ export default function NewProjectPage() {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleFormatYaml}
-                    className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white"
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface-200 px-2.5 py-1 text-xs font-medium text-neutral-300 hover:bg-surface-100 hover:text-white transition-colors"
                     title="Format YAML"
                   >
                     <AlignLeft className="h-3.5 w-3.5" />
@@ -389,14 +386,14 @@ export default function NewProjectPage() {
             </div>
 
             {/* Warnings */}
-            {parseResult.warnings.length > 0 && (
+            {(parseResult.warnings || []).length > 0 && (
               <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
                 <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
                   <AlertTriangle className="h-4 w-4" />
                   Warnings
                 </div>
                 <ul className="mt-2 space-y-1 text-xs text-yellow-300/80">
-                  {parseResult.warnings.map((w, i) => (
+                  {(parseResult.warnings || []).map((w, i) => (
                     <li key={i}>• {w}</li>
                   ))}
                 </ul>
@@ -407,24 +404,24 @@ export default function NewProjectPage() {
             <div>
               <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-neutral-300">
                 <Server className="h-4 w-4" />
-                App Services ({parseResult.services.length})
+                App Services ({(parseResult.services || []).length})
               </h3>
               <div className="space-y-3">
-                {parseResult.services.map((svc) => (
+                {(parseResult.services || []).map((svc) => (
                   <ServiceCard key={svc.name} service={svc} projectId={projectId} />
                 ))}
               </div>
             </div>
 
             {/* Managed services */}
-            {parseResult.managed_services.length > 0 && (
+            {(parseResult.managed_services || []).length > 0 && (
               <div>
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-neutral-300">
                   <Database className="h-4 w-4" />
-                  Managed Services ({parseResult.managed_services.length})
+                  Managed Services ({(parseResult.managed_services || []).length})
                 </h3>
                 <div className="space-y-3">
-                  {parseResult.managed_services.map((ms) => (
+                  {(parseResult.managed_services || []).map((ms) => (
                     <ManagedServiceCard
                       key={ms.name}
                       managed={ms}
@@ -437,14 +434,14 @@ export default function NewProjectPage() {
             )}
 
             {/* Env vars preview */}
-            {parseResult.services.some((s) => s.env_vars.length > 0) && (
+            {(parseResult.services || []).some((s) => s.env_vars.length > 0) && (
               <div>
                 <h3 className="mb-3 text-sm font-medium text-neutral-300">
                   Environment Variables
                 </h3>
                 <div className="rounded-lg border border-border bg-surface-200 p-4">
                   <div className="space-y-2">
-                    {parseResult.services.flatMap((svc) =>
+                    {(parseResult.services || []).flatMap((svc) =>
                       svc.env_vars.map((ev) => (
                           <div key={`${svc.name}-${ev.key}`} className="text-xs">
                             <span className="text-neutral-400">{svc.name}/</span>
@@ -500,7 +497,7 @@ export default function NewProjectPage() {
             {/* Deploy status per service */}
             {parseResult && (
               <div className="space-y-3">
-                {parseResult.services.map((svc) => (
+                {(parseResult.services || []).map((svc) => (
                   <div
                     key={svc.name}
                     className="flex items-center justify-between rounded-lg border border-border bg-surface-200 px-4 py-3"
