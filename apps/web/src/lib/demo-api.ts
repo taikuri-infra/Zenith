@@ -1826,6 +1826,7 @@ export const demoApi = {
         ],
         warnings: [],
         errors: [],
+        ai_suggestions: ["Add health checks to your API service", "Consider adding resource limits"],
       };
     },
   },
