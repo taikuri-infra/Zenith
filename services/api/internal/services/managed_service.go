@@ -171,6 +171,233 @@ func (s *ManagedServiceService) ProvisionRedis(ctx context.Context, projectID, u
 	return svc, nil
 }
 
+// ProvisionMySQL creates a MySQL StatefulSet for a managed MySQL service.
+func (s *ManagedServiceService) ProvisionMySQL(ctx context.Context, projectID, userID, name, version string, storageGB int) (*entities.ManagedService, error) {
+	id := uuid.New().String()
+	user, pass, dbName := generateCredentials(name)
+
+	resourceName := fmt.Sprintf("ms-%s", sanitizeK8sName(name))
+	host := fmt.Sprintf("%s.%s.svc", resourceName, s.namespace)
+	port := entities.DefaultPort(entities.ServiceTypeMySQL)
+	connURL := fmt.Sprintf("mysql://%s:%s@%s:%d/%s", user, pass, host, port, dbName)
+
+	svc := &entities.ManagedService{
+		ID:              id,
+		ProjectID:       projectID,
+		UserID:          userID,
+		ServiceType:     entities.ServiceTypeMySQL,
+		Name:            name,
+		Version:         normalizeVersion(version, "8"),
+		ConnectionURL:   connURL,
+		InternalHost:    host,
+		Port:            port,
+		Username:        user,
+		Password:        pass,
+		DatabaseName:    dbName,
+		K8sNamespace:    s.namespace,
+		K8sResourceName: resourceName,
+		Status:          entities.ManagedServiceProvisioning,
+		StorageGB:       storageGB,
+	}
+
+	if err := s.msRepo.CreateManagedService(ctx, svc); err != nil {
+		return nil, err
+	}
+
+	if s.k8s != nil {
+		secretName := resourceName + "-auth"
+		secretObj := map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      secretName,
+				"namespace": s.namespace,
+				"labels":    map[string]interface{}{"app.zenith.dev/managed-service": resourceName},
+			},
+			"type": "Opaque",
+			"stringData": map[string]interface{}{
+				"mysql-root-password": pass,
+				"mysql-user":          user,
+				"mysql-password":      pass,
+				"mysql-database":      dbName,
+			},
+		}
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, secretObj); err != nil {
+			slog.Error("failed to create MySQL secret", "name", secretName, "error", err)
+		}
+
+		sts := buildMySQLStatefulSet(resourceName, s.namespace, svc.Version, secretName, storageGB)
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, sts); err != nil {
+			slog.Error("failed to create MySQL StatefulSet", "name", resourceName, "error", err)
+			s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceError, err.Error(), "", "", 0)
+			return svc, nil
+		}
+
+		svcObj := buildGenericService(resourceName, s.namespace, port, 3306, "mysql")
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, svcObj); err != nil {
+			slog.Error("failed to create MySQL service", "name", resourceName, "error", err)
+		}
+
+		s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceReady, "", connURL, host, port)
+		svc.Status = entities.ManagedServiceReady
+	} else {
+		s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceReady, "", connURL, host, port)
+		svc.Status = entities.ManagedServiceReady
+	}
+
+	return svc, nil
+}
+
+// ProvisionMongoDB creates a MongoDB StatefulSet for a managed MongoDB service.
+func (s *ManagedServiceService) ProvisionMongoDB(ctx context.Context, projectID, userID, name, version string, storageGB int) (*entities.ManagedService, error) {
+	id := uuid.New().String()
+	user, pass, dbName := generateCredentials(name)
+
+	resourceName := fmt.Sprintf("ms-%s", sanitizeK8sName(name))
+	host := fmt.Sprintf("%s.%s.svc", resourceName, s.namespace)
+	port := entities.DefaultPort(entities.ServiceTypeMongoDB)
+	connURL := fmt.Sprintf("mongodb://%s:%s@%s:%d/%s", user, pass, host, port, dbName)
+
+	svc := &entities.ManagedService{
+		ID:              id,
+		ProjectID:       projectID,
+		UserID:          userID,
+		ServiceType:     entities.ServiceTypeMongoDB,
+		Name:            name,
+		Version:         normalizeVersion(version, "7"),
+		ConnectionURL:   connURL,
+		InternalHost:    host,
+		Port:            port,
+		Username:        user,
+		Password:        pass,
+		DatabaseName:    dbName,
+		K8sNamespace:    s.namespace,
+		K8sResourceName: resourceName,
+		Status:          entities.ManagedServiceProvisioning,
+		StorageGB:       storageGB,
+	}
+
+	if err := s.msRepo.CreateManagedService(ctx, svc); err != nil {
+		return nil, err
+	}
+
+	if s.k8s != nil {
+		secretName := resourceName + "-auth"
+		secretObj := map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      secretName,
+				"namespace": s.namespace,
+				"labels":    map[string]interface{}{"app.zenith.dev/managed-service": resourceName},
+			},
+			"type": "Opaque",
+			"stringData": map[string]interface{}{
+				"mongo-root-username": user,
+				"mongo-root-password": pass,
+			},
+		}
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, secretObj); err != nil {
+			slog.Error("failed to create MongoDB secret", "name", secretName, "error", err)
+		}
+
+		sts := buildMongoDBStatefulSet(resourceName, s.namespace, svc.Version, secretName, dbName, storageGB)
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, sts); err != nil {
+			slog.Error("failed to create MongoDB StatefulSet", "name", resourceName, "error", err)
+			s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceError, err.Error(), "", "", 0)
+			return svc, nil
+		}
+
+		svcObj := buildGenericService(resourceName, s.namespace, port, 27017, "mongo")
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, svcObj); err != nil {
+			slog.Error("failed to create MongoDB service", "name", resourceName, "error", err)
+		}
+
+		s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceReady, "", connURL, host, port)
+		svc.Status = entities.ManagedServiceReady
+	} else {
+		s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceReady, "", connURL, host, port)
+		svc.Status = entities.ManagedServiceReady
+	}
+
+	return svc, nil
+}
+
+// ProvisionRabbitMQ creates a RabbitMQ StatefulSet for a managed RabbitMQ service.
+func (s *ManagedServiceService) ProvisionRabbitMQ(ctx context.Context, projectID, userID, name, version string, storageGB int) (*entities.ManagedService, error) {
+	id := uuid.New().String()
+	user := "zenith"
+	pass := randomHex(16)
+
+	resourceName := fmt.Sprintf("ms-%s", sanitizeK8sName(name))
+	host := fmt.Sprintf("%s.%s.svc", resourceName, s.namespace)
+	port := entities.DefaultPort(entities.ServiceTypeRabbitMQ)
+	connURL := fmt.Sprintf("amqp://%s:%s@%s:%d/", user, pass, host, port)
+
+	svc := &entities.ManagedService{
+		ID:              id,
+		ProjectID:       projectID,
+		UserID:          userID,
+		ServiceType:     entities.ServiceTypeRabbitMQ,
+		Name:            name,
+		Version:         normalizeVersion(version, "3"),
+		ConnectionURL:   connURL,
+		InternalHost:    host,
+		Port:            port,
+		Username:        user,
+		Password:        pass,
+		K8sNamespace:    s.namespace,
+		K8sResourceName: resourceName,
+		Status:          entities.ManagedServiceProvisioning,
+		StorageGB:       storageGB,
+	}
+
+	if err := s.msRepo.CreateManagedService(ctx, svc); err != nil {
+		return nil, err
+	}
+
+	if s.k8s != nil {
+		secretName := resourceName + "-auth"
+		secretObj := map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      secretName,
+				"namespace": s.namespace,
+				"labels":    map[string]interface{}{"app.zenith.dev/managed-service": resourceName},
+			},
+			"type": "Opaque",
+			"stringData": map[string]interface{}{
+				"rabbitmq-user":     user,
+				"rabbitmq-password": pass,
+			},
+		}
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, secretObj); err != nil {
+			slog.Error("failed to create RabbitMQ secret", "name", secretName, "error", err)
+		}
+
+		sts := buildRabbitMQStatefulSet(resourceName, s.namespace, svc.Version, secretName, storageGB)
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, sts); err != nil {
+			slog.Error("failed to create RabbitMQ StatefulSet", "name", resourceName, "error", err)
+			s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceError, err.Error(), "", "", 0)
+			return svc, nil
+		}
+
+		svcObj := buildGenericService(resourceName, s.namespace, port, 5672, "amqp")
+		if err := s.k8s.ApplyUnstructured(ctx, s.namespace, svcObj); err != nil {
+			slog.Error("failed to create RabbitMQ service", "name", resourceName, "error", err)
+		}
+
+		s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceReady, "", connURL, host, port)
+		svc.Status = entities.ManagedServiceReady
+	} else {
+		s.msRepo.UpdateManagedServiceStatus(ctx, id, entities.ManagedServiceReady, "", connURL, host, port)
+		svc.Status = entities.ManagedServiceReady
+	}
+
+	return svc, nil
+}
+
 // DeleteManagedService removes a managed service and its K8s resources.
 func (s *ManagedServiceService) DeleteManagedService(ctx context.Context, id string) error {
 	ms, err := s.msRepo.GetManagedService(ctx, id)
@@ -188,18 +415,16 @@ func (s *ManagedServiceService) DeleteManagedService(ctx context.Context, id str
 			if err := s.k8s.DeleteResource(ctx, ms.K8sNamespace, "postgresql.cnpg.io/v1", "Cluster", ms.K8sResourceName); err != nil {
 				slog.Warn("failed to delete CNPG cluster", "name", ms.K8sResourceName, "error", err)
 			}
-		case entities.ServiceTypeRedis:
-			// Delete StatefulSet
+		case entities.ServiceTypeRedis, entities.ServiceTypeMySQL, entities.ServiceTypeMongoDB, entities.ServiceTypeRabbitMQ:
+			// All non-CNPG managed services use StatefulSet + Service + Secret
 			if err := s.k8s.DeleteResource(ctx, ms.K8sNamespace, "apps/v1", "StatefulSet", ms.K8sResourceName); err != nil {
-				slog.Warn("failed to delete Redis StatefulSet", "name", ms.K8sResourceName, "error", err)
+				slog.Warn("failed to delete StatefulSet", "type", ms.ServiceType, "name", ms.K8sResourceName, "error", err)
 			}
-			// Delete Service
 			if err := s.k8s.DeleteResource(ctx, ms.K8sNamespace, "v1", "Service", ms.K8sResourceName); err != nil {
-				slog.Warn("failed to delete Redis Service", "name", ms.K8sResourceName, "error", err)
+				slog.Warn("failed to delete Service", "type", ms.ServiceType, "name", ms.K8sResourceName, "error", err)
 			}
-			// Delete Secret
 			if err := s.k8s.DeleteResource(ctx, ms.K8sNamespace, "v1", "Secret", ms.K8sResourceName+"-auth"); err != nil {
-				slog.Warn("failed to delete Redis Secret", "name", ms.K8sResourceName, "error", err)
+				slog.Warn("failed to delete Secret", "type", ms.ServiceType, "name", ms.K8sResourceName, "error", err)
 			}
 		}
 	}
@@ -433,8 +658,8 @@ func buildRedisStatefulSet(name, namespace, version, secretName string, storageG
 	}
 }
 
-// buildRedisService returns an unstructured headless Service for the Redis StatefulSet.
-func buildRedisService(name, namespace string, port int) map[string]interface{} {
+// buildGenericService returns an unstructured headless Service for a StatefulSet.
+func buildGenericService(name, namespace string, port, containerPort int, portName string) map[string]interface{} {
 	return map[string]interface{}{
 		"apiVersion": "v1",
 		"kind":       "Service",
@@ -453,8 +678,190 @@ func buildRedisService(name, namespace string, port int) map[string]interface{} 
 			"ports": []map[string]interface{}{
 				{
 					"port":       port,
-					"targetPort": 6379,
-					"name":       "redis",
+					"targetPort": containerPort,
+					"name":       portName,
+				},
+			},
+		},
+	}
+}
+
+// buildRedisService is kept for backward compat — delegates to buildGenericService.
+func buildRedisService(name, namespace string, port int) map[string]interface{} {
+	return buildGenericService(name, namespace, port, 6379, "redis")
+}
+
+// buildMySQLStatefulSet returns an unstructured MySQL StatefulSet manifest.
+func buildMySQLStatefulSet(name, namespace, version, secretName string, storageGB int) map[string]interface{} {
+	imageTag := version
+	if !strings.Contains(imageTag, ".") {
+		imageTag = version + "-debian"
+	}
+
+	return map[string]interface{}{
+		"apiVersion": "apps/v1",
+		"kind":       "StatefulSet",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+			"labels":    map[string]interface{}{"app.zenith.dev/managed-service": name},
+		},
+		"spec": map[string]interface{}{
+			"replicas":    1,
+			"serviceName": name,
+			"selector": map[string]interface{}{
+				"matchLabels": map[string]interface{}{"app.zenith.dev/managed-service": name},
+			},
+			"template": map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{"app.zenith.dev/managed-service": name},
+				},
+				"spec": map[string]interface{}{
+					"containers": []map[string]interface{}{
+						{
+							"name":  "mysql",
+							"image": fmt.Sprintf("mysql:%s", imageTag),
+							"env": []map[string]interface{}{
+								{"name": "MYSQL_ROOT_PASSWORD", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": secretName, "key": "mysql-root-password"}}},
+								{"name": "MYSQL_USER", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": secretName, "key": "mysql-user"}}},
+								{"name": "MYSQL_PASSWORD", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": secretName, "key": "mysql-password"}}},
+								{"name": "MYSQL_DATABASE", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": secretName, "key": "mysql-database"}}},
+							},
+							"ports":        []map[string]interface{}{{"containerPort": 3306, "name": "mysql"}},
+							"volumeMounts": []map[string]interface{}{{"name": "data", "mountPath": "/var/lib/mysql"}},
+							"resources": map[string]interface{}{
+								"requests": map[string]interface{}{"cpu": "100m", "memory": "256Mi"},
+								"limits":   map[string]interface{}{"cpu": "1000m", "memory": "1Gi"},
+							},
+						},
+					},
+				},
+			},
+			"volumeClaimTemplates": []map[string]interface{}{
+				{
+					"metadata": map[string]interface{}{"name": "data"},
+					"spec": map[string]interface{}{
+						"accessModes": []string{"ReadWriteOnce"},
+						"resources":   map[string]interface{}{"requests": map[string]interface{}{"storage": fmt.Sprintf("%dGi", storageGB)}},
+					},
+				},
+			},
+		},
+	}
+}
+
+// buildMongoDBStatefulSet returns an unstructured MongoDB StatefulSet manifest.
+func buildMongoDBStatefulSet(name, namespace, version, secretName, dbName string, storageGB int) map[string]interface{} {
+	imageTag := version
+	if !strings.Contains(imageTag, ".") {
+		imageTag = version + ".0"
+	}
+
+	return map[string]interface{}{
+		"apiVersion": "apps/v1",
+		"kind":       "StatefulSet",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+			"labels":    map[string]interface{}{"app.zenith.dev/managed-service": name},
+		},
+		"spec": map[string]interface{}{
+			"replicas":    1,
+			"serviceName": name,
+			"selector": map[string]interface{}{
+				"matchLabels": map[string]interface{}{"app.zenith.dev/managed-service": name},
+			},
+			"template": map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{"app.zenith.dev/managed-service": name},
+				},
+				"spec": map[string]interface{}{
+					"containers": []map[string]interface{}{
+						{
+							"name":  "mongo",
+							"image": fmt.Sprintf("mongo:%s", imageTag),
+							"env": []map[string]interface{}{
+								{"name": "MONGO_INITDB_ROOT_USERNAME", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": secretName, "key": "mongo-root-username"}}},
+								{"name": "MONGO_INITDB_ROOT_PASSWORD", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": secretName, "key": "mongo-root-password"}}},
+								{"name": "MONGO_INITDB_DATABASE", "value": dbName},
+							},
+							"ports":        []map[string]interface{}{{"containerPort": 27017, "name": "mongo"}},
+							"volumeMounts": []map[string]interface{}{{"name": "data", "mountPath": "/data/db"}},
+							"resources": map[string]interface{}{
+								"requests": map[string]interface{}{"cpu": "100m", "memory": "256Mi"},
+								"limits":   map[string]interface{}{"cpu": "1000m", "memory": "1Gi"},
+							},
+						},
+					},
+				},
+			},
+			"volumeClaimTemplates": []map[string]interface{}{
+				{
+					"metadata": map[string]interface{}{"name": "data"},
+					"spec": map[string]interface{}{
+						"accessModes": []string{"ReadWriteOnce"},
+						"resources":   map[string]interface{}{"requests": map[string]interface{}{"storage": fmt.Sprintf("%dGi", storageGB)}},
+					},
+				},
+			},
+		},
+	}
+}
+
+// buildRabbitMQStatefulSet returns an unstructured RabbitMQ StatefulSet manifest.
+func buildRabbitMQStatefulSet(name, namespace, version, secretName string, storageGB int) map[string]interface{} {
+	imageTag := version
+	if !strings.Contains(imageTag, "-") {
+		imageTag = version + "-management-alpine"
+	}
+
+	return map[string]interface{}{
+		"apiVersion": "apps/v1",
+		"kind":       "StatefulSet",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": namespace,
+			"labels":    map[string]interface{}{"app.zenith.dev/managed-service": name},
+		},
+		"spec": map[string]interface{}{
+			"replicas":    1,
+			"serviceName": name,
+			"selector": map[string]interface{}{
+				"matchLabels": map[string]interface{}{"app.zenith.dev/managed-service": name},
+			},
+			"template": map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{"app.zenith.dev/managed-service": name},
+				},
+				"spec": map[string]interface{}{
+					"containers": []map[string]interface{}{
+						{
+							"name":  "rabbitmq",
+							"image": fmt.Sprintf("rabbitmq:%s", imageTag),
+							"env": []map[string]interface{}{
+								{"name": "RABBITMQ_DEFAULT_USER", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": secretName, "key": "rabbitmq-user"}}},
+								{"name": "RABBITMQ_DEFAULT_PASS", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": secretName, "key": "rabbitmq-password"}}},
+							},
+							"ports": []map[string]interface{}{
+								{"containerPort": 5672, "name": "amqp"},
+								{"containerPort": 15672, "name": "management"},
+							},
+							"volumeMounts": []map[string]interface{}{{"name": "data", "mountPath": "/var/lib/rabbitmq"}},
+							"resources": map[string]interface{}{
+								"requests": map[string]interface{}{"cpu": "100m", "memory": "256Mi"},
+								"limits":   map[string]interface{}{"cpu": "1000m", "memory": "512Mi"},
+							},
+						},
+					},
+				},
+			},
+			"volumeClaimTemplates": []map[string]interface{}{
+				{
+					"metadata": map[string]interface{}{"name": "data"},
+					"spec": map[string]interface{}{
+						"accessModes": []string{"ReadWriteOnce"},
+						"resources":   map[string]interface{}{"requests": map[string]interface{}{"storage": fmt.Sprintf("%dGi", storageGB)}},
+					},
 				},
 			},
 		},

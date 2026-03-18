@@ -70,10 +70,15 @@ var managedImages = map[string]entities.ServiceType{
 	"postgresql": entities.ServiceTypePostgreSQL,
 	"redis":      entities.ServiceTypeRedis,
 	"valkey":     entities.ServiceTypeRedis,
+	"mysql":      entities.ServiceTypeMySQL,
+	"mariadb":    entities.ServiceTypeMySQL,
+	"mongo":      entities.ServiceTypeMongoDB,
+	"mongodb":    entities.ServiceTypeMongoDB,
+	"rabbitmq":   entities.ServiceTypeRabbitMQ,
 }
 
 // serviceURLPattern matches service references like http://api:8080 or postgres://db:5432
-var serviceURLPattern = regexp.MustCompile(`(https?|postgresql|postgres|redis|amqp|mysql)://([a-zA-Z0-9_-]+):(\d+)`)
+var serviceURLPattern = regexp.MustCompile(`(https?|postgresql|postgres|redis|amqp|amqps|mysql|mongodb|mongodb\+srv)://([a-zA-Z0-9_-]+):(\d+)`)
 
 // ParseCompose parses a docker-compose.yml content and detects services and managed services.
 func ParseCompose(content string, projectSlug, namespace string) (*ParsedCompose, error) {

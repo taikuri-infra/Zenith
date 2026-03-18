@@ -96,8 +96,8 @@ func (h *ManagedServiceHandler) Provision(c *fiber.Ctx) error {
 
 	// Validate service type
 	st := entities.ServiceType(req.ServiceType)
-	if st != entities.ServiceTypePostgreSQL && st != entities.ServiceTypeRedis {
-		return NewBadRequest("service_type must be 'postgresql' or 'redis'")
+	if !entities.ValidServiceType(st) {
+		return NewBadRequest("service_type must be one of: postgresql, redis, mysql, mongodb, rabbitmq")
 	}
 
 	if req.Version == "" {
@@ -107,14 +107,22 @@ func (h *ManagedServiceHandler) Provision(c *fiber.Ctx) error {
 		req.StorageGB = 5
 	}
 
-	// Redis: not supported yet (no operator). Only PostgreSQL via CNPG.
-	if st == entities.ServiceTypeRedis {
-		return NewBadRequest("Redis provisioning is not available yet. Only PostgreSQL is supported as a managed service.")
-	}
-
 	// Use service layer for K8s provisioning if available
 	if h.msSvc != nil {
-		svc, provErr := h.msSvc.ProvisionPostgreSQL(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
+		var svc *entities.ManagedService
+		var provErr error
+		switch st {
+		case entities.ServiceTypePostgreSQL:
+			svc, provErr = h.msSvc.ProvisionPostgreSQL(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
+		case entities.ServiceTypeRedis:
+			svc, provErr = h.msSvc.ProvisionRedis(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
+		case entities.ServiceTypeMySQL:
+			svc, provErr = h.msSvc.ProvisionMySQL(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
+		case entities.ServiceTypeMongoDB:
+			svc, provErr = h.msSvc.ProvisionMongoDB(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
+		case entities.ServiceTypeRabbitMQ:
+			svc, provErr = h.msSvc.ProvisionRabbitMQ(c.Context(), projectID, userID, req.Name, req.Version, req.StorageGB)
+		}
 		if provErr != nil {
 			if isAlreadyExists(provErr) {
 				return NewConflict(provErr.Error())

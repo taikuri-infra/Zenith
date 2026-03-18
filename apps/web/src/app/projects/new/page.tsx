@@ -106,8 +106,8 @@ export default function NewProjectPage() {
 
       // AI suggestions only shown when there are errors (not generic tips on success)
 
-      // Auto-provision managed services (only PostgreSQL — Redis not supported yet)
-      const provisionable = (result.managed_services || []).filter((ms) => ms.type === "postgresql");
+      // Auto-provision managed services (postgresql, redis, mysql, mongodb, rabbitmq)
+      const provisionable = result.managed_services || [];
       if (provisionable.length > 0) {
         setProvisioning(true);
         const provisioned: ManagedService[] = [];
@@ -239,7 +239,7 @@ export default function NewProjectPage() {
 
     const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const services = parseResult.services || [];
-    const managed = (parseResult.managed_services || []).filter((ms) => ms.type === "postgresql");
+    const managed = parseResult.managed_services || [];
 
     // Categorize services
     const backends = services.filter((s) => !(exposureOverrides[s.name] ?? s.is_public));
@@ -684,10 +684,10 @@ export default function NewProjectPage() {
             {/* Service cards */}
             <div className="space-y-2">
               {/* Managed services */}
-              {(parseResult.managed_services || []).filter((ms) => ms.type === "postgresql").length > 0 && (
+              {(parseResult.managed_services || []).length > 0 && (
                 <>
-                  <div className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider pt-2">Database</div>
-                  {(parseResult.managed_services || []).filter((ms) => ms.type === "postgresql").map((ms) => {
+                  <div className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider pt-2">Managed Services</div>
+                  {(parseResult.managed_services || []).map((ms) => {
                     const st = deployStatus[`db:${ms.name}`];
                     return (
                       <DeployItemCard
@@ -978,19 +978,22 @@ function ManagedServiceCard({
   provisioned?: ManagedService;
   provisioning: boolean;
 }) {
-  const typeIcon = managed.type === "postgresql" ? "P" : "R";
-  const typeColor =
-    managed.type === "postgresql"
-      ? "bg-blue-500/20 text-blue-400"
-      : "bg-red-500/20 text-red-400";
+  const typeConfig: Record<string, { icon: string; color: string }> = {
+    postgresql: { icon: "P", color: "bg-blue-500/20 text-blue-400" },
+    redis: { icon: "R", color: "bg-red-500/20 text-red-400" },
+    mysql: { icon: "M", color: "bg-orange-500/20 text-orange-400" },
+    mongodb: { icon: "M", color: "bg-green-500/20 text-green-400" },
+    rabbitmq: { icon: "Q", color: "bg-purple-500/20 text-purple-400" },
+  };
+  const cfg = typeConfig[managed.type] || { icon: "?", color: "bg-neutral-500/20 text-neutral-400" };
 
   return (
     <div className="flex items-center justify-between rounded-lg border border-border bg-surface-200 px-4 py-3">
       <div className="flex items-center gap-3">
         <span
-          className={`flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold ${typeColor}`}
+          className={`flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold ${cfg.color}`}
         >
-          {typeIcon}
+          {cfg.icon}
         </span>
         <div>
           <span className="text-sm font-medium text-white">{managed.name}</span>
@@ -1000,9 +1003,7 @@ function ManagedServiceCard({
         </div>
       </div>
       <div>
-        {managed.type !== "postgresql" ? (
-          <span className="text-xs text-yellow-400">Not supported yet</span>
-        ) : provisioned ? (
+        {provisioned ? (
           <span className="flex items-center gap-1.5 text-xs text-emerald-400">
             <Check className="h-3.5 w-3.5" />
             {provisioned.status}

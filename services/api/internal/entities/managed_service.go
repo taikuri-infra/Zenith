@@ -6,7 +6,19 @@ type ServiceType string
 const (
 	ServiceTypePostgreSQL ServiceType = "postgresql"
 	ServiceTypeRedis      ServiceType = "redis"
+	ServiceTypeMySQL      ServiceType = "mysql"
+	ServiceTypeMongoDB    ServiceType = "mongodb"
+	ServiceTypeRabbitMQ   ServiceType = "rabbitmq"
 )
+
+// ValidServiceType returns true if the given service type is supported.
+func ValidServiceType(st ServiceType) bool {
+	switch st {
+	case ServiceTypePostgreSQL, ServiceTypeRedis, ServiceTypeMySQL, ServiceTypeMongoDB, ServiceTypeRabbitMQ:
+		return true
+	}
+	return false
+}
 
 // ManagedServiceStatus represents the lifecycle status of a managed service.
 type ManagedServiceStatus string
@@ -47,7 +59,31 @@ func DefaultPort(st ServiceType) int {
 		return 5432
 	case ServiceTypeRedis:
 		return 6379
+	case ServiceTypeMySQL:
+		return 3306
+	case ServiceTypeMongoDB:
+		return 27017
+	case ServiceTypeRabbitMQ:
+		return 5672
 	default:
 		return 0
+	}
+}
+
+// DefaultVersion returns the default version for each managed service type.
+func DefaultVersion(st ServiceType) string {
+	switch st {
+	case ServiceTypePostgreSQL:
+		return "16"
+	case ServiceTypeRedis:
+		return "7"
+	case ServiceTypeMySQL:
+		return "8"
+	case ServiceTypeMongoDB:
+		return "7"
+	case ServiceTypeRabbitMQ:
+		return "3"
+	default:
+		return "latest"
 	}
 }
