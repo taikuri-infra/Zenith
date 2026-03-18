@@ -154,19 +154,13 @@ resource "kubernetes_manifest" "kyverno_disallow_privileged" {
         match = {
           any = [{
             resources = {
-              kinds = ["Pod"]
-            }
-          }]
-        }
-        exclude = {
-          any = [{
-            resources = {
-              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system", "mongodb-operator", "redis-operator", "keda", "velero", "harbor", "argocd", "apisix", "monitoring", "temporal", "keycloak"]
+              kinds      = ["Pod"]
+              namespaces = ["zenith-apps", "zenith-builds"]
             }
           }]
         }
         validate = {
-          message = "Privileged containers are not allowed."
+          message = "Privileged containers are not allowed in application namespaces."
           pattern = {
             spec = {
               containers = [{
@@ -215,14 +209,8 @@ resource "kubernetes_manifest" "kyverno_require_non_root" {
         match = {
           any = [{
             resources = {
-              kinds = ["Pod"]
-            }
-          }]
-        }
-        exclude = {
-          any = [{
-            resources = {
-              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system", "mongodb-operator", "redis-operator", "keda", "velero", "harbor", "argocd", "apisix", "monitoring", "temporal", "keycloak"]
+              kinds      = ["Pod"]
+              namespaces = ["zenith-apps", "zenith-builds"]
             }
           }]
         }
@@ -276,14 +264,8 @@ resource "kubernetes_manifest" "kyverno_disallow_host_namespaces" {
         match = {
           any = [{
             resources = {
-              kinds = ["Pod"]
-            }
-          }]
-        }
-        exclude = {
-          any = [{
-            resources = {
-              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system", "mongodb-operator", "redis-operator", "keda", "velero", "harbor", "argocd", "apisix", "monitoring", "temporal", "keycloak"]
+              kinds      = ["Pod"]
+              namespaces = ["zenith-apps", "zenith-builds"]
             }
           }]
         }
@@ -335,14 +317,8 @@ resource "kubernetes_manifest" "kyverno_require_resource_limits" {
         match = {
           any = [{
             resources = {
-              kinds = ["Pod"]
-            }
-          }]
-        }
-        exclude = {
-          any = [{
-            resources = {
-              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system", "mongodb-operator", "redis-operator", "keda", "velero", "harbor", "argocd", "apisix", "monitoring", "temporal", "keycloak"]
+              kinds      = ["Pod"]
+              namespaces = ["zenith-apps", "zenith-builds", "zenith-staging"]
             }
           }]
         }

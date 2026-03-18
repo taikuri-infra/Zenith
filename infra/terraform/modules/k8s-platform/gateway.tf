@@ -48,12 +48,12 @@ resource "helm_release" "apisix" {
 
   # Allow ingress controller pod network to reach admin API
   set {
-    name  = "admin.allow.list[0]"
+    name  = "admin.allow.ipList[0]"
     value = "127.0.0.1/24"
   }
 
   set {
-    name  = "admin.allow.list[1]"
+    name  = "admin.allow.ipList[1]"
     value = "10.42.0.0/16"
   }
 
