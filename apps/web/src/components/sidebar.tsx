@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -34,6 +34,7 @@ import {
   Bell,
   GitBranch,
   Rocket,
+  Trash2,
 } from "lucide-react";
 import { useProjectContext } from "@/hooks/use-project";
 import { IS_STANDALONE } from "@/lib/runtime-env";
@@ -119,10 +120,12 @@ const bottomNav: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { currentProject, projects, setCurrentProject, createProject } = useProjectContext();
+  const { currentProject, projects, setCurrentProject, createProject, deleteProject } = useProjectContext();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -149,6 +152,19 @@ export function Sidebar() {
       // ignore
     }
   };
+
+  const handleDelete = useCallback(async (id: string) => {
+    setDeleting(true);
+    try {
+      await deleteProject(id);
+      setDeleteConfirmId(null);
+      setDropdownOpen(false);
+    } catch {
+      // ignore
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteProject]);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -178,18 +194,51 @@ export function Sidebar() {
         {dropdownOpen && (
           <div className="absolute left-2 right-2 top-full z-50 mt-1 rounded-md border border-border bg-surface-100 py-1 shadow-lg">
             {projects.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => {
-                  setCurrentProject(p);
-                  setDropdownOpen(false);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-neutral-300 hover:bg-surface-300"
-              >
-                {p.id === currentProject?.id && <Check className="h-3 w-3 text-accent-400" />}
-                {p.id !== currentProject?.id && <span className="w-3" />}
-                <span className="truncate">{p.name}</span>
-              </button>
+              <div key={p.id}>
+                {deleteConfirmId === p.id ? (
+                  <div className="px-3 py-2 space-y-2">
+                    <p className="text-xs text-red-400">Delete &quot;{p.name}&quot;? This removes all apps, databases, and K8s resources.</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDelete(p.id)}
+                        disabled={deleting}
+                        className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {deleting ? "Deleting..." : "Delete"}
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(null)}
+                        className="rounded border border-border px-2 py-1 text-xs text-neutral-400 hover:text-white"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="group flex w-full items-center justify-between hover:bg-surface-300">
+                    <button
+                      onClick={() => {
+                        setCurrentProject(p);
+                        setDropdownOpen(false);
+                      }}
+                      className="flex flex-1 items-center gap-2 px-3 py-1.5 text-sm text-neutral-300"
+                    >
+                      {p.id === currentProject?.id && <Check className="h-3 w-3 text-accent-400" />}
+                      {p.id !== currentProject?.id && <span className="w-3" />}
+                      <span className="truncate">{p.name}</span>
+                    </button>
+                    {projects.length > 1 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(p.id); }}
+                        className="mr-2 rounded p-1 text-neutral-600 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                        title="Delete project"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
             <div className="border-t border-border mt-1 pt-1">
               {creating ? (

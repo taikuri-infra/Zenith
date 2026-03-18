@@ -9,6 +9,7 @@ interface ProjectContextValue {
   projects: Project[];
   setCurrentProject: (project: Project) => void;
   createProject: (name: string, description?: string) => Promise<Project>;
+  deleteProject: (id: string) => Promise<void>;
   loading: boolean;
 }
 
@@ -17,6 +18,9 @@ const defaultValue: ProjectContextValue = {
   projects: [],
   setCurrentProject: () => {},
   createProject: async () => {
+    throw new Error("ProjectProvider not mounted");
+  },
+  deleteProject: async () => {
     throw new Error("ProjectProvider not mounted");
   },
   loading: true,
@@ -79,5 +83,25 @@ export function useProjectState(): ProjectContextValue {
     []
   );
 
-  return { currentProject, projects, setCurrentProject, createProject, loading };
+  const deleteProject = useCallback(
+    async (id: string): Promise<void> => {
+      if (isDemoMode()) throw new Error("Not available in demo mode");
+      const api = getApi();
+      await api.projects.delete(id);
+      setProjects((prev) => {
+        const remaining = prev.filter((p) => p.id !== id);
+        // Switch to another project if we deleted the current one
+        if (currentProject?.id === id && remaining.length > 0) {
+          setCurrentProjectState(remaining[0]);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("currentProjectId", remaining[0].id);
+          }
+        }
+        return remaining;
+      });
+    },
+    [currentProject]
+  );
+
+  return { currentProject, projects, setCurrentProject, createProject, deleteProject, loading };
 }
