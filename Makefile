@@ -9,7 +9,7 @@ CHART_DIR    := infra/helm/zenith
 CHART_NAME   := zenith
 STAGING_HOST ?= 77.42.88.149
 
-IMAGES := zenith-api zenith-landing zenith-mc zenith-mc-demo zenith-web zenith-web-demo zenith-operator
+IMAGES := zenith-api zenith-landing zenith-mc zenith-web zenith-operator
 
 .PHONY: help version \
 	test test-api test-web lint lint-api lint-web \
@@ -67,13 +67,11 @@ build-api: ## Build zenith-api image
 build-landing: ## Build zenith-landing image
 	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-landing:$(VERSION) -f apps/landing/Dockerfile --load .
 
-build-mc: ## Build zenith-mc + zenith-mc-demo images
+build-mc: ## Build zenith-mc image
 	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-mc:$(VERSION) -f apps/mission-control/Dockerfile --load .
-	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-mc-demo:$(VERSION) -f apps/mission-control/Dockerfile --build-arg NEXT_PUBLIC_DEMO_MODE=true --load .
 
-build-web: ## Build zenith-web + zenith-web-demo images
+build-web: ## Build zenith-web image
 	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-web:$(VERSION) -f apps/web/Dockerfile --load .
-	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-web-demo:$(VERSION) -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_DEMO_MODE=true --load .
 
 build-operator: ## Build zenith-operator image
 	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-operator:$(VERSION) -f services/operator/Dockerfile --load services/operator
@@ -88,13 +86,11 @@ push-api: ## Push zenith-api to registry
 push-landing: ## Push zenith-landing to registry
 	docker push $(REGISTRY)/zenith-landing:$(VERSION)
 
-push-mc: ## Push zenith-mc + demo to registry
+push-mc: ## Push zenith-mc to registry
 	docker push $(REGISTRY)/zenith-mc:$(VERSION)
-	docker push $(REGISTRY)/zenith-mc-demo:$(VERSION)
 
-push-web: ## Push zenith-web + demo to registry
+push-web: ## Push zenith-web to registry
 	docker push $(REGISTRY)/zenith-web:$(VERSION)
-	docker push $(REGISTRY)/zenith-web-demo:$(VERSION)
 
 push-operator: ## Push zenith-operator to registry
 	docker push $(REGISTRY)/zenith-operator:$(VERSION)

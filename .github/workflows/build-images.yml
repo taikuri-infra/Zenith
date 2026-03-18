@@ -203,22 +203,8 @@ jobs:
           cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc@${{ steps.build.outputs.digest }}
 
-      - name: Build & push zenith-mc-demo
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: apps/mission-control/Dockerfile
-          push: true
-          platforms: linux/amd64
-          build-args: |
-            NEXT_PUBLIC_DEMO_MODE=true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc-demo:${{ needs.prepare.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc-demo:sha-${{ needs.prepare.outputs.sha_short }}
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-mc-demo:latest
-
   # =========================================================================
-  # Build & Push: Web Platform + Demo
+  # Build & Push: Web Platform
   # =========================================================================
   build-web:
     needs: prepare
@@ -266,20 +252,6 @@ jobs:
         run: |
           cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
             ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web@${{ steps.build.outputs.digest }}
-
-      - name: Build & push zenith-web-demo
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: apps/web/Dockerfile
-          push: true
-          platforms: linux/amd64
-          build-args: |
-            NEXT_PUBLIC_DEMO_MODE=true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:${{ needs.prepare.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:sha-${{ needs.prepare.outputs.sha_short }}
-            ${{ env.REGISTRY }}/${{ env.PROJECT }}/zenith-web-demo:latest
 
       - name: Scan zenith-web with Trivy
         uses: aquasecurity/trivy-action@master

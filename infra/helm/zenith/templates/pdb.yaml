@@ -33,38 +33,6 @@ spec:
       app: zenith-landing
 {{- end }}
 
-{{- if .Values.mcDemo.enabled }}
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: zenith-mc-demo
-  namespace: {{ include "zenith.namespace" . }}
-  labels:
-    {{- include "zenith.componentLabels" (dict "name" "zenith-mc-demo" "component" "mission-control-demo") | nindent 4 }}
-spec:
-  maxUnavailable: 1
-  selector:
-    matchLabels:
-      app: zenith-mc-demo
-{{- end }}
-
-{{- if .Values.webDemo.enabled }}
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: zenith-web-demo
-  namespace: {{ include "zenith.namespace" . }}
-  labels:
-    {{- include "zenith.componentLabels" (dict "name" "zenith-web-demo" "component" "web-demo") | nindent 4 }}
-spec:
-  maxUnavailable: 1
-  selector:
-    matchLabels:
-      app: zenith-web-demo
-{{- end }}
-
 {{- range $name, $tenant := .Values.tenants }}
 ---
 apiVersion: policy/v1

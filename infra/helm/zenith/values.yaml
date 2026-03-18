@@ -80,34 +80,6 @@ landing:
       memory: 128Mi
       cpu: 100m
 
-# -- Mission Control Demo
-mcDemo:
-  enabled: true
-  replicas: 1
-  image: zenith-mc-demo:latest
-  port: 3100
-  resources:
-    requests:
-      memory: 128Mi
-      cpu: 100m
-    limits:
-      memory: 256Mi
-      cpu: 250m
-
-# -- Web Platform Demo
-webDemo:
-  enabled: true
-  replicas: 1
-  image: zenith-web-demo:latest
-  port: 3000
-  resources:
-    requests:
-      memory: 128Mi
-      cpu: 100m
-    limits:
-      memory: 256Mi
-      cpu: 250m
-
 # -- KEDA scale-to-zero (requires KEDA + HTTP add-on installed)
 keda:
   enabled: false
@@ -119,14 +91,6 @@ keda:
     minReplicas: 0
     maxReplicas: 3
     targetRequestRate: 20
-  mcDemo:
-    minReplicas: 0
-    maxReplicas: 3
-    targetRequestRate: 10
-  webDemo:
-    minReplicas: 0
-    maxReplicas: 3
-    targetRequestRate: 10
 
 # Legacy Kong — removed, now using APISIX via zenith-api chart
 # kong:
@@ -162,12 +126,6 @@ ingress:
     tlsSecret: freezenith-tls
   api:
     host: api.freezenith.com
-    tlsSecret: freezenith-tls
-  demoMc:
-    host: demo-ms.freezenith.com
-    tlsSecret: freezenith-tls
-  demoWeb:
-    host: demo-cloud.freezenith.com
     tlsSecret: freezenith-tls
 
 # -- Customer Tenants

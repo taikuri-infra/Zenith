@@ -76,17 +76,6 @@ if [[ "$SKIP_BUILD" == "false" ]]; then
   docker build -t zenith-api:latest -f services/api/Dockerfile . --quiet
   log_ok "zenith-api:latest built"
 
-  echo "  Building zenith-mc-demo (demo mode)..."
-  docker build -t zenith-mc-demo:latest \
-    --build-arg NEXT_PUBLIC_DEMO_MODE=true \
-    -f apps/mission-control/Dockerfile . --quiet
-  log_ok "zenith-mc-demo:latest built"
-
-  echo "  Building zenith-web-demo (demo mode)..."
-  docker build -t zenith-web-demo:latest \
-    --build-arg NEXT_PUBLIC_DEMO_MODE=true \
-    -f apps/web/Dockerfile . --quiet
-  log_ok "zenith-web-demo:latest built"
 else
   log_warn "Skipping Docker builds (--skip-build)"
 fi
@@ -96,7 +85,7 @@ fi
 # -------------------------------------------------------
 log_step "Importing Docker images into k3s..."
 
-for img in zenith-landing zenith-mc zenith-web zenith-api zenith-mc-demo zenith-web-demo; do
+for img in zenith-landing zenith-mc zenith-web zenith-api; do
   if docker image inspect "${img}:latest" > /dev/null 2>&1; then
     docker save "${img}:latest" | sudo k3s ctr images import -
     log_ok "Imported ${img}:latest into k3s"
@@ -163,9 +152,6 @@ log_ok "API deployment applied"
 kubectl apply -f infra/k8s/web.yaml
 log_ok "Web (embermind) deployment applied"
 
-kubectl apply -f infra/k8s/demo.yaml
-log_ok "Demo deployments applied"
-
 kubectl apply -f infra/k8s/certificates.yaml
 log_ok "TLS certificates applied"
 
@@ -178,8 +164,6 @@ log_ok "Ingress routes applied"
 log_step "Restarting deployments..."
 
 kubectl rollout restart deployment/zenith-landing -n zenith-platform
-kubectl rollout restart deployment/zenith-mc-demo -n zenith-platform
-kubectl rollout restart deployment/zenith-web-demo -n zenith-platform
 kubectl rollout restart deployment/zenith-api -n zenith-platform
 kubectl rollout restart deployment/zenith-mc -n zenith-embermind
 kubectl rollout restart deployment/zenith-web -n zenith-embermind
@@ -193,14 +177,6 @@ log_step "Waiting for rollouts to complete..."
 echo "  Waiting for zenith-landing..."
 kubectl rollout status deployment/zenith-landing -n zenith-platform --timeout=120s
 log_ok "zenith-landing is ready"
-
-echo "  Waiting for zenith-mc-demo..."
-kubectl rollout status deployment/zenith-mc-demo -n zenith-platform --timeout=120s
-log_ok "zenith-mc-demo is ready"
-
-echo "  Waiting for zenith-web-demo..."
-kubectl rollout status deployment/zenith-web-demo -n zenith-platform --timeout=120s
-log_ok "zenith-web-demo is ready"
 
 echo "  Waiting for zenith-api..."
 kubectl rollout status deployment/zenith-api -n zenith-platform --timeout=120s
@@ -248,8 +224,6 @@ echo "============================================="
 echo ""
 echo "Endpoints:"
 echo "  Landing:             https://freezenith.com"
-echo "  Demo MC:             https://demo-ms.freezenith.com"
-echo "  Demo Cloud:          https://demo-cloud.freezenith.com"
 echo "  API:                 https://api.freezenith.com/health"
 echo "  Embermind MC:        https://ms.embermind.app"
 echo "  Embermind Cloud:     https://cloud.embermind.app"
