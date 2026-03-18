@@ -32,6 +32,12 @@ variable "landing_chart_path" {
   default     = ""
 }
 
+variable "mc_chart_path" {
+  description = "Local path to the zenith-mc Helm chart"
+  type        = string
+  default     = ""
+}
+
 # --- Per-chart values files ---
 
 variable "platform_values_file" {
@@ -46,6 +52,11 @@ variable "api_values_file" {
 
 variable "landing_values_file" {
   description = "Path to the zenith-landing values file"
+  type        = string
+}
+
+variable "mc_values_file" {
+  description = "Path to the zenith-mc values file"
   type        = string
 }
 
@@ -282,6 +293,12 @@ variable "cosign_public_key" {
   description = "Cosign public key for image signature verification (PEM format)"
   type        = string
   default     = ""
+}
+
+variable "policy_reporter_version" {
+  description = "Policy Reporter Helm chart version (Kyverno UI)"
+  type        = string
+  default     = "2.24.2"
 }
 
 variable "enable_falco" {

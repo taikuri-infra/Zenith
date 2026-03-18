@@ -41,6 +41,63 @@ resource "helm_release" "kyverno" {
 }
 
 # =============================================================================
+# Policy Reporter — Kyverno UI Dashboard (5.13.1)
+# =============================================================================
+
+resource "helm_release" "policy_reporter" {
+  count = var.enable_kyverno ? 1 : 0
+
+  name             = "policy-reporter"
+  repository       = "https://kyverno.github.io/policy-reporter"
+  chart            = "policy-reporter"
+  version          = var.policy_reporter_version
+  namespace        = "kyverno"
+  create_namespace = false
+  wait             = true
+  timeout          = 300
+
+  # Enable the UI plugin
+  set {
+    name  = "ui.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "ui.plugins.kyverno"
+    value = "true"
+  }
+
+  # Kyverno plugin for policy details
+  set {
+    name  = "kyvernoPlugin.enabled"
+    value = "true"
+  }
+
+  # Resource limits
+  set {
+    name  = "resources.requests.cpu"
+    value = "50m"
+  }
+
+  set {
+    name  = "resources.requests.memory"
+    value = "128Mi"
+  }
+
+  set {
+    name  = "ui.resources.requests.cpu"
+    value = "50m"
+  }
+
+  set {
+    name  = "ui.resources.requests.memory"
+    value = "64Mi"
+  }
+
+  depends_on = [helm_release.kyverno]
+}
+
+# =============================================================================
 # Kyverno Policy — Validate Image Architecture (amd64 only in zenith-apps)
 # =============================================================================
 
@@ -453,6 +510,78 @@ resource "helm_release" "falco" {
     name  = "falcosidekick.config.telegram.minimumpriority"
     value = "warning"
   }
+
+  # --- Custom Falco Rules ---
+  values = [yamlencode({
+    customRules = {
+      "zenith-rules.yaml" = yamlencode([
+        {
+          rule      = "Detect crypto mining"
+          desc      = "Detect crypto mining processes"
+          condition = "spawned_process and proc.name in (xmrig, minergate, minerd, cpuminer, cgminer, bfgminer, stratum)"
+          output    = "Crypto miner detected (user=%user.name command=%proc.cmdline container=%container.name namespace=%k8s.ns.name pod=%k8s.pod.name)"
+          priority  = "CRITICAL"
+          tags      = ["crypto", "mitre_execution"]
+        },
+        {
+          rule      = "Unauthorized shell in app container"
+          desc      = "Detect shell access in application containers"
+          condition = "spawned_process and container and proc.name in (bash, sh, zsh, dash, csh, ksh) and k8s.ns.name in (zenith-apps, zenith-builds)"
+          output    = "Shell spawned in app container (user=%user.name shell=%proc.name container=%container.name namespace=%k8s.ns.name pod=%k8s.pod.name)"
+          priority  = "WARNING"
+          tags      = ["shell", "mitre_execution"]
+        },
+        {
+          rule      = "Sensitive file access in container"
+          desc      = "Detect access to sensitive files"
+          condition = "open_read and container and fd.name in (/etc/shadow, /etc/passwd, /etc/sudoers, /root/.ssh/authorized_keys, /root/.bash_history) and k8s.ns.name in (zenith-apps, zenith-builds)"
+          output    = "Sensitive file read (file=%fd.name user=%user.name container=%container.name namespace=%k8s.ns.name pod=%k8s.pod.name)"
+          priority  = "WARNING"
+          tags      = ["filesystem", "mitre_discovery"]
+        },
+        {
+          rule      = "Outbound connection to unusual port"
+          desc      = "Detect outbound connections to non-standard ports from app containers"
+          condition = "outbound and container and not fd.sport in (53, 80, 443, 5432, 6379, 8080, 8443, 9090, 27017) and k8s.ns.name in (zenith-apps, zenith-builds)"
+          output    = "Unusual outbound connection (port=%fd.sport ip=%fd.sip container=%container.name namespace=%k8s.ns.name pod=%k8s.pod.name)"
+          priority  = "WARNING"
+          tags      = ["network", "mitre_command_and_control"]
+        },
+        {
+          rule      = "Package manager in container"
+          desc      = "Detect package manager usage in running containers"
+          condition = "spawned_process and container and proc.name in (apt, apt-get, yum, dnf, apk, pip, npm, gem) and k8s.ns.name in (zenith-apps, zenith-builds)"
+          output    = "Package manager run in container (command=%proc.cmdline container=%container.name namespace=%k8s.ns.name pod=%k8s.pod.name)"
+          priority  = "WARNING"
+          tags      = ["package", "mitre_persistence"]
+        },
+        {
+          rule      = "Reverse shell detected"
+          desc      = "Detect potential reverse shell connections"
+          condition = "spawned_process and container and proc.name in (bash, sh, zsh, nc, ncat) and (proc.cmdline contains '/dev/tcp' or proc.cmdline contains 'nc -e' or proc.cmdline contains 'ncat -e') and k8s.ns.name in (zenith-apps, zenith-builds)"
+          output    = "Reverse shell detected (user=%user.name command=%proc.cmdline container=%container.name namespace=%k8s.ns.name pod=%k8s.pod.name)"
+          priority  = "CRITICAL"
+          tags      = ["reverse_shell", "mitre_execution"]
+        },
+        {
+          rule      = "Binary written to /tmp"
+          desc      = "Detect binaries dropped into tmp directories"
+          condition = "((evt.type = open and evt.is_open_write = true) or evt.type = creat) and container and (fd.name startswith /tmp or fd.name startswith /var/tmp) and k8s.ns.name in (zenith-apps, zenith-builds)"
+          output    = "Binary written to temp dir (file=%fd.name user=%user.name container=%container.name namespace=%k8s.ns.name pod=%k8s.pod.name)"
+          priority  = "WARNING"
+          tags      = ["filesystem", "mitre_defense_evasion"]
+        },
+        {
+          rule      = "Kubernetes service account token access"
+          desc      = "Detect access to service account tokens"
+          condition = "open_read and container and fd.name startswith /var/run/secrets/kubernetes.io and k8s.ns.name in (zenith-apps, zenith-builds)"
+          output    = "Service account token read (file=%fd.name user=%user.name container=%container.name namespace=%k8s.ns.name pod=%k8s.pod.name)"
+          priority  = "WARNING"
+          tags      = ["k8s", "mitre_credential_access"]
+        },
+      ])
+    }
+  })]
 
   set {
     name  = "resources.requests.cpu"
