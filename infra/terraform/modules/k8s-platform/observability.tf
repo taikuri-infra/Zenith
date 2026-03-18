@@ -390,3 +390,224 @@ resource "helm_release" "otel_collector" {
 # REMOVED (Phase 7: API-as-Proxy) — Hubble UI public access removed.
 # Access via kubectl port-forward or API proxy if needed.
 # =============================================================================
+
+# =============================================================================
+# ServiceMonitors — Enable Prometheus scraping for all platform services
+# =============================================================================
+
+# ArgoCD metrics — ServiceMonitors created by ArgoCD Helm chart
+# (server.metrics.serviceMonitor.enabled, controller.metrics.serviceMonitor.enabled, etc.)
+
+# Cert-Manager metrics
+resource "kubernetes_manifest" "servicemonitor_cert_manager" {
+  count = var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "cert-manager"
+      namespace = "cert-manager"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "tcp-prometheus-servicemonitor", interval = "60s", path = "/metrics" },
+      ]
+      selector = {
+        matchLabels = {
+          "app.kubernetes.io/name" = "cert-manager"
+        }
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack, helm_release.cert_manager]
+}
+
+# Kyverno metrics
+resource "kubernetes_manifest" "servicemonitor_kyverno" {
+  count = var.enable_kyverno && var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "kyverno"
+      namespace = "kyverno"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "metrics-port", interval = "30s" },
+      ]
+      selector = {
+        matchExpressions = [{
+          key      = "app.kubernetes.io/component"
+          operator = "In"
+          values   = ["admission-controller", "background-controller", "cleanup-controller", "reports-controller"]
+        }]
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack, helm_release.kyverno]
+}
+
+# Temporal metrics (all headless services expose port 9090)
+resource "kubernetes_manifest" "servicemonitor_temporal" {
+  count = var.enable_temporal && var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "temporal"
+      namespace = "temporal"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "metrics", interval = "30s" },
+      ]
+      namespaceSelector = {
+        matchNames = ["temporal"]
+      }
+      selector = {
+        matchLabels = {
+          "app.kubernetes.io/instance" = "temporal"
+        }
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack, helm_release.temporal]
+}
+
+# Loki metrics
+resource "kubernetes_manifest" "servicemonitor_loki" {
+  count = var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "loki"
+      namespace = "monitoring"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "http-metrics", interval = "30s" },
+      ]
+      selector = {
+        matchLabels = {
+          "app.kubernetes.io/name" = "loki"
+        }
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack, helm_release.loki]
+}
+
+# Tempo metrics
+resource "kubernetes_manifest" "servicemonitor_tempo" {
+  count = var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "tempo"
+      namespace = "monitoring"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "http-metrics", interval = "30s" },
+      ]
+      selector = {
+        matchLabels = {
+          "app.kubernetes.io/name" = "tempo"
+        }
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack, helm_release.tempo]
+}
+
+# Hubble metrics (Cilium network observability)
+resource "kubernetes_manifest" "servicemonitor_hubble" {
+  count = var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "hubble"
+      namespace = "kube-system"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "hubble-metrics", interval = "30s" },
+      ]
+      namespaceSelector = {
+        matchNames = ["kube-system"]
+      }
+      selector = {
+        matchLabels = {
+          "k8s-app" = "hubble"
+        }
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack]
+}
+
+# Velero metrics
+resource "kubernetes_manifest" "servicemonitor_velero" {
+  count = var.enable_velero && var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "velero"
+      namespace = "velero"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "monitoring", interval = "60s" },
+      ]
+      namespaceSelector = {
+        matchNames = ["velero"]
+      }
+      selector = {
+        matchLabels = {
+          "app.kubernetes.io/name" = "velero"
+        }
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack, helm_release.velero]
+}

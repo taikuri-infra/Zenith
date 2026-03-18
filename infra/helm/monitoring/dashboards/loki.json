@@ -1,0 +1,295 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "style": "dark",
+  "uid": "zenith-loki",
+  "title": "Loki Log Aggregation",
+  "tags": ["loki", "logging", "zenith"],
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["10s", "30s", "1m", "5m"] },
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Ingestion Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "showPoints": "never" },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "id": 2,
+      "title": "Log Lines Ingested Rate",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum(rate(loki_distributor_lines_received_total[5m]))", "legendFormat": "Total Lines/s" },
+        { "expr": "sum by (tenant) (rate(loki_distributor_lines_received_total[5m]))", "legendFormat": "{{ tenant }}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "showPoints": "never" },
+          "unit": "Bps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "id": 3,
+      "title": "Bytes Ingested Rate",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum(rate(loki_distributor_bytes_received_total[5m]))", "legendFormat": "Total Bytes/s" },
+        { "expr": "sum by (tenant) (rate(loki_distributor_bytes_received_total[5m]))", "legendFormat": "{{ tenant }}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "#10b981", "value": null },
+              { "color": "#f59e0b", "value": 5000 },
+              { "color": "#ef4444", "value": 10000 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 9 },
+      "id": 4,
+      "title": "Active Streams",
+      "type": "stat",
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "expr": "sum(loki_ingester_memory_streams)", "legendFormat": "Active Streams" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "#10b981", "value": null }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 9 },
+      "id": 5,
+      "title": "Streams Created (Total)",
+      "type": "stat",
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "expr": "sum(loki_ingester_streams_created_total)", "legendFormat": "Created" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "#10b981", "value": null }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 9 },
+      "id": 6,
+      "title": "Chunks Stored",
+      "type": "stat",
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "expr": "sum(loki_ingester_chunks_stored_total)", "legendFormat": "Chunks" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "#10b981", "value": null }
+            ]
+          },
+          "unit": "bytes"
+        }
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 9 },
+      "id": 7,
+      "title": "Storage Used",
+      "type": "stat",
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "expr": "sum(loki_store_index_cache_hits_total + loki_store_index_cache_misses_total) or sum(loki_ingester_chunks_stored_total) * 512", "legendFormat": "Estimated" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 8,
+      "title": "Request Performance",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 9,
+      "title": "Request Duration - Write Path",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(loki_request_duration_seconds_bucket{route=~\".*push.*\"}[5m])))", "legendFormat": "p50 Write" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(loki_request_duration_seconds_bucket{route=~\".*push.*\"}[5m])))", "legendFormat": "p95 Write" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(loki_request_duration_seconds_bucket{route=~\".*push.*\"}[5m])))", "legendFormat": "p99 Write" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 10,
+      "title": "Request Duration - Read Path",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(loki_request_duration_seconds_bucket{route=~\".*query.*\"}[5m])))", "legendFormat": "p50 Read" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(loki_request_duration_seconds_bucket{route=~\".*query.*\"}[5m])))", "legendFormat": "p95 Read" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(loki_request_duration_seconds_bucket{route=~\".*query.*\"}[5m])))", "legendFormat": "p99 Read" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "showPoints": "never", "stacking": { "mode": "normal" } },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "id": 11,
+      "title": "Query Rate",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum by (route) (rate(loki_request_duration_seconds_count{route=~\".*query.*\"}[5m]))", "legendFormat": "{{ route }}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "showPoints": "never" },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "id": 12,
+      "title": "Query Errors",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum by (route, status_code) (rate(loki_request_duration_seconds_count{status_code=~\"5..\"}[5m]))", "legendFormat": "{{ route }} ({{ status_code }})" },
+        { "expr": "sum by (route, status_code) (rate(loki_request_duration_seconds_count{status_code=~\"4..\"}[5m]))", "legendFormat": "{{ route }} ({{ status_code }})" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "id": 13,
+      "title": "Resource Usage",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "#10b981", "value": null },
+              { "color": "#f59e0b", "value": 2147483648 },
+              { "color": "#ef4444", "value": 4294967296 }
+            ]
+          },
+          "unit": "bytes"
+        }
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 32 },
+      "id": 14,
+      "title": "Ingester Memory Usage",
+      "type": "gauge",
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "showThresholdLabels": false, "showThresholdMarkers": true },
+      "targets": [
+        { "expr": "sum(go_memstats_heap_inuse_bytes{job=~\".*loki.*\"})", "legendFormat": "Heap In Use" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "showPoints": "never" },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 32 },
+      "id": 15,
+      "title": "Pod CPU Usage",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{pod=~\"loki.*\"}[5m]))", "legendFormat": "{{ pod }}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "showPoints": "never" },
+          "unit": "bytes"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 32 },
+      "id": 16,
+      "title": "Pod Memory Usage",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum by (pod) (container_memory_working_set_bytes{pod=~\"loki.*\"})", "legendFormat": "{{ pod }}" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": { "list": [] },
+  "refresh": "30s"
+}
