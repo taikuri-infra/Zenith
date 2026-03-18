@@ -124,6 +124,250 @@ resource "kubernetes_manifest" "kyverno_validate_image_arch" {
 }
 
 # =============================================================================
+# Kyverno Policy — Disallow Privileged Containers
+# =============================================================================
+
+resource "kubernetes_manifest" "kyverno_disallow_privileged" {
+  count = var.enable_kyverno ? 1 : 0
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  manifest = {
+    apiVersion = "kyverno.io/v1"
+    kind       = "ClusterPolicy"
+    metadata = {
+      name = "disallow-privileged-containers"
+      annotations = {
+        "policies.kyverno.io/title"       = "Disallow Privileged Containers"
+        "policies.kyverno.io/category"    = "Pod Security"
+        "policies.kyverno.io/severity"    = "high"
+        "policies.kyverno.io/description" = "Privileged containers can access the host OS. This policy blocks them in application namespaces."
+      }
+    }
+    spec = {
+      validationFailureAction = "Enforce"
+      background              = true
+      rules = [{
+        name = "deny-privileged"
+        match = {
+          any = [{
+            resources = {
+              kinds = ["Pod"]
+            }
+          }]
+        }
+        exclude = {
+          any = [{
+            resources = {
+              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system"]
+            }
+          }]
+        }
+        validate = {
+          message = "Privileged containers are not allowed."
+          pattern = {
+            spec = {
+              containers = [{
+                securityContext = {
+                  privileged = "false | !true"
+                }
+              }]
+            }
+          }
+        }
+      }]
+    }
+  }
+
+  depends_on = [helm_release.kyverno]
+}
+
+# =============================================================================
+# Kyverno Policy — Require Run As Non-Root
+# =============================================================================
+
+resource "kubernetes_manifest" "kyverno_require_non_root" {
+  count = var.enable_kyverno ? 1 : 0
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  manifest = {
+    apiVersion = "kyverno.io/v1"
+    kind       = "ClusterPolicy"
+    metadata = {
+      name = "require-run-as-non-root"
+      annotations = {
+        "policies.kyverno.io/title"       = "Require Run As Non-Root"
+        "policies.kyverno.io/category"    = "Pod Security"
+        "policies.kyverno.io/severity"    = "high"
+        "policies.kyverno.io/description" = "Containers must run as non-root user. Prevents privilege escalation attacks."
+      }
+    }
+    spec = {
+      validationFailureAction = "Audit"
+      background              = true
+      rules = [{
+        name = "check-non-root"
+        match = {
+          any = [{
+            resources = {
+              kinds = ["Pod"]
+            }
+          }]
+        }
+        exclude = {
+          any = [{
+            resources = {
+              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system"]
+            }
+          }]
+        }
+        validate = {
+          message = "Containers must set runAsNonRoot to true."
+          pattern = {
+            spec = {
+              containers = [{
+                securityContext = {
+                  runAsNonRoot = true
+                }
+              }]
+            }
+          }
+        }
+      }]
+    }
+  }
+
+  depends_on = [helm_release.kyverno]
+}
+
+# =============================================================================
+# Kyverno Policy — Disallow Host Namespaces
+# =============================================================================
+
+resource "kubernetes_manifest" "kyverno_disallow_host_namespaces" {
+  count = var.enable_kyverno ? 1 : 0
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  manifest = {
+    apiVersion = "kyverno.io/v1"
+    kind       = "ClusterPolicy"
+    metadata = {
+      name = "disallow-host-namespaces"
+      annotations = {
+        "policies.kyverno.io/title"       = "Disallow Host Namespaces"
+        "policies.kyverno.io/category"    = "Pod Security"
+        "policies.kyverno.io/severity"    = "high"
+        "policies.kyverno.io/description" = "Pods must not use hostNetwork, hostPID, or hostIPC. These give direct access to the host."
+      }
+    }
+    spec = {
+      validationFailureAction = "Enforce"
+      background              = true
+      rules = [{
+        name = "deny-host-namespaces"
+        match = {
+          any = [{
+            resources = {
+              kinds = ["Pod"]
+            }
+          }]
+        }
+        exclude = {
+          any = [{
+            resources = {
+              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system"]
+            }
+          }]
+        }
+        validate = {
+          message = "Pods cannot use hostNetwork, hostPID, or hostIPC."
+          pattern = {
+            spec = {
+              "=(hostNetwork)" = false
+              "=(hostPID)"     = false
+              "=(hostIPC)"     = false
+            }
+          }
+        }
+      }]
+    }
+  }
+
+  depends_on = [helm_release.kyverno]
+}
+
+# =============================================================================
+# Kyverno Policy — Require Resource Limits
+# =============================================================================
+
+resource "kubernetes_manifest" "kyverno_require_resource_limits" {
+  count = var.enable_kyverno ? 1 : 0
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  manifest = {
+    apiVersion = "kyverno.io/v1"
+    kind       = "ClusterPolicy"
+    metadata = {
+      name = "require-resource-limits"
+      annotations = {
+        "policies.kyverno.io/title"       = "Require Resource Limits"
+        "policies.kyverno.io/category"    = "Resource Management"
+        "policies.kyverno.io/severity"    = "medium"
+        "policies.kyverno.io/description" = "All containers must define memory limits. Prevents a single pod from consuming all node resources."
+      }
+    }
+    spec = {
+      validationFailureAction = "Audit"
+      background              = true
+      rules = [{
+        name = "check-resource-limits"
+        match = {
+          any = [{
+            resources = {
+              kinds = ["Pod"]
+            }
+          }]
+        }
+        exclude = {
+          any = [{
+            resources = {
+              namespaces = ["kube-system", "kyverno", "cnpg-system"]
+            }
+          }]
+        }
+        validate = {
+          message = "All containers must have memory limits defined."
+          pattern = {
+            spec = {
+              containers = [{
+                resources = {
+                  limits = {
+                    memory = "?*"
+                  }
+                }
+              }]
+            }
+          }
+        }
+      }]
+    }
+  }
+
+  depends_on = [helm_release.kyverno]
+}
+
+# =============================================================================
 # Falco — Runtime Security Detection (5.14)
 # =============================================================================
 
