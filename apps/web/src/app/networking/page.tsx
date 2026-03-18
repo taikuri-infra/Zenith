@@ -3,7 +3,7 @@
 import { Shell } from "@/components/shell";
 import { Modal } from "@/components/modal";
 import { useEffect, useState, useCallback } from "react";
-import { useApi } from "@/lib/get-api";
+import { getApi } from "@/lib/get-api";
 
 interface AppInfo {
   id: string;
@@ -23,7 +23,7 @@ interface Domain {
 }
 
 export default function NetworkingPage() {
-  const api = useApi();
+  const api = getApi();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
 
