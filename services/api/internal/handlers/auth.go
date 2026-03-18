@@ -86,6 +86,27 @@ type messageResponse struct {
 	Message string `json:"message"`
 }
 
+// ProxyLogin authenticates via trusted Cf-Access-Authenticated-User-Email header.
+// Only for admin/owner users behind Cloudflare Zero Trust.
+func (h *AuthHandler) ProxyLogin(c *fiber.Ctx) error {
+	email := c.Get("Cf-Access-Authenticated-User-Email")
+	if email == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "missing proxy auth header")
+	}
+
+	tokens, err := h.svc.ProxyLogin(c.Context(), email)
+	if err != nil {
+		return fiber.NewError(fiber.StatusForbidden, err.Error())
+	}
+
+	return c.JSON(tokenResponse{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+		TokenType:    "bearer",
+		ExpiresIn:    tokens.ExpiresIn,
+	})
+}
+
 // Login authenticates a user and returns JWT tokens (or MFA challenge).
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req loginRequest

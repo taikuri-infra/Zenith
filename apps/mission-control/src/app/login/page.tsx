@@ -3,20 +3,51 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isDemoMode } from "@/lib/get-api";
-import { api } from "@/lib/api";
+import { api, setTokens } from "@/lib/api";
 
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [autoLogging, setAutoLogging] = useState(true);
 
   useEffect(() => {
     if (isDemoMode()) {
       router.replace("/");
       return;
     }
+
+    // Try Cloudflare Access auto-login first
+    fetch("/api/cf-auth", { method: "POST" })
+      .then(async (res) => {
+        if (res.ok) {
+          const tokens = await res.json();
+          // Validate admin/owner role from JWT
+          try {
+            const payload = JSON.parse(atob(tokens.access_token.split(".")[1]));
+            const role = payload.role || "";
+            if (role !== "owner" && role !== "admin") {
+              setAutoLogging(false);
+              setError("Access denied. Only platform administrators can sign in.");
+              return;
+            }
+          } catch {
+            // If JWT parsing fails, still try — backend already validated
+          }
+          setTokens(tokens.access_token, tokens.refresh_token);
+          router.replace("/");
+          return;
+        }
+        // Not behind CF Access or not admin — show normal login
+        setAutoLogging(false);
+      })
+      .catch(() => {
+        setAutoLogging(false);
+      });
+
     const err = searchParams.get("error");
     if (err) {
+      setAutoLogging(false);
       setError(
         err === "oauth_failed"
           ? "Sign in failed. Please try again."
@@ -28,6 +59,17 @@ function LoginInner() {
       );
     }
   }, [router, searchParams]);
+
+  if (autoLogging && !error) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-neutral-400 text-sm">Authenticating...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">

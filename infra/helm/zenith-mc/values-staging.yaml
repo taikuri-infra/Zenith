@@ -10,6 +10,7 @@ port: 3100
 env:
   NEXT_PUBLIC_API_URL: "https://api.stage.freezenith.com"
   NEXT_PUBLIC_LANDING_URL: "https://stage.freezenith.com"
+  API_INTERNAL_URL: "http://zenith-api.zenith-staging.svc.cluster.local:8080"
 
 ingress:
   enabled: false

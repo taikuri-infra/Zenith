@@ -835,6 +835,21 @@ func (s *AuthService) findOrCreateOAuthUser(ctx context.Context, email, name, pr
 	return s.issueTokens(ctx, user)
 }
 
+// ProxyLogin authenticates a user by trusted email header (Cloudflare Access).
+// Only allows owner/admin roles. Used when the service is behind Zero Trust.
+func (s *AuthService) ProxyLogin(ctx context.Context, email string) (*TokenPair, error) {
+	user, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	if user.Role != entities.RoleOwner && user.Role != entities.RoleAdmin {
+		return nil, fmt.Errorf("insufficient permissions")
+	}
+
+	return s.issueTokens(ctx, &user.User)
+}
+
 func (s *AuthService) issueTokens(ctx context.Context, user *entities.User) (*TokenPair, error) {
 	// Check if user is a team member — issue tokens with AccountID if so
 	if s.teamRepo != nil {

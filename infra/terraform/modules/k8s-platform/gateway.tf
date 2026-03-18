@@ -88,6 +88,17 @@ resource "helm_release" "apisix" {
     value = "infra-critical"
   }
 
+  # Enable Prometheus metrics
+  set {
+    name  = "serviceMonitor.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "serviceMonitor.namespace"
+    value = "apisix"
+  }
+
   depends_on = [
     kubernetes_manifest.cluster_issuer,
     kubernetes_priority_class.infra_critical,

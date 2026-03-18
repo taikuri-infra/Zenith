@@ -573,6 +573,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	authRoutes.Get("/me", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist), authHandler.GetMe)
 	authRoutes.Put("/onboarding", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist), authHandler.UpdateOnboarding)
 	authRoutes.Post("/login", authHandler.Login)
+	authRoutes.Post("/proxy-login", authHandler.ProxyLogin)
 	authRoutes.Post("/login/mfa", authHandler.MFALogin)
 	authRoutes.Post("/register", authHandler.Register)
 	authRoutes.Post("/refresh", authHandler.Refresh)

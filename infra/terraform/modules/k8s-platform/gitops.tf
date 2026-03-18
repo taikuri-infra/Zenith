@@ -64,6 +64,44 @@ resource "helm_release" "argocd" {
     value = "true"
   }
 
+  # Disable ArgoCD built-in auth — Zero Trust handles authentication.
+  # Cf-Access-Authenticated-User-Email header is trusted after Cloudflare Access.
+  set {
+    name  = "configs.params.server\\.disable\\.auth"
+    value = "true"
+  }
+
+  # --- Metrics for Prometheus scraping ---
+  set {
+    name  = "controller.metrics.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "controller.metrics.serviceMonitor.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "server.metrics.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "server.metrics.serviceMonitor.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "repoServer.metrics.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "repoServer.metrics.serviceMonitor.enabled"
+    value = "true"
+  }
+
   # --- Git repository credentials for ArgoCD ---
   set {
     name  = "configs.repositories.zenith.url"
