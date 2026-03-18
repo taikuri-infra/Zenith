@@ -66,8 +66,7 @@ module "dns" {
     api        = { name = "api.stage" }
     ms         = { name = "ms.stage" }
     cloud      = { name = "cloud.stage" }
-    grafana    = { name = "grafana.stage" }
-    prometheus = { name = "prometheus.stage" }
+    # grafana, prometheus, alerts, loki → moved to Cloudflare Zero Trust Tunnel (staging-k8s)
     # --- V2 additions ---
     argocd       = { name = "argocd.stage" }
     keycloak     = { name = "auth.stage" }
@@ -76,7 +75,6 @@ module "dns" {
     harbor_hub   = { name = "hub.stage" }
     hubble       = { name = "hubble.stage" }
     tempo        = { name = "tempo.stage" }
-    alertmanager = { name = "alerts.stage" }
     # Web dashboard
     app = { name = "app.stage" }
     # Wildcard for customer apps (*.apps.stage.freezenith.com)

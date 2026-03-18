@@ -5,3 +5,7 @@ kubeconfig_path = "~/.kube/zenith-staging.yaml"
 jwt_secret     = ""
 admin_email    = "admin@staging.freezenith.com"
 admin_password = ""
+
+# Cloudflare Zero Trust Tunnel (optional)
+# enable_cloudflare_tunnel = true
+# cloudflare_access_emails = ["babak.dorani@gmail.com"]

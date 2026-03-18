@@ -80,6 +80,39 @@ resource "helm_release" "prometheus_stack" {
     value = "platform"
   }
 
+  # --- Auth Proxy: trust Cloudflare Access header for SSO ---
+  # After passing Cloudflare Zero Trust, the Cf-Access-Authenticated-User-Email
+  # header contains the verified email. Grafana reads it and auto-logs in.
+  set {
+    name  = "grafana.grafana\\.ini.auth\\.proxy.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.grafana\\.ini.auth\\.proxy.header_name"
+    value = "Cf-Access-Authenticated-User-Email"
+  }
+
+  set {
+    name  = "grafana.grafana\\.ini.auth\\.proxy.header_property"
+    value = "email"
+  }
+
+  set {
+    name  = "grafana.grafana\\.ini.auth\\.proxy.auto_sign_up"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.grafana\\.ini.auth\\.proxy.headers"
+    value = "Email:Cf-Access-Authenticated-User-Email"
+  }
+
+  set {
+    name  = "grafana.grafana\\.ini.users.auto_assign_org_role"
+    value = "Admin"
+  }
+
   depends_on = [kubernetes_priority_class.platform]
 }
 

@@ -47,6 +47,10 @@ resource "helm_release" "kyverno" {
 resource "kubernetes_manifest" "kyverno_validate_image_arch" {
   count = var.enable_kyverno ? 1 : 0
 
+  field_manager {
+    force_conflicts = true
+  }
+
   manifest = {
     apiVersion = "kyverno.io/v1"
     kind       = "ClusterPolicy"

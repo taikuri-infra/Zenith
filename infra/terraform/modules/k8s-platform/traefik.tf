@@ -14,6 +14,10 @@
 # =============================================================================
 
 resource "kubernetes_manifest" "traefik_config" {
+  field_manager {
+    force_conflicts = true
+  }
+
   manifest = {
     apiVersion = "helm.cattle.io/v1"
     kind       = "HelmChartConfig"

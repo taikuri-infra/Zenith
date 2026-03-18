@@ -71,6 +71,14 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.17"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -85,6 +93,14 @@ provider "helm" {
     config_path = var.kubeconfig_path
   }
 }
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
+}
+
+# --- Cloudflare Zero Trust Tunnel ---
+# Moved to staging-tunnel/ (separate state) to avoid platform module label conflicts.
+# See: infra/terraform/staging-tunnel/
 
 # --- K8s Platform ---
 

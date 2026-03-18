@@ -195,3 +195,35 @@ variable "github_token" {
   sensitive   = true
   default     = ""
 }
+
+# --- Cloudflare Zero Trust Tunnel ---
+
+variable "freezenith_zone_id" {
+  description = "Cloudflare zone ID for freezenith.com"
+  type        = string
+  default     = "37ac5735b1cf9099ccedd4e038d99465"
+}
+
+variable "cloudflare_account_id" {
+  description = "Cloudflare account ID"
+  type        = string
+  default     = "800cc319b1bda193dbcc3ee55db19a87"
+}
+
+variable "enable_cloudflare_tunnel" {
+  description = "Enable Cloudflare Zero Trust Tunnel for monitoring access"
+  type        = bool
+  default     = false
+}
+
+variable "cloudflare_access_emails" {
+  description = "Email addresses allowed through Cloudflare Access"
+  type        = list(string)
+  default     = ["babak.dorani@gmail.com", "admin@freezenith.com"]
+}
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "staging"
+}

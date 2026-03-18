@@ -324,6 +324,10 @@ resource "kubernetes_manifest" "cnpg_backup_keycloak" {
 resource "kubernetes_manifest" "cnpg_backup_free_pg" {
   count = var.enable_cnpg ? 1 : 0
 
+  field_manager {
+    force_conflicts = true
+  }
+
   manifest = {
     apiVersion = "postgresql.cnpg.io/v1"
     kind       = "ScheduledBackup"
