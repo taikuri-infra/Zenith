@@ -110,6 +110,30 @@ resource "kubernetes_network_policy_v1" "allow_apisix_to_api_staging" {
   }
 }
 
+# Allow cloudflared tunnel → zenith-staging (MC admin panel)
+resource "kubernetes_network_policy_v1" "allow_tunnel_to_staging" {
+  metadata {
+    name      = "allow-cloudflare-tunnel"
+    namespace = "zenith-staging"
+  }
+
+  spec {
+    pod_selector {}
+
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "cloudflare-tunnel"
+          }
+        }
+      }
+    }
+
+    policy_types = ["Ingress"]
+  }
+}
+
 # --- Default Deny Ingress for zenith-apps (customer apps) ---
 
 resource "kubernetes_network_policy_v1" "deny_all_zenith_apps" {

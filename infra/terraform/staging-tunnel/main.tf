@@ -71,11 +71,11 @@ module "tunnel" {
     }
     argocd = {
       subdomain = "argocd-stage"
-      service   = "https://argocd-server.argocd.svc.cluster.local:443"
+      service   = "http://argocd-server.argocd.svc.cluster.local:80"
     }
     harbor = {
       subdomain = "harbor-stage"
-      service   = "http://harbor-core.harbor.svc.cluster.local:80"
+      service   = "http://harbor.harbor.svc.cluster.local:80"
     }
     tempo = {
       subdomain = "tempo-stage"
