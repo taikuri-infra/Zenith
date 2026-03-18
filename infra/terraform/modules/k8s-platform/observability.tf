@@ -535,7 +535,7 @@ resource "kubernetes_manifest" "servicemonitor_tempo" {
     }
     spec = {
       endpoints = [
-        { port = "http-metrics", interval = "30s" },
+        { port = "tempo-prom-metrics", interval = "30s" },
       ]
       selector = {
         matchLabels = {
@@ -596,7 +596,7 @@ resource "kubernetes_manifest" "servicemonitor_velero" {
     }
     spec = {
       endpoints = [
-        { port = "monitoring", interval = "60s" },
+        { port = "http-monitoring", interval = "60s" },
       ]
       namespaceSelector = {
         matchNames = ["velero"]
