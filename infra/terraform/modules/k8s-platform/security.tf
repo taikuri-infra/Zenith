@@ -437,6 +437,23 @@ resource "helm_release" "falco" {
     value = "all"
   }
 
+  # --- Telegram alerts ---
+  set_sensitive {
+    name  = "falcosidekick.config.telegram.token"
+    value = var.telegram_bot_token
+  }
+
+  set {
+    name  = "falcosidekick.config.telegram.chatid"
+    value = var.telegram_chat_id
+    type  = "string"
+  }
+
+  set {
+    name  = "falcosidekick.config.telegram.minimumpriority"
+    value = "warning"
+  }
+
   set {
     name  = "resources.requests.cpu"
     value = "100m"

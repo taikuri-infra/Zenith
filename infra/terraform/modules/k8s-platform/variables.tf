@@ -303,6 +303,19 @@ variable "slack_webhook_url" {
   default     = ""
 }
 
+variable "telegram_bot_token" {
+  description = "Telegram bot token for Falco security alerts"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "telegram_chat_id" {
+  description = "Telegram chat ID for Falco security alerts"
+  type        = string
+  default     = ""
+}
+
 variable "enable_velero" {
   description = "Enable Velero cluster backups"
   type        = bool

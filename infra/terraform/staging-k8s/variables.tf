@@ -227,3 +227,18 @@ variable "environment" {
   type        = string
   default     = "staging"
 }
+
+# --- Telegram (Falco alerts) ---
+
+variable "telegram_bot_token" {
+  description = "Telegram bot token for Falco security alerts"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "telegram_chat_id" {
+  description = "Telegram chat ID for Falco security alerts"
+  type        = string
+  default     = ""
+}

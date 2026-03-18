@@ -188,4 +188,8 @@ module "platform" {
   # Data operators (standalone, not tied to enable_v3_operators)
   enable_redis_operator   = true
   enable_mongodb_operator = true
+
+  # Falco → Telegram alerts
+  telegram_bot_token = var.telegram_bot_token
+  telegram_chat_id   = var.telegram_chat_id
 }
