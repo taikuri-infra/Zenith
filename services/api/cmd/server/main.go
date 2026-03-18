@@ -528,6 +528,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	k8sProvisioner := services.NewK8sProvisionerAdapter(k8sClient)
 	msSvc := services.NewManagedServiceService(msRepo, k8sProvisioner, "zenith-apps")
 	msHandler.SetService(msSvc)
+	projectHandlerV2.SetManagedServiceDeleter(msRepo, msSvc)
 	envVarHandler.SetK8sClient(k8sClient)
 
 	// Image status + project deploy handlers are wired after harborClient is initialized (see below)

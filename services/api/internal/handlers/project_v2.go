@@ -10,17 +10,30 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// ManagedServiceDeleter cleans up K8s resources for managed services.
+type ManagedServiceDeleter interface {
+	DeleteManagedService(ctx context.Context, id string) error
+}
+
 // ProjectHandlerV2 handles DB-backed project CRUD (replaces legacy CRD-based ProjectHandler).
 type ProjectHandlerV2 struct {
 	projectRepo ports.ProjectRepository
 	appRepo     ports.AppRepository
+	msRepo      ports.ManagedServiceRepository
 	deployer    AppDeleter
+	msDeleter   ManagedServiceDeleter
 	onAppDeleted func(ctx context.Context, appID string)
 }
 
 // NewProjectHandlerV2 creates a new ProjectHandlerV2.
 func NewProjectHandlerV2(projectRepo ports.ProjectRepository, appRepo ports.AppRepository, deployer AppDeleter) *ProjectHandlerV2 {
 	return &ProjectHandlerV2{projectRepo: projectRepo, appRepo: appRepo, deployer: deployer}
+}
+
+// SetManagedServiceDeleter sets the managed service deleter for K8s cleanup on project delete.
+func (h *ProjectHandlerV2) SetManagedServiceDeleter(msRepo ports.ManagedServiceRepository, msDeleter ManagedServiceDeleter) {
+	h.msRepo = msRepo
+	h.msDeleter = msDeleter
 }
 
 // SetOnAppDeleted sets a callback invoked after an app within a project is deleted.
@@ -188,6 +201,18 @@ func (h *ProjectHandlerV2) Delete(c *fiber.Ctx) error {
 	}
 	if count <= 1 {
 		return NewBadRequest("cannot delete your only project")
+	}
+
+	// Cleanup K8s resources for all managed services in this project
+	if h.msRepo != nil && h.msDeleter != nil {
+		msList, err := h.msRepo.ListManagedServicesByProject(c.Context(), projectID)
+		if err == nil {
+			for i := range msList {
+				if err := h.msDeleter.DeleteManagedService(context.Background(), msList[i].ID); err != nil {
+					slog.Warn("failed to delete K8s resources for managed service", "name", msList[i].Name, "type", msList[i].ServiceType, "error", err)
+				}
+			}
+		}
 	}
 
 	// Cleanup K8s resources for all apps in this project
