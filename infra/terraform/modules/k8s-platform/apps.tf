@@ -135,3 +135,34 @@ resource "helm_release" "zenith_landing" {
   depends_on = [helm_release.zenith_platform]
 }
 
+# =============================================================================
+# Zenith Mission Control — Next.js admin dashboard (Zero Trust only)
+# =============================================================================
+
+resource "helm_release" "zenith_mc" {
+  name      = "zenith-mc"
+  chart     = var.chart_repository != "" ? "zenith-mc" : var.mc_chart_path
+  version   = var.chart_repository != "" ? var.chart_version : null
+  namespace = var.platform_namespace
+  wait      = false
+  timeout   = 300
+
+  repository          = var.chart_repository != "" ? var.chart_repository : null
+  repository_username = var.chart_repository != "" ? var.registry_username : null
+  repository_password = var.chart_repository != "" ? var.registry_password : null
+
+  values = [file(var.mc_values_file)]
+
+  set {
+    name  = "imagePullSecret"
+    value = var.registry_host != "" ? "harbor-registry" : ""
+  }
+
+  set {
+    name  = "imageRegistry"
+    value = var.registry_host != "" ? "${var.registry_host}/zenith-stage" : ""
+  }
+
+  depends_on = [helm_release.zenith_platform]
+}
+

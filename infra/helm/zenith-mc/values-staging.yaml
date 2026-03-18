@@ -5,13 +5,14 @@ image: zenith-mc:sha-e82f48a
 imageRegistry: ""  # set via ArgoCD/Terraform
 imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via ArgoCD/Terraform
-port: 3000
+port: 3100
 
 env:
   NEXT_PUBLIC_API_URL: "https://api.stage.freezenith.com"
   NEXT_PUBLIC_LANDING_URL: "https://stage.freezenith.com"
 
 ingress:
+  enabled: false
   hosts:
     - ms.stage.freezenith.com
   tlsSecret: staging-tls

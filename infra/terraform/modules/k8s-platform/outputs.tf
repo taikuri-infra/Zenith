@@ -18,6 +18,11 @@ output "landing_status" {
   value       = helm_release.zenith_landing.status
 }
 
+output "mc_status" {
+  description = "Zenith Mission Control release status"
+  value       = helm_release.zenith_mc.status
+}
+
 output "apisix_status" {
   description = "APISIX API Gateway release status"
   value       = var.enable_apisix ? helm_release.apisix[0].status : "disabled"

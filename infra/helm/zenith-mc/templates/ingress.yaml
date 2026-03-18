@@ -1,3 +1,4 @@
+{{- if .Values.ingress.enabled }}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -32,3 +33,4 @@ spec:
       services:
         - name: zenith-mc
           port: {{ .Values.port }}
+{{- end }}

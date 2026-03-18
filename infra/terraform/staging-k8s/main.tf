@@ -127,10 +127,12 @@ module "platform" {
   platform_chart_path = "${path.module}/../../helm/zenith-platform"
   api_chart_path      = "${path.module}/../../helm/zenith-api"
   landing_chart_path  = "${path.module}/../../helm/zenith-landing"
+  mc_chart_path       = "${path.module}/../../helm/zenith-mc"
   # Per-chart values files
   platform_values_file = "${path.module}/../../helm/zenith-platform/values-staging.yaml"
   api_values_file      = "${path.module}/../../helm/zenith-api/values-staging.yaml"
   landing_values_file  = "${path.module}/../../helm/zenith-landing/values-staging.yaml"
+  mc_values_file       = "${path.module}/../../helm/zenith-mc/values-staging.yaml"
 
   # Registry credentials (for OCI pull + imagePullSecret)
   registry_host          = var.registry_host
