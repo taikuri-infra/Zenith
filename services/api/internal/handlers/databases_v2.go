@@ -17,11 +17,12 @@ type DatabaseHandlerV2 struct {
 	dbSvc   *services.DatabaseService // nil when CNPG not configured (dev mode)
 	dbRepo  ports.DatabaseRepository
 	appRepo ports.AppRepository
+	msRepo  ports.ManagedServiceRepository // merged into ListByUser results
 }
 
 // NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
-func NewDatabaseHandlerV2(dbSvc *services.DatabaseService, dbRepo ports.DatabaseRepository, appRepo ports.AppRepository) *DatabaseHandlerV2 {
-	return &DatabaseHandlerV2{dbSvc: dbSvc, dbRepo: dbRepo, appRepo: appRepo}
+func NewDatabaseHandlerV2(dbSvc *services.DatabaseService, dbRepo ports.DatabaseRepository, appRepo ports.AppRepository, msRepo ports.ManagedServiceRepository) *DatabaseHandlerV2 {
+	return &DatabaseHandlerV2{dbSvc: dbSvc, dbRepo: dbRepo, appRepo: appRepo, msRepo: msRepo}
 }
 
 // fetchCredentials retrieves the password and connection string for a database.
@@ -187,7 +188,8 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 	}
 
 	switch input.Engine {
-	case entities.DatabaseEnginePostgres, entities.DatabaseEngineMySQL, entities.DatabaseEngineRedis:
+	case entities.DatabaseEnginePostgres, entities.DatabaseEngineMySQL, entities.DatabaseEngineRedis,
+		entities.DatabaseEngineMongoDB, entities.DatabaseEngineRabbitMQ:
 	default:
 		return fiber.NewError(fiber.StatusBadRequest, "unsupported engine: "+string(input.Engine))
 	}
@@ -268,6 +270,7 @@ func (h *DatabaseHandlerV2) DeleteStandalone(c *fiber.Ctx) error {
 }
 
 // ListByUser returns all databases for the authenticated user.
+// Merges both standalone UserDatabases and ManagedServices into a single list.
 // GET /api/v1/databases
 func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
@@ -284,10 +287,31 @@ func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	result := make([]dto.DatabaseInfo, len(dbs))
-	for i, db := range dbs {
-		result[i] = toDatabaseInfoV2(&db, "", "")
+	result := make([]dto.DatabaseInfo, 0, len(dbs))
+	for i := range dbs {
+		result = append(result, toDatabaseInfoV2(&dbs[i], "", ""))
 	}
+
+	// Also include managed services (provisioned via compose import)
+	if h.msRepo != nil {
+		var msList []entities.ManagedService
+		if projectID != "" {
+			msList, _ = h.msRepo.ListManagedServicesByProject(c.Context(), projectID)
+		} else {
+			msList, _ = h.msRepo.ListManagedServicesByUser(c.Context(), userID)
+		}
+		// Build a set of existing IDs to avoid duplicates
+		seen := make(map[string]bool, len(result))
+		for _, r := range result {
+			seen[r.ID] = true
+		}
+		for i := range msList {
+			if !seen[msList[i].ID] {
+				result = append(result, managedServiceToDatabaseInfo(&msList[i]))
+			}
+		}
+	}
+
 	return c.JSON(result)
 }
 
@@ -335,6 +359,26 @@ func envKeyForEngine(engine entities.DatabaseEngine) string {
 		return "KAFKA_BROKERS"
 	default:
 		return "DATABASE_URL"
+	}
+}
+
+// managedServiceToDatabaseInfo converts a ManagedService to DatabaseInfo so both
+// standalone databases and compose-provisioned services appear in the same list.
+func managedServiceToDatabaseInfo(ms *entities.ManagedService) dto.DatabaseInfo {
+	engine := entities.DatabaseEngine(ms.ServiceType) // ServiceType values match DatabaseEngine values
+	status := entities.DatabaseStatus(ms.Status)      // same mapping: provisioning, ready, error, deleting
+	return dto.DatabaseInfo{
+		ID:        ms.ID,
+		Name:      ms.Name,
+		Engine:    engine,
+		Host:      ms.InternalHost,
+		Port:      ms.Port,
+		DBName:    ms.DatabaseName,
+		DBUser:    ms.Username,
+		SizeMB:    ms.StorageGB * 1024,
+		MaxSizeMB: ms.StorageGB * 1024,
+		Status:    status,
+		CreatedAt: ms.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 }
 

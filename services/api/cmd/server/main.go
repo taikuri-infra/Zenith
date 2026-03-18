@@ -702,7 +702,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		slog.Info("CNPG not configured, metadata-only mode (dev)")
 	}
 
-	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo)
+	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo, msRepo)
 	appByID.Post("/databases", handlers.CheckLimit(planRepo, "databases", func(c *fiber.Ctx, userID string) (int, error) {
 		return dbRepo.CountDatabasesByUser(c.Context(), userID)
 	}), dbHandlerV2.Create)

@@ -487,9 +487,13 @@ func (s *ManagedServiceService) pollCNPGReady(msID, resourceName string) {
 
 // buildCNPGCluster returns an unstructured CNPG Cluster manifest.
 func buildCNPGCluster(name, namespace, version, user, password, dbName string, storageGB int) map[string]interface{} {
+	// Strip distro suffixes like -alpine, -bullseye, -bookworm from version
 	imageTag := version
+	for _, suffix := range []string{"-alpine", "-bullseye", "-bookworm", "-slim", "-debian"} {
+		imageTag = strings.TrimSuffix(imageTag, suffix)
+	}
 	if !strings.Contains(imageTag, ".") {
-		imageTag = version + ".6" // default to latest patch
+		imageTag = imageTag + ".6" // default to latest patch
 	}
 
 	return map[string]interface{}{

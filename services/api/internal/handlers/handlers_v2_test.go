@@ -304,7 +304,7 @@ func setupDatabaseTest() (*fiber.App, *handlers.DatabaseHandlerV2, ports.AppRepo
 	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
 	appRepo := memory.NewMemoryAppRepository()
 	dbRepo := memory.NewMemoryDatabaseRepository()
-	dbHandler := handlers.NewDatabaseHandlerV2(nil, dbRepo, appRepo)
+	dbHandler := handlers.NewDatabaseHandlerV2(nil, dbRepo, appRepo, nil)
 	return app, dbHandler, appRepo, dbRepo
 }
 
