@@ -66,6 +66,9 @@ export default function NewProjectPage() {
   // Exposure overrides: user can toggle backend services to public
   const [exposureOverrides, setExposureOverrides] = useState<Record<string, boolean>>({});
 
+  // Image URL overrides: for build-only services that need a Docker Hub image
+  const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({});
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
@@ -297,8 +300,8 @@ export default function NewProjectPage() {
       status[svc.name] = { state: "creating" };
       setDeployStatus({ ...status });
 
-      let imageUrl = svc.image || "";
-      if (svc.build_context && !imageUrl) {
+      let imageUrl = imageOverrides[svc.name] || svc.image || "";
+      if (!imageUrl && svc.build_context) {
         imageUrl = `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`;
       }
 
@@ -375,7 +378,7 @@ export default function NewProjectPage() {
       toast("error", "Some services failed to deploy.");
     }
     setDeploying(false);
-  }, [parseResult, projectId, name, api, toast, exposureOverrides, provisionedServices, addLog, waitForApp]);
+  }, [parseResult, projectId, name, api, toast, exposureOverrides, imageOverrides, provisionedServices, addLog, waitForApp]);
 
   return (
     <Shell>
@@ -557,11 +560,15 @@ export default function NewProjectPage() {
                     service={svc}
                     projectId={projectId}
                     isPublic={exposureOverrides[svc.name] ?? svc.is_public}
+                    imageOverride={imageOverrides[svc.name] || ""}
                     onToggleExposure={() =>
                       setExposureOverrides((prev) => ({
                         ...prev,
                         [svc.name]: !(prev[svc.name] ?? svc.is_public),
                       }))
+                    }
+                    onImageChange={(url) =>
+                      setImageOverrides((prev) => ({ ...prev, [svc.name]: url }))
                     }
                   />
                 ))}
@@ -863,12 +870,16 @@ function ServiceCard({
   service,
   projectId,
   isPublic,
+  imageOverride,
   onToggleExposure,
+  onImageChange,
 }: {
   service: ParsedService;
   projectId: string;
   isPublic: boolean;
+  imageOverride: string;
   onToggleExposure: () => void;
+  onImageChange: (url: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -945,8 +956,31 @@ function ServiceCard({
         </div>
       )}
 
-      {service.build_context && (
+      {service.build_context && !service.image && (
         <div className="mt-3">
+          <p className="mb-1 text-[11px] text-neutral-500">
+            Image URL <span className="text-red-400">*</span>
+            <span className="ml-1 text-neutral-600">(no image in compose, build-only)</span>
+          </p>
+          <input
+            type="text"
+            value={imageOverride}
+            onChange={(e) => onImageChange(e.target.value)}
+            placeholder="e.g. bablido/my-backend:latest"
+            className="w-full rounded bg-neutral-900 px-3 py-2 font-mono text-[11px] text-neutral-300 placeholder:text-neutral-600 border border-border focus:border-accent-500 focus:outline-none"
+          />
+        </div>
+      )}
+      {service.build_context && service.image && (
+        <div className="mt-3">
+          <p className="mb-1 text-[11px] text-neutral-500">Image:</p>
+          <code className="block rounded bg-neutral-900 px-3 py-2 font-mono text-[11px] text-neutral-300">
+            {service.image}
+          </code>
+        </div>
+      )}
+      {service.build_context && (
+        <div className="mt-2">
           <p className="mb-1 text-[11px] text-neutral-500">Push command:</p>
           <div className="flex items-center gap-2">
             <code className="flex-1 rounded bg-neutral-900 px-3 py-2 font-mono text-[11px] text-neutral-300">
