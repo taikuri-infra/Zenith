@@ -20,6 +20,20 @@ Return ONLY a JSON array of strings, no markdown, no explanation.
 Example: ["Line 2: 'services' is indented under 'version' — it should be at the root level (no indentation)","Line 8: port format should be 'HOST:CONTAINER' e.g. '8080:80'"]
 If the file looks valid, return: []`
 
+// ComposeFormatPrompt is used to fix and reformat broken docker-compose YAML.
+// Called when js-yaml fails to parse user input — AI returns the corrected YAML.
+const ComposeFormatPrompt = `You are a YAML formatting expert. The user pasted a docker-compose.yml that has indentation or syntax errors.
+Fix the YAML so it is valid and properly indented (2-space indent).
+Rules:
+- "services:", "volumes:", "networks:" must be at root level (no indentation)
+- Service names are indented 2 spaces under "services:"
+- Service properties (image, ports, environment, depends_on, volumes) are indented 4 spaces
+- Port mappings, env vars, depends_on items are indented 6 spaces with "- " prefix
+- Environment values as map (KEY: value) are indented 6 spaces
+- Keep all original values, do not add or remove anything
+- Return ONLY the corrected YAML, no markdown fences, no explanation
+If the YAML is already valid, return it unchanged with proper 2-space indentation.`
+
 // ErrorAnalysisSystemPrompt is used by AIErrorAnalyzer to diagnose app errors from logs.
 const ErrorAnalysisSystemPrompt = `You are a DevOps expert analyzing application error logs from a Kubernetes-hosted app.
 Analyze the provided log lines and return a JSON object with these fields:

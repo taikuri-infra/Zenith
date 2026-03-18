@@ -11,6 +11,7 @@ import type {
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useState, useCallback, useRef } from "react";
+import yaml from "js-yaml";
 import {
   ArrowLeft,
   ArrowRight,
@@ -139,22 +140,48 @@ export default function NewProjectPage() {
     }
   }, [name, composeContent, projectId, api, toast]);
 
-  // Format YAML: fix common indentation issues
-  const handleFormatYaml = useCallback(() => {
-    const lines = composeContent.split("\n");
-    // Simple fix: if "services:" is indented, dedent it and everything below
-    const formatted = lines.map((line) => {
-      // Remove leading spaces from top-level keys (version, services, volumes, networks)
-      if (/^\s+(version|services|volumes|networks):/.test(line)) {
-        return line.trimStart();
+  // Format YAML: parse and re-serialize for correct indentation
+  // Falls back to AI formatting if js-yaml can't parse
+  const handleFormatYaml = useCallback(async () => {
+    try {
+      const parsed = yaml.load(composeContent);
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("Not a valid YAML object");
       }
-      return line;
-    });
-    setComposeContent(formatted.join("\n"));
-    setParseErrors([]);
-    setAISuggestions([]);
-    toast("success", "YAML formatted");
-  }, [composeContent, toast]);
+      const formatted = yaml.dump(parsed, {
+        indent: 2,
+        lineWidth: -1,
+        noRefs: true,
+        sortKeys: false,
+        quotingType: '"',
+        forceQuotes: false,
+      });
+      setComposeContent(formatted);
+      setParseErrors([]);
+      setAISuggestions([]);
+      toast("success", "YAML formatted");
+    } catch {
+      // js-yaml failed — try AI-powered format
+      if (!projectId) {
+        toast("error", "Create a project first to use AI formatting");
+        return;
+      }
+      toast("info", "YAML has errors, using AI to fix...");
+      try {
+        const result = await api.composeImport.format(projectId, composeContent);
+        if (result.formatted) {
+          setComposeContent(result.formatted);
+          setParseErrors([]);
+          setAISuggestions([]);
+          toast("success", "YAML fixed by AI");
+        } else {
+          toast("error", "AI could not fix the YAML");
+        }
+      } catch {
+        toast("error", "AI formatting failed — check your YAML manually");
+      }
+    }
+  }, [composeContent, toast, projectId, api]);
 
   // Sync line numbers scroll with textarea
   const handleTextareaScroll = useCallback(() => {

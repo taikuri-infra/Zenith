@@ -144,3 +144,40 @@ func (h *ComposeHandler) ImportCompose(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// FormatCompose handles POST /projects/:projectId/format-compose
+// Uses AI to fix broken YAML that js-yaml can't parse.
+func (h *ComposeHandler) FormatCompose(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	if userID == "" {
+		return NewUnauthorized("authentication required")
+	}
+
+	projectID := c.Params("projectId")
+	project, err := h.projectRepo.GetProject(c.Context(), projectID)
+	if err != nil {
+		return NewNotFound("project not found")
+	}
+	if project.UserID != userID {
+		return NewForbidden("not your project")
+	}
+
+	var req importComposeRequest
+	if err := c.BodyParser(&req); err != nil {
+		return NewBadRequest("invalid request body")
+	}
+	if req.ComposeContent == "" {
+		return NewBadRequest("compose_content is required")
+	}
+
+	if h.aiValidator == nil {
+		return NewInternal("AI validator not configured")
+	}
+
+	formatted := h.aiValidator.FormatCompose(c.Context(), req.ComposeContent)
+	if formatted == "" {
+		return NewInternal("AI could not format the YAML")
+	}
+
+	return c.JSON(fiber.Map{"formatted": formatted})
+}
+

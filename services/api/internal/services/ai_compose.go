@@ -41,6 +41,21 @@ func (v *AIComposeValidator) ValidateCompose(ctx context.Context, composeContent
 	return suggestions
 }
 
+// FormatCompose uses AI to fix and reformat broken docker-compose YAML.
+// Returns the corrected YAML string. On error, returns empty string.
+func (v *AIComposeValidator) FormatCompose(ctx context.Context, composeContent string) string {
+	if v.aiClient == nil || !v.aiClient.IsEnabled() {
+		return ""
+	}
+
+	resp, err := v.aiClient.Complete(ctx, ComposeFormatPrompt, composeContent)
+	if err != nil || resp == nil {
+		return ""
+	}
+
+	return resp.Content
+}
+
 // ValidateComposeWithUsage performs AI-powered compose file analysis and returns usage info.
 func (v *AIComposeValidator) ValidateComposeWithUsage(ctx context.Context, composeContent string) ([]string, *AIResponse) {
 	if v.aiClient == nil || !v.aiClient.IsEnabled() {

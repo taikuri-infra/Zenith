@@ -634,6 +634,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Compose import + Managed services (under /projects/:projectId)
 	projectByID := projects.Group("/:projectId")
 	projectByID.Post("/import-compose", composeHandler.ImportCompose)
+	projectByID.Post("/format-compose", composeHandler.FormatCompose)
 	projectByID.Post("/managed-services", msHandler.Provision)
 	projectByID.Get("/managed-services", msHandler.List)
 	projectByID.Get("/managed-services/:msId", msHandler.Get)

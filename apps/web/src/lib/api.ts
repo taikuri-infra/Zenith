@@ -363,6 +363,11 @@ export const composeImport = {
       `/api/v1/projects/${projectId}/import-compose`,
       { method: "POST", body: JSON.stringify({ compose_content: composeContent }) }
     ),
+  format: (projectId: string, composeContent: string) =>
+    apiFetch<{ formatted: string }>(
+      `/api/v1/projects/${projectId}/format-compose`,
+      { method: "POST", body: JSON.stringify({ compose_content: composeContent }) }
+    ),
 };
 
 // ---- Enhanced Env Vars API (V2) ----

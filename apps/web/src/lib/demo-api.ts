@@ -1829,6 +1829,10 @@ export const demoApi = {
         ai_suggestions: ["Add health checks to your API service", "Consider adding resource limits"],
       };
     },
+    format: async () => {
+      await delay();
+      return { formatted: "" };
+    },
   },
   envVarsV2: {
     list: async () => {
