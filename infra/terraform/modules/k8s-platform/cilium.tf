@@ -61,6 +61,34 @@ resource "helm_release" "cilium" {
     value = "256Mi"
   }
 
+  # Prometheus metrics — agent
+  set {
+    name  = "prometheus.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "prometheus.serviceMonitor.enabled"
+    value = "true"
+  }
+
+  # Prometheus metrics — operator
+  set {
+    name  = "operator.prometheus.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "operator.prometheus.serviceMonitor.enabled"
+    value = "true"
+  }
+
+  # Hubble metrics
+  set {
+    name  = "hubble.metrics.serviceMonitor.enabled"
+    value = "true"
+  }
+
   # Resources — Hubble relay
   set {
     name  = "hubble.relay.resources.requests.cpu"

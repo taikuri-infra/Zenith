@@ -12,7 +12,7 @@ resource "helm_release" "prometheus_stack" {
   namespace        = "monitoring"
   create_namespace = true
   wait             = true
-  timeout          = 600
+  timeout          = 900
 
   set_sensitive {
     name  = "grafana.adminPassword"
@@ -111,6 +111,71 @@ resource "helm_release" "prometheus_stack" {
   set {
     name  = "grafana.grafana\\.ini.users.auto_assign_org_role"
     value = "Admin"
+  }
+
+  # --- Grafana plugins ---
+  # Infinity: query any REST API (Hetzner Cloud, etc.)
+  set {
+    name  = "grafana.plugins[0]"
+    value = "yesoreyeram-infinity-datasource"
+  }
+
+  # Cloudflare analytics
+  set {
+    name  = "grafana.plugins[1]"
+    value = "cloudflare-app"
+  }
+
+  # --- Loki datasource ---
+  set {
+    name  = "grafana.additionalDataSources[0].name"
+    value = "Loki"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].type"
+    value = "loki"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].url"
+    value = "http://loki.monitoring.svc.cluster.local:3100"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].access"
+    value = "proxy"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].isDefault"
+    value = "false"
+  }
+
+  # --- Tempo datasource ---
+  set {
+    name  = "grafana.additionalDataSources[1].name"
+    value = "Tempo"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].type"
+    value = "tempo"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].url"
+    value = "http://tempo.monitoring.svc.cluster.local:3100"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].access"
+    value = "proxy"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].isDefault"
+    value = "false"
   }
 
   depends_on = [kubernetes_priority_class.platform]
@@ -611,3 +676,69 @@ resource "kubernetes_manifest" "servicemonitor_velero" {
 
   depends_on = [helm_release.prometheus_stack, helm_release.velero]
 }
+
+# APISIX metrics (prometheus plugin exports on port 9091)
+resource "kubernetes_manifest" "servicemonitor_apisix" {
+  count = var.enable_apisix && var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "apisix"
+      namespace = "apisix"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "apisix-prometheus", interval = "30s", path = "/apisix/prometheus/metrics" },
+      ]
+      namespaceSelector = {
+        matchNames = ["apisix"]
+      }
+      selector = {
+        matchLabels = {
+          "app.kubernetes.io/name" = "apisix"
+        }
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack, helm_release.apisix]
+}
+
+# Falcosidekick metrics (prometheus on port 2810)
+resource "kubernetes_manifest" "servicemonitor_falco" {
+  count = var.enable_falco && var.enable_monitoring ? 1 : 0
+
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "falco"
+      namespace = "falco"
+      labels = {
+        release = "kube-prometheus-stack"
+      }
+    }
+    spec = {
+      endpoints = [
+        { port = "http", interval = "30s", path = "/metrics" },
+      ]
+      namespaceSelector = {
+        matchNames = ["falco"]
+      }
+      selector = {
+        matchLabels = {
+          "app.kubernetes.io/name" = "falcosidekick"
+        }
+      }
+    }
+  }
+
+  depends_on = [helm_release.prometheus_stack, helm_release.falco]
+}
+
+# Harbor metrics — ServiceMonitor created by Harbor Helm chart (metrics.serviceMonitor.enabled)

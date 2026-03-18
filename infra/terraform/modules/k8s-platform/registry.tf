@@ -84,6 +84,17 @@ resource "helm_release" "harbor" {
     value = "256Mi"
   }
 
+  # Metrics exporter
+  set {
+    name  = "metrics.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "metrics.serviceMonitor.enabled"
+    value = "true"
+  }
+
   set {
     name  = "priorityClassName"
     value = "platform"

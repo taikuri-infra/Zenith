@@ -511,6 +511,28 @@ resource "helm_release" "falco" {
     value = "warning"
   }
 
+  # Falco metrics for Prometheus scraping
+  set {
+    name  = "falco.metrics_enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "falco.metrics_interval"
+    value = "15s"
+  }
+
+  # Loki output for Falco events (logs → Loki for dashboard)
+  set {
+    name  = "falcosidekick.config.loki.hostport"
+    value = "http://loki.monitoring.svc.cluster.local:3100"
+  }
+
+  set {
+    name  = "falcosidekick.config.loki.minimumpriority"
+    value = "notice"
+  }
+
   # --- Custom Falco Rules ---
   values = [yamlencode({
     customRules = {

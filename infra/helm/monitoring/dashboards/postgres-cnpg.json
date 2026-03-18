@@ -1,11 +1,10 @@
 {
-  "uid": "zenith-postgres-cnpg",
-  "title": "PostgreSQL / CNPG",
-  "description": "Deep dive into CloudNativePG clusters: keycloak-pg, free-pg, zenith-postgres",
-  "tags": ["zenith", "practical"],
+  "uid": "postgres-cnpg",
+  "title": "CNPG PostgreSQL",
+  "tags": ["zenith", "postgres", "cnpg"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-1h", "to": "now" },
   "fiscalYearStartMonth": 0,
@@ -30,21 +29,24 @@
   "panels": [
     {
       "type": "row",
-      "title": "Cluster Health",
+      "title": "Health & Overview",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-      "id": 1,
+      "id": 100,
       "collapsed": false
     },
     {
       "type": "stat",
-      "title": "Instances Up",
-      "description": "Number of CNPG collector instances reporting",
+      "title": "Database Up",
+      "description": "CNPG collector status (1 = up, 0 = down)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
-      "id": 2,
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1,
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" }, "0": { "text": "DOWN", "color": "red" } } }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -60,112 +62,35 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto"
       },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(cnpg_collector_up{cluster=\"$cluster\"})",
-          "legendFormat": "Instances",
+          "expr": "min(cnpg_collector_up{cluster=\"$cluster\"})",
+          "legendFormat": "Health",
           "refId": "A"
         }
       ]
     },
     {
       "type": "stat",
-      "title": "Role",
-      "description": "0 = primary, 1 = replica",
+      "title": "Active Connections",
+      "description": "Total active backend connections",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
-      "id": 3,
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2,
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "mappings": [
-            { "type": "value", "options": { "0": { "text": "Primary", "color": "green" }, "1": { "text": "Replica", "color": "blue" } } }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "color": { "mode": "thresholds" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_collector_replica_mode{cluster=\"$cluster\"}",
-          "legendFormat": "{{ pod }}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "PostgreSQL Version",
-      "description": "PostgreSQL major version as reported by CNPG",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
-      "id": 4,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "blue", "value": null }
-            ]
-          },
-          "color": { "mode": "thresholds" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_collector_postgres_version{cluster=\"$cluster\"}",
-          "legendFormat": "PG Version",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "WAL Directory Size",
-      "description": "Size of the WAL directory on disk",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
-      "id": 5,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 536870912 },
-              { "color": "red", "value": 1073741824 }
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 90 }
             ]
           },
           "color": { "mode": "thresholds" }
@@ -183,102 +108,58 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_collector_pg_wal{cluster=\"$cluster\"}",
-          "legendFormat": "WAL Size",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "row",
-      "title": "Connections",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
-      "id": 6,
-      "collapsed": false
-    },
-    {
-      "type": "timeseries",
-      "title": "Active Backends",
-      "description": "Total active database connections",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 6 },
-      "id": 7,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 20,
-            "showPoints": "never",
-            "spanNulls": true,
-            "lineWidth": 2,
-            "gradientMode": "scheme",
-            "axisPlacement": "auto",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_backends_total{cluster=\"$cluster\"}",
-          "legendFormat": "{{ pod }}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Waiting Backends",
-      "description": "Backends waiting on locks",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 6 },
-      "id": 8,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 20,
-            "showPoints": "never",
-            "spanNulls": true,
-            "lineWidth": 2,
-            "gradientMode": "scheme",
-            "axisPlacement": "auto",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_backends_waiting_total{cluster=\"$cluster\"}",
-          "legendFormat": "{{ pod }}",
+          "expr": "sum(cnpg_backends_total{cluster=\"$cluster\"})",
+          "legendFormat": "Connections",
           "refId": "A"
         }
       ]
     },
     {
       "type": "stat",
-      "title": "Max TX Duration",
-      "description": "Longest running transaction duration",
+      "title": "Database Size",
+      "description": "Total database size on disk",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 6 },
-      "id": 9,
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1073741824 },
+              { "color": "red", "value": 5368709120 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(cnpg_pg_database_size_bytes{cluster=\"$cluster\"})",
+          "legendFormat": "Total Size",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Longest Transaction",
+      "description": "Duration of the longest running transaction",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 12,
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -312,207 +193,12 @@
       ]
     },
     {
-      "type": "row",
-      "title": "Database Size & Performance",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
-      "id": 10,
-      "collapsed": false
-    },
-    {
-      "type": "timeseries",
-      "title": "Database Size",
-      "description": "Total database size on disk",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
-      "id": 11,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 15,
-            "showPoints": "never",
-            "spanNulls": true,
-            "lineWidth": 2,
-            "gradientMode": "scheme",
-            "axisPlacement": "auto",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_pg_database_size_bytes{cluster=\"$cluster\"}",
-          "legendFormat": "{{ datname }}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Transactions per Second",
-      "description": "Committed transactions rate",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
-      "id": 12,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 15,
-            "showPoints": "never",
-            "spanNulls": true,
-            "lineWidth": 2,
-            "gradientMode": "scheme",
-            "axisPlacement": "auto",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_xact_commit{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "commits {{ datname }}",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_xact_rollback{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "rollbacks {{ datname }}",
-          "refId": "B"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Row Operations Rate",
-      "description": "Rows returned, fetched, inserted, updated, deleted per second",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
-      "id": 13,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "lineWidth": 1,
-            "gradientMode": "scheme",
-            "axisPlacement": "auto",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_tup_returned{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "returned",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_tup_fetched{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "fetched",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_tup_inserted{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "inserted",
-          "refId": "C"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_tup_updated{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "updated",
-          "refId": "D"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_tup_deleted{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "deleted",
-          "refId": "E"
-        }
-      ]
-    },
-    {
-      "type": "row",
-      "title": "Replication & Backup",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
-      "id": 14,
-      "collapsed": false
-    },
-    {
       "type": "stat",
-      "title": "Active Replication Slots",
-      "description": "Number of active replication slots",
+      "title": "Replication Lag",
+      "description": "Replication lag in seconds (0 for primary-only clusters)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 23 },
-      "id": 15,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "blue", "value": null }
-            ]
-          },
-          "color": { "mode": "thresholds" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(cnpg_pg_replication_slots_active{cluster=\"$cluster\"}) OR vector(0)",
-          "legendFormat": "Slots",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "Last Backup Age",
-      "description": "Time since the last available backup",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 23 },
-      "id": 16,
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 7,
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -520,8 +206,8 @@
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 86400 },
-              { "color": "red", "value": 172800 }
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
             ]
           },
           "color": { "mode": "thresholds" }
@@ -533,36 +219,34 @@
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "value",
-        "graphMode": "none",
+        "graphMode": "area",
         "justifyMode": "auto"
       },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "time() - max(cnpg_collector_last_available_backup_timestamp{cluster=\"$cluster\"})",
-          "legendFormat": "Backup Age",
+          "expr": "max(cnpg_pg_replication_lag{cluster=\"$cluster\"}) OR vector(0)",
+          "legendFormat": "Lag",
           "refId": "A"
         }
       ]
     },
     {
       "type": "stat",
-      "title": "WAL Archiving OK",
-      "description": "1 if WAL archiving is working, 0 if failed",
+      "title": "Waiting Backends",
+      "description": "Number of backends waiting on locks",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 23 },
-      "id": 17,
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 15,
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "mappings": [
-            { "type": "value", "options": { "1": { "text": "OK", "color": "green" }, "0": { "text": "FAIL", "color": "red" } } }
-          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
             ]
           },
           "color": { "mode": "thresholds" }
@@ -573,76 +257,140 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none",
+        "colorMode": "value",
+        "graphMode": "area",
         "justifyMode": "auto"
       },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_collector_wal_archiving_info{cluster=\"$cluster\"}",
-          "legendFormat": "WAL Archive",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Replication Lag",
-      "description": "Replication lag in bytes between sent and written WAL",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 23 },
-      "id": 18,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 20,
-            "showPoints": "never",
-            "spanNulls": true,
-            "lineWidth": 2,
-            "gradientMode": "scheme",
-            "axisPlacement": "auto",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_pg_stat_replication_sent_diff_bytes{cluster=\"$cluster\"} - cnpg_pg_stat_replication_write_diff_bytes{cluster=\"$cluster\"}",
-          "legendFormat": "{{ application_name }}",
+          "expr": "sum(cnpg_backends_waiting_total{cluster=\"$cluster\"}) OR vector(0)",
+          "legendFormat": "Waiting",
           "refId": "A"
         }
       ]
     },
     {
       "type": "row",
-      "title": "Cache & Buffer",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
-      "id": 19,
+      "title": "Throughput",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Transactions / sec",
+      "description": "Committed and rolled-back transactions per second",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 4,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_xact_commit{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "commits/s",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_xact_rollback{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "rollbacks/s",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rows Inserted / Updated / Deleted",
+      "description": "Row mutation rates across all databases",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 5,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_tup_inserted{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "inserted/s",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_tup_updated{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "updated/s",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_tup_deleted{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "deleted/s",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Cache & I/O",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 102,
       "collapsed": false
     },
     {
       "type": "timeseries",
       "title": "Cache Hit Ratio",
-      "description": "Percentage of reads served from shared buffer cache (higher is better)",
+      "description": "Proportion of reads served from shared buffer cache (target > 99%)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
-      "id": 20,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
+      "id": 6,
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
           "min": 0,
           "max": 1,
+          "decimals": 4,
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "smooth",
@@ -665,19 +413,317 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "cnpg_pg_stat_database_blks_hit{cluster=\"$cluster\"} / (cnpg_pg_stat_database_blks_hit{cluster=\"$cluster\"} + cnpg_pg_stat_database_blks_read{cluster=\"$cluster\"})",
-          "legendFormat": "{{ datname }}",
+          "expr": "sum(cnpg_pg_stat_database_blks_hit{cluster=\"$cluster\"}) / (sum(cnpg_pg_stat_database_blks_hit{cluster=\"$cluster\"}) + sum(cnpg_pg_stat_database_blks_read{cluster=\"$cluster\"}))",
+          "legendFormat": "hit ratio",
           "refId": "A"
         }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Temp Files & Bytes",
-      "description": "Temporary files created and bytes written",
+      "title": "Buffer Checkpoint / Clean / Backend Writes",
+      "description": "Buffers written by checkpointer, background writer, and backends",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
-      "id": 21,
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
+      "id": 14,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "normal" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_bgwriter_buffers_checkpoint{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "checkpoint",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_bgwriter_buffers_clean{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "bgwriter clean",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_bgwriter_buffers_backend{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "backend",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rows Fetched / Returned",
+      "description": "Rows fetched (by index) vs returned (by seq scan) per second",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
+      "id": 16,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_tup_fetched{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "fetched/s",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_tup_returned{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "returned/s",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "WAL & Replication",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 103,
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "WAL Archiving Success / Failure",
+      "description": "Rate of successfully archived vs failed WAL segments",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "id": 8,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "failed" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "archived" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_archiver_archived_count{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "archived",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_archiver_failed_count{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "failed",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Replication Lag",
+      "description": "Replication lag over time (seconds behind primary)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "id": 17,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "cnpg_pg_replication_lag{cluster=\"$cluster\"}",
+          "legendFormat": "{{ pod }}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sequential vs Index Scans",
+      "description": "Total sequential scans vs index scans across all user tables",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "id": 13,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "seq scans" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "idx scans" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_user_tables_seq_scan{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "seq scans",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_user_tables_idx_scan{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "idx scans",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Maintenance & Issues",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 104,
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Dead Tuples (Needs Vacuum)",
+      "description": "Dead tuples per table - high values indicate vacuum is needed",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 33 },
+      "id": 9,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "topk(10, cnpg_pg_stat_user_tables_n_dead_tup{cluster=\"$cluster\"})",
+          "legendFormat": "{{ relname }}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Temp Files & Bytes (Spilling to Disk)",
+      "description": "Temporary files/bytes created when queries exceed work_mem",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 33 },
+      "id": 10,
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -700,7 +746,10 @@
           },
           {
             "matcher": { "id": "byRegexp", "options": ".*files.*" },
-            "properties": [{ "id": "unit", "value": "short" }, { "id": "custom.axisPlacement", "value": "right" }]
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "custom.axisPlacement", "value": "right" }
+            ]
           }
         ]
       },
@@ -711,14 +760,67 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_temp_bytes{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "temp bytes {{ datname }}",
+          "expr": "sum(rate(cnpg_pg_stat_database_temp_bytes{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "temp bytes/s",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(cnpg_pg_stat_database_temp_files{cluster=\"$cluster\"}[5m])",
-          "legendFormat": "temp files {{ datname }}",
+          "expr": "sum(rate(cnpg_pg_stat_database_temp_files{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "temp files/s",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Deadlocks & Conflicts",
+      "description": "Deadlocks and query conflicts (replica recovery conflicts)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 33 },
+      "id": 11,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineWidth": 2,
+            "gradientMode": "scheme",
+            "axisPlacement": "auto",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "deadlocks" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "conflicts" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_deadlocks{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "deadlocks",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(cnpg_pg_stat_database_conflicts{cluster=\"$cluster\"}[5m]))",
+          "legendFormat": "conflicts",
           "refId": "B"
         }
       ]

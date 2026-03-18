@@ -1,11 +1,11 @@
 {
-  "uid": "zenith-apisix",
-  "title": "APISIX API Gateway",
-  "description": "APISIX gateway traffic, latency, errors, and connection metrics",
-  "tags": ["zenith", "apisix", "gateway"],
+  "uid": "apisix",
+  "title": "APISIX Gateway",
+  "description": "APISIX gateway traffic, latency, errors, connections, and etcd health",
+  "tags": ["zenith", "apisix", "gateway", "etcd"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": { "from": "now-1h", "to": "now" },
   "fiscalYearStartMonth": 0,
@@ -16,7 +16,7 @@
   "panels": [
     {
       "type": "row",
-      "title": "Traffic Overview",
+      "title": "Overview",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 1,
       "collapsed": false
@@ -26,7 +26,7 @@
       "title": "Requests / sec",
       "description": "Total HTTP request rate across all routes",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
       "id": 2,
       "fieldConfig": {
         "defaults": {
@@ -55,7 +55,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(apisix_http_requests_total[1m]))",
+          "expr": "sum(rate(apisix_http_status[5m]))",
           "legendFormat": "req/s",
           "refId": "A"
         }
@@ -64,9 +64,9 @@
     {
       "type": "stat",
       "title": "Active Connections",
-      "description": "Current active HTTP connections to APISIX",
+      "description": "Current active nginx connections",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
       "id": 3,
       "fieldConfig": {
         "defaults": {
@@ -103,9 +103,9 @@
     {
       "type": "stat",
       "title": "Error Rate %",
-      "description": "Percentage of 5xx responses out of total requests",
+      "description": "5xx responses as percentage of total requests",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
       "id": 4,
       "fieldConfig": {
         "defaults": {
@@ -144,12 +144,52 @@
       ]
     },
     {
+      "type": "gauge",
+      "title": "P95 Request Latency",
+      "description": "95th percentile total request latency",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 5,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "max": 5000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 200 },
+              { "color": "orange", "value": 500 },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(apisix_http_latency_bucket{type=\"request\"}[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "type": "stat",
       "title": "Bandwidth In",
       "description": "Ingress bandwidth rate",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
-      "id": 5,
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 6,
       "fieldConfig": {
         "defaults": {
           "unit": "Bps",
@@ -187,8 +227,8 @@
       "title": "Bandwidth Out",
       "description": "Egress bandwidth rate",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
-      "id": 6,
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 7,
       "fieldConfig": {
         "defaults": {
           "unit": "Bps",
@@ -222,58 +262,18 @@
       ]
     },
     {
-      "type": "gauge",
-      "title": "P95 Latency",
-      "description": "95th percentile request latency",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
-      "id": 7,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "min": 0,
-          "max": 5000,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 200 },
-              { "color": "orange", "value": 500 },
-              { "color": "red", "value": 1000 }
-            ]
-          },
-          "color": { "mode": "thresholds" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "orientation": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(apisix_http_latency_bucket[5m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "A"
-        }
-      ]
-    },
-    {
       "type": "row",
-      "title": "HTTP Status Breakdown",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "title": "HTTP Status & Errors",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
       "id": 8,
       "collapsed": false
     },
     {
       "type": "timeseries",
       "title": "HTTP Status Rate",
-      "description": "Rate of HTTP responses grouped by status class (2xx, 4xx, 5xx)",
+      "description": "Rate of HTTP responses grouped by status class",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 7 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "id": 9,
       "fieldConfig": {
         "defaults": {
@@ -293,26 +293,24 @@
           "color": { "mode": "palette-classic" },
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
+            "steps": [{ "color": "green", "value": null }]
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byRegexp", "options": "2xx" },
+            "matcher": { "id": "byName", "options": "2xx" },
             "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
           },
           {
-            "matcher": { "id": "byRegexp", "options": "3xx" },
+            "matcher": { "id": "byName", "options": "3xx" },
             "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
           },
           {
-            "matcher": { "id": "byRegexp", "options": "4xx" },
+            "matcher": { "id": "byName", "options": "4xx" },
             "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }]
           },
           {
-            "matcher": { "id": "byRegexp", "options": "5xx" },
+            "matcher": { "id": "byName", "options": "5xx" },
             "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
           }
         ]
@@ -320,74 +318,6 @@
       "options": {
         "tooltip": { "mode": "multi", "sort": "desc" },
         "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum", "mean", "lastNotNull"] }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(apisix_http_status{code=~\"2..\"}[1m]))",
-          "legendFormat": "2xx",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(apisix_http_status{code=~\"3..\"}[1m]))",
-          "legendFormat": "3xx",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(apisix_http_status{code=~\"4..\"}[1m]))",
-          "legendFormat": "4xx",
-          "refId": "C"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(apisix_http_status{code=~\"5..\"}[1m]))",
-          "legendFormat": "5xx",
-          "refId": "D"
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "Status Code Distribution",
-      "description": "Current distribution of response status codes",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 7 },
-      "id": 10,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "color": { "mode": "palette-classic" }
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byRegexp", "options": "2xx" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
-          },
-          {
-            "matcher": { "id": "byRegexp", "options": "4xx" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }]
-          },
-          {
-            "matcher": { "id": "byRegexp", "options": "5xx" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
-          }
-        ]
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "horizontal",
-        "textMode": "value_and_name",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto"
       },
       "targets": [
         {
@@ -417,18 +347,82 @@
       ]
     },
     {
+      "type": "timeseries",
+      "title": "Error Rate % Over Time",
+      "description": "5xx and 4xx error rates as percentage of total traffic",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 10,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "gradientMode": "scheme",
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "scaleDistribution": { "type": "linear" },
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "5xx %" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "4xx %" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(sum(rate(apisix_http_status{code=~\"5..\"}[5m])) / sum(rate(apisix_http_status[5m]))) * 100 or vector(0)",
+          "legendFormat": "5xx %",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(sum(rate(apisix_http_status{code=~\"4..\"}[5m])) / sum(rate(apisix_http_status[5m]))) * 100 or vector(0)",
+          "legendFormat": "4xx %",
+          "refId": "B"
+        }
+      ]
+    },
+    {
       "type": "row",
       "title": "Latency",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
       "id": 11,
       "collapsed": false
     },
     {
       "type": "timeseries",
-      "title": "Request Latency Percentiles",
-      "description": "HTTP request latency at p50, p95, and p99",
+      "title": "Request Latency p50 / p95 / p99",
+      "description": "End-to-end request latency percentiles (type=request)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "id": 12,
       "fieldConfig": {
         "defaults": {
@@ -477,19 +471,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(apisix_http_latency_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(apisix_http_latency_bucket{type=\"request\"}[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(apisix_http_latency_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(apisix_http_latency_bucket{type=\"request\"}[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(apisix_http_latency_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(apisix_http_latency_bucket{type=\"request\"}[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -497,10 +491,10 @@
     },
     {
       "type": "timeseries",
-      "title": "Upstream Response Time",
-      "description": "Latency between APISIX and upstream backends (p50, p95, p99)",
+      "title": "Upstream Latency p95",
+      "description": "Latency between APISIX and upstream backends (type=upstream)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "id": 13,
       "fieldConfig": {
         "defaults": {
@@ -570,7 +564,7 @@
     {
       "type": "row",
       "title": "Bandwidth & Connections",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
       "id": 14,
       "collapsed": false
     },
@@ -579,7 +573,7 @@
       "title": "Bandwidth (Ingress / Egress)",
       "description": "Network bandwidth through APISIX gateway",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 25 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
       "id": 15,
       "fieldConfig": {
         "defaults": {
@@ -599,9 +593,7 @@
           "color": { "mode": "palette-classic" },
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
+            "steps": [{ "color": "green", "value": null }]
           }
         },
         "overrides": [
@@ -636,10 +628,10 @@
     },
     {
       "type": "timeseries",
-      "title": "Nginx Connections",
+      "title": "Nginx Connections by State",
       "description": "APISIX nginx connection states over time",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 25 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "id": 16,
       "fieldConfig": {
         "defaults": {
@@ -652,28 +644,26 @@
             "gradientMode": "scheme",
             "showPoints": "never",
             "spanNulls": true,
-            "stacking": { "mode": "none", "group": "A" },
+            "stacking": { "mode": "normal", "group": "A" },
             "axisPlacement": "auto",
             "scaleDistribution": { "type": "linear" }
           },
           "color": { "mode": "palette-classic" },
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
+            "steps": [{ "color": "green", "value": null }]
           }
         },
         "overrides": []
       },
       "options": {
         "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] }
       },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(apisix_nginx_http_current_connections) by (state)",
+          "expr": "sum by (state) (apisix_nginx_http_current_connections)",
           "legendFormat": "{{ state }}",
           "refId": "A"
         }
@@ -682,7 +672,7 @@
     {
       "type": "row",
       "title": "Per-Route Analysis",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
       "id": 17,
       "collapsed": false
     },
@@ -691,7 +681,7 @@
       "title": "Top 10 Routes by Request Rate",
       "description": "Highest traffic routes by requests per second",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 34 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
       "id": 18,
       "fieldConfig": {
         "defaults": {
@@ -711,9 +701,7 @@
           "color": { "mode": "palette-classic" },
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
+            "steps": [{ "color": "green", "value": null }]
           }
         },
         "overrides": []
@@ -725,128 +713,183 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "topk(10, sum(rate(apisix_http_status[5m])) by (route))",
-          "legendFormat": "{{ route }}",
+          "expr": "topk(10, sum by (matched_uri) (rate(apisix_http_status[5m])))",
+          "legendFormat": "{{ matched_uri }}",
           "refId": "A"
         }
       ]
     },
     {
-      "type": "table",
-      "title": "Route Error Breakdown",
-      "description": "Per-route error counts (4xx and 5xx) in the selected time range",
+      "type": "timeseries",
+      "title": "Top 10 Routes by Error Rate",
+      "description": "Routes with highest 5xx error rates",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
       "id": 19,
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "reqps",
           "custom": {
-            "align": "auto",
-            "cellOptions": { "type": "auto" },
-            "inspect": false
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "gradientMode": "scheme",
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "mode": "normal", "group": "A" },
+            "axisPlacement": "auto",
+            "scaleDistribution": { "type": "linear" }
           },
+          "color": { "mode": "palette-classic" },
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 10 },
-              { "color": "red", "value": 100 }
-            ]
-          },
-          "color": { "mode": "thresholds" }
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Value" },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": { "type": "color-text" }
-              }
-            ]
+            "steps": [{ "color": "green", "value": null }]
           }
-        ]
+        },
+        "overrides": []
       },
       "options": {
-        "showHeader": true,
-        "sortBy": [{ "displayName": "Value", "desc": true }],
-        "cellHeight": "sm"
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum", "lastNotNull"] }
       },
-      "transformations": [
-        {
-          "id": "reduce",
-          "options": { "reducers": ["sum"] }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": { "Time": true },
-            "includeByName": {},
-            "indexByName": {}
-          }
-        }
-      ],
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by (route, code) (increase(apisix_http_status{code=~\"[45]..\" }[1h]))",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "",
+          "expr": "topk(10, sum by (matched_uri) (rate(apisix_http_status{code=~\"5..\"}[5m])))",
+          "legendFormat": "{{ matched_uri }}",
           "refId": "A"
         }
       ]
     },
     {
       "type": "row",
-      "title": "Error Rate Over Time",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "title": "etcd Health",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
       "id": 20,
       "collapsed": false
     },
     {
-      "type": "timeseries",
-      "title": "Error Rate % Over Time",
-      "description": "5xx error rate as a percentage of total traffic",
+      "type": "stat",
+      "title": "etcd Reachable",
+      "description": "Whether APISIX can reach its etcd backend (1 = reachable)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 43 },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 42 },
       "id": 21,
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "decimals": 2,
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } },
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "apisix_etcd_reachable",
+          "legendFormat": "etcd",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "etcd Modify Index",
+      "description": "Current etcd modify index (config version counter)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 42 },
+      "id": 22,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max(apisix_etcd_modify_indexes)",
+          "legendFormat": "index",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "etcd Request Latency",
+      "description": "etcd request duration p50 / p95 / p99",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 42 },
+      "id": 23,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "fillOpacity": 20,
-            "gradientMode": "scheme",
+            "fillOpacity": 10,
+            "gradientMode": "none",
             "showPoints": "never",
             "spanNulls": true,
             "stacking": { "mode": "none", "group": "A" },
             "axisPlacement": "auto",
-            "scaleDistribution": { "type": "linear" },
-            "thresholdsStyle": { "mode": "line+area" }
+            "scaleDistribution": { "type": "linear" }
           },
           "color": { "mode": "palette-classic" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "transparent", "value": null },
-              { "color": "red", "value": 5 }
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 0.5 }
             ]
-          },
-          "min": 0
+          }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "5xx %" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+            "matcher": { "id": "byName", "options": "p50" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
           },
           {
-            "matcher": { "id": "byName", "options": "4xx %" },
+            "matcher": { "id": "byName", "options": "p95" },
             "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p99" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
           }
         ]
       },
@@ -857,15 +900,129 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "(sum(rate(apisix_http_status{code=~\"5..\"}[5m])) / sum(rate(apisix_http_status[5m]))) * 100 or vector(0)",
-          "legendFormat": "5xx %",
+          "expr": "histogram_quantile(0.50, sum(rate(etcd_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "(sum(rate(apisix_http_status{code=~\"4..\"}[5m])) / sum(rate(apisix_http_status[5m]))) * 100 or vector(0)",
-          "legendFormat": "4xx %",
+          "expr": "histogram_quantile(0.95, sum(rate(etcd_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
           "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(etcd_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "etcd Requests & Errors",
+      "description": "etcd total requests vs errors over time",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 42 },
+      "id": 24,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "scaleDistribution": { "type": "linear" }
+          },
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Requests" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Errors" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum", "lastNotNull"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(etcd_requests_total[5m]))",
+          "legendFormat": "Requests",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(etcd_request_errors_total[5m]))",
+          "legendFormat": "Errors",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Shared Memory",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 50 },
+      "id": 25,
+      "collapsed": false
+    },
+    {
+      "type": "bargauge",
+      "title": "Shared Dict Usage",
+      "description": "Lua shared dictionary memory usage (capacity vs used)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 51 },
+      "id": 26,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.7 },
+              { "color": "orange", "value": 0.85 },
+              { "color": "red", "value": 0.95 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "minVizWidth": 8,
+        "minVizHeight": 16
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(apisix_shared_dict_capacity_bytes - apisix_shared_dict_free_space_bytes) / apisix_shared_dict_capacity_bytes",
+          "legendFormat": "{{ name }}",
+          "refId": "A"
         }
       ]
     }

@@ -58,9 +58,40 @@ resource "helm_release" "apisix" {
   }
 
   # Plugins (must be a YAML array, not object)
+  # plugin_attr configures prometheus to export metrics on port 9091
   values = [yamlencode({
     plugins = ["jwt-auth", "cors", "limit-count", "openid-connect", "opentelemetry", "prometheus", "uri-blocker", "ua-restriction", "referer-restriction"]
+    plugin_attr = {
+      prometheus = {
+        export_addr = {
+          ip   = "0.0.0.0"
+          port = 9091
+        }
+      }
+    }
+    extPluginEvents = []
   })]
+
+  # Expose prometheus metrics port
+  set {
+    name  = "extraPorts[0].name"
+    value = "apisix-prometheus"
+  }
+
+  set {
+    name  = "extraPorts[0].containerPort"
+    value = "9091"
+  }
+
+  set {
+    name  = "extraPorts[0].servicePort"
+    value = "9091"
+  }
+
+  set {
+    name  = "extraPorts[0].protocol"
+    value = "TCP"
+  }
 
   # Resources
   set {
