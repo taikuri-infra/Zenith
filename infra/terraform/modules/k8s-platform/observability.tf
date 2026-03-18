@@ -117,6 +117,37 @@ resource "helm_release" "prometheus_stack" {
 }
 
 # =============================================================================
+# Grafana Dashboards — Auto-provisioned via sidecar (label: grafana_dashboard=1)
+# =============================================================================
+
+locals {
+  dashboard_files = fileset("${path.module}/../../../helm/monitoring/dashboards", "*.json")
+}
+
+resource "kubernetes_config_map_v1" "grafana_dashboards" {
+  for_each = var.enable_monitoring ? { for f in local.dashboard_files : trimsuffix(f, ".json") => f } : {}
+
+  metadata {
+    name      = "zenith-dashboard-${each.key}"
+    namespace = "monitoring"
+    labels = {
+      grafana_dashboard                = "1"
+      "app.kubernetes.io/part-of"      = "zenith"
+      "app.kubernetes.io/component"    = "monitoring"
+    }
+    annotations = {
+      grafana_folder = "Zenith"
+    }
+  }
+
+  data = {
+    "${each.value}" = file("${path.module}/../../../helm/monitoring/dashboards/${each.value}")
+  }
+
+  depends_on = [helm_release.prometheus_stack]
+}
+
+# =============================================================================
 # Loki — Log Aggregation (5.17)
 # =============================================================================
 
