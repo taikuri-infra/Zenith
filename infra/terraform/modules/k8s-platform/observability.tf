@@ -148,6 +148,11 @@ resource "helm_release" "prometheus_stack" {
   }
 
   set {
+    name  = "grafana.additionalDataSources[0].uid"
+    value = "loki"
+  }
+
+  set {
     name  = "grafana.additionalDataSources[0].isDefault"
     value = "false"
   }
@@ -171,6 +176,11 @@ resource "helm_release" "prometheus_stack" {
   set {
     name  = "grafana.additionalDataSources[1].access"
     value = "proxy"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].uid"
+    value = "tempo"
   }
 
   set {
