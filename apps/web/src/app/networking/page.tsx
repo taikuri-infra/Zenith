@@ -5,15 +5,7 @@ import { Modal } from "@/components/modal";
 import { useEffect, useState, useCallback } from "react";
 import { getApi } from "@/lib/get-api";
 
-interface AppInfo {
-  id: string;
-  name: string;
-  subdomain?: string;
-  app_type: string;
-  exposure: string;
-  port: number;
-  status: string;
-}
+import type { DeployApp } from "@/lib/api";
 
 interface Domain {
   domain: string;
@@ -34,7 +26,8 @@ export default function NetworkingPage() {
   const loadDomains = useCallback(async () => {
     setLoading(true);
     try {
-      const apps: AppInfo[] = await api.appsDeploy.list();
+      const resp = await api.appsDeploy.list();
+      const apps: DeployApp[] = resp.items;
       // Build domains from deployed apps that have a subdomain
       const appDomains: Domain[] = apps
         .filter((a) => a.subdomain && a.status !== "deleted")
