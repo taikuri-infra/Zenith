@@ -85,6 +85,14 @@ module "tunnel" {
       subdomain = "temporal-stage"
       service   = "http://temporal-web.temporal.svc.cluster.local:8080"
     }
+    policy_reporter = {
+      subdomain = "kyverno-stage"
+      service   = "http://policy-reporter-ui.kyverno.svc.cluster.local:8080"
+    }
+    mc = {
+      subdomain = "mc-stage"
+      service   = "http://zenith-mc.zenith-staging.svc.cluster.local:3100"
+    }
   }
 
   access_emails = var.cloudflare_access_emails
