@@ -278,6 +278,12 @@ variable "kyverno_version" {
   default     = "3.7.1"
 }
 
+variable "cosign_public_key" {
+  description = "Cosign public key for image signature verification (PEM format)"
+  type        = string
+  default     = ""
+}
+
 variable "enable_falco" {
   description = "Enable Falco runtime security"
   type        = bool
@@ -288,6 +294,13 @@ variable "falco_version" {
   description = "Falco chart version"
   type        = string
   default     = "4.18.0"
+}
+
+variable "slack_webhook_url" {
+  description = "Slack webhook URL for Falco security alerts"
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "enable_velero" {
@@ -529,16 +542,28 @@ variable "keycloak_operator_version" {
   default     = "26.0.7"
 }
 
+variable "enable_redis_operator" {
+  description = "Deploy Redis Operator (OpsTree) for managed Redis instances"
+  type        = bool
+  default     = false
+}
+
 variable "redis_operator_version" {
-  description = "Redis Operator (Spotahome) Helm chart version"
+  description = "Redis Operator Helm chart version"
   type        = string
-  default     = "3.3.1"
+  default     = "0.18.0"
+}
+
+variable "enable_mongodb_operator" {
+  description = "Deploy Percona MongoDB Operator for managed MongoDB instances"
+  type        = bool
+  default     = false
 }
 
 variable "mongodb_operator_version" {
   description = "Percona MongoDB Operator Helm chart version"
   type        = string
-  default     = "1.17.0"
+  default     = "1.18.0"
 }
 
 variable "nats_version" {
@@ -557,4 +582,12 @@ variable "strimzi_version" {
   description = "Strimzi Kafka Operator Helm chart version"
   type        = string
   default     = "0.44.0"
+}
+
+# --- Cilium CNI ---
+
+variable "cilium_version" {
+  description = "Cilium Helm chart version"
+  type        = string
+  default     = "1.16.5"
 }

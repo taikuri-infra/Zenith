@@ -65,9 +65,9 @@ module "tunnel" {
       subdomain = "alerts-stage"
       service   = "http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093"
     }
-    mission_control = {
-      subdomain = "mc-stage"
-      service   = "http://zenith-mc-demo.zenith-staging.svc.cluster.local:3100"
+    hubble = {
+      subdomain = "hubble-stage"
+      service   = "http://hubble-ui.kube-system.svc.cluster.local:80"
     }
     argocd = {
       subdomain = "argocd-stage"
@@ -77,7 +77,7 @@ module "tunnel" {
       subdomain = "harbor-stage"
       service   = "http://harbor-core.harbor.svc.cluster.local:80"
     }
-tempo = {
+    tempo = {
       subdomain = "tempo-stage"
       service   = "http://tempo.monitoring.svc.cluster.local:3100"
     }

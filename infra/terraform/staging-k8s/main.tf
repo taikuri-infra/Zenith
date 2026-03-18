@@ -184,4 +184,8 @@ module "platform" {
   enable_sealed_secrets = true
   enable_monitoring     = true
   enable_keda           = true
+
+  # Data operators (standalone, not tied to enable_v3_operators)
+  enable_redis_operator   = true
+  enable_mongodb_operator = true
 }

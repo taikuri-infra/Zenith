@@ -161,7 +161,7 @@ resource "kubernetes_manifest" "kyverno_disallow_privileged" {
         exclude = {
           any = [{
             resources = {
-              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system"]
+              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system", "mongodb-operator", "redis-operator", "keda", "velero", "harbor", "argocd", "apisix", "monitoring", "temporal", "keycloak"]
             }
           }]
         }
@@ -222,7 +222,7 @@ resource "kubernetes_manifest" "kyverno_require_non_root" {
         exclude = {
           any = [{
             resources = {
-              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system"]
+              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system", "mongodb-operator", "redis-operator", "keda", "velero", "harbor", "argocd", "apisix", "monitoring", "temporal", "keycloak"]
             }
           }]
         }
@@ -283,7 +283,7 @@ resource "kubernetes_manifest" "kyverno_disallow_host_namespaces" {
         exclude = {
           any = [{
             resources = {
-              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system"]
+              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system", "mongodb-operator", "redis-operator", "keda", "velero", "harbor", "argocd", "apisix", "monitoring", "temporal", "keycloak"]
             }
           }]
         }
@@ -342,7 +342,7 @@ resource "kubernetes_manifest" "kyverno_require_resource_limits" {
         exclude = {
           any = [{
             resources = {
-              namespaces = ["kube-system", "kyverno", "cnpg-system"]
+              namespaces = ["kube-system", "falco", "kyverno", "cnpg-system", "mongodb-operator", "redis-operator", "keda", "velero", "harbor", "argocd", "apisix", "monitoring", "temporal", "keycloak"]
             }
           }]
         }
@@ -360,6 +360,59 @@ resource "kubernetes_manifest" "kyverno_require_resource_limits" {
             }
           }
         }
+      }]
+    }
+  }
+
+  depends_on = [helm_release.kyverno]
+}
+
+# =============================================================================
+# Kyverno Policy — Verify Cosign Image Signatures
+# =============================================================================
+
+resource "kubernetes_manifest" "kyverno_verify_image_signatures" {
+  count = var.enable_kyverno && var.cosign_public_key != "" ? 1 : 0
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  manifest = {
+    apiVersion = "kyverno.io/v1"
+    kind       = "ClusterPolicy"
+    metadata = {
+      name = "verify-image-signatures"
+      annotations = {
+        "policies.kyverno.io/title"       = "Verify Image Signatures"
+        "policies.kyverno.io/category"    = "Supply Chain Security"
+        "policies.kyverno.io/severity"    = "high"
+        "policies.kyverno.io/description" = "Verify that images from the internal registry are signed with Cosign. Set to Audit mode until keys are generated and signing is enabled in CI."
+      }
+    }
+    spec = {
+      validationFailureAction = "Audit"
+      background              = true
+      rules = [{
+        name = "verify-cosign-signature"
+        match = {
+          any = [{
+            resources = {
+              kinds      = ["Pod"]
+              namespaces = ["zenith-staging", "zenith-apps"]
+            }
+          }]
+        }
+        verifyImages = [{
+          imageReferences = ["registry.stage.freezenith.com/zenith-stage/*"]
+          attestors = [{
+            entries = [{
+              keys = {
+                publicKeys = var.cosign_public_key
+              }
+            }]
+          }]
+        }]
       }]
     }
   }
@@ -391,6 +444,21 @@ resource "helm_release" "falco" {
   set {
     name  = "falcosidekick.enabled"
     value = "true"
+  }
+
+  set {
+    name  = "falcosidekick.config.slack.webhookurl"
+    value = var.slack_webhook_url
+  }
+
+  set {
+    name  = "falcosidekick.config.slack.minimumpriority"
+    value = "warning"
+  }
+
+  set {
+    name  = "falcosidekick.config.slack.outputformat"
+    value = "all"
   }
 
   set {

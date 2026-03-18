@@ -64,6 +64,9 @@ spec:
               - select.*from
               - union.*select
               - "<script"
+              - "javascript:"
+              - etc/passwd
+              - proc/self
               - "\\bor\\b.*=.*"
               - "\\band\\b.*=.*"
             rejected_code: 403
@@ -126,6 +129,9 @@ spec:
               - select.*from
               - union.*select
               - "<script"
+              - "javascript:"
+              - etc/passwd
+              - proc/self
               - "\\bor\\b.*=.*"
               - "\\band\\b.*=.*"
             rejected_code: 403

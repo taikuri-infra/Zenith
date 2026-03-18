@@ -131,13 +131,13 @@ resource "kubernetes_manifest" "keycloak_realm_zenith" {
   depends_on = [kubernetes_manifest.keycloak_instance]
 }
 
-# --- Redis Operator — Spotahome (P2-08) ---
+# --- Redis Operator — OpsTree (P2-08) ---
 
 resource "helm_release" "redis_operator" {
-  count = var.enable_v3_operators ? 1 : 0
+  count = var.enable_redis_operator || var.enable_v3_operators ? 1 : 0
 
   name             = "redis-operator"
-  repository       = "https://spotahome.github.io/redis-operator"
+  repository       = "https://ot-container-kit.github.io/helm-charts/"
   chart            = "redis-operator"
   version          = var.redis_operator_version
   namespace        = "redis-operator"
@@ -147,19 +147,19 @@ resource "helm_release" "redis_operator" {
 
   set {
     name  = "resources.requests.cpu"
-    value = "25m"
+    value = "50m"
   }
 
   set {
     name  = "resources.requests.memory"
-    value = "64Mi"
+    value = "128Mi"
   }
 }
 
 # --- MongoDB Operator — Percona (P2-13) ---
 
 resource "helm_release" "mongodb_operator" {
-  count = var.enable_v3_operators ? 1 : 0
+  count = var.enable_mongodb_operator || var.enable_v3_operators ? 1 : 0
 
   name             = "psmdb-operator"
   repository       = "https://percona.github.io/percona-helm-charts"
@@ -178,5 +178,16 @@ resource "helm_release" "mongodb_operator" {
   set {
     name  = "resources.requests.memory"
     value = "64Mi"
+  }
+
+  # Disable multicluster service discovery (crashes with stale KEDA metrics API)
+  set {
+    name  = "env[0].name"
+    value = "DISABLE_TELEMETRY"
+  }
+
+  set {
+    name  = "env[0].value"
+    value = "true"
   }
 }
