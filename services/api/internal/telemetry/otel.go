@@ -71,12 +71,8 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 		return nil, fmt.Errorf("failed to setup trace provider: %w", err)
 	}
 
-	// Set up meter provider
-	meterShutdown, err := setupMeterProvider(ctx, cfg, res)
-	if err != nil {
-		traceShutdown(ctx)
-		return nil, fmt.Errorf("failed to setup meter provider: %w", err)
-	}
+	// Skip OTLP metric export — Prometheus already scrapes the API on :9090.
+	// Sending metrics via OTLP to Tempo fails (Tempo only accepts traces).
 
 	// Set the global text map propagator for context propagation across services
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
@@ -85,17 +81,7 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	))
 
 	shutdown := func(ctx context.Context) error {
-		var errs []error
-		if err := traceShutdown(ctx); err != nil {
-			errs = append(errs, err)
-		}
-		if err := meterShutdown(ctx); err != nil {
-			errs = append(errs, err)
-		}
-		if len(errs) > 0 {
-			return fmt.Errorf("shutdown errors: %v", errs)
-		}
-		return nil
+		return traceShutdown(ctx)
 	}
 
 	return shutdown, nil
