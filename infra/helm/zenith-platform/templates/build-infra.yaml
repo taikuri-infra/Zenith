@@ -129,9 +129,14 @@ spec:
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - name: html
               mountPath: /usr/share/nginx/html
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 5m
@@ -143,6 +148,8 @@ spec:
         - name: html
           configMap:
             name: cold-start-page
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
