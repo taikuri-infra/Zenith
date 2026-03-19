@@ -80,6 +80,12 @@ resource "helm_release" "prometheus_stack" {
     value = "platform"
   }
 
+  # Enable remote write receiver so Tempo can push span metrics to Prometheus
+  set {
+    name  = "prometheus.prometheusSpec.enableRemoteWriteReceiver"
+    value = "true"
+  }
+
   # --- Auth Proxy: trust Cloudflare Access header for SSO ---
   # After passing Cloudflare Zero Trust, the Cf-Access-Authenticated-User-Email
   # header contains the verified email. Grafana reads it and auto-logs in.
@@ -475,6 +481,40 @@ resource "helm_release" "tempo" {
   set {
     name  = "securityContext.runAsGroup"
     value = "10001"
+  }
+
+  # --- Metrics Generator: auto-generate span metrics + service graph ---
+  # This powers Grafana's Service Map (like Datadog APM service map)
+  set {
+    name  = "tempo.metricsGenerator.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "tempo.metricsGenerator.remoteWriteUrl"
+    value = "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+  }
+
+  # Generate span metrics (RED per service/endpoint)
+  set {
+    name  = "tempo.metricsGenerator.processor.span_metrics.dimensions[0]"
+    value = "http.method"
+  }
+
+  set {
+    name  = "tempo.metricsGenerator.processor.span_metrics.dimensions[1]"
+    value = "http.status_code"
+  }
+
+  set {
+    name  = "tempo.metricsGenerator.processor.span_metrics.dimensions[2]"
+    value = "http.route"
+  }
+
+  # Generate service graph (who calls who)
+  set {
+    name  = "tempo.metricsGenerator.processor.service_graphs.dimensions[0]"
+    value = "http.method"
   }
 
   depends_on = [helm_release.prometheus_stack]
