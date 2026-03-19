@@ -46,24 +46,18 @@ resource "helm_release" "apisix" {
     value = var.environment == "production" ? "2" : "1"
   }
 
-  # Allow ingress controller pod network to reach admin API
-  set {
-    name  = "admin.allow.ipList[0]"
-    value = "127.0.0.1/24"
-  }
-
-  set {
-    name  = "admin.allow.ipList[1]"
-    value = "10.42.0.0/16"
-  }
-
-  # Plugins + prometheus metrics export
+  # Plugins + prometheus metrics export + admin allow list
   values = [yamlencode({
     plugins = ["jwt-auth", "cors", "limit-count", "openid-connect", "opentelemetry", "prometheus", "uri-blocker", "ua-restriction", "referer-restriction"]
     apisix = {
       prometheus = {
         enabled       = true
         containerPort = 9091
+      }
+    }
+    admin = {
+      allow = {
+        ipList = ["127.0.0.1/24", "10.42.0.0/16", "10.43.0.0/16", "0.0.0.0/0"]
       }
     }
     metrics = {
