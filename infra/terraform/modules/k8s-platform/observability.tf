@@ -620,10 +620,23 @@ resource "kubernetes_manifest" "servicemonitor_loki" {
       endpoints = [
         { port = "http-metrics", interval = "30s" },
       ]
+      namespaceSelector = {
+        matchNames = ["monitoring"]
+      }
       selector = {
         matchLabels = {
           "app.kubernetes.io/name" = "loki"
         }
+        matchExpressions = [
+          {
+            key      = "app.kubernetes.io/component"
+            operator = "DoesNotExist"
+          },
+          {
+            key      = "variant"
+            operator = "DoesNotExist"
+          },
+        ]
       }
     }
   }
