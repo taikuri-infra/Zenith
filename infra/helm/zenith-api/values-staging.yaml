@@ -37,6 +37,10 @@ env:
   AI_LITELLM_URL: "https://api.openai.com/v1"
   AI_API_KEY: "true"  # actual value stored in zenith-secrets Secret
   AI_MODEL: "gpt-4o-mini"
+  OTEL_ENABLED: "true"
+  OTEL_INSECURE: "true"
+  OTEL_SAMPLE_RATE: "1.0"
+  ENVIRONMENT: "staging"
 
 cnpgAdminSecret: "cnpg-admin-dsn"
 keycloakAdminSecret: "keycloak-admin"

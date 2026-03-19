@@ -232,6 +232,20 @@ spec:
                   name: zenith-secrets
                   key: ai-api-key
             {{- end }}
+            {{- if .Values.env.OTEL_ENABLED }}
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "$(HOST_IP):4317"
+            - name: OTEL_INSECURE
+              value: {{ .Values.env.OTEL_INSECURE | default "true" | quote }}
+            - name: OTEL_SAMPLE_RATE
+              value: {{ .Values.env.OTEL_SAMPLE_RATE | default "1.0" | quote }}
+            - name: ENVIRONMENT
+              value: {{ .Values.env.ENVIRONMENT | default "staging" | quote }}
+            {{- end }}
             - name: DB_HOST
               valueFrom:
                 secretKeyRef:

@@ -239,6 +239,33 @@ resource "helm_release" "prometheus_stack" {
     value = "false"
   }
 
+  # Tempo → Loki: click a trace span → see matching logs
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.tracesToLogsV2.datasourceUid"
+    value = "loki"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.tracesToLogsV2.filterByTraceID"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.tracesToLogsV2.filterBySpanID"
+    value = "true"
+  }
+
+  # Service map (node graph) powered by Prometheus metrics
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.serviceMap.datasourceUid"
+    value = "prometheus"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.nodeGraph.enabled"
+    value = "true"
+  }
+
   depends_on = [kubernetes_priority_class.platform]
 }
 
