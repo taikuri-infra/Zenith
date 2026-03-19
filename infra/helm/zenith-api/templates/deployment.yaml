@@ -233,12 +233,8 @@ spec:
                   key: ai-api-key
             {{- end }}
             {{- if .Values.env.OTEL_ENABLED }}
-            - name: HOST_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "$(HOST_IP):4317"
+              value: {{ .Values.env.OTEL_ENDPOINT | default "tempo.monitoring.svc.cluster.local:4317" | quote }}
             - name: OTEL_INSECURE
               value: {{ .Values.env.OTEL_INSECURE | default "true" | quote }}
             - name: OTEL_SAMPLE_RATE
