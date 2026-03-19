@@ -113,6 +113,22 @@ resource "helm_release" "prometheus_stack" {
     value = "Admin"
   }
 
+  # --- Disable k3s false-positive alerts (these components are built into k3s) ---
+  set {
+    name  = "kubeControllerManager.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "kubeProxy.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "kubeScheduler.enabled"
+    value = "false"
+  }
+
   # --- Grafana plugins ---
   # Infinity: query any REST API (Hetzner Cloud, etc.)
   set {
@@ -447,6 +463,27 @@ resource "helm_release" "otel_collector" {
     value = "0.0.0.0:4318"
   }
 
+  # Wire traces pipeline to Tempo via otlp exporter (not just debug)
+  set {
+    name  = "config.service.pipelines.traces.exporters[0]"
+    value = "otlp"
+  }
+
+  set {
+    name  = "config.service.pipelines.traces.receivers[0]"
+    value = "otlp"
+  }
+
+  set {
+    name  = "config.service.pipelines.traces.receivers[1]"
+    value = "jaeger"
+  }
+
+  set {
+    name  = "config.service.pipelines.traces.receivers[2]"
+    value = "zipkin"
+  }
+
   set {
     name  = "resources.requests.cpu"
     value = "50m"
@@ -687,37 +724,7 @@ resource "kubernetes_manifest" "servicemonitor_velero" {
   depends_on = [helm_release.prometheus_stack, helm_release.velero]
 }
 
-# APISIX metrics (prometheus plugin exports on port 9091)
-resource "kubernetes_manifest" "servicemonitor_apisix" {
-  count = var.enable_apisix && var.enable_monitoring ? 1 : 0
-
-  manifest = {
-    apiVersion = "monitoring.coreos.com/v1"
-    kind       = "ServiceMonitor"
-    metadata = {
-      name      = "apisix"
-      namespace = "apisix"
-      labels = {
-        release = "kube-prometheus-stack"
-      }
-    }
-    spec = {
-      endpoints = [
-        { port = "apisix-prometheus", interval = "30s", path = "/apisix/prometheus/metrics" },
-      ]
-      namespaceSelector = {
-        matchNames = ["apisix"]
-      }
-      selector = {
-        matchLabels = {
-          "app.kubernetes.io/name" = "apisix"
-        }
-      }
-    }
-  }
-
-  depends_on = [helm_release.prometheus_stack, helm_release.apisix]
-}
+# APISIX metrics — ServiceMonitor created by APISIX Helm chart (metrics.serviceMonitor.enabled)
 
 # Falcosidekick metrics (prometheus on port 2810)
 resource "kubernetes_manifest" "servicemonitor_falco" {

@@ -216,6 +216,77 @@ resource "kubernetes_network_policy_v1" "allow_tunnel_to_monitoring" {
   }
 }
 
+# Allow Falco → Loki (falcosidekick sends events to Loki in monitoring)
+resource "kubernetes_network_policy_v1" "allow_falco_to_monitoring" {
+  count = var.enable_monitoring && var.enable_falco ? 1 : 0
+
+  metadata {
+    name      = "allow-falco-to-loki"
+    namespace = "monitoring"
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "loki"
+      }
+    }
+
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "falco"
+          }
+        }
+      }
+
+      ports {
+        port     = "3100"
+        protocol = "TCP"
+      }
+    }
+
+    policy_types = ["Ingress"]
+  }
+}
+
+# Allow OTel Collector → Tempo (traces pipeline)
+resource "kubernetes_network_policy_v1" "allow_otel_to_tempo" {
+  count = var.enable_monitoring ? 1 : 0
+
+  metadata {
+    name      = "allow-otel-to-tempo"
+    namespace = "monitoring"
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "tempo"
+      }
+    }
+
+    ingress {
+      from {
+        namespace_selector {}
+      }
+
+      ports {
+        port     = "4317"
+        protocol = "TCP"
+      }
+
+      ports {
+        port     = "4318"
+        protocol = "TCP"
+      }
+    }
+
+    policy_types = ["Ingress"]
+  }
+}
+
 # Allow Prometheus scraping from monitoring namespace (self + other namespaces)
 resource "kubernetes_network_policy_v1" "allow_prometheus_scrape" {
   count = var.enable_monitoring ? 1 : 0
