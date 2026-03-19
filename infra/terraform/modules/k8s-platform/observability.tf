@@ -113,7 +113,8 @@ resource "helm_release" "prometheus_stack" {
     value = "Admin"
   }
 
-  # --- Disable k3s false-positive alerts (these components are built into k3s) ---
+  # --- Disable k3s false-positive alerts and duplicate-series rules ---
+  # k3s bundles controller-manager, proxy, scheduler into a single process
   set {
     name  = "kubeControllerManager.enabled"
     value = "false"
@@ -127,6 +128,40 @@ resource "helm_release" "prometheus_stack" {
   set {
     name  = "kubeScheduler.enabled"
     value = "false"
+  }
+
+  # k3s exposes kubelet metrics on multiple endpoints (/metrics, /metrics/cadvisor,
+  # /metrics/probes), each returning kubelet_node_name with different labels.
+  # This causes "duplicate series" errors in recording rules that join on it.
+  # Fix: drop kubelet_node_name from non-primary endpoints via metricRelabelings.
+  set {
+    name  = "kubelet.serviceMonitor.cAdvisorMetricRelabelings[0].sourceLabels[0]"
+    value = "__name__"
+  }
+
+  set {
+    name  = "kubelet.serviceMonitor.cAdvisorMetricRelabelings[0].regex"
+    value = "kubelet_node_name"
+  }
+
+  set {
+    name  = "kubelet.serviceMonitor.cAdvisorMetricRelabelings[0].action"
+    value = "drop"
+  }
+
+  set {
+    name  = "kubelet.serviceMonitor.probesMetricRelabelings[0].sourceLabels[0]"
+    value = "__name__"
+  }
+
+  set {
+    name  = "kubelet.serviceMonitor.probesMetricRelabelings[0].regex"
+    value = "kubelet_node_name"
+  }
+
+  set {
+    name  = "kubelet.serviceMonitor.probesMetricRelabelings[0].action"
+    value = "drop"
   }
 
   # --- Grafana plugins ---

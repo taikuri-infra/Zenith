@@ -110,6 +110,41 @@ resource "kubernetes_network_policy_v1" "allow_apisix_to_api_staging" {
   }
 }
 
+# Allow Prometheus → zenith-postgres metrics (CNPG exporter on port 9187)
+resource "kubernetes_network_policy_v1" "allow_prometheus_to_cnpg_staging" {
+  count = var.enable_monitoring ? 1 : 0
+
+  metadata {
+    name      = "allow-prometheus-to-postgres"
+    namespace = "zenith-staging"
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "cnpg.io/cluster" = "zenith-postgres"
+      }
+    }
+
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "monitoring"
+          }
+        }
+      }
+
+      ports {
+        port     = "9187"
+        protocol = "TCP"
+      }
+    }
+
+    policy_types = ["Ingress"]
+  }
+}
+
 # Allow cloudflared tunnel → zenith-staging (MC admin panel)
 resource "kubernetes_network_policy_v1" "allow_tunnel_to_staging" {
   metadata {
