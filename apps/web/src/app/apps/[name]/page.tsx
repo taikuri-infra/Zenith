@@ -1346,14 +1346,14 @@ function AuthTab({ appId }: { appId: string }) {
       <div className="rounded-lg border border-border bg-surface-100 p-4">
         <h3 className="mb-2 text-sm font-medium text-neutral-400">Quick Start</h3>
         <div className="rounded-md bg-surface-200 p-3 font-mono text-xs text-neutral-300">
-          <div className="text-neutral-600">// Sign up a user</div>
+          <div className="text-neutral-600">{`// Sign up a user`}</div>
           <div>
             <span className="text-amber-400">fetch</span>(
             <span className="text-emerald-400">&apos;/api/v1/apps/{appId}/auth/signup&apos;</span>, {"{"}
           </div>
           <div className="pl-4">method: <span className="text-emerald-400">&apos;POST&apos;</span>,</div>
           <div className="pl-4">body: JSON.stringify({"{"} email, password, name {"}"})</div>
-          <div>{"}"}) <span className="text-neutral-600">// Returns JWT access_token</span></div>
+          <div>{"}"}) <span className="text-neutral-600">{`// Returns JWT access_token`}</span></div>
         </div>
       </div>
 
