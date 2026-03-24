@@ -9,7 +9,7 @@ import { getApi, isDemoMode } from "@/lib/get-api";
 import { demoAggregatedLogs } from "@/lib/demo-api";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { PageWithTableSkeleton } from "@/components/loading-skeleton";
-import { Search, Radio } from "lucide-react";
+import { Search, Radio, Clock, Check } from "lucide-react";
 import { getAccessToken } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/runtime-env";
 
@@ -22,14 +22,24 @@ const LOG_LEVELS = [
   { value: "deploy", label: "Deploy" },
 ];
 
+const TIME_RANGES = [
+  { value: "1h", label: "Last 1 hour" },
+  { value: "6h", label: "Last 6 hours" },
+  { value: "24h", label: "Last 24 hours" },
+  { value: "7d", label: "Last 7 days" },
+];
+
 export default function LogsPage() {
   const { appsDeploy, monitoring } = getApi();
   const projectId = useProject();
-  const [appFilter, setAppFilter] = useState<string>("all");
+  const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [levelFilter, setLevelFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [timeRange, setTimeRange] = useState("1h");
   const [streaming, setStreaming] = useState(false);
   const [streamEntries, setStreamEntries] = useState<Array<{ timestamp: string; level: string; message: string }>>([]);
+  const [showAppDropdown, setShowAppDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const { data: deployData, loading } = useApi(
@@ -38,18 +48,26 @@ export default function LogsPage() {
   );
   const apps = deployData?.items ?? [];
 
-  // Fetch real logs from Loki when an app is selected
+  // Fetch logs: aggregated multi-app endpoint or single-app
   const { data: logsData } = useApi(
     () => {
-      if (isDemoMode() || appFilter === "all") return Promise.resolve(null);
-      return monitoring.getLogs(appFilter, {
+      if (isDemoMode()) return Promise.resolve(null);
+      if (selectedApps.length === 0) return Promise.resolve(null);
+
+      const params = {
         level: levelFilter !== "all" ? levelFilter : undefined,
         search: searchQuery || undefined,
         limit: 200,
-        since: "1h",
-      });
+        since: timeRange,
+      };
+
+      // Use aggregated endpoint for multi-app, single-app endpoint for one
+      if (selectedApps.length === 1) {
+        return monitoring.getLogs(selectedApps[0], params);
+      }
+      return monitoring.getAggregatedLogs(selectedApps, params);
     },
-    [appFilter, levelFilter, searchQuery]
+    [selectedApps.join(","), levelFilter, searchQuery, timeRange]
   );
 
   // Build the combined log list
@@ -70,8 +88,10 @@ export default function LogsPage() {
 
     // In demo mode, apply client-side filters
     if (isDemoMode()) {
-      if (appFilter !== "all") {
-        logs = logs.filter((l) => l.message.includes(`[${appFilter}]`));
+      if (selectedApps.length > 0) {
+        logs = logs.filter((l) =>
+          selectedApps.some((app) => l.message.includes(`[${app}]`))
+        );
       }
       if (levelFilter !== "all") {
         logs = logs.filter((l) => l.level === levelFilter);
@@ -83,9 +103,29 @@ export default function LogsPage() {
     }
 
     return logs;
-  }, [allLogs, appFilter, levelFilter, searchQuery, streaming, streamEntries]);
+  }, [allLogs, selectedApps, levelFilter, searchQuery, streaming, streamEntries]);
 
-  // SSE streaming toggle
+  // Toggle app selection
+  const toggleApp = useCallback((appId: string) => {
+    setSelectedApps((prev) =>
+      prev.includes(appId)
+        ? prev.filter((id) => id !== appId)
+        : prev.length < 10
+          ? [...prev, appId]
+          : prev
+    );
+  }, []);
+
+  // Select / deselect all
+  const toggleAllApps = useCallback(() => {
+    if (selectedApps.length === apps.length) {
+      setSelectedApps([]);
+    } else {
+      setSelectedApps(apps.map((a) => (isDemoMode() ? a.name : a.id)));
+    }
+  }, [selectedApps.length, apps]);
+
+  // SSE streaming toggle (works for single app only)
   const toggleStreaming = useCallback(() => {
     if (streaming) {
       eventSourceRef.current?.close();
@@ -94,10 +134,10 @@ export default function LogsPage() {
       return;
     }
 
-    if (appFilter === "all" || isDemoMode()) return;
+    if (selectedApps.length !== 1 || isDemoMode()) return;
 
     const token = getAccessToken();
-    const url = `${API_BASE_URL}/api/v1/apps/${appFilter}/logs/stream?token=${token}`;
+    const url = `${API_BASE_URL}/api/v1/apps/${selectedApps[0]}/logs/stream?token=${token}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
     setStreaming(true);
@@ -128,7 +168,7 @@ export default function LogsPage() {
       es.close();
       setStreaming(false);
     };
-  }, [streaming, appFilter]);
+  }, [streaming, selectedApps]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -142,7 +182,18 @@ export default function LogsPage() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const urlApp = params.get("app");
-    if (urlApp) setAppFilter(urlApp);
+    if (urlApp) setSelectedApps([urlApp]);
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowAppDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   if (loading) {
@@ -159,14 +210,14 @@ export default function LogsPage() {
         <div>
           <h1 className="text-lg font-semibold text-white">Logs</h1>
           <p className="text-sm text-neutral-500">
-            Aggregated logs across all apps
+            Aggregated logs across your services
           </p>
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {/* Search */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
             <input
               type="text"
@@ -177,19 +228,60 @@ export default function LogsPage() {
             />
           </div>
 
-          {/* App filter */}
-          <select
-            value={appFilter}
-            onChange={(e) => setAppFilter(e.target.value)}
-            className="rounded-lg border border-border bg-surface-100 px-3 py-1.5 text-sm text-neutral-400 focus:border-accent-500 focus:outline-none"
-          >
-            <option value="all">All apps</option>
-            {apps.map((app) => (
-              <option key={app.id} value={isDemoMode() ? app.name : app.id}>
-                {app.name}
-              </option>
-            ))}
-          </select>
+          {/* Multi-select app dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowAppDropdown(!showAppDropdown)}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-100 px-3 py-1.5 text-sm text-neutral-400 hover:text-white transition-colors"
+            >
+              {selectedApps.length === 0
+                ? "Select services"
+                : `${selectedApps.length} service${selectedApps.length > 1 ? "s" : ""}`}
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showAppDropdown && (
+              <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-border bg-surface-200 py-1 shadow-xl">
+                {/* Select all */}
+                <button
+                  onClick={toggleAllApps}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-neutral-400 hover:bg-surface-100 hover:text-white"
+                >
+                  <div className={`flex h-4 w-4 items-center justify-center rounded border ${
+                    selectedApps.length === apps.length
+                      ? "border-accent-500 bg-accent-500"
+                      : "border-neutral-600"
+                  }`}>
+                    {selectedApps.length === apps.length && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                  {selectedApps.length === apps.length ? "Deselect all" : "Select all"}
+                </button>
+                <div className="my-1 border-t border-border" />
+                {apps.map((app) => {
+                  const appId = isDemoMode() ? app.name : app.id;
+                  const checked = selectedApps.includes(appId);
+                  return (
+                    <button
+                      key={app.id}
+                      onClick={() => toggleApp(appId)}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-neutral-300 hover:bg-surface-100 hover:text-white"
+                    >
+                      <div className={`flex h-4 w-4 items-center justify-center rounded border ${
+                        checked
+                          ? "border-accent-500 bg-accent-500"
+                          : "border-neutral-600"
+                      }`}>
+                        {checked && <Check className="h-3 w-3 text-white" />}
+                      </div>
+                      {app.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Level filter */}
           <select
@@ -204,8 +296,24 @@ export default function LogsPage() {
             ))}
           </select>
 
-          {/* Stream toggle */}
-          {appFilter !== "all" && !isDemoMode() && (
+          {/* Time range */}
+          <div className="flex items-center gap-1">
+            <Clock className="h-3.5 w-3.5 text-neutral-500" />
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="rounded-lg border border-border bg-surface-100 px-3 py-1.5 text-sm text-neutral-400 focus:border-accent-500 focus:outline-none"
+            >
+              {TIME_RANGES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Stream toggle (single app only) */}
+          {selectedApps.length === 1 && !isDemoMode() && (
             <button
               onClick={toggleStreaming}
               className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
@@ -226,21 +334,24 @@ export default function LogsPage() {
         </div>
 
         {/* Active filters */}
-        {(appFilter !== "all" ||
+        {(selectedApps.length > 0 ||
           levelFilter !== "all" ||
           searchQuery.trim()) && (
           <div className="flex items-center gap-2 flex-wrap">
-            {appFilter !== "all" && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-500/10 px-2.5 py-1 text-xs text-accent-400">
-                App: {apps.find((a) => (isDemoMode() ? a.name : a.id) === appFilter)?.name || appFilter}
+            {selectedApps.map((appId) => (
+              <span
+                key={appId}
+                className="inline-flex items-center gap-1.5 rounded-full bg-accent-500/10 px-2.5 py-1 text-xs text-accent-400"
+              >
+                {apps.find((a) => (isDemoMode() ? a.name : a.id) === appId)?.name || appId}
                 <button
-                  onClick={() => setAppFilter("all")}
+                  onClick={() => setSelectedApps((prev) => prev.filter((id) => id !== appId))}
                   className="hover:text-white"
                 >
                   &times;
                 </button>
               </span>
-            )}
+            ))}
             {levelFilter !== "all" && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-500/10 px-2.5 py-1 text-xs text-accent-400">
                 Level: {levelFilter}
@@ -265,7 +376,7 @@ export default function LogsPage() {
             )}
             <button
               onClick={() => {
-                setAppFilter("all");
+                setSelectedApps([]);
                 setLevelFilter("all");
                 setSearchQuery("");
               }}
@@ -276,13 +387,24 @@ export default function LogsPage() {
           </div>
         )}
 
-        {/* AI Error Analysis */}
-        {appFilter !== "all" && (
-          <AIErrorAnalysis appId={appFilter} />
+        {/* AI Error Analysis (single app) */}
+        {selectedApps.length === 1 && (
+          <AIErrorAnalysis appId={selectedApps[0]} />
+        )}
+
+        {/* Empty state */}
+        {selectedApps.length === 0 && !isDemoMode() && (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-surface-100 py-16 text-center">
+            <Search className="mb-3 h-8 w-8 text-neutral-600" />
+            <p className="text-sm text-neutral-400">Select one or more services to view logs</p>
+            <p className="mt-1 text-xs text-neutral-600">You can select up to 10 services at once</p>
+          </div>
         )}
 
         {/* Log viewer */}
-        <BuildLogViewer entries={filteredLogs} streaming={streaming} />
+        {(selectedApps.length > 0 || isDemoMode()) && (
+          <BuildLogViewer entries={filteredLogs} streaming={streaming} />
+        )}
       </div>
     </Shell>
   );

@@ -81,6 +81,8 @@ module "dns" {
     apps_wildcard = { name = "*.apps.stage" }
     # Wildcard for API gateways (*.gw.stage.freezenith.com)
     gw_wildcard = { name = "*.gw.stage" }
+    # Wildcard for staging environments (*.dev.apps.stage.freezenith.com)
+    dev_apps_wildcard = { name = "*.dev.apps.stage" }
   }
 
   # Customer: embermind on staging

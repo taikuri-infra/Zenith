@@ -168,3 +168,8 @@ func (c *Client) GetDatabase(projectID, name string) (*Database, error) {
 	}
 	return &db, nil
 }
+
+// DoRaw exposes the internal do method for arbitrary API calls.
+func (c *Client) DoRaw(method, path string, body interface{}, result interface{}) error {
+	return c.do(method, path, body, result)
+}

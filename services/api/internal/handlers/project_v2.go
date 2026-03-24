@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
 )
@@ -23,6 +24,8 @@ type ProjectHandlerV2 struct {
 	deployer    AppDeleter
 	msDeleter   ManagedServiceDeleter
 	onAppDeleted func(ctx context.Context, appID string)
+	envHandler  *EnvironmentHandler
+	planRepo    ports.UserPlanRepository
 }
 
 // NewProjectHandlerV2 creates a new ProjectHandlerV2.
@@ -39,6 +42,16 @@ func (h *ProjectHandlerV2) SetManagedServiceDeleter(msRepo ports.ManagedServiceR
 // SetOnAppDeleted sets a callback invoked after an app within a project is deleted.
 func (h *ProjectHandlerV2) SetOnAppDeleted(fn func(ctx context.Context, appID string)) {
 	h.onAppDeleted = fn
+}
+
+// SetEnvironmentHandler sets the environment handler for auto-creating environments on project creation.
+func (h *ProjectHandlerV2) SetEnvironmentHandler(eh *EnvironmentHandler) {
+	h.envHandler = eh
+}
+
+// SetPlanRepo sets the plan repo for checking user tier on project creation.
+func (h *ProjectHandlerV2) SetPlanRepo(planRepo ports.UserPlanRepository) {
+	h.planRepo = planRepo
 }
 
 type ProjectV2Response struct {
@@ -80,6 +93,20 @@ func (h *ProjectHandlerV2) Create(c *fiber.Ctx) error {
 		}
 		slog.Error("failed to create project", "error", err)
 		return NewInternal("failed to create project")
+	}
+
+	// Auto-create environments (production always, staging for Pro+)
+	if h.envHandler != nil {
+		includeStaging := false
+		if h.planRepo != nil {
+			plan, err := h.planRepo.GetUserPlan(c.Context(), userID)
+			if err == nil && plan.Tier != entities.PlanFree {
+				includeStaging = true
+			}
+		}
+		if _, err := h.envHandler.CreateEnvironmentsForProject(c, project.ID, includeStaging); err != nil {
+			slog.Error("failed to create environments", "project", project.ID, "error", err)
+		}
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(ProjectV2Response{

@@ -54,6 +54,12 @@ var (
 	StatusStopped = SubtitleStyle.Render("Stopped")
 )
 
+// Color helper functions for inline text coloring.
+func Green(s string) string  { return SuccessStyle.Render(s) }
+func Red(s string) string    { return ErrorStyle.Render(s) }
+func Yellow(s string) string { return WarningStyle.Render(s) }
+func Cyan(s string) string   { return lipgloss.NewStyle().Foreground(ColorSecondary).Render(s) }
+
 func StatusBadge(phase string) string {
 	switch phase {
 	case "Running", "Ready", "Active":

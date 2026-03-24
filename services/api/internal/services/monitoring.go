@@ -269,6 +269,70 @@ func (s *MonitoringService) StreamLogs(ctx context.Context, userID, appID string
 	return nil
 }
 
+// GetAggregatedLogs queries Loki for log entries from multiple apps.
+func (s *MonitoringService) GetAggregatedLogs(ctx context.Context, userID string, appIDs []string, level, search string, limit int, since time.Duration) (*dto.MonitoringLogsResponse, error) {
+	if s.loki == nil {
+		return &dto.MonitoringLogsResponse{Entries: []dto.MonitoringLogEntry{}, Total: 0}, nil
+	}
+
+	if limit <= 0 {
+		limit = 200
+	}
+	if since == 0 {
+		since = 1 * time.Hour
+	}
+
+	// Resolve all app names and verify ownership
+	appNames := make([]string, 0, len(appIDs))
+	for _, id := range appIDs {
+		name, err := s.resolveApp(ctx, userID, id)
+		if err != nil {
+			continue // skip apps the user doesn't own
+		}
+		appNames = append(appNames, name)
+	}
+	if len(appNames) == 0 {
+		return &dto.MonitoringLogsResponse{Entries: []dto.MonitoringLogEntry{}, Total: 0}, nil
+	}
+
+	// Build LogQL with regex for multiple apps
+	appRegex := strings.Join(appNames, "|")
+	logQL := fmt.Sprintf(`{namespace="%s",app=~"%s"}`, appsNamespace, appRegex)
+	if search != "" {
+		logQL += fmt.Sprintf(` |= "%s"`, strings.ReplaceAll(search, `"`, `\"`))
+	}
+	if level != "" && level != "all" {
+		logQL += fmt.Sprintf(` | logfmt | level=~"%s"`, level)
+	}
+
+	end := time.Now()
+	start := end.Add(-since)
+
+	entries, err := s.loki.QueryRange(ctx, logQL, start, end, limit)
+	if err != nil {
+		return nil, fmt.Errorf("loki query failed: %w", err)
+	}
+
+	result := make([]dto.MonitoringLogEntry, 0, len(entries))
+	for _, e := range entries {
+		lvl := ""
+		if v, ok := e.Labels["level"]; ok {
+			lvl = v
+		}
+		result = append(result, dto.MonitoringLogEntry{
+			Timestamp: e.Timestamp,
+			Line:      e.Line,
+			Level:     lvl,
+			Labels:    e.Labels,
+		})
+	}
+
+	return &dto.MonitoringLogsResponse{
+		Entries: result,
+		Total:   len(result),
+	}, nil
+}
+
 // GetPods returns pod list with status and resource usage.
 func (s *MonitoringService) GetPods(ctx context.Context, userID, appID string) (*dto.PodsResponse, error) {
 	appName, err := s.resolveApp(ctx, userID, appID)

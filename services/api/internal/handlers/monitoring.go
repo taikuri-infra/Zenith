@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -128,6 +129,61 @@ func (h *MonitoringHandler) StreamLogs(c *fiber.Ctx) error {
 	})
 
 	return nil
+}
+
+// GetAggregatedLogs returns logs from multiple apps.
+// GET /api/v1/logs?apps=id1,id2,id3&level=error&search=timeout&limit=200&since=1h
+func (h *MonitoringHandler) GetAggregatedLogs(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	appsParam := c.Query("apps", "")
+	if appsParam == "" {
+		return NewBadRequest("apps parameter is required")
+	}
+
+	appIDs := splitCSV(appsParam)
+	if len(appIDs) == 0 {
+		return NewBadRequest("at least one app ID is required")
+	}
+	if len(appIDs) > 10 {
+		return NewBadRequest("maximum 10 apps can be queried at once")
+	}
+
+	level := c.Query("level", "")
+	search := c.Query("search", "")
+	limit := c.QueryInt("limit", 200)
+
+	var since time.Duration
+	switch c.Query("since", "1h") {
+	case "1h":
+		since = 1 * time.Hour
+	case "6h":
+		since = 6 * time.Hour
+	case "24h":
+		since = 24 * time.Hour
+	case "7d":
+		since = 7 * 24 * time.Hour
+	default:
+		since = 1 * time.Hour
+	}
+
+	logs, err := h.svc.GetAggregatedLogs(c.Context(), userID, appIDs, level, search, limit, since)
+	if err != nil {
+		return NewInternal(err.Error())
+	}
+
+	return c.JSON(logs)
+}
+
+// splitCSV splits a comma-separated string into trimmed non-empty parts.
+func splitCSV(s string) []string {
+	var parts []string
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return parts
 }
 
 // GetPods returns pods with status and resource usage.

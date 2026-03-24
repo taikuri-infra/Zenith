@@ -164,6 +164,59 @@ func ParseToken(secret, tokenString string) (*Claims, error) {
 	return zenithJWT.ParseToken(secret, tokenString)
 }
 
+// DeployTokenAuthFunc validates deploy tokens using a callback function.
+// This is the preferred way to wire deploy token auth into the middleware chain.
+func DeployTokenAuthFunc(validate func(tokenID, secret string) (*entities.DeployToken, error)) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// Skip if already authenticated
+		if c.Locals("user_id") != nil {
+			return c.Next()
+		}
+
+		authHeader := c.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "DeployToken ") {
+			return c.Next()
+		}
+
+		credentials := strings.TrimPrefix(authHeader, "DeployToken ")
+		parts := strings.SplitN(credentials, ":", 2)
+		if len(parts) != 2 {
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid deploy token format")
+		}
+
+		tokenID := parts[0]
+		tokenSecret := parts[1]
+
+		dt, err := validate(tokenID, tokenSecret)
+		if err != nil {
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired deploy token")
+		}
+
+		c.Locals("user_id", dt.UserID)
+		c.Locals("project_id", dt.ProjectID)
+		c.Locals("deploy_token", dt)
+		c.Locals("role", entities.RoleDeveloper)
+
+		return c.Next()
+	}
+}
+
+// RequireDeployScope checks if the deploy token has the required scope.
+func RequireDeployScope(scope string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		dt, ok := c.Locals("deploy_token").(*entities.DeployToken)
+		if !ok {
+			return c.Next() // Not using deploy token
+		}
+
+		if !dt.HasScope(scope) {
+			return fiber.NewError(fiber.StatusForbidden, "deploy token missing required scope: "+scope)
+		}
+
+		return c.Next()
+	}
+}
+
 // ConstantTimeCompare provides timing-safe string comparison
 func ConstantTimeCompare(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1

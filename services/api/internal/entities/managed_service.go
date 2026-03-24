@@ -34,6 +34,7 @@ const (
 type ManagedService struct {
 	ID              string               `json:"id"`
 	ProjectID       string               `json:"project_id"`
+	EnvironmentID   string               `json:"environment_id,omitempty"`
 	UserID          string               `json:"user_id"`
 	ServiceType     ServiceType          `json:"service_type"`
 	Name            string               `json:"name"`

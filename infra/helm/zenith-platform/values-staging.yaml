@@ -46,6 +46,15 @@ certificate:
     - embermind.stage.freezenith.com
     - gw.stage.freezenith.com
 
+# Certificates in zenith-apps namespace for customer app routing
+appCertificates:
+  - secretName: apps-wildcard-tls
+    domains:
+      - "*.apps.stage.freezenith.com"
+  - secretName: dev-apps-wildcard-tls
+    domains:
+      - "*.dev.apps.stage.freezenith.com"
+
 keycloak:
   enabled: true
   host: auth.stage.freezenith.com

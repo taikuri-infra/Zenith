@@ -4,9 +4,11 @@ import (
 	"github.com/dotechhq/zenith/cli/cmd/apply"
 	"github.com/dotechhq/zenith/cli/cmd/db"
 	"github.com/dotechhq/zenith/cli/cmd/deploy"
+	"github.com/dotechhq/zenith/cli/cmd/dev"
 	"github.com/dotechhq/zenith/cli/cmd/diff"
 	exportcmd "github.com/dotechhq/zenith/cli/cmd/export"
 	"github.com/dotechhq/zenith/cli/cmd/install"
+	"github.com/dotechhq/zenith/cli/cmd/login"
 	"github.com/dotechhq/zenith/cli/cmd/logs"
 	"github.com/dotechhq/zenith/cli/cmd/status"
 	"github.com/dotechhq/zenith/cli/cmd/top"
@@ -29,8 +31,10 @@ You get: Apps, Databases, Storage, Auth, Gateway, Monitoring, Registry.`,
 
 func init() {
 	rootCmd.AddCommand(version.Cmd)
+	rootCmd.AddCommand(login.Cmd)
 	rootCmd.AddCommand(install.Cmd)
 	rootCmd.AddCommand(deploy.Cmd)
+	rootCmd.AddCommand(dev.Cmd)
 	rootCmd.AddCommand(status.Cmd)
 	rootCmd.AddCommand(top.Cmd)
 	rootCmd.AddCommand(logs.Cmd)

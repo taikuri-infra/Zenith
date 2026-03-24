@@ -55,6 +55,15 @@ certificate:
     - www.freezenith.com
     - api.freezenith.com
 
+# Additional certificates for the zenith-apps namespace (customer app routing)
+appCertificates: []
+# - secretName: apps-wildcard-tls
+#   domains:
+#     - "*.apps.example.com"
+# - secretName: dev-apps-wildcard-tls
+#   domains:
+#     - "*.dev.apps.example.com"
+
 # Tenant quota/limit templates (ConfigMaps for Temporal provisioning)
 tenantQuotas:
   enabled: false

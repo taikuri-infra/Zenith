@@ -2244,6 +2244,18 @@ export const monitoring = {
     const token = getAccessToken();
     return `${API_BASE_URL}/api/v1/apps/${appId}/logs/stream?token=${token}`;
   },
+  getAggregatedLogs: (
+    appIds: string[],
+    params?: { level?: string; search?: string; limit?: number; since?: string }
+  ) => {
+    const q = new URLSearchParams();
+    q.set("apps", appIds.join(","));
+    if (params?.level) q.set("level", params.level);
+    if (params?.search) q.set("search", params.search);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.since) q.set("since", params.since);
+    return apiFetch<MonitoringLogsResponse>(`/api/v1/logs?${q.toString()}`);
+  },
 };
 
 // ---- Pod Exec Sessions (SSH Audit) ----
@@ -2496,3 +2508,79 @@ export function connectWebSocket(
 
   return ws;
 }
+
+// ---- Environment types ----
+
+export interface Environment {
+  id: string;
+  project_id: string;
+  name: "production" | "staging";
+  slug: string;
+  status: "provisioning" | "active" | "error";
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export const environments = {
+  list: (projectId: string) =>
+    apiFetch<{ environments: Environment[] }>(
+      `/api/v1/projects/${projectId}/environments`
+    ),
+  get: (projectId: string, envId: string) =>
+    apiFetch<Environment>(
+      `/api/v1/projects/${projectId}/environments/${envId}`
+    ),
+};
+
+// ---- Deploy Token types ----
+
+export interface DeployToken {
+  id: string;
+  user_id: string;
+  project_id: string;
+  name: string;
+  token_id: string;
+  token_prefix: string;
+  secret?: string; // Only returned on creation
+  scopes: string[];
+  last_used_at?: string;
+  expires_at?: string;
+  rotated_at?: string;
+  created_at: string;
+  revoked_at?: string;
+}
+
+export const deployTokens = {
+  list: (projectId: string) =>
+    apiFetch<{ tokens: DeployToken[] }>(
+      `/api/v1/projects/${projectId}/deploy-tokens`
+    ),
+  create: (
+    projectId: string,
+    name: string,
+    scopes: string[],
+    expiresIn?: string
+  ) =>
+    apiFetch<DeployToken>(
+      `/api/v1/projects/${projectId}/deploy-tokens`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          scopes,
+          expires_in: expiresIn || "90d",
+        }),
+      }
+    ),
+  revoke: (projectId: string, tokenId: string) =>
+    apiFetch<{ message: string }>(
+      `/api/v1/projects/${projectId}/deploy-tokens/${tokenId}`,
+      { method: "DELETE" }
+    ),
+  rotate: (projectId: string, tokenId: string) =>
+    apiFetch<DeployToken>(
+      `/api/v1/projects/${projectId}/deploy-tokens/${tokenId}/rotate`,
+      { method: "POST" }
+    ),
+};

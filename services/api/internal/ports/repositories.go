@@ -81,6 +81,16 @@ type ProjectRepository interface {
 	UpdateProjectStatus(ctx context.Context, id string, status entities.ProjectStatus) error
 }
 
+// EnvironmentRepository defines environment persistence operations.
+type EnvironmentRepository interface {
+	CreateEnvironment(ctx context.Context, env *entities.Environment) error
+	GetEnvironment(ctx context.Context, id string) (*entities.Environment, error)
+	GetEnvironmentByName(ctx context.Context, projectID string, name entities.EnvironmentName) (*entities.Environment, error)
+	ListEnvironmentsByProject(ctx context.Context, projectID string) ([]entities.Environment, error)
+	UpdateEnvironmentStatus(ctx context.Context, id string, status entities.EnvironmentStatus) error
+	DeleteEnvironment(ctx context.Context, id string) error
+}
+
 // ManagedServiceRepository defines managed service persistence operations.
 type ManagedServiceRepository interface {
 	CreateManagedService(ctx context.Context, svc *entities.ManagedService) error
@@ -396,6 +406,18 @@ type AuthPoolRepository interface {
 	UpdatePoolStatus(ctx context.Context, id string, status entities.AuthPoolStatus) error
 	UpdatePoolUserCount(ctx context.Context, id string, delta int) error
 	CountPoolsByUser(ctx context.Context, userID string) (int, error)
+}
+
+// DeployTokenRepository defines deploy token persistence operations.
+type DeployTokenRepository interface {
+	CreateDeployToken(ctx context.Context, userID, projectID, name string, scopes []string, expiresAt *time.Time) (*entities.DeployToken, error)
+	GetDeployToken(ctx context.Context, id string) (*entities.DeployToken, error)
+	GetDeployTokenByTokenID(ctx context.Context, tokenID string) (*entities.DeployToken, error)
+	ListDeployTokensByProject(ctx context.Context, projectID string) ([]entities.DeployToken, error)
+	RevokeDeployToken(ctx context.Context, id string) error
+	RotateDeployToken(ctx context.Context, id string) (*entities.DeployToken, error)
+	UpdateLastUsed(ctx context.Context, id string) error
+	VerifySecret(dt *entities.DeployToken, secret string) bool
 }
 
 // AIUsageRepository tracks AI feature usage per user.

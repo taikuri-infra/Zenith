@@ -1594,6 +1594,19 @@ const demoMonitoring = {
     };
   },
   streamLogsURL: (_appId: string) => "",
+  getAggregatedLogs: async (_appIds: string[], _params?: { level?: string; search?: string; limit?: number; since?: string }) => {
+    await delay();
+    return {
+      entries: [
+        { timestamp: "2026-03-08T10:31:10Z", line: "[go-api] Connection timeout to redis", level: "error", labels: { app: "go-api" } },
+        { timestamp: "2026-03-08T10:31:05Z", line: "[my-next-app] Slow query detected: 342ms", level: "warn", labels: { app: "my-next-app" } },
+        { timestamp: "2026-03-08T10:31:00Z", line: "[go-api] GET /api/health 200 2ms", level: "info", labels: { app: "go-api" } },
+        { timestamp: "2026-03-08T10:30:10Z", line: "[my-next-app] Connected to database", level: "info", labels: { app: "my-next-app" } },
+        { timestamp: "2026-03-08T10:30:05Z", line: "[go-api] Server started on port 8080", level: "info", labels: { app: "go-api" } },
+      ],
+      total: 5,
+    };
+  },
 };
 
 const demoAuditEntries: AuditEntry[] = [
@@ -1872,6 +1885,40 @@ export const demoApi = {
     get: async () => {
       await delay();
       return "name: Deploy to Zenith\non:\n  push:\n    branches: [main]\n# ... template content";
+    },
+  },
+  environments: {
+    list: async () => {
+      await delay();
+      return {
+        environments: [
+          { id: "env-1", project_id: "demo-project", name: "production", slug: "prod", status: "active", is_default: true, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
+          { id: "env-2", project_id: "demo-project", name: "staging", slug: "staging", status: "active", is_default: false, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
+        ],
+      };
+    },
+    get: async () => {
+      await delay();
+      return { id: "env-1", project_id: "demo-project", name: "production", slug: "prod", status: "active", is_default: true, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" };
+    },
+  },
+  deployTokens: {
+    list: async () => {
+      await delay();
+      return {
+        tokens: [
+          { id: "dt-1", project_id: "demo-project", name: "GitHub Actions", token_id: "znt_id_demo12345678", token_prefix: "znt_sk_demo1234", scopes: ["deploy:staging", "deploy:production"], expires_at: "2026-06-01T00:00:00Z", created_at: "2026-03-01T10:00:00Z" },
+        ],
+      };
+    },
+    create: async () => {
+      await delay();
+      return { id: "dt-new", project_id: "demo-project", name: "New Token", token_id: "znt_id_new123456789", token_prefix: "znt_sk_new12345", secret: "znt_sk_new1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12", scopes: ["deploy:staging"], expires_at: "2026-06-01T00:00:00Z", created_at: new Date().toISOString() };
+    },
+    revoke: async () => ({ message: "token revoked" }),
+    rotate: async () => {
+      await delay();
+      return { id: "dt-1", project_id: "demo-project", name: "GitHub Actions", token_id: "znt_id_demo12345678", token_prefix: "znt_sk_rotated1", secret: "znt_sk_rotated1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab", scopes: ["deploy:staging", "deploy:production"], created_at: "2026-03-01T10:00:00Z" };
     },
   },
 };

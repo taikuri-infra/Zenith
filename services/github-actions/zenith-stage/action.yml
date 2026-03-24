@@ -1,0 +1,114 @@
+name: 'Zenith Deploy to Staging'
+description: 'Deploy your application to Zenith Cloud staging environment'
+branding:
+  icon: 'upload-cloud'
+  color: 'green'
+
+inputs:
+  token-id:
+    description: 'Zenith deploy token ID (znt_id_...)'
+    required: true
+  token-secret:
+    description: 'Zenith deploy token secret (znt_sk_...)'
+    required: true
+  app:
+    description: 'Application name on Zenith'
+    required: true
+  image:
+    description: 'Docker image URL with tag (e.g., myrepo/app:sha-abc123)'
+    required: true
+  api-url:
+    description: 'Zenith API URL'
+    required: false
+    default: 'https://api.freezenith.com'
+  wait:
+    description: 'Wait for deployment to be healthy (true/false)'
+    required: false
+    default: 'true'
+  timeout:
+    description: 'Deployment timeout in seconds'
+    required: false
+    default: '120'
+
+outputs:
+  deployment-id:
+    description: 'The deployment ID'
+    value: ${{ steps.deploy.outputs.deployment-id }}
+  url:
+    description: 'The staging app URL'
+    value: ${{ steps.deploy.outputs.url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Deploy to Zenith Staging
+      id: deploy
+      shell: bash
+      env:
+        ZENITH_TOKEN_ID: ${{ inputs.token-id }}
+        ZENITH_TOKEN_SECRET: ${{ inputs.token-secret }}
+        ZENITH_API_URL: ${{ inputs.api-url }}
+        APP_NAME: ${{ inputs.app }}
+        IMAGE_URL: ${{ inputs.image }}
+        WAIT: ${{ inputs.wait }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -euo pipefail
+
+        echo "::group::Deploying to Zenith Staging"
+
+        # Create release
+        RESPONSE=$(curl -sf -X POST "${ZENITH_API_URL}/api/v1/deploy" \
+          -H "Authorization: DeployToken ${ZENITH_TOKEN_ID}:${ZENITH_TOKEN_SECRET}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"app\": \"${APP_NAME}\",
+            \"image\": \"${IMAGE_URL}\",
+            \"environment\": \"staging\"
+          }")
+
+        DEPLOYMENT_ID=$(echo "$RESPONSE" | jq -r '.deployment_id // .id // empty')
+        URL=$(echo "$RESPONSE" | jq -r '.url // empty')
+
+        if [ -z "$DEPLOYMENT_ID" ]; then
+          echo "::error::Failed to create deployment"
+          echo "$RESPONSE"
+          exit 1
+        fi
+
+        echo "Deployment created: $DEPLOYMENT_ID"
+        echo "deployment-id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+        echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+        # Wait for deployment
+        if [ "$WAIT" = "true" ]; then
+          echo "Waiting for deployment to be healthy..."
+          ELAPSED=0
+          while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+            STATUS=$(curl -sf "${ZENITH_API_URL}/api/v1/deployments/${DEPLOYMENT_ID}" \
+              -H "Authorization: DeployToken ${ZENITH_TOKEN_ID}:${ZENITH_TOKEN_SECRET}" | jq -r '.status // "unknown"')
+
+            case "$STATUS" in
+              running|active|healthy)
+                echo "Deployment is $STATUS"
+                break
+                ;;
+              failed|error|crash_loop)
+                echo "::error::Deployment failed with status: $STATUS"
+                exit 1
+                ;;
+              *)
+                echo "Status: $STATUS (${ELAPSED}s/${TIMEOUT}s)"
+                sleep 5
+                ELAPSED=$((ELAPSED + 5))
+                ;;
+            esac
+          done
+
+          if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+            echo "::warning::Deployment timed out after ${TIMEOUT}s"
+          fi
+        fi
+
+        echo "::endgroup::"
+        echo "Staging deployment complete: $URL"

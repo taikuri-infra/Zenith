@@ -17,6 +17,21 @@ type K8sResources struct {
 	Certificate      map[string]interface{} // nil when no custom domains
 }
 
+// StagingPerAppResources returns minimal CPU/RAM limits for staging environment apps.
+func StagingPerAppResources() (cpuLimit, memLimit, cpuReq, memReq string) {
+	return "250m", "256Mi", "50m", "64Mi"
+}
+
+// AppHostname returns the full hostname for an app based on its environment.
+// Production: subdomain.apps.{baseDomain}
+// Staging:    subdomain.dev.apps.{baseDomain}
+func AppHostname(subdomain, baseDomain string, isStaging bool) string {
+	if isStaging {
+		return subdomain + ".dev." + baseDomain
+	}
+	return subdomain + "." + baseDomain
+}
+
 // PerAppResources returns CPU/RAM limits and requests per tier for a single app container.
 func PerAppResources(tier entities.PlanTier) (cpuLimit, memLimit, cpuReq, memReq string) {
 	switch tier {
@@ -37,7 +52,7 @@ func PerAppResources(tier entities.PlanTier) (cpuLimit, memLimit, cpuReq, memReq
 // When planLimits is non-nil and the plan uses scale-to-zero, the deployment
 // starts at 0 replicas and an HTTPScaledObject CRD is included for KEDA.
 // customDomains is a list of verified custom domain hostnames to add to the IngressRoute.
-func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVars []entities.EnvVar, planLimits *entities.PlanLimits, tier entities.PlanTier, customDomains []string) *K8sResources {
+func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVars []entities.EnvVar, planLimits *entities.PlanLimits, tier entities.PlanTier, customDomains []string, isStaging ...bool) *K8sResources {
 	namespace := "zenith-apps"
 	labels := map[string]string{
 		"app":                   app.Subdomain,
@@ -45,35 +60,52 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 		"zenith.dev/managed-by": "zenith",
 	}
 
+	staging := len(isStaging) > 0 && isStaging[0]
 	scaleToZero := planLimits != nil && ShouldScaleToZero(planLimits)
+
+	// Staging environments use minimal resources regardless of plan tier
+	effectiveTier := tier
+	if staging {
+		effectiveTier = entities.PlanFree // minimal resources for staging
+	}
 
 	// APISIX is used for the platform API gateway (api.stage.freezenith.com),
 	// NOT for routing customer app traffic. Customer apps route directly to
 	// their own service. The auto-gateway creates APISIX routes on *.gw.* domains.
 	useApisix := false
 
+	// Build the effective hostname for this environment
+	effectiveDomain := baseDomain
+	if staging {
+		// Staging apps get dev.apps.{baseDomain} subdomain
+		parts := strings.SplitN(baseDomain, ".", 2)
+		if len(parts) == 2 {
+			effectiveDomain = "dev." + baseDomain
+		}
+	}
+
 	res := &K8sResources{
-		Deployment:    generateDeployment(app, imageTag, namespace, labels, envVars, tier),
+		Deployment:    generateDeployment(app, imageTag, namespace, labels, envVars, effectiveTier),
 		Service:       generateService(app, namespace, labels),
 		NetworkPolicy: generateNetworkPolicy(app, namespace, labels, useApisix),
 	}
 
-	if scaleToZero {
+	if scaleToZero && !staging {
 		// Set deployment replicas to 0 — KEDA manages scaling
 		spec := res.Deployment["spec"].(map[string]interface{})
 		spec["replicas"] = int32(0)
 
-		res.HTTPScaledObject = GenerateHTTPScaledObject(app, baseDomain, planLimits.SleepAfterMins)
+		res.HTTPScaledObject = GenerateHTTPScaledObject(app, effectiveDomain, planLimits.SleepAfterMins)
 		if useApisix {
-			res.IngressRoute = generateIngressRouteViaApisixWithColdStart(app, namespace, labels, baseDomain, customDomains)
+			res.IngressRoute = generateIngressRouteViaApisixWithColdStart(app, namespace, labels, effectiveDomain, customDomains)
 		} else {
-			res.IngressRoute = generateIngressRouteWithColdStart(app, namespace, labels, baseDomain, customDomains)
+			res.IngressRoute = generateIngressRouteWithColdStart(app, namespace, labels, effectiveDomain, customDomains)
 		}
 	} else {
 		if useApisix {
-			res.IngressRoute = generateIngressRouteViaApisix(app, namespace, labels, baseDomain, customDomains)
+			res.IngressRoute = generateIngressRouteViaApisix(app, namespace, labels, effectiveDomain, customDomains)
 		} else {
-			res.IngressRoute = generateIngressRoute(app, namespace, labels, baseDomain, customDomains, tier)
+			res.IngressRoute = generateIngressRoute(app, namespace, labels, effectiveDomain, customDomains, effectiveTier, staging)
 		}
 	}
 
@@ -237,12 +269,16 @@ func generateService(app *entities.App, namespace string, labels map[string]stri
 	}
 }
 
-func generateIngressRoute(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string, tier entities.PlanTier) map[string]interface{} {
+func generateIngressRoute(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string, tier entities.PlanTier, staging ...bool) map[string]interface{} {
 	matchRule := buildHostMatchRule(app.Subdomain+"."+baseDomain, customDomains)
 
+	isStaging := len(staging) > 0 && staging[0]
 	tls := map[string]interface{}{}
 	if len(customDomains) > 0 {
 		tls["secretName"] = app.Subdomain + "-custom-tls"
+	} else if isStaging {
+		// Staging apps use a separate wildcard cert for *.dev.apps.{baseDomain}
+		tls["secretName"] = "dev-apps-wildcard-tls"
 	}
 
 	route := map[string]interface{}{

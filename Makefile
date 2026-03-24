@@ -19,7 +19,8 @@ IMAGES := zenith-api zenith-landing zenith-mc zenith-web zenith-operator
 	chart-lint chart-package chart-push \
 	deploy-staging tf-plan tf-apply \
 	ci-images ci-chart ci-terraform ci-all \
-	deploy deploy-api deploy-web deploy-mc deploy-landing deploy-operator deploy-all ci
+	deploy deploy-api deploy-web deploy-mc deploy-landing deploy-operator deploy-all ci \
+	deploy-app deploy-admin deploy-frontend deploy-frontend-fast setup-money
 
 # --- Help ---
 help: ## Show this help
@@ -170,3 +171,30 @@ deploy-all: ## Deploy ALL components to staging
 
 ci: ## Run CI tests locally via act
 	act -j test -W .github/workflows/ci.yml --secret-file .secrets
+
+# =============================================================================
+# Deploy to Money Server (harsh.dockerhelper.ir) — docker-compose + SSH
+# Requires: .secrets with MONEY_SSH_PRIVATE_KEY, HARBOR_ROBOT_USER, HARBOR_ROBOT_TOKEN
+# =============================================================================
+
+MONEY_HOST       ?= 35.184.19.30
+ACT_DEPLOY_MONEY := act -j deploy -W .github/workflows/deploy-money.yml --secret-file .secrets
+
+deploy-landing: ## Deploy Landing → harsh.dockerhelper.ir
+	$(ACT_DEPLOY_MONEY) --input component=landing
+
+deploy-app: ## Deploy Web App → app.harsh.dockerhelper.ir
+	$(ACT_DEPLOY_MONEY) --input component=app
+
+deploy-admin: ## Deploy Admin (MC) → admin.harsh.dockerhelper.ir
+	$(ACT_DEPLOY_MONEY) --input component=admin
+
+deploy-frontend: ## Deploy ALL frontend → money server
+	$(ACT_DEPLOY_MONEY) --input component=all
+
+deploy-frontend-fast: ## Redeploy frontend without rebuild (fast)
+	$(ACT_DEPLOY_MONEY) --input component=all --input skip_build=true
+
+# Bootstrap money server (run once)
+setup-money: ## Setup money server: install Docker + Compose
+	ssh $(MONEY_HOST) 'apt-get update && apt-get install -y docker.io docker-compose-plugin && systemctl enable docker && systemctl start docker'

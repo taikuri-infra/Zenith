@@ -520,6 +520,25 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		envVarRepo = memory.NewMemoryEnvVarRepository()
 	}
 
+	// Environment repo
+	var envRepo ports.EnvironmentRepository
+	if pool != nil {
+		envRepo = postgres.NewPostgresEnvironmentRepository(pool)
+	} else {
+		envRepo = memory.NewMemoryEnvironmentRepository()
+	}
+
+	envHandler := handlers.NewEnvironmentHandler(envRepo, projectRepo)
+	projectHandlerV2.SetEnvironmentHandler(envHandler)
+	projectHandlerV2.SetPlanRepo(planRepo)
+
+	// Deploy token repo
+	var deployTokenRepo ports.DeployTokenRepository
+	if pool != nil {
+		deployTokenRepo = postgres.NewPostgresDeployTokenRepository(pool)
+	}
+	deployTokenHandler := handlers.NewDeployTokenHandler(deployTokenRepo, projectRepo)
+
 	composeHandler := handlers.NewComposeHandler(projectRepo)
 	msHandler := handlers.NewManagedServiceHandler(projectRepo, msRepo)
 	envVarHandler := handlers.NewEnvVarHandler(appRepo, envVarRepo)
@@ -616,8 +635,30 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		internal.Post("/metering", meteringHandler.RecordUsage)
 	}
 
-	// Protected routes
-	protected := api.Group("", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist))
+	// Protected routes — deploy token auth runs first (if present), then JWT fallback
+	var deployTokenMiddleware fiber.Handler
+	if deployTokenRepo != nil {
+		deployTokenMiddleware = middleware.DeployTokenAuthFunc(func(tokenID, secret string) (*entities.DeployToken, error) {
+			dt, err := deployTokenRepo.GetDeployTokenByTokenID(context.Background(), tokenID)
+			if err != nil {
+				return nil, err
+			}
+			if dt.IsRevoked() || dt.IsExpired() {
+				return nil, fmt.Errorf("token revoked or expired")
+			}
+			if !deployTokenRepo.VerifySecret(dt, secret) {
+				return nil, fmt.Errorf("invalid secret")
+			}
+			go deployTokenRepo.UpdateLastUsed(context.Background(), dt.ID)
+			return dt, nil
+		})
+	}
+	protectedMiddlewares := []fiber.Handler{}
+	if deployTokenMiddleware != nil {
+		protectedMiddlewares = append(protectedMiddlewares, deployTokenMiddleware)
+	}
+	protectedMiddlewares = append(protectedMiddlewares, middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist))
+	protected := api.Group("", protectedMiddlewares...)
 
 	// Team members (IAM)
 	protected.Post("/team/invite", teamHandler.InviteMember)
@@ -637,6 +678,20 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	projectByID := projects.Group("/:projectId")
 	projectByID.Post("/import-compose", composeHandler.ImportCompose)
 	projectByID.Post("/format-compose", composeHandler.FormatCompose)
+	projectByID.Get("/environments", envHandler.List)
+	projectByID.Get("/environments/:envId", envHandler.Get)
+	// Deploy tokens (under /projects/:projectId/deploy-tokens)
+	if deployTokenRepo != nil {
+		projectByID.Post("/deploy-tokens", deployTokenHandler.Create)
+		projectByID.Get("/deploy-tokens", deployTokenHandler.List)
+		projectByID.Delete("/deploy-tokens/:tokenId", deployTokenHandler.Revoke)
+		projectByID.Post("/deploy-tokens/:tokenId/rotate", deployTokenHandler.Rotate)
+	}
+
+	// Dev info + tunnel (for zen dev CLI)
+	tunnelHandler := handlers.NewTunnelHandler(projectRepo, envRepo, msRepo)
+	projectByID.Get("/dev-info", tunnelHandler.GetDevInfo)
+
 	projectByID.Post("/managed-services", msHandler.Provision)
 	projectByID.Get("/managed-services", msHandler.List)
 	projectByID.Get("/managed-services/:msId", msHandler.Get)
@@ -968,6 +1023,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Get("/logs", monitoringHandler.GetLogs)
 	appByID.Get("/logs/stream", monitoringHandler.StreamLogs)
 	appByID.Get("/pods", monitoringHandler.GetPods)
+	protected.Get("/logs", monitoringHandler.GetAggregatedLogs)
 
 	// AI features (Phase 3 — LiteLLM / OpenAI-compatible)
 	aiClient := services.NewAIClient(cfg.AILiteLLMURL, cfg.AIAPIKey, cfg.AIModel, cfg.AIEnabled)
