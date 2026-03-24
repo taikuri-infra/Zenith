@@ -31,7 +31,22 @@ import {
   Shield,
 } from "lucide-react";
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
+
+type EnvVarEdit = {
+  key: string;
+  value: string;
+  is_secret: boolean;
+  fromCompose: boolean; // pre-filled from compose vs. user-added
+};
+
+function looksLikeSecret(key: string): boolean {
+  const lower = key.toLowerCase();
+  return ["password", "passwd", "secret", "token", "api_key", "apikey",
+    "private_key", "privatekey", "auth", "credential", "cert", "key"].some((h) =>
+    lower.includes(h)
+  );
+}
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -52,7 +67,11 @@ export default function NewProjectPage() {
   const [provisionedServices, setProvisionedServices] = useState<ManagedService[]>([]);
   const [provisioning, setProvisioning] = useState(false);
 
-  // Step 3: Deploy
+  // Step 3: Env vars
+  const [envVarEdits, setEnvVarEdits] = useState<Record<string, EnvVarEdit[]>>({});
+  const [dotEnvImport, setDotEnvImport] = useState("");
+
+  // Step 4: Deploy
   const [deploying, setDeploying] = useState(false);
   const [deployDone, setDeployDone] = useState(false);
   const [deployPhase, setDeployPhase] = useState<"managed" | "backend" | "frontend" | "done">("managed");
@@ -142,6 +161,82 @@ export default function NewProjectPage() {
       setParsing(false);
     }
   }, [name, composeContent, projectId, api, toast]);
+
+  // Init env var edit state from parse result when entering step 3
+  const initEnvVarEdits = useCallback((result: ComposeImportResult) => {
+    const edits: Record<string, EnvVarEdit[]> = {};
+    for (const svc of result.services || []) {
+      edits[svc.name] = svc.env_vars.map((ev) => ({
+        key: ev.key,
+        value: ev.zenith || ev.original || "",
+        is_secret: looksLikeSecret(ev.key),
+        fromCompose: true,
+      }));
+      // Add one blank row per service for extra vars
+      edits[svc.name].push({ key: "", value: "", is_secret: false, fromCompose: false });
+    }
+    setEnvVarEdits(edits);
+  }, []);
+
+  const handleEnvVarChange = (svcName: string, idx: number, field: keyof EnvVarEdit, val: string | boolean) => {
+    setEnvVarEdits((prev) => {
+      const rows = [...(prev[svcName] || [])];
+      rows[idx] = { ...rows[idx], [field]: val };
+      return { ...prev, [svcName]: rows };
+    });
+  };
+
+  const addEnvVarRow = (svcName: string) => {
+    setEnvVarEdits((prev) => ({
+      ...prev,
+      [svcName]: [...(prev[svcName] || []), { key: "", value: "", is_secret: false, fromCompose: false }],
+    }));
+  };
+
+  const removeEnvVarRow = (svcName: string, idx: number) => {
+    setEnvVarEdits((prev) => {
+      const rows = (prev[svcName] || []).filter((_, i) => i !== idx);
+      return { ...prev, [svcName]: rows };
+    });
+  };
+
+  // Parse and merge a .env file content into all services
+  const applyDotEnvImport = (content: string) => {
+    const parsed: Record<string, string> = {};
+    content.split("\n").forEach((line) => {
+      line = line.trim();
+      if (!line || line.startsWith("#")) return;
+      line = line.replace(/^export\s+/, "");
+      const idx = line.indexOf("=");
+      if (idx < 1) return;
+      const key = line.slice(0, idx).trim();
+      let value = line.slice(idx + 1).trim();
+      if (value.length >= 2 && ((value[0] === '"' && value.endsWith('"')) || (value[0] === "'" && value.endsWith("'")))) {
+        value = value.slice(1, -1);
+      }
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) parsed[key] = value;
+    });
+    if (Object.keys(parsed).length === 0) return;
+    setEnvVarEdits((prev) => {
+      const next = { ...prev };
+      for (const svcName of Object.keys(next)) {
+        const rows = [...next[svcName]];
+        for (const [key, value] of Object.entries(parsed)) {
+          const existing = rows.findIndex((r) => r.key === key);
+          if (existing >= 0) {
+            rows[existing] = { ...rows[existing], value };
+          } else {
+            // Insert before the last blank row
+            const insertAt = rows.length > 0 && !rows[rows.length - 1].key ? rows.length - 1 : rows.length;
+            rows.splice(insertAt, 0, { key, value, is_secret: looksLikeSecret(key), fromCompose: false });
+          }
+        }
+        next[svcName] = rows;
+      }
+      return next;
+    });
+    setDotEnvImport("");
+  };
 
   // Format YAML: parse and re-serialize for correct indentation
   // Falls back to AI formatting if js-yaml can't parse
@@ -305,9 +400,11 @@ export default function NewProjectPage() {
         imageUrl = `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`;
       }
 
-      const envVars = svc.env_vars
-        .filter((ev) => ev.zenith)
-        .map((ev) => ({ key: ev.key, value: ev.zenith }));
+      const envVars = (envVarEdits[svc.name] || svc.env_vars.map((ev) => ({
+        key: ev.key, value: ev.zenith || ev.original || "", is_secret: false, fromCompose: true,
+      })))
+        .filter((ev) => ev.key.trim() && ev.value.trim())
+        .map((ev) => ({ key: ev.key.trim(), value: ev.value }));
 
       const appName = `${slug}-${svc.name}`;
       const isPublic = exposureOverrides[svc.name] ?? svc.is_public;
@@ -378,7 +475,7 @@ export default function NewProjectPage() {
       toast("error", "Some services failed to deploy.");
     }
     setDeploying(false);
-  }, [parseResult, projectId, name, api, toast, exposureOverrides, imageOverrides, provisionedServices, addLog, waitForApp]);
+  }, [parseResult, projectId, name, api, toast, exposureOverrides, imageOverrides, provisionedServices, addLog, waitForApp, envVarEdits]);
 
   return (
     <Shell>
@@ -391,10 +488,12 @@ export default function NewProjectPage() {
           <h1 className="text-lg font-semibold text-white">Deploy Project</h1>
           <div className="ml-auto flex items-center gap-2 text-sm text-neutral-400">
             <StepDot active={step >= 1} done={step > 1} label="1" />
-            <div className="h-px w-6 bg-neutral-700" />
+            <div className="h-px w-4 bg-neutral-700" />
             <StepDot active={step >= 2} done={step > 2} label="2" />
-            <div className="h-px w-6 bg-neutral-700" />
-            <StepDot active={step >= 3} done={deployDone} label="3" />
+            <div className="h-px w-4 bg-neutral-700" />
+            <StepDot active={step >= 3} done={step > 3} label="3" />
+            <div className="h-px w-4 bg-neutral-700" />
+            <StepDot active={step >= 4} done={deployDone} label="4" />
           </div>
         </div>
 
@@ -634,7 +733,156 @@ export default function NewProjectPage() {
                 Back
               </button>
               <button
-                onClick={() => setStep(3)}
+                onClick={() => { if (parseResult) initEnvVarEdits(parseResult); setStep(3); }}
+                className="flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand/90"
+              >
+                <ArrowRight className="h-4 w-4" />
+                Configure Env Vars
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Env Vars */}
+        {step === 3 && parseResult && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-medium text-white">Step 3: Environment Variables</h2>
+              <p className="mt-1 text-sm text-neutral-400">
+                Review and fill in environment variables for each service.
+                Values left blank won&apos;t be set.
+              </p>
+            </div>
+
+            {/* Upload .env */}
+            <div className="rounded-lg border border-border bg-surface-200 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-neutral-300 flex items-center gap-2">
+                  <Upload className="h-4 w-4 text-accent-400" />
+                  Bulk import from .env file
+                </p>
+                <label className="flex cursor-pointer items-center gap-1.5 rounded border border-border px-2 py-1 text-xs text-neutral-400 hover:text-white transition-colors">
+                  <Upload className="h-3 w-3" />
+                  Upload file
+                  <input
+                    type="file"
+                    accept=".env,text/plain"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        const content = ev.target?.result as string ?? "";
+                        applyDotEnvImport(content);
+                      };
+                      reader.readAsText(file);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              <textarea
+                value={dotEnvImport}
+                onChange={(e) => setDotEnvImport(e.target.value)}
+                placeholder={"DATABASE_URL=postgres://...\nREDIS_URL=redis://...\nJWT_SECRET=..."}
+                rows={4}
+                className="w-full rounded-md border border-border bg-surface-100 px-3 py-2 font-mono text-xs text-neutral-300 placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none resize-none"
+              />
+              <button
+                onClick={() => applyDotEnvImport(dotEnvImport)}
+                disabled={!dotEnvImport.trim()}
+                className="rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Apply to all services
+              </button>
+            </div>
+
+            {/* Per-service env var tables */}
+            {(parseResult.services || []).map((svc) => {
+              const rows = envVarEdits[svc.name] || [];
+              const emptyCount = rows.filter((r) => r.fromCompose && r.key && !r.value).length;
+              return (
+                <div key={svc.name} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="flex items-center gap-2 text-sm font-medium text-neutral-300">
+                      <Server className="h-4 w-4 text-accent-400" />
+                      {svc.name}
+                      {emptyCount > 0 && (
+                        <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-400">
+                          {emptyCount} empty
+                        </span>
+                      )}
+                    </h3>
+                  </div>
+                  <div className="rounded-lg border border-border bg-surface-200 overflow-hidden">
+                    {/* Header */}
+                    <div className="grid grid-cols-[1fr_1fr_5rem_2rem] gap-2 border-b border-border bg-surface-100 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-neutral-500">
+                      <span>Key</span><span>Value</span><span>Secret</span><span />
+                    </div>
+                    {rows.map((row, idx) => (
+                      <div
+                        key={idx}
+                        className={`grid grid-cols-[1fr_1fr_5rem_2rem] gap-2 items-center px-3 py-1.5 border-b border-border/50 last:border-0 ${
+                          row.fromCompose && row.key && !row.value ? "bg-amber-500/5" : ""
+                        }`}
+                      >
+                        <input
+                          type="text"
+                          value={row.key}
+                          onChange={(e) => handleEnvVarChange(svc.name, idx, "key", e.target.value)}
+                          placeholder="KEY"
+                          className="w-full rounded bg-transparent px-2 py-1 font-mono text-xs text-white placeholder:text-neutral-600 border border-transparent hover:border-border focus:border-accent-500 focus:outline-none"
+                        />
+                        <input
+                          type={row.is_secret ? "password" : "text"}
+                          value={row.value}
+                          onChange={(e) => handleEnvVarChange(svc.name, idx, "value", e.target.value)}
+                          placeholder={row.fromCompose && row.key && !row.value ? "required" : "value"}
+                          className={`w-full rounded bg-transparent px-2 py-1 font-mono text-xs placeholder:text-neutral-600 border border-transparent hover:border-border focus:border-accent-500 focus:outline-none ${
+                            row.fromCompose && row.key && !row.value ? "placeholder:text-amber-600 text-white" : "text-neutral-300"
+                          }`}
+                        />
+                        <button
+                          onClick={() => handleEnvVarChange(svc.name, idx, "is_secret", !row.is_secret)}
+                          className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] transition-colors ${
+                            row.is_secret
+                              ? "bg-amber-500/20 text-amber-400"
+                              : "text-neutral-600 hover:text-neutral-400"
+                          }`}
+                        >
+                          <Lock className="h-3 w-3" />
+                          {row.is_secret ? "Secret" : "Plain"}
+                        </button>
+                        <button
+                          onClick={() => removeEnvVarRow(svc.name, idx)}
+                          className="text-neutral-600 hover:text-red-400 transition-colors"
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => addEnvVarRow(svc.name)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-neutral-500 hover:text-accent-400 hover:bg-surface-100 transition-colors"
+                    >
+                      <span className="text-lg leading-none">+</span> Add variable
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="flex justify-between">
+              <button
+                onClick={() => setStep(2)}
+                className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm text-neutral-300 hover:text-white"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+              <button
+                onClick={() => setStep(4)}
                 className="flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand/90"
               >
                 <Rocket className="h-4 w-4" />
@@ -644,11 +892,11 @@ export default function NewProjectPage() {
           </div>
         )}
 
-        {/* Step 3: Deploy */}
-        {step === 3 && parseResult && (
+        {/* Step 4: Deploy */}
+        {step === 4 && parseResult && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-base font-medium text-white">Step 3: Deploy</h2>
+              <h2 className="text-base font-medium text-white">Step 4: Deploy</h2>
               <p className="mt-1 text-sm text-neutral-400">
                 {deployDone
                   ? "All services are running!"
@@ -800,7 +1048,7 @@ export default function NewProjectPage() {
             <div className="flex justify-between">
               {!deployDone && !deploying && (
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm text-neutral-300 hover:text-white"
                 >
                   <ArrowLeft className="h-4 w-4" />
