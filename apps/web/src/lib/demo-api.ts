@@ -1907,18 +1907,18 @@ export const demoApi = {
       await delay();
       return {
         tokens: [
-          { id: "dt-1", project_id: "demo-project", name: "GitHub Actions", token_id: "znt_id_demo12345678", token_prefix: "znt_sk_demo1234", scopes: ["deploy:staging", "deploy:production"], expires_at: "2026-06-01T00:00:00Z", created_at: "2026-03-01T10:00:00Z" },
+          { id: "dt-1", user_id: "demo-user", project_id: "demo-project", name: "GitHub Actions", token_id: "znt_id_demo12345678", token_prefix: "znt_sk_demo1234", scopes: ["deploy:staging", "deploy:production"], expires_at: "2026-06-01T00:00:00Z", created_at: "2026-03-01T10:00:00Z" },
         ],
       };
     },
     create: async () => {
       await delay();
-      return { id: "dt-new", project_id: "demo-project", name: "New Token", token_id: "znt_id_new123456789", token_prefix: "znt_sk_new12345", secret: "znt_sk_new1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12", scopes: ["deploy:staging"], expires_at: "2026-06-01T00:00:00Z", created_at: new Date().toISOString() };
+      return { id: "dt-new", user_id: "demo-user", project_id: "demo-project", name: "New Token", token_id: "znt_id_new123456789", token_prefix: "znt_sk_new12345", secret: "znt_sk_new1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12", scopes: ["deploy:staging"], expires_at: "2026-06-01T00:00:00Z", created_at: new Date().toISOString() };
     },
     revoke: async () => ({ message: "token revoked" }),
     rotate: async () => {
       await delay();
-      return { id: "dt-1", project_id: "demo-project", name: "GitHub Actions", token_id: "znt_id_demo12345678", token_prefix: "znt_sk_rotated1", secret: "znt_sk_rotated1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab", scopes: ["deploy:staging", "deploy:production"], created_at: "2026-03-01T10:00:00Z" };
+      return { id: "dt-1", user_id: "demo-user", project_id: "demo-project", name: "GitHub Actions", token_id: "znt_id_demo12345678", token_prefix: "znt_sk_rotated1", secret: "znt_sk_rotated1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab", scopes: ["deploy:staging", "deploy:production"], created_at: "2026-03-01T10:00:00Z" };
     },
   },
 };
