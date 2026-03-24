@@ -4,6 +4,7 @@ import { Shell } from "@/components/shell";
 import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
 import type { DeployToken } from "@/lib/api";
+import { DEPLOY_TOKEN_SCOPES, DEPLOY_TOKEN_EXPIRY_OPTIONS } from "@/lib/api";
 import { useParams } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -18,21 +19,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-const SCOPES = [
-  { value: "deploy:staging", label: "Deploy to Staging" },
-  { value: "deploy:production", label: "Deploy to Production" },
-  { value: "app:read", label: "Read Apps" },
-  { value: "app:write", label: "Write Apps" },
-  { value: "db:read", label: "Read Databases" },
-  { value: "logs:read", label: "Read Logs" },
-];
-
-const EXPIRY_OPTIONS = [
-  { value: "30d", label: "30 days" },
-  { value: "90d", label: "90 days" },
-  { value: "180d", label: "180 days" },
-  { value: "365d", label: "1 year" },
-];
+const SCOPES = DEPLOY_TOKEN_SCOPES;
+const EXPIRY_OPTIONS = DEPLOY_TOKEN_EXPIRY_OPTIONS;
 
 export default function DeployTokensPage() {
   const { id: projectId } = useParams<{ id: string }>();

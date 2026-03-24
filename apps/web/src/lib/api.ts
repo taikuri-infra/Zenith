@@ -2542,6 +2542,23 @@ export const environments = {
 
 // ---- Deploy Token types ----
 
+export const DEPLOY_TOKEN_SCOPES = [
+  { value: "deploy:staging", label: "Deploy to Staging" },
+  { value: "deploy:production", label: "Deploy to Production" },
+  { value: "app:read", label: "Read Apps" },
+  { value: "app:write", label: "Write Apps" },
+  { value: "db:read", label: "Read Databases" },
+  { value: "logs:read", label: "Read Logs" },
+  { value: "infra:*", label: "Full Infrastructure Access" },
+] as const;
+
+export const DEPLOY_TOKEN_EXPIRY_OPTIONS = [
+  { value: "30d", label: "30 days" },
+  { value: "90d", label: "90 days" },
+  { value: "180d", label: "180 days" },
+  { value: "365d", label: "1 year" },
+] as const;
+
 export interface DeployToken {
   id: string;
   user_id: string;

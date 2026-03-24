@@ -2,12 +2,9 @@ package dev
 
 import (
 	"fmt"
-	"net"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/dotechhq/zenith/cli/internal/api"
 	"github.com/dotechhq/zenith/cli/internal/config"
@@ -34,14 +31,10 @@ connect to the remote staging services automatically.`,
 	RunE: runDev,
 }
 
-var (
-	flagProject string
-	flagApp     string
-)
+var flagProject string
 
 func init() {
 	Cmd.Flags().StringVar(&flagProject, "project", "", "Project name or ID (auto-detected from docker-compose.yml if omitted)")
-	Cmd.Flags().StringVar(&flagApp, "app", "", "App name (optional)")
 }
 
 // composeFile represents a minimal docker-compose.yml structure.
@@ -228,15 +221,6 @@ func runDev(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  # or: source .env.zenith && go run .\n")
 	fmt.Printf("  # or: set -a && source .env.zenith && python manage.py runserver\n")
 
-	// If --app flag, keep running (future: tunnel mode)
-	if flagApp != "" {
-		fmt.Printf("\n%s Watching for changes... (Ctrl+C to stop)\n", tui.Cyan("→"))
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-		<-sig
-		fmt.Printf("\n%s Disconnected\n", tui.Green("✓"))
-	}
-
 	return nil
 }
 
@@ -289,12 +273,3 @@ func addToGitignore(filename string) {
 	fmt.Printf("%s Added %s to .gitignore\n", tui.Green("✓"), filename)
 }
 
-// isLocalPortAvailable checks if a TCP port is available.
-func isLocalPortAvailable(port int) bool {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		return false
-	}
-	ln.Close()
-	return true
-}
