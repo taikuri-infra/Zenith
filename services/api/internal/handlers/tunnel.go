@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/dotechhq/zenith/services/api/internal/ports"
@@ -90,14 +89,3 @@ func (h *TunnelHandler) GetDevInfo(c *fiber.Ctx) error {
 	})
 }
 
-// CreateTunnel handles POST /projects/:projectId/environments/:envId/tunnels
-// Creates a tunnel session to staging services.
-// TODO: Implement WebSocket-based tunneling for direct port access.
-func (h *TunnelHandler) CreateTunnel(c *fiber.Ctx) error {
-	_ = c.Locals("user_id")
-
-	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-		"message": "Tunnel sessions not yet implemented. Use connection URLs from /dev-info endpoint.",
-		"hint":    fmt.Sprintf("GET /api/v1/projects/%s/dev-info returns connection details for managed services", c.Params("projectId")),
-	})
-}
