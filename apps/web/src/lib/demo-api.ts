@@ -1892,14 +1892,14 @@ export const demoApi = {
       await delay();
       return {
         environments: [
-          { id: "env-1", project_id: "demo-project", name: "production", slug: "prod", status: "active", is_default: true, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
-          { id: "env-2", project_id: "demo-project", name: "staging", slug: "staging", status: "active", is_default: false, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
+          { id: "env-1", project_id: "demo-project", name: "production" as const, slug: "prod", status: "active" as const, is_default: true, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
+          { id: "env-2", project_id: "demo-project", name: "staging" as const, slug: "staging", status: "active" as const, is_default: false, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" },
         ],
       };
     },
     get: async () => {
       await delay();
-      return { id: "env-1", project_id: "demo-project", name: "production", slug: "prod", status: "active", is_default: true, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" };
+      return { id: "env-1", project_id: "demo-project", name: "production" as const, slug: "prod", status: "active" as const, is_default: true, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:00:00Z" };
     },
   },
   deployTokens: {
