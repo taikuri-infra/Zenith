@@ -617,7 +617,7 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
       {pendingRestart && (
         <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
           <p className="text-sm text-amber-300">
-            Changes saved. Restart the app to apply them to the running container.
+            Changes saved to <span className="font-semibold">{activeEnv}</span>. Restart the app to apply them to the running container.
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -639,27 +639,37 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
 
       {/* Environment tabs + toolbar */}
       <div className="flex items-center justify-between">
-        <div className="flex rounded-lg border border-border overflow-hidden">
-          <button
-            onClick={() => setActiveEnv("production")}
-            className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeEnv === "production" ? "bg-accent-500 text-white" : "bg-surface-100 text-neutral-400 hover:text-white"
-            }`}
-          >
-            Production
-          </button>
-          <button
-            onClick={() => setActiveEnv("staging")}
-            disabled={!hasStagingEnv}
-            title={!hasStagingEnv ? "Staging environment not available on Free plan" : undefined}
-            className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeEnv === "staging"
-                ? "bg-accent-500 text-white"
-                : "bg-surface-100 text-neutral-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-            }`}
-          >
-            Staging
-          </button>
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            <button
+              onClick={() => setActiveEnv("production")}
+              className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium transition-colors ${
+                activeEnv === "production"
+                  ? "bg-red-600 text-white"
+                  : "bg-surface-100 text-neutral-400 hover:text-white"
+              }`}
+            >
+              Production
+            </button>
+            <button
+              onClick={() => setActiveEnv("staging")}
+              disabled={!hasStagingEnv}
+              title={!hasStagingEnv ? "Staging environment not available on Free plan" : undefined}
+              className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                activeEnv === "staging"
+                  ? "bg-green-600 text-white"
+                  : "bg-surface-100 text-neutral-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+              }`}
+            >
+              Staging
+            </button>
+          </div>
+          {activeEnv === "production" && (
+            <span className="flex items-center gap-1 rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-0.5 text-xs font-medium text-red-400">
+              <AlertTriangle className="h-3 w-3" />
+              Live environment
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
