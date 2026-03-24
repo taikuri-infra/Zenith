@@ -9,7 +9,7 @@ import { BuildLogViewer } from "@/components/build-log-viewer";
 import { useToast } from "@/components/toast";
 import { useApi } from "@/hooks/use-api";
 import { useDeployLogs } from "@/hooks/use-deploy-logs";
-import { type DeployApp, type Deployment, type EnvVar, type Secret, type Release, type AppDatabase, type DatabaseBackup, type AppAuthConfig, type AppAuthUser, type AppBucket, type CustomDomain, type PodStatus, monitoring } from "@/lib/api";
+import { type DeployApp, type Deployment, type EnvVar, type AppEnvVar, type Secret, type Release, type AppDatabase, type DatabaseBackup, type AppAuthConfig, type AppAuthUser, type AppBucket, type CustomDomain, type PodStatus, monitoring } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import { useState, useCallback, useEffect } from "react";
 import { useDeployEvents } from "@/hooks/use-deploy-events";
@@ -43,6 +43,7 @@ import {
   Cog,
   Heart,
   AlertTriangle,
+  Upload,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -202,7 +203,7 @@ export default function AppDetailPage() {
         {activeTab === "auth" && <AuthTab appId={appId} />}
         {activeTab === "domains" && <DomainsTab appId={appId} />}
         {activeTab === "secrets" && <SecretsTab appId={appId} />}
-        {activeTab === "env" && <EnvTab appId={appId} />}
+        {activeTab === "env" && <EnvTab appId={appId} projectId={app?.project_id} />}
       </div>
     </Shell>
   );
@@ -471,48 +472,184 @@ function DeploymentsTab({ appId }: { appId: string }) {
   );
 }
 
-function EnvTab({ appId }: { appId: string }) {
-  const { appsDeploy } = getApi();
+// EnvTab supports per-environment env vars (Production / Staging) + .env file import.
+function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
+  const api = getApi();
   const { toast } = useToast();
+
+  // Environment selection: "" = production (default), or a staging env ID
+  const [activeEnv, setActiveEnv] = useState<"production" | "staging">("production");
+  const [stagingEnvId, setStagingEnvId] = useState<string>("");
+  const [envIdsLoaded, setEnvIdsLoaded] = useState(false);
+
+  // Load environment IDs from the project
+  useEffect(() => {
+    if (!projectId) { setEnvIdsLoaded(true); return; }
+    api.environments.list(projectId).then((resp) => {
+      const staging = resp.environments?.find((e) => e.name === "staging");
+      if (staging) setStagingEnvId(staging.id);
+      setEnvIdsLoaded(true);
+    }).catch(() => setEnvIdsLoaded(true));
+  }, [projectId]);
+
+  const currentEnvId = activeEnv === "staging" ? stagingEnvId : "";
+
   const { data: envData, loading, error, refetch } = useApi(
-    () => appsDeploy.getEnvVars(appId),
-    [appId]
+    () => envIdsLoaded ? api.envVarsV2.list(appId, currentEnvId) : Promise.resolve(null),
+    [appId, currentEnvId, envIdsLoaded]
   );
 
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [newIsSecret, setNewIsSecret] = useState(false);
   const [showValues, setShowValues] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [dotEnvContent, setDotEnvContent] = useState("");
 
-  if (loading) return <PageWithTableSkeleton cols={3} rows={3} />;
-  if (error) return <ErrorState message={error} onRetry={refetch} />;
-
-  const items = envData?.items || [];
+  const items: AppEnvVar[] = envData?.items || [];
 
   const handleAdd = async () => {
-    if (!newKey.trim()) return;
+    const key = newKey.trim();
+    if (!key) return;
     try {
-      await appsDeploy.setEnvVars(appId, { [newKey.trim()]: newValue });
+      await api.envVarsV2.set(appId, [{ key, value: newValue, is_secret: newIsSecret }], currentEnvId);
       setNewKey("");
       setNewValue("");
+      setNewIsSecret(false);
       refetch();
     } catch {
       toast("error", "Failed to set environment variable");
     }
   };
 
-  const handleDelete = async (key: string) => {
+  const handleDelete = async (varId: string) => {
     try {
-      await appsDeploy.deleteEnvVar(appId, key);
+      await api.envVarsV2.delete(appId, varId);
       refetch();
     } catch {
       toast("error", "Failed to delete environment variable");
     }
   };
 
+  const handleImport = async () => {
+    if (!dotEnvContent.trim()) return;
+    setImporting(true);
+    try {
+      const result = await api.envVarsV2.importDotEnv(appId, dotEnvContent, currentEnvId);
+      toast("success", `Imported ${result.imported} variable${result.imported !== 1 ? "s" : ""}`);
+      setDotEnvContent("");
+      setShowImport(false);
+      refetch();
+    } catch {
+      toast("error", "Failed to import .env file");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setDotEnvContent(ev.target?.result as string ?? "");
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  if (!envIdsLoaded || loading) return <PageWithTableSkeleton cols={3} rows={3} />;
+  if (error) return <ErrorState message={error} onRetry={refetch} />;
+
+  const hasStagingEnv = !!stagingEnvId;
+
   return (
     <div className="space-y-4">
+      {/* Environment tabs */}
+      <div className="flex items-center justify-between">
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          <button
+            onClick={() => setActiveEnv("production")}
+            className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeEnv === "production"
+                ? "bg-accent-500 text-white"
+                : "bg-surface-100 text-neutral-400 hover:text-white"
+            }`}
+          >
+            Production
+          </button>
+          <button
+            onClick={() => setActiveEnv("staging")}
+            disabled={!hasStagingEnv}
+            title={!hasStagingEnv ? "Staging environment not available on Free plan" : undefined}
+            className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeEnv === "staging"
+                ? "bg-accent-500 text-white"
+                : "bg-surface-100 text-neutral-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            }`}
+          >
+            Staging
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowImport(!showImport)}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-100 px-3 py-1.5 text-xs font-medium text-neutral-400 hover:text-white transition-colors"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Import .env
+          </button>
+          <button
+            onClick={() => setShowValues(!showValues)}
+            className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-white transition-colors"
+          >
+            {showValues ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            {showValues ? "Hide values" : "Show values"}
+          </button>
+        </div>
+      </div>
+
+      {/* .env import panel */}
+      {showImport && (
+        <div className="rounded-lg border border-border bg-surface-100 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-neutral-300">Import .env file</p>
+            <label className="flex items-center gap-1.5 cursor-pointer rounded border border-border px-2 py-1 text-xs text-neutral-400 hover:text-white transition-colors">
+              <Upload className="h-3 w-3" />
+              Upload file
+              <input type="file" accept=".env,text/plain" className="hidden" onChange={handleFileUpload} />
+            </label>
+          </div>
+          <textarea
+            value={dotEnvContent}
+            onChange={(e) => setDotEnvContent(e.target.value)}
+            placeholder={"DATABASE_URL=postgres://...\nREDIS_URL=redis://...\nAPI_SECRET=mysecret"}
+            rows={6}
+            className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 font-mono text-xs text-neutral-300 placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none resize-none"
+          />
+          <p className="text-xs text-neutral-600">
+            Supports KEY=VALUE, quoted values, # comments, and <code className="text-neutral-500">export KEY=VALUE</code>.
+            Values with &quot;password&quot;, &quot;secret&quot;, &quot;token&quot;, etc. are automatically marked as secret.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => { setShowImport(false); setDotEnvContent(""); }}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs text-neutral-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={!dotEnvContent.trim() || importing}
+              className="rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-600 disabled:opacity-50 transition-colors"
+            >
+              {importing ? "Importing..." : `Import to ${activeEnv}`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Add new env var */}
-      <div className="flex items-end gap-3">
+      <div className="flex items-end gap-2">
         <div className="flex-1">
           <label className="mb-1 block text-xs font-medium text-neutral-400">Key</label>
           <input
@@ -526,12 +663,22 @@ function EnvTab({ appId }: { appId: string }) {
         <div className="flex-1">
           <label className="mb-1 block text-xs font-medium text-neutral-400">Value</label>
           <input
-            type="text"
+            type={newIsSecret ? "password" : "text"}
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
             placeholder="postgres://..."
             className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none font-mono"
           />
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <label className="text-xs font-medium text-neutral-400">Secret</label>
+          <button
+            onClick={() => setNewIsSecret(!newIsSecret)}
+            className={`rounded p-1.5 transition-colors ${newIsSecret ? "text-amber-400 bg-amber-400/10" : "text-neutral-500 hover:text-neutral-300"}`}
+            title={newIsSecret ? "Mark as plain" : "Mark as secret"}
+          >
+            {newIsSecret ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+          </button>
         </div>
         <button
           onClick={handleAdd}
@@ -543,22 +690,13 @@ function EnvTab({ appId }: { appId: string }) {
         </button>
       </div>
 
-      {/* Toggle show/hide values */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowValues(!showValues)}
-          className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-white transition-colors"
-        >
-          {showValues ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-          {showValues ? "Hide values" : "Show values"}
-        </button>
-      </div>
-
       {/* Env var list */}
       {items.length === 0 ? (
         <EmptyState
-          title="No environment variables"
-          description="Add environment variables to configure your app."
+          title={`No ${activeEnv} environment variables`}
+          description={activeEnv === "staging"
+            ? "Add staging-specific overrides. Production vars are used as the baseline."
+            : "Add environment variables to configure your app."}
         />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border">
@@ -567,21 +705,29 @@ function EnvTab({ appId }: { appId: string }) {
               <tr className="border-b border-border bg-surface-100">
                 <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Key</th>
                 <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Value</th>
-                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500 w-20">Actions</th>
+                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500 w-8"></th>
+                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500 w-16">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((env: EnvVar) => (
-                <tr key={env.key} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
+              {items.map((ev) => (
+                <tr key={ev.id} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
                   <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-medium text-accent-400">
-                    {env.key}
+                    {ev.key}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">
-                    {showValues ? env.value : "••••••••••"}
+                  <td className="max-w-xs truncate px-4 py-3 font-mono text-xs text-neutral-300">
+                    {ev.is_secret ? (showValues ? ev.value : "••••••••") : (showValues ? ev.value : "••••••••")}
+                  </td>
+                  <td className="px-4 py-3">
+                    {ev.is_secret && (
+                      <span title="Secret" className="text-amber-400">
+                        <Lock className="h-3 w-3" />
+                      </span>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <button
-                      onClick={() => handleDelete(env.key)}
+                      onClick={() => handleDelete(ev.id)}
                       className="rounded p-1 text-neutral-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
                       title="Delete variable"
                     >

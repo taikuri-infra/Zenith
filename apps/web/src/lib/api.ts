@@ -375,6 +375,7 @@ export const composeImport = {
 export interface AppEnvVar {
   id: string;
   app_id: string;
+  environment_id?: string;
   key: string;
   value: string;
   is_secret: boolean;
@@ -385,19 +386,25 @@ export interface AppEnvVar {
 }
 
 export const envVarsV2 = {
-  list: (appId: string) =>
+  // environmentId="" = production/default, pass staging env ID for staging vars
+  list: (appId: string, environmentId = "") =>
     apiFetch<{ items: AppEnvVar[]; total: number }>(
-      `/api/v1/apps/${appId}/env-v2`
+      `/api/v1/apps/${appId}/env-v2${environmentId ? `?env=${encodeURIComponent(environmentId)}` : ""}`
     ),
-  set: (appId: string, vars: { key: string; value: string; is_secret: boolean }[]) =>
+  set: (appId: string, vars: { key: string; value: string; is_secret: boolean }[], environmentId = "") =>
     apiFetch<{ items: AppEnvVar[]; total: number }>(
-      `/api/v1/apps/${appId}/env-v2`,
+      `/api/v1/apps/${appId}/env-v2${environmentId ? `?env=${encodeURIComponent(environmentId)}` : ""}`,
       { method: "POST", body: JSON.stringify({ vars }) }
     ),
   delete: (appId: string, varId: string) =>
     apiFetch<void>(`/api/v1/apps/${appId}/env-v2/${varId}`, {
       method: "DELETE",
     }),
+  importDotEnv: (appId: string, content: string, environmentId = "") =>
+    apiFetch<{ imported: number; items: AppEnvVar[]; total: number }>(
+      `/api/v1/apps/${appId}/env-v2/import${environmentId ? `?env=${encodeURIComponent(environmentId)}` : ""}`,
+      { method: "POST", body: JSON.stringify({ content }) }
+    ),
 };
 
 // ---- AI Features (Phase 3) ----

@@ -33,9 +33,9 @@ func (r *MemoryEnvVarRepository) SetEnvVar(_ context.Context, envVar *entities.A
 	}
 	now := time.Now()
 
-	// Check for existing var with same app_id + key (upsert)
+	// Upsert: match on app_id + key + environment_id
 	for id, v := range r.vars {
-		if v.AppID == envVar.AppID && v.Key == envVar.Key {
+		if v.AppID == envVar.AppID && v.Key == envVar.Key && v.EnvironmentID == envVar.EnvironmentID {
 			v.Value = envVar.Value
 			v.IsSecret = envVar.IsSecret
 			v.Source = envVar.Source
@@ -54,12 +54,20 @@ func (r *MemoryEnvVarRepository) SetEnvVar(_ context.Context, envVar *entities.A
 }
 
 func (r *MemoryEnvVarRepository) GetEnvVars(_ context.Context, appID string) ([]entities.AppEnvVar, error) {
+	return r.getByEnvironment(appID, "")
+}
+
+func (r *MemoryEnvVarRepository) GetEnvVarsByEnvironment(_ context.Context, appID, environmentID string) ([]entities.AppEnvVar, error) {
+	return r.getByEnvironment(appID, environmentID)
+}
+
+func (r *MemoryEnvVarRepository) getByEnvironment(appID, environmentID string) ([]entities.AppEnvVar, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	var result []entities.AppEnvVar
 	for _, v := range r.vars {
-		if v.AppID == appID {
+		if v.AppID == appID && v.EnvironmentID == environmentID {
 			result = append(result, *v)
 		}
 	}

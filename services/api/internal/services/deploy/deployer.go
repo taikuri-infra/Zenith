@@ -18,6 +18,7 @@ import (
 type Deployer struct {
 	k8sClient  k8sclient.Client
 	appRepo    ports.AppRepository
+	envVarRepo ports.EnvVarRepository
 	planRepo   ports.UserPlanRepository
 	domainRepo ports.DomainRepository
 	baseDomain string
@@ -38,16 +39,40 @@ func (d *Deployer) SetDomainRepo(repo ports.DomainRepository) {
 	d.domainRepo = repo
 }
 
+// SetEnvVarRepo injects the V2 env var repository for per-environment env vars.
+func (d *Deployer) SetEnvVarRepo(repo ports.EnvVarRepository) {
+	d.envVarRepo = repo
+}
+
 // DeployApp deploys an app's built image to Kubernetes.
 // It creates or updates the Deployment, Service, IngressRoute, and
 // optionally the KEDA HTTPScaledObject for free-tier scale-to-zero.
 func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag string) error {
 	slog.Info("deploying app", "app", app.Name, "image", imageTag)
 
-	// Get env vars for the app
-	envVars, err := d.appRepo.GetEnvVars(ctx, app.ID)
-	if err != nil {
-		return fmt.Errorf("failed to get env vars: %w", err)
+	// Get env vars for the app.
+	// V2: use per-environment vars when envVarRepo is set (app.EnvironmentID="" = production/default).
+	// Fallback to legacy appRepo.GetEnvVars for backward compatibility.
+	var envVars []entities.EnvVar
+	if d.envVarRepo != nil {
+		v2vars, err := d.envVarRepo.GetEnvVarsByEnvironment(ctx, app.ID, app.EnvironmentID)
+		if err != nil {
+			return fmt.Errorf("failed to get env vars: %w", err)
+		}
+		for _, v := range v2vars {
+			envVars = append(envVars, entities.EnvVar{
+				ID:    v.ID,
+				AppID: v.AppID,
+				Key:   v.Key,
+				Value: v.Value,
+			})
+		}
+	} else {
+		var err error
+		envVars, err = d.appRepo.GetEnvVars(ctx, app.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get env vars: %w", err)
+		}
 	}
 
 	// Look up user plan to decide scale-to-zero and resource limits

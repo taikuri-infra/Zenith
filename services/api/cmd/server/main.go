@@ -730,9 +730,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Delete("/env/:key", deployHandler.DeleteEnvVar)
 
 	// Enhanced env vars with source tracking (V5)
+	// All endpoints support ?env=<environmentID> query param (omit = production/default)
 	appByID.Post("/env-v2", envVarHandler.Set)
 	appByID.Get("/env-v2", envVarHandler.List)
 	appByID.Delete("/env-v2/:varId", envVarHandler.Delete)
+	appByID.Post("/env-v2/import", envVarHandler.ImportDotEnv)
 
 	// Secrets (nested under /apps/:appId) — only if SECRETS_ENCRYPTION_KEY is set
 	if secretHandler != nil {
@@ -1135,6 +1137,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		domainRepo = memory.NewMemoryDomainRepository()
 	}
 	deployer.SetDomainRepo(domainRepo)
+	deployer.SetEnvVarRepo(envVarRepo)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(deployer)
 	appByID.Post("/domains", domainHandler.Add)

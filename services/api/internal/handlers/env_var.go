@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bufio"
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -44,16 +46,21 @@ type envVarInput struct {
 	IsSecret bool   `json:"is_secret"`
 }
 
+type importDotEnvRequest struct {
+	Content string `json:"content"` // raw .env file content
+}
+
 type envVarResponse struct {
-	ID        string `json:"id"`
-	AppID     string `json:"app_id"`
-	Key       string `json:"key"`
-	Value     string `json:"value"`
-	IsSecret  bool   `json:"is_secret"`
-	Source    string `json:"source"`
-	SourceID  string `json:"source_id,omitempty"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID            string `json:"id"`
+	AppID         string `json:"app_id"`
+	EnvironmentID string `json:"environment_id,omitempty"`
+	Key           string `json:"key"`
+	Value         string `json:"value"`
+	IsSecret      bool   `json:"is_secret"`
+	Source        string `json:"source"`
+	SourceID      string `json:"source_id,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
 }
 
 func toEnvVarResponse(ev *entities.AppEnvVar) envVarResponse {
@@ -62,26 +69,30 @@ func toEnvVarResponse(ev *entities.AppEnvVar) envVarResponse {
 		value = "••••••••"
 	}
 	return envVarResponse{
-		ID:        ev.ID,
-		AppID:     ev.AppID,
-		Key:       ev.Key,
-		Value:     value,
-		IsSecret:  ev.IsSecret,
-		Source:    string(ev.Source),
-		SourceID:  ev.SourceID,
-		CreatedAt: ev.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: ev.UpdatedAt.Format(time.RFC3339),
+		ID:            ev.ID,
+		AppID:         ev.AppID,
+		EnvironmentID: ev.EnvironmentID,
+		Key:           ev.Key,
+		Value:         value,
+		IsSecret:      ev.IsSecret,
+		Source:        string(ev.Source),
+		SourceID:      ev.SourceID,
+		CreatedAt:     ev.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:     ev.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
-// Set handles POST /apps/:appId/env
-func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
+// envFromQuery reads the optional ?env= query param and returns the environment ID.
+// Empty string means production/default.
+func envFromQuery(c *fiber.Ctx) string {
+	return c.Query("env", "")
+}
+
+func (h *EnvVarHandler) verifyAppOwnership(c *fiber.Ctx, appID string) error {
 	userID, _ := c.Locals("user_id").(string)
 	if userID == "" {
 		return NewUnauthorized("authentication required")
 	}
-
-	appID := c.Params("appId")
 	app, err := h.appRepo.GetApp(c.Context(), appID)
 	if err != nil {
 		return NewNotFound("app not found")
@@ -89,6 +100,18 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 	if app.UserID != userID {
 		return NewForbidden("not your app")
 	}
+	return nil
+}
+
+// Set handles POST /apps/:appId/env-v2
+// Optional query param: ?env=<environmentID>  (omit = production/default)
+func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
+	appID := c.Params("appId")
+	if err := h.verifyAppOwnership(c, appID); err != nil {
+		return err
+	}
+
+	environmentID := envFromQuery(c)
 
 	var req setEnvVarsRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -98,7 +121,6 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 		return NewBadRequest("vars is required and must not be empty")
 	}
 
-	// Validate no duplicate keys
 	seen := make(map[string]bool)
 	for _, v := range req.Vars {
 		if v.Key == "" {
@@ -110,15 +132,15 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 		seen[v.Key] = true
 	}
 
-	// Convert to entities
 	envVars := make([]entities.AppEnvVar, 0, len(req.Vars))
 	for _, v := range req.Vars {
 		envVars = append(envVars, entities.AppEnvVar{
-			AppID:    appID,
-			Key:      v.Key,
-			Value:    v.Value,
-			IsSecret: v.IsSecret,
-			Source:   entities.EnvVarSourceManual,
+			AppID:         appID,
+			EnvironmentID: environmentID,
+			Key:           v.Key,
+			Value:         v.Value,
+			IsSecret:      v.IsSecret,
+			Source:        entities.EnvVarSourceManual,
 		})
 	}
 
@@ -127,14 +149,12 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 		return NewInternal("failed to set environment variables")
 	}
 
-	// Return updated list
-	allVars, err := h.envVarRepo.GetEnvVars(c.Context(), appID)
+	allVars, err := h.envVarRepo.GetEnvVarsByEnvironment(c.Context(), appID, environmentID)
 	if err != nil {
 		slog.Error("failed to get env vars", "error", err)
 		return NewInternal("failed to retrieve environment variables")
 	}
 
-	// Sync to K8s Secret/ConfigMap (best-effort, don't fail the request)
 	if h.k8s != nil {
 		h.syncEnvVarsToK8s(c.Context(), appID, allVars)
 	}
@@ -144,29 +164,20 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 		items = append(items, toEnvVarResponse(&allVars[i]))
 	}
 
-	return c.JSON(fiber.Map{
-		"items": items,
-		"total": len(items),
-	})
+	return c.JSON(fiber.Map{"items": items, "total": len(items)})
 }
 
-// List handles GET /apps/:appId/env
+// List handles GET /apps/:appId/env-v2
+// Optional query param: ?env=<environmentID>
 func (h *EnvVarHandler) List(c *fiber.Ctx) error {
-	userID, _ := c.Locals("user_id").(string)
-	if userID == "" {
-		return NewUnauthorized("authentication required")
-	}
-
 	appID := c.Params("appId")
-	app, err := h.appRepo.GetApp(c.Context(), appID)
-	if err != nil {
-		return NewNotFound("app not found")
-	}
-	if app.UserID != userID {
-		return NewForbidden("not your app")
+	if err := h.verifyAppOwnership(c, appID); err != nil {
+		return err
 	}
 
-	vars, err := h.envVarRepo.GetEnvVars(c.Context(), appID)
+	environmentID := envFromQuery(c)
+
+	vars, err := h.envVarRepo.GetEnvVarsByEnvironment(c.Context(), appID, environmentID)
 	if err != nil {
 		slog.Error("failed to get env vars", "error", err)
 		return NewInternal("failed to retrieve environment variables")
@@ -177,26 +188,14 @@ func (h *EnvVarHandler) List(c *fiber.Ctx) error {
 		items = append(items, toEnvVarResponse(&vars[i]))
 	}
 
-	return c.JSON(fiber.Map{
-		"items": items,
-		"total": len(items),
-	})
+	return c.JSON(fiber.Map{"items": items, "total": len(items)})
 }
 
-// Delete handles DELETE /apps/:appId/env/:varId
+// Delete handles DELETE /apps/:appId/env-v2/:varId
 func (h *EnvVarHandler) Delete(c *fiber.Ctx) error {
-	userID, _ := c.Locals("user_id").(string)
-	if userID == "" {
-		return NewUnauthorized("authentication required")
-	}
-
 	appID := c.Params("appId")
-	app, err := h.appRepo.GetApp(c.Context(), appID)
-	if err != nil {
-		return NewNotFound("app not found")
-	}
-	if app.UserID != userID {
-		return NewForbidden("not your app")
+	if err := h.verifyAppOwnership(c, appID); err != nil {
+		return err
 	}
 
 	varID := c.Params("varId")
@@ -206,7 +205,8 @@ func (h *EnvVarHandler) Delete(c *fiber.Ctx) error {
 
 	// Re-sync remaining env vars to K8s (best-effort)
 	if h.k8s != nil {
-		remaining, rerr := h.envVarRepo.GetEnvVars(c.Context(), appID)
+		environmentID := envFromQuery(c)
+		remaining, rerr := h.envVarRepo.GetEnvVarsByEnvironment(c.Context(), appID, environmentID)
 		if rerr == nil {
 			h.syncEnvVarsToK8s(c.Context(), appID, remaining)
 		}
@@ -215,7 +215,153 @@ func (h *EnvVarHandler) Delete(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "environment variable deleted"})
 }
 
-// syncEnvVarsToK8s syncs all env vars for an app to K8s Secret (secrets) and ConfigMap (plain vars).
+// ImportDotEnv handles POST /apps/:appId/env-v2/import
+// Body: { "content": ".env file content as string" }
+// Optional query param: ?env=<environmentID>
+func (h *EnvVarHandler) ImportDotEnv(c *fiber.Ctx) error {
+	appID := c.Params("appId")
+	if err := h.verifyAppOwnership(c, appID); err != nil {
+		return err
+	}
+
+	environmentID := envFromQuery(c)
+
+	var req importDotEnvRequest
+	if err := c.BodyParser(&req); err != nil {
+		return NewBadRequest("invalid request body")
+	}
+	if strings.TrimSpace(req.Content) == "" {
+		return NewBadRequest("content is required")
+	}
+
+	parsed, err := parseDotEnv(req.Content)
+	if err != nil {
+		return NewBadRequest("invalid .env format: " + err.Error())
+	}
+	if len(parsed) == 0 {
+		return NewBadRequest("no valid KEY=VALUE pairs found in content")
+	}
+	if len(parsed) > 100 {
+		return NewBadRequest("too many variables (max 100 per import)")
+	}
+
+	envVars := make([]entities.AppEnvVar, 0, len(parsed))
+	for key, value := range parsed {
+		// Treat values that look like secrets as secret (contains password/secret/key/token)
+		isSecret := looksLikeSecret(key)
+		envVars = append(envVars, entities.AppEnvVar{
+			AppID:         appID,
+			EnvironmentID: environmentID,
+			Key:           key,
+			Value:         value,
+			IsSecret:      isSecret,
+			Source:        entities.EnvVarSourceManual,
+		})
+	}
+
+	if err := h.envVarRepo.BulkSetEnvVars(c.Context(), appID, envVars); err != nil {
+		slog.Error("failed to import .env vars", "error", err)
+		return NewInternal("failed to import environment variables")
+	}
+
+	allVars, err := h.envVarRepo.GetEnvVarsByEnvironment(c.Context(), appID, environmentID)
+	if err != nil {
+		slog.Error("failed to get env vars after import", "error", err)
+		return NewInternal("failed to retrieve environment variables")
+	}
+
+	if h.k8s != nil {
+		h.syncEnvVarsToK8s(c.Context(), appID, allVars)
+	}
+
+	items := make([]envVarResponse, 0, len(allVars))
+	for i := range allVars {
+		items = append(items, toEnvVarResponse(&allVars[i]))
+	}
+
+	return c.JSON(fiber.Map{
+		"imported": len(parsed),
+		"items":    items,
+		"total":    len(items),
+	})
+}
+
+// parseDotEnv parses a .env file string into a key→value map.
+// Supports: KEY=VALUE, KEY="VALUE", # comments, blank lines, export KEY=VALUE.
+func parseDotEnv(content string) (map[string]string, error) {
+	result := make(map[string]string)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip blank lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Strip leading "export "
+		line = strings.TrimPrefix(line, "export ")
+
+		idx := strings.Index(line, "=")
+		if idx < 1 {
+			continue // skip lines without =
+		}
+
+		key := strings.TrimSpace(line[:idx])
+		value := strings.TrimSpace(line[idx+1:])
+
+		// Validate key: only letters, digits, underscores
+		if !isValidEnvKey(key) {
+			continue
+		}
+
+		// Strip surrounding quotes
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') ||
+				(value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+
+		// Strip inline comments (unquoted # after space)
+		if idx := strings.Index(value, " #"); idx >= 0 {
+			value = strings.TrimSpace(value[:idx])
+		}
+
+		result[key] = value
+	}
+
+	return result, scanner.Err()
+}
+
+func isValidEnvKey(key string) bool {
+	if len(key) == 0 {
+		return false
+	}
+	for _, c := range key {
+		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+			(c >= '0' && c <= '9') || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// looksLikeSecret returns true if the key name suggests a sensitive value.
+func looksLikeSecret(key string) bool {
+	lower := strings.ToLower(key)
+	hints := []string{"password", "passwd", "secret", "token", "api_key", "apikey",
+		"private_key", "privatekey", "auth", "credential", "cert", "key"}
+	for _, h := range hints {
+		if strings.Contains(lower, h) {
+			return true
+		}
+	}
+	return false
+}
+
+// syncEnvVarsToK8s syncs env vars to K8s Secret (secrets) and ConfigMap (plain vars).
 func (h *EnvVarHandler) syncEnvVarsToK8s(ctx context.Context, appID string, vars []entities.AppEnvVar) {
 	secretData := make(map[string][]byte)
 	configData := make(map[string]string)

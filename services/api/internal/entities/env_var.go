@@ -12,12 +12,13 @@ const (
 
 // AppEnvVar represents an environment variable with source tracking.
 type AppEnvVar struct {
-	ID       string       `json:"id"`
-	AppID    string       `json:"app_id"`
-	Key      string       `json:"key"`
-	Value    string       `json:"value,omitempty"`
-	IsSecret bool         `json:"is_secret"`
-	Source   EnvVarSource `json:"source"`
-	SourceID string       `json:"source_id,omitempty"`
+	ID            string       `json:"id"`
+	AppID         string       `json:"app_id"`
+	EnvironmentID string       `json:"environment_id,omitempty"` // empty = production/default
+	Key           string       `json:"key"`
+	Value         string       `json:"value,omitempty"`
+	IsSecret      bool         `json:"is_secret"`
+	Source        EnvVarSource `json:"source"`
+	SourceID      string       `json:"source_id,omitempty"`
 	Timestamps
 }

@@ -106,6 +106,7 @@ type ManagedServiceRepository interface {
 type EnvVarRepository interface {
 	SetEnvVar(ctx context.Context, envVar *entities.AppEnvVar) error
 	GetEnvVars(ctx context.Context, appID string) ([]entities.AppEnvVar, error)
+	GetEnvVarsByEnvironment(ctx context.Context, appID, environmentID string) ([]entities.AppEnvVar, error)
 	DeleteEnvVar(ctx context.Context, id string) error
 	BulkSetEnvVars(ctx context.Context, appID string, vars []entities.AppEnvVar) error
 	DeleteEnvVarsBySource(ctx context.Context, appID string, source entities.EnvVarSource) error
