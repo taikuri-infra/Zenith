@@ -116,6 +116,9 @@ export default function NewProjectPage() {
   // Image URL overrides: for build-only services that need a Docker Hub image
   const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({});
 
+  // Confirmed pushes: build-context services where user confirmed they've pushed
+  const [confirmedPushes, setConfirmedPushes] = useState<Set<string>>(new Set());
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
@@ -665,14 +668,58 @@ export default function NewProjectPage() {
         )}
 
         {/* Step 2: Review & Push */}
-        {step === 2 && parseResult && (
+        {step === 2 && parseResult && (() => {
+          const services = parseResult.services || [];
+          const buildServices = services.filter((s) => s.build_context && !imageOverrides[s.name]);
+          const unresolvedBuilds = buildServices.filter((s) => !confirmedPushes.has(s.name));
+
+          return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-base font-medium text-white">Step 2: Review & Push</h2>
+              <h2 className="text-base font-medium text-white">Step 2: Review Services</h2>
               <p className="mt-1 text-sm text-neutral-400">
-                We detected your services. Push your images when ready.
+                Zenith detected {services.length} app service{services.length !== 1 ? "s" : ""} and {(parseResult.managed_services || []).length} managed service{(parseResult.managed_services || []).length !== 1 ? "s" : ""}.
               </p>
             </div>
+
+            {/* Action Required — build-context services */}
+            {unresolvedBuilds.length > 0 && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-amber-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  Action Required — {unresolvedBuilds.length} service{unresolvedBuilds.length !== 1 ? "s" : ""} need{unresolvedBuilds.length === 1 ? "s" : ""} a Docker image
+                </div>
+                <p className="text-xs text-amber-300/70">
+                  Zenith deploys images — it does not build source code. Services using <code className="bg-amber-500/20 px-1 rounded">build:</code> must be built and pushed to a registry first, or you can provide an external image URL.
+                </p>
+                {unresolvedBuilds.map((svc) => {
+                  const pushTarget = `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`;
+                  return (
+                    <div key={svc.name} className="rounded border border-amber-500/20 bg-neutral-900/60 p-3 space-y-1.5">
+                      <p className="text-xs font-medium text-amber-400">
+                        <Server className="inline h-3 w-3 mr-1" />
+                        {svc.name}
+                        {svc.build_context && (
+                          <span className="ml-2 font-mono text-[10px] text-neutral-500">build: {svc.build_context}</span>
+                        )}
+                      </p>
+                      <CopyLine label="build" value={`docker build -t ${pushTarget} ${svc.build_context || "."}`} />
+                      <CopyLine label="push" value={`docker push ${pushTarget}`} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* All resolved */}
+            {unresolvedBuilds.length === 0 && buildServices.length > 0 && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+                <div className="flex items-center gap-2 text-sm text-emerald-400">
+                  <Check className="h-4 w-4" />
+                  All services have images — ready to configure env vars.
+                </div>
+              </div>
+            )}
 
             {/* Warnings */}
             {(parseResult.warnings || []).length > 0 && (
@@ -693,24 +740,32 @@ export default function NewProjectPage() {
             <div>
               <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-neutral-300">
                 <Server className="h-4 w-4" />
-                App Services ({(parseResult.services || []).length})
+                App Services ({services.length})
               </h3>
               <div className="space-y-3">
-                {(parseResult.services || []).map((svc) => (
+                {services.map((svc) => (
                   <ServiceCard
                     key={svc.name}
                     service={svc}
                     projectId={projectId}
                     isPublic={exposureOverrides[svc.name] ?? svc.is_public}
                     imageOverride={imageOverrides[svc.name] || ""}
+                    confirmed={confirmedPushes.has(svc.name)}
                     onToggleExposure={() =>
                       setExposureOverrides((prev) => ({
                         ...prev,
                         [svc.name]: !(prev[svc.name] ?? svc.is_public),
                       }))
                     }
-                    onImageChange={(url) =>
-                      setImageOverrides((prev) => ({ ...prev, [svc.name]: url }))
+                    onImageChange={(url) => {
+                      setImageOverrides((prev) => ({ ...prev, [svc.name]: url }));
+                      // Clear confirmed if user changes image
+                      if (!url) {
+                        setConfirmedPushes((prev) => { const s = new Set(prev); s.delete(svc.name); return s; });
+                      }
+                    }}
+                    onConfirm={() =>
+                      setConfirmedPushes((prev) => new Set([...prev, svc.name]))
                     }
                   />
                 ))}
@@ -737,36 +792,6 @@ export default function NewProjectPage() {
               </div>
             )}
 
-            {/* Env vars preview */}
-            {(parseResult.services || []).some((s) => s.env_vars.length > 0) && (
-              <div>
-                <h3 className="mb-3 text-sm font-medium text-neutral-300">
-                  Environment Variables
-                </h3>
-                <div className="rounded-lg border border-border bg-surface-200 p-4">
-                  <div className="space-y-2">
-                    {(parseResult.services || []).flatMap((svc) =>
-                      svc.env_vars.map((ev) => (
-                          <div key={`${svc.name}-${ev.key}`} className="text-xs">
-                            <span className="text-neutral-400">{svc.name}/</span>
-                            <span className="font-medium text-white">{ev.key}</span>
-                            {ev.original !== ev.zenith ? (
-                              <div className="mt-0.5 flex items-center gap-2 text-neutral-500">
-                                <span className="line-through">{ev.original}</span>
-                                <ArrowRight className="h-3 w-3" />
-                                <span className="text-emerald-400">{ev.zenith}</span>
-                              </div>
-                            ) : (
-                              <div className="mt-0.5 text-neutral-500">{ev.zenith}</div>
-                            )}
-                          </div>
-                        ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="flex justify-between">
               <button
                 onClick={() => setStep(1)}
@@ -776,7 +801,14 @@ export default function NewProjectPage() {
                 Back
               </button>
               <button
-                onClick={() => { if (parseResult) initEnvVarEdits(parseResult); setStep(3); }}
+                onClick={() => {
+                  if (unresolvedBuilds.length > 0) {
+                    toast("error", `Resolve images for: ${unresolvedBuilds.map((s) => s.name).join(", ")}. Provide an image URL or confirm you've pushed.`);
+                    return;
+                  }
+                  if (parseResult) initEnvVarEdits(parseResult);
+                  setStep(3);
+                }}
                 className="flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand/90"
               >
                 <ArrowRight className="h-4 w-4" />
@@ -784,7 +816,8 @@ export default function NewProjectPage() {
               </button>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Step 3: Env Vars */}
         {step === 3 && parseResult && (() => {
@@ -1191,6 +1224,30 @@ export default function NewProjectPage() {
 
 // Sub-components
 
+function CopyLine({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-8 shrink-0 text-[9px] font-medium uppercase tracking-wider text-neutral-600">{label}</span>
+      <code className="flex-1 rounded bg-neutral-900 px-2.5 py-1.5 font-mono text-[11px] text-neutral-300 overflow-x-auto whitespace-nowrap">
+        {value}
+      </code>
+      <button
+        onClick={handleCopy}
+        title="Copy"
+        className="shrink-0 rounded border border-border p-1 text-neutral-500 hover:text-white transition-colors"
+      >
+        {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+      </button>
+    </div>
+  );
+}
+
 function StepDot({
   active,
   done,
@@ -1220,41 +1277,118 @@ function ServiceCard({
   projectId,
   isPublic,
   imageOverride,
+  confirmed,
   onToggleExposure,
   onImageChange,
+  onConfirm,
 }: {
   service: ParsedService;
   projectId: string;
   isPublic: boolean;
   imageOverride: string;
+  confirmed: boolean;
   onToggleExposure: () => void;
   onImageChange: (url: string) => void;
+  onConfirm: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
-
-  const pushCmd = `docker push registry.stage.freezenith.com/${projectId}/${service.name}:latest`;
-  const handleCopy = () => {
-    navigator.clipboard.writeText(pushCmd);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const hasBuildContext = !!service.build_context;
+  const isResolved = !hasBuildContext || !!imageOverride || confirmed;
+  const defaultPushTarget = `registry.stage.freezenith.com/${projectId}/${service.name}:latest`;
+  const effectiveImage = imageOverride || service.image || (hasBuildContext ? defaultPushTarget : "");
 
   return (
-    <div className="rounded-lg border border-border bg-surface-200 p-4">
+    <div className={`rounded-lg border bg-surface-200 p-4 transition-colors ${
+      hasBuildContext && !isResolved ? "border-amber-500/40" : isResolved ? "border-emerald-500/20" : "border-border"
+    }`}>
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Server className="h-4 w-4 text-brand" />
+          <Server className={`h-4 w-4 ${hasBuildContext && !isResolved ? "text-amber-400" : isResolved ? "text-emerald-400" : "text-brand"}`} />
           <span className="text-sm font-medium text-white">{service.name}</span>
           {service.port > 0 && (
             <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] text-neutral-300">
               :{service.port}
             </span>
           )}
+          {hasBuildContext && !isResolved && (
+            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-400">needs image</span>
+          )}
+          {isResolved && hasBuildContext && (
+            <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+              <Check className="h-2.5 w-2.5" /> image set
+            </span>
+          )}
+          {!hasBuildContext && service.image && (
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">public image</span>
+          )}
         </div>
-        {service.url && (
-          <span className="text-xs text-neutral-400">{service.url}</span>
-        )}
       </div>
+
+      {/* Image info for non-build services */}
+      {!hasBuildContext && service.image && (
+        <div className="mt-2 flex items-center gap-2 rounded-md bg-emerald-500/5 border border-emerald-500/20 px-3 py-2">
+          <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+          <span className="font-mono text-[11px] text-neutral-300">{service.image}</span>
+          <span className="ml-auto text-[10px] text-emerald-400/70">ready — will pull automatically</span>
+        </div>
+      )}
+
+      {/* Build context resolution */}
+      {hasBuildContext && (
+        <div className="mt-3 space-y-2">
+          {/* Option A: provide external image URL */}
+          <div>
+            <p className="mb-1 text-[11px] text-neutral-400 font-medium">
+              Option A — Use external image URL
+              <span className="ml-1 text-neutral-600">(Docker Hub, GHCR, etc.)</span>
+            </p>
+            <input
+              type="text"
+              value={imageOverride}
+              onChange={(e) => onImageChange(e.target.value)}
+              placeholder="e.g. myuser/my-backend:latest"
+              className={`w-full rounded bg-neutral-900 px-3 py-2 font-mono text-[11px] placeholder:text-neutral-600 border focus:outline-none ${
+                imageOverride ? "border-emerald-500/40 text-emerald-300 focus:border-emerald-500" : "border-border text-neutral-300 focus:border-accent-500"
+              }`}
+            />
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-2 text-[10px] text-neutral-600">
+            <div className="flex-1 h-px bg-neutral-800" />
+            or push to Zenith registry
+            <div className="flex-1 h-px bg-neutral-800" />
+          </div>
+
+          {/* Option B: push to Zenith registry */}
+          <div className="space-y-1">
+            <p className="text-[11px] text-neutral-400 font-medium">
+              Option B — Push to Zenith registry
+            </p>
+            <CopyLine label="build" value={`docker build -t ${effectiveImage} ${service.build_context || "."}`} />
+            <CopyLine label="push" value={`docker push ${effectiveImage}`} />
+          </div>
+
+          {/* Confirm pushed button */}
+          {!imageOverride && (
+            <button
+              onClick={onConfirm}
+              disabled={confirmed}
+              className={`mt-1 flex w-full items-center justify-center gap-2 rounded-lg border py-2 text-xs font-medium transition-colors ${
+                confirmed
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
+                  : "border-brand/40 text-brand hover:bg-brand/10"
+              }`}
+            >
+              {confirmed ? (
+                <><Check className="h-3.5 w-3.5" /> Image confirmed — ready to deploy</>
+              ) : (
+                <><Check className="h-3.5 w-3.5" /> I&apos;ve built and pushed this image</>
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Exposure toggle */}
       <div className="mt-3 flex items-center justify-between rounded-lg border border-border/50 bg-neutral-900/50 px-3 py-2">
@@ -1282,70 +1416,20 @@ function ServiceCard({
           }`}
         >
           {isPublic ? (
-            <>
-              <Lock className="h-3 w-3" />
-              Make Private
-            </>
+            <><Lock className="h-3 w-3" /> Make Private</>
           ) : (
-            <>
-              <Globe className="h-3 w-3" />
-              Make Public
-            </>
+            <><Globe className="h-3 w-3" /> Make Public</>
           )}
         </button>
       </div>
 
-      {/* API Gateway note for public services */}
+      {/* API Gateway note */}
       {isPublic && !service.is_public && (
         <div className="mt-2 flex items-center gap-2 rounded-md bg-blue-500/10 px-3 py-1.5">
           <Shield className="h-3 w-3 text-blue-400 shrink-0" />
           <span className="text-[10px] text-blue-300">
             Routed through API Gateway with rate limiting & security
           </span>
-        </div>
-      )}
-
-      {service.build_context && !service.image && (
-        <div className="mt-3">
-          <p className="mb-1 text-[11px] text-neutral-500">
-            Image URL <span className="text-red-400">*</span>
-            <span className="ml-1 text-neutral-600">(no image in compose, build-only)</span>
-          </p>
-          <input
-            type="text"
-            value={imageOverride}
-            onChange={(e) => onImageChange(e.target.value)}
-            placeholder="e.g. bablido/my-backend:latest"
-            className="w-full rounded bg-neutral-900 px-3 py-2 font-mono text-[11px] text-neutral-300 placeholder:text-neutral-600 border border-border focus:border-accent-500 focus:outline-none"
-          />
-        </div>
-      )}
-      {service.build_context && service.image && (
-        <div className="mt-3">
-          <p className="mb-1 text-[11px] text-neutral-500">Image:</p>
-          <code className="block rounded bg-neutral-900 px-3 py-2 font-mono text-[11px] text-neutral-300">
-            {service.image}
-          </code>
-        </div>
-      )}
-      {service.build_context && (
-        <div className="mt-2">
-          <p className="mb-1 text-[11px] text-neutral-500">Push command:</p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 rounded bg-neutral-900 px-3 py-2 font-mono text-[11px] text-neutral-300">
-              {pushCmd}
-            </code>
-            <button
-              onClick={handleCopy}
-              className="shrink-0 rounded border border-border p-1.5 text-neutral-400 hover:text-white"
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </div>
         </div>
       )}
     </div>
