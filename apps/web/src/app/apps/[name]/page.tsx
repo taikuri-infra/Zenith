@@ -91,15 +91,15 @@ export default function AppDetailPage() {
 
   const allTabs: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; webOnly?: boolean }[] = [
     { key: "overview", label: "Overview", icon: Eye },
+    { key: "env", label: "Environment", icon: Settings },
     { key: "deployments", label: "Deployments", icon: Layers },
-    { key: "releases", label: "Releases", icon: Tag },
     { key: "logs", label: "Logs", icon: Terminal },
     { key: "databases", label: "Databases", icon: Database },
     { key: "storage", label: "Storage", icon: HardDrive },
     { key: "auth", label: "Auth", icon: Shield },
     { key: "domains", label: "Domains", icon: Globe, webOnly: true },
     { key: "secrets", label: "Secrets", icon: KeyRound },
-    { key: "env", label: "Environment", icon: Settings },
+    { key: "releases", label: "Releases", icon: Tag },
   ];
   const tabs = allTabs.filter((t) => !t.webOnly || isWeb);
 
