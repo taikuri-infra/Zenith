@@ -154,29 +154,6 @@ export default function NewProjectPage() {
         return;
       }
 
-      // AI suggestions only shown when there are errors (not generic tips on success)
-
-      // Auto-provision managed services (postgresql, redis, mysql, mongodb, rabbitmq)
-      const provisionable = result.managed_services || [];
-      if (provisionable.length > 0) {
-        setProvisioning(true);
-        const provisioned: ManagedService[] = [];
-        for (const ms of provisionable) {
-          try {
-            const svc = await api.managedServices.provision(pid, {
-              service_type: ms.type,
-              name: ms.name,
-              version: ms.version,
-            });
-            provisioned.push(svc);
-          } catch (e) {
-            toast("error", `Failed to provision ${ms.name}: ${e}`);
-          }
-        }
-        setProvisionedServices(provisioned);
-        setProvisioning(false);
-      }
-
       setStep(2);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -216,6 +193,27 @@ export default function NewProjectPage() {
     }
     setEnvVarEdits(edits);
   }, []);
+
+  const generatePassword = (): string => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#%^&*";
+    const arr = new Uint8Array(24);
+    crypto.getRandomValues(arr);
+    return Array.from(arr).map((b) => chars[b % chars.length]).join("");
+  };
+
+  // Validate step 3: block if any required env var is empty
+  const validateEnvVars = (): string[] => {
+    const missing: string[] = [];
+    for (const [svcKey, rows] of Object.entries(envVarEdits)) {
+      for (const row of rows) {
+        if (row.fromCompose && row.key && !row.value) {
+          const label = svcKey.startsWith("_db_") ? svcKey.slice(4) : svcKey;
+          missing.push(`${label} / ${row.key}`);
+        }
+      }
+    }
+    return missing;
+  };
 
   const handleEnvVarChange = (svcName: string, idx: number, field: keyof EnvVarEdit, val: string | boolean) => {
     setEnvVarEdits((prev) => {
@@ -343,9 +341,9 @@ export default function NewProjectPage() {
     setDeployLog((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
   }, []);
 
-  // Poll app until running or error (max 60s)
-  const waitForApp = useCallback(async (appId: string, appName: string): Promise<{ ok: boolean; url?: string; error?: string }> => {
-    const maxAttempts = 20;
+  // Poll app until running or error (max 90s)
+  const waitForApp = useCallback(async (appId: string, appName: string, imageUrl: string): Promise<{ ok: boolean; url?: string; error?: string }> => {
+    const maxAttempts = 30;
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((r) => setTimeout(r, 3000));
       try {
@@ -354,14 +352,19 @@ export default function NewProjectPage() {
           return { ok: true, url: app.url };
         }
         if (app.status === "error" || app.status === "failed" || app.status === "crash_loop") {
-          return { ok: false, error: `App entered ${app.status} state` };
+          const hint = imageUrl.includes("registry.stage.freezenith.com")
+            ? `Image not found in registry. Push your image first:\n  docker build -t ${imageUrl} .\n  docker push ${imageUrl}`
+            : app.status === "crash_loop"
+            ? "App is crash-looping. Check your env vars and startup command. View the Logs tab for details."
+            : "App failed to start. Check your env vars and image. View the Logs tab for details.";
+          return { ok: false, error: hint };
         }
         // Still deploying...
       } catch {
         // Ignore transient errors during polling
       }
     }
-    return { ok: false, error: "Timed out waiting for app to start (60s)" };
+    return { ok: false, error: "Timed out (90s). The app may still be starting — check the Logs tab." };
   }, [api]);
 
   // Step 3: Deploy with phases: managed → backend → frontend
@@ -444,6 +447,11 @@ export default function NewProjectPage() {
       const appName = `${slug}-${svc.name}`;
       const isPublic = exposureOverrides[svc.name] ?? svc.is_public;
 
+      if (svc.build_context && !svc.image && !imageOverrides[svc.name]) {
+        addLog(`⚠ ${svc.name} uses build: context — push image first:`);
+        addLog(`  docker build -t ${imageUrl} .`);
+        addLog(`  docker push ${imageUrl}`);
+      }
       addLog(`Creating ${appName} (${isPublic ? "public" : "private"}, port ${svc.port || 8080})...`);
 
       try {
@@ -462,7 +470,7 @@ export default function NewProjectPage() {
         setDeployStatus({ ...status });
         addLog(`Waiting for ${appName} to start...`);
 
-        const result = await waitForApp(app.id, appName);
+        const result = await waitForApp(app.id, appName, imageUrl);
         if (result.ok) {
           status[svc.name] = { state: "running", url: result.url };
           setDeployStatus({ ...status });
@@ -890,11 +898,14 @@ export default function NewProjectPage() {
                       <div className="grid grid-cols-[1fr_1fr_5rem_2rem] gap-2 border-b border-border bg-surface-100 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-neutral-500">
                         <span>Key</span><span>Value</span><span>Secret</span><span />
                       </div>
-                      {rows.map((row, idx) => (
+                      {rows.map((row, idx) => {
+                        const isRequired = row.fromCompose && row.key && !row.value;
+                        const canGenerate = isRequired && looksLikeSecret(row.key);
+                        return (
                         <div
                           key={idx}
                           className={`grid grid-cols-[1fr_1fr_5rem_2rem] gap-2 items-center px-3 py-1.5 border-b border-border/50 last:border-0 ${
-                            row.fromCompose && row.key && !row.value ? "bg-amber-500/5" : ""
+                            isRequired ? "bg-amber-500/5" : ""
                           }`}
                         >
                           <input
@@ -904,17 +915,28 @@ export default function NewProjectPage() {
                             placeholder="KEY"
                             className="w-full rounded bg-transparent px-2 py-1 font-mono text-xs text-white placeholder:text-neutral-600 border border-transparent hover:border-border focus:border-accent-500 focus:outline-none"
                           />
-                          <input
-                            type={row.is_secret ? "password" : "text"}
-                            value={row.value}
-                            onChange={(e) => handleEnvVarChange(svcKey, idx, "value", e.target.value)}
-                            placeholder={row.fromCompose && row.key && !row.value ? "required" : "value"}
-                            className={`w-full rounded bg-transparent px-2 py-1 font-mono text-xs border border-transparent hover:border-border focus:border-accent-500 focus:outline-none ${
-                              row.fromCompose && row.key && !row.value
-                                ? "placeholder:text-amber-500/70 text-white"
-                                : "placeholder:text-neutral-600 text-neutral-300"
-                            }`}
-                          />
+                          <div className="flex items-center gap-1 min-w-0">
+                            <input
+                              type={row.is_secret ? "password" : "text"}
+                              value={row.value}
+                              onChange={(e) => handleEnvVarChange(svcKey, idx, "value", e.target.value)}
+                              placeholder={isRequired ? "required" : "value"}
+                              className={`min-w-0 flex-1 rounded bg-transparent px-2 py-1 font-mono text-xs border border-transparent hover:border-border focus:border-accent-500 focus:outline-none ${
+                                isRequired
+                                  ? "placeholder:text-amber-500/70 text-white"
+                                  : "placeholder:text-neutral-600 text-neutral-300"
+                              }`}
+                            />
+                            {canGenerate && (
+                              <button
+                                onClick={() => handleEnvVarChange(svcKey, idx, "value", generatePassword())}
+                                title="Generate strong password"
+                                className="shrink-0 rounded bg-accent-500/20 px-1.5 py-0.5 text-[9px] font-medium text-accent-400 hover:bg-accent-500/30 transition-colors whitespace-nowrap"
+                              >
+                                Generate
+                              </button>
+                            )}
+                          </div>
                           <button
                             onClick={() => handleEnvVarChange(svcKey, idx, "is_secret", !row.is_secret)}
                             className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] transition-colors ${
@@ -931,7 +953,8 @@ export default function NewProjectPage() {
                             <XCircle className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                       <button
                         onClick={() => addEnvVarRow(svcKey)}
                         className="flex w-full items-center gap-2 px-3 py-2 text-xs text-neutral-500 hover:text-accent-400 hover:bg-surface-100 transition-colors"
@@ -952,7 +975,14 @@ export default function NewProjectPage() {
                   Back
                 </button>
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => {
+                    const missing = validateEnvVars();
+                    if (missing.length > 0) {
+                      toast("error", `Fill required fields first: ${missing.join(", ")}`);
+                      return;
+                    }
+                    setStep(4);
+                  }}
                   className="flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand/90"
                 >
                   <Rocket className="h-4 w-4" />
