@@ -7,9 +7,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
+	"github.com/dotechhq/zenith/services/api/internal/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -21,6 +22,7 @@ type Deployer struct {
 	envVarRepo ports.EnvVarRepository
 	planRepo   ports.UserPlanRepository
 	domainRepo ports.DomainRepository
+	envCrypto  *crypto.EnvCrypto
 	baseDomain string
 }
 
@@ -44,6 +46,11 @@ func (d *Deployer) SetEnvVarRepo(repo ports.EnvVarRepository) {
 	d.envVarRepo = repo
 }
 
+// SetEnvCrypto injects the encryption helper to decrypt secret env vars before K8s injection.
+func (d *Deployer) SetEnvCrypto(c *crypto.EnvCrypto) {
+	d.envCrypto = c
+}
+
 // DeployApp deploys an app's built image to Kubernetes.
 // It creates or updates the Deployment, Service, IngressRoute, and
 // optionally the KEDA HTTPScaledObject for free-tier scale-to-zero.
@@ -60,11 +67,22 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 			return fmt.Errorf("failed to get env vars: %w", err)
 		}
 		for _, v := range v2vars {
+			value := v.Value
+			// Decrypt secret values before injecting into the pod.
+			// Plaintext values pass through unchanged.
+			if v.IsSecret && d.envCrypto != nil && crypto.IsEncrypted(value) {
+				decrypted, err := d.envCrypto.Decrypt(app.UserID, value)
+				if err != nil {
+					slog.Error("failed to decrypt env var, skipping", "key", v.Key, "error", err)
+					continue
+				}
+				value = decrypted
+			}
 			envVars = append(envVars, entities.EnvVar{
 				ID:    v.ID,
 				AppID: v.AppID,
 				Key:   v.Key,
-				Value: v.Value,
+				Value: value,
 			})
 		}
 	} else {

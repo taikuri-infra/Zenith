@@ -27,7 +27,9 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/services/autoscale"
 	"github.com/dotechhq/zenith/services/api/internal/services/cluster"
 	"github.com/dotechhq/zenith/services/api/internal/config"
+	"github.com/dotechhq/zenith/services/api/internal/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
+	pkgCrypto "github.com/dotechhq/zenith/services/api/pkg/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/hetznerclient"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
@@ -561,6 +563,23 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		os.Exit(1)
 	}
 
+	// EnvCrypto: AES-256-GCM encryption for secret env var values.
+	// Same SECRETS_ENCRYPTION_KEY — already a 32-byte hex key in zenith-secrets.
+	// Per-user keys are derived via HKDF so user data is isolated.
+	var envCrypto *crypto.EnvCrypto
+	if cfg.SecretsKey != "" {
+		keyBytes, keyErr := pkgCrypto.KeyFromHex(cfg.SecretsKey)
+		if keyErr != nil {
+			slog.Error("invalid SECRETS_ENCRYPTION_KEY for env crypto", "error", keyErr)
+			os.Exit(1)
+		}
+		envCrypto = crypto.NewEnvCrypto(keyBytes)
+		slog.Info("env var encryption enabled")
+	} else {
+		slog.Warn("SECRETS_ENCRYPTION_KEY not set — env var encryption disabled")
+	}
+	envVarHandler.SetEnvCrypto(envCrypto)
+
 	eventHandler := handlers.NewEventHandler(eventHub)
 	backstageHandler := handlers.NewBackstageHandler(k8sClient)
 
@@ -735,6 +754,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Get("/env-v2", envVarHandler.List)
 	appByID.Delete("/env-v2/:varId", envVarHandler.Delete)
 	appByID.Post("/env-v2/import", envVarHandler.ImportDotEnv)
+	appByID.Post("/env-v2/apply", envVarHandler.Apply)
 
 	// Secrets (nested under /apps/:appId) — only if SECRETS_ENCRYPTION_KEY is set
 	if secretHandler != nil {
@@ -1138,6 +1158,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 	deployer.SetDomainRepo(domainRepo)
 	deployer.SetEnvVarRepo(envVarRepo)
+	deployer.SetEnvCrypto(envCrypto)
+	envVarHandler.SetRestarter(deployer)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(deployer)
 	appByID.Post("/domains", domainHandler.Add)

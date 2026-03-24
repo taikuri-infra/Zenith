@@ -44,6 +44,7 @@ import {
   Heart,
   AlertTriangle,
   Upload,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -472,17 +473,15 @@ function DeploymentsTab({ appId }: { appId: string }) {
   );
 }
 
-// EnvTab supports per-environment env vars (Production / Staging) + .env file import.
+// EnvTab supports per-environment env vars (Production / Staging) + .env file import + inline edit.
 function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
   const api = getApi();
   const { toast } = useToast();
 
-  // Environment selection: "" = production (default), or a staging env ID
   const [activeEnv, setActiveEnv] = useState<"production" | "staging">("production");
   const [stagingEnvId, setStagingEnvId] = useState<string>("");
   const [envIdsLoaded, setEnvIdsLoaded] = useState(false);
 
-  // Load environment IDs from the project
   useEffect(() => {
     if (!projectId) { setEnvIdsLoaded(true); return; }
     api.environments.list(projectId).then((resp) => {
@@ -499,25 +498,41 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
     [appId, currentEnvId, envIdsLoaded]
   );
 
+  // Add new var
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [newIsSecret, setNewIsSecret] = useState(false);
   const [showValues, setShowValues] = useState(false);
+
+  // Import .env
   const [importing, setImporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [dotEnvContent, setDotEnvContent] = useState("");
 
+  // Inline edit
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editIsSecret, setEditIsSecret] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Pending restart banner
+  const [pendingRestart, setPendingRestart] = useState(false);
+  const [applying, setApplying] = useState(false);
+
+  // Delete confirmation
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const items: AppEnvVar[] = envData?.items || [];
+
+  const markPending = () => setPendingRestart(true);
 
   const handleAdd = async () => {
     const key = newKey.trim();
     if (!key) return;
     try {
       await api.envVarsV2.set(appId, [{ key, value: newValue, is_secret: newIsSecret }], currentEnvId);
-      setNewKey("");
-      setNewValue("");
-      setNewIsSecret(false);
-      refetch();
+      setNewKey(""); setNewValue(""); setNewIsSecret(false);
+      refetch(); markPending();
     } catch {
       toast("error", "Failed to set environment variable");
     }
@@ -526,9 +541,31 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
   const handleDelete = async (varId: string) => {
     try {
       await api.envVarsV2.delete(appId, varId);
-      refetch();
+      setDeletingId(null);
+      refetch(); markPending();
     } catch {
       toast("error", "Failed to delete environment variable");
+    }
+  };
+
+  const startEdit = (ev: AppEnvVar) => {
+    setEditingId(ev.id);
+    setEditValue(ev.is_secret ? "" : ev.value); // secrets: force re-entry
+    setEditIsSecret(ev.is_secret);
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditValue(""); };
+
+  const handleSaveEdit = async (ev: AppEnvVar) => {
+    setSaving(true);
+    try {
+      await api.envVarsV2.set(appId, [{ key: ev.key, value: editValue, is_secret: editIsSecret }], currentEnvId);
+      setEditingId(null);
+      refetch(); markPending();
+    } catch {
+      toast("error", "Failed to update environment variable");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -538,13 +575,25 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
     try {
       const result = await api.envVarsV2.importDotEnv(appId, dotEnvContent, currentEnvId);
       toast("success", `Imported ${result.imported} variable${result.imported !== 1 ? "s" : ""}`);
-      setDotEnvContent("");
-      setShowImport(false);
-      refetch();
+      setDotEnvContent(""); setShowImport(false);
+      refetch(); markPending();
     } catch {
       toast("error", "Failed to import .env file");
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleApply = async () => {
+    setApplying(true);
+    try {
+      await api.envVarsV2.apply(appId);
+      toast("success", "Rolling restart triggered — changes will be live in ~30 seconds");
+      setPendingRestart(false);
+    } catch {
+      toast("error", "Failed to restart app");
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -564,15 +613,37 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Environment tabs */}
+      {/* Pending restart banner */}
+      {pendingRestart && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm text-amber-300">
+            Changes saved. Restart the app to apply them to the running container.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPendingRestart(false)}
+              className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+            >
+              Dismiss
+            </button>
+            <button
+              onClick={handleApply}
+              disabled={applying}
+              className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+            >
+              {applying ? "Restarting..." : "Restart now"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Environment tabs + toolbar */}
       <div className="flex items-center justify-between">
         <div className="flex rounded-lg border border-border overflow-hidden">
           <button
             onClick={() => setActiveEnv("production")}
             className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeEnv === "production"
-                ? "bg-accent-500 text-white"
-                : "bg-surface-100 text-neutral-400 hover:text-white"
+              activeEnv === "production" ? "bg-accent-500 text-white" : "bg-surface-100 text-neutral-400 hover:text-white"
             }`}
           >
             Production
@@ -656,6 +727,7 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
             type="text"
             value={newKey}
             onChange={(e) => setNewKey(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             placeholder="DATABASE_URL"
             className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none font-mono"
           />
@@ -666,6 +738,7 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
             type={newIsSecret ? "password" : "text"}
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             placeholder="postgres://..."
             className="w-full rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none font-mono"
           />
@@ -705,34 +778,94 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
               <tr className="border-b border-border bg-surface-100">
                 <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Key</th>
                 <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Value</th>
-                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500 w-8"></th>
-                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500 w-16">Actions</th>
+                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500 w-24 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {items.map((ev) => (
-                <tr key={ev.id} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-medium text-accent-400">
-                    {ev.key}
+                <tr key={ev.id} className="border-b border-border last:border-0 hover:bg-surface-200/50 transition-colors">
+                  <td className="whitespace-nowrap px-4 py-2 font-mono text-xs font-medium text-accent-400">
+                    <div className="flex items-center gap-1.5">
+                      {ev.is_secret && <Lock className="h-3 w-3 text-amber-400 shrink-0" />}
+                      {ev.key}
+                    </div>
                   </td>
-                  <td className="max-w-xs truncate px-4 py-3 font-mono text-xs text-neutral-300">
-                    {ev.is_secret ? (showValues ? ev.value : "••••••••") : (showValues ? ev.value : "••••••••")}
-                  </td>
-                  <td className="px-4 py-3">
-                    {ev.is_secret && (
-                      <span title="Secret" className="text-amber-400">
-                        <Lock className="h-3 w-3" />
+                  <td className="px-4 py-2 font-mono text-xs text-neutral-300">
+                    {editingId === ev.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          type={editIsSecret ? "password" : "text"}
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleSaveEdit(ev); if (e.key === "Escape") cancelEdit(); }}
+                          placeholder={ev.is_secret ? "Enter new value..." : ev.value}
+                          className="flex-1 rounded border border-accent-500 bg-surface-300 px-2 py-1 text-xs text-white placeholder:text-neutral-600 focus:outline-none font-mono"
+                        />
+                        <button
+                          onClick={() => setEditIsSecret(!editIsSecret)}
+                          className={`rounded p-1 transition-colors ${editIsSecret ? "text-amber-400 bg-amber-400/10" : "text-neutral-500 hover:text-neutral-300"}`}
+                          title={editIsSecret ? "Mark as plain" : "Mark as secret"}
+                        >
+                          {editIsSecret ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="truncate max-w-xs block">
+                        {ev.is_secret ? "••••••••" : (showValues ? ev.value : ev.value.length > 40 ? ev.value.slice(0, 40) + "…" : ev.value)}
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <button
-                      onClick={() => handleDelete(ev.id)}
-                      className="rounded p-1 text-neutral-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
-                      title="Delete variable"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                  <td className="whitespace-nowrap px-4 py-2 text-right">
+                    {editingId === ev.id ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleSaveEdit(ev)}
+                          disabled={saving}
+                          className="rounded px-2 py-1 text-xs bg-accent-500 text-white hover:bg-accent-600 disabled:opacity-50 transition-colors"
+                        >
+                          {saving ? "..." : "Save"}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="rounded px-2 py-1 text-xs text-neutral-500 hover:text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : deletingId === ev.id ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleDelete(ev.id)}
+                          className="rounded px-2 py-1 text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => setDeletingId(null)}
+                          className="rounded px-2 py-1 text-xs text-neutral-500 hover:text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => startEdit(ev)}
+                          className="rounded p-1 text-neutral-500 hover:text-white transition-colors"
+                          title="Edit variable"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeletingId(ev.id)}
+                          className="rounded p-1 text-neutral-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                          title="Delete variable"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

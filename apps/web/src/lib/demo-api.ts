@@ -1861,6 +1861,7 @@ export const demoApi = {
     set: async () => { throw new Error("Not available in demo mode"); },
     delete: async () => { throw new Error("Not available in demo mode"); },
     importDotEnv: async () => { throw new Error("Not available in demo mode"); },
+    apply: async () => { throw new Error("Not available in demo mode"); },
   },
   ai: {
     analyzeError: async () => {

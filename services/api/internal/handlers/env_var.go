@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotechhq/zenith/services/api/internal/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
@@ -18,11 +19,18 @@ type EnvVarK8sSyncer interface {
 	CreateConfigMap(ctx context.Context, namespace, name string, data map[string]string) error
 }
 
+// AppRestarter redeploys an app with the same image to apply updated env vars.
+type AppRestarter interface {
+	DeployApp(ctx context.Context, app *entities.App, imageTag string) error
+}
+
 // EnvVarHandler handles enhanced environment variable endpoints.
 type EnvVarHandler struct {
 	appRepo    ports.AppRepository
 	envVarRepo ports.EnvVarRepository
 	k8s        EnvVarK8sSyncer
+	envCrypto  *crypto.EnvCrypto
+	restarter  AppRestarter
 	namespace  string
 }
 
@@ -34,6 +42,16 @@ func NewEnvVarHandler(appRepo ports.AppRepository, envVarRepo ports.EnvVarReposi
 // SetK8sClient sets the K8s client for env var syncing.
 func (h *EnvVarHandler) SetK8sClient(k8s EnvVarK8sSyncer) {
 	h.k8s = k8s
+}
+
+// SetEnvCrypto injects the encryption helper for secret values.
+func (h *EnvVarHandler) SetEnvCrypto(c *crypto.EnvCrypto) {
+	h.envCrypto = c
+}
+
+// SetRestarter injects the deployer used to trigger rolling restarts.
+func (h *EnvVarHandler) SetRestarter(r AppRestarter) {
+	h.restarter = r
 }
 
 type setEnvVarsRequest struct {
@@ -103,6 +121,15 @@ func (h *EnvVarHandler) verifyAppOwnership(c *fiber.Ctx, appID string) error {
 	return nil
 }
 
+// encryptIfSecret encrypts value with the user's derived key when is_secret=true.
+// Falls back to plaintext if crypto is not configured.
+func (h *EnvVarHandler) encryptIfSecret(userID, value string, isSecret bool) (string, error) {
+	if !isSecret || h.envCrypto == nil {
+		return value, nil
+	}
+	return h.envCrypto.Encrypt(userID, value)
+}
+
 // Set handles POST /apps/:appId/env-v2
 // Optional query param: ?env=<environmentID>  (omit = production/default)
 func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
@@ -132,13 +159,18 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 		seen[v.Key] = true
 	}
 
+	userID, _ := c.Locals("user_id").(string)
 	envVars := make([]entities.AppEnvVar, 0, len(req.Vars))
 	for _, v := range req.Vars {
+		value, err := h.encryptIfSecret(userID, v.Value, v.IsSecret)
+		if err != nil {
+			return NewInternal("failed to encrypt secret value")
+		}
 		envVars = append(envVars, entities.AppEnvVar{
 			AppID:         appID,
 			EnvironmentID: environmentID,
 			Key:           v.Key,
-			Value:         v.Value,
+			Value:         value,
 			IsSecret:      v.IsSecret,
 			Source:        entities.EnvVarSourceManual,
 		})
@@ -245,15 +277,19 @@ func (h *EnvVarHandler) ImportDotEnv(c *fiber.Ctx) error {
 		return NewBadRequest("too many variables (max 100 per import)")
 	}
 
+	importUserID, _ := c.Locals("user_id").(string)
 	envVars := make([]entities.AppEnvVar, 0, len(parsed))
 	for key, value := range parsed {
-		// Treat values that look like secrets as secret (contains password/secret/key/token)
 		isSecret := looksLikeSecret(key)
+		encValue, err := h.encryptIfSecret(importUserID, value, isSecret)
+		if err != nil {
+			return NewInternal("failed to encrypt secret value for key: " + key)
+		}
 		envVars = append(envVars, entities.AppEnvVar{
 			AppID:         appID,
 			EnvironmentID: environmentID,
 			Key:           key,
-			Value:         value,
+			Value:         encValue,
 			IsSecret:      isSecret,
 			Source:        entities.EnvVarSourceManual,
 		})
@@ -393,4 +429,45 @@ func (h *EnvVarHandler) syncEnvVarsToK8s(ctx context.Context, appID string, vars
 			slog.Warn("failed to sync env config to K8s", "app_id", appID, "error", err)
 		}
 	}
+}
+
+// Apply handles POST /apps/:appId/env/apply
+// Triggers a rolling restart of the app to pick up the latest env vars.
+// Gets the current image from the last release and re-deploys with updated env vars.
+func (h *EnvVarHandler) Apply(c *fiber.Ctx) error {
+	appID := c.Params("appId")
+	if err := h.verifyAppOwnership(c, appID); err != nil {
+		return err
+	}
+
+	if h.restarter == nil {
+		return NewInternal("restart not available")
+	}
+
+	app, err := h.appRepo.GetApp(c.Context(), appID)
+	if err != nil {
+		return NewNotFound("app not found")
+	}
+
+	// Get current image from latest release
+	releases, err := h.appRepo.ListReleases(c.Context(), appID, 1)
+	if err != nil || len(releases) == 0 {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"error": "no deployment found — deploy the app first before applying env changes",
+		})
+	}
+
+	imageTag := releases[0].Image
+	slog.Info("applying env vars via rolling restart", "app", app.Name, "image", imageTag)
+
+	if err := h.restarter.DeployApp(c.Context(), app, imageTag); err != nil {
+		slog.Error("failed to apply env vars", "app", app.Name, "error", err)
+		return NewInternal("failed to restart app: " + err.Error())
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "rolling restart triggered",
+		"app":     app.Name,
+		"image":   imageTag,
+	})
 }

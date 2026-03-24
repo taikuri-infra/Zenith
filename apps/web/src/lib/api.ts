@@ -405,6 +405,11 @@ export const envVarsV2 = {
       `/api/v1/apps/${appId}/env-v2/import${environmentId ? `?env=${encodeURIComponent(environmentId)}` : ""}`,
       { method: "POST", body: JSON.stringify({ content }) }
     ),
+  apply: (appId: string) =>
+    apiFetch<{ message: string; app: string; image: string }>(
+      `/api/v1/apps/${appId}/env-v2/apply`,
+      { method: "POST" }
+    ),
 };
 
 // ---- AI Features (Phase 3) ----
