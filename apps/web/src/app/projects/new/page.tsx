@@ -8,6 +8,7 @@ import type {
   ManagedService,
   ParsedService,
   ParsedManaged,
+  RegistryCredentials,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useState, useCallback, useRef } from "react";
@@ -29,6 +30,9 @@ import {
   Globe,
   Lock,
   Shield,
+  Eye,
+  EyeOff,
+  ExternalLink,
 } from "lucide-react";
 
 type Step = 1 | 2 | 3 | 4;
@@ -119,6 +123,12 @@ export default function NewProjectPage() {
   // Confirmed pushes: build-context services where user confirmed they've pushed
   const [confirmedPushes, setConfirmedPushes] = useState<Set<string>>(new Set());
 
+  // Private registry credentials per service (for services using external private registries)
+  const [privateRegCreds, setPrivateRegCreds] = useState<Record<string, { username: string; password: string }>>({});
+
+  // Zenith registry credentials (shared robot account — fetched once project is created)
+  const [registryCreds, setRegistryCreds] = useState<RegistryCredentials | null>(null);
+
   // Image verification state (Step 2 → Step 3 gate)
   const [verifying, setVerifying] = useState(false);
   const [verifyResults, setVerifyResults] = useState<Record<string, { reachable: boolean; error?: string }>>({});
@@ -148,6 +158,8 @@ export default function NewProjectPage() {
         const project = await api.projects.create({ name: name.trim() });
         pid = project.id;
         setProjectId(pid);
+        // Fetch Zenith registry credentials for Step 2 push instructions
+        api.registryCredentials.get(pid).then(setRegistryCreds).catch(() => {});
       }
 
       // Parse compose
@@ -688,30 +700,16 @@ export default function NewProjectPage() {
 
             {/* Action Required — build-context services */}
             {unresolvedBuilds.length > 0 && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-amber-400">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  Action Required — {unresolvedBuilds.length} service{unresolvedBuilds.length !== 1 ? "s" : ""} need{unresolvedBuilds.length === 1 ? "s" : ""} a Docker image
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-start gap-3">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-400">
+                    {unresolvedBuilds.length} service{unresolvedBuilds.length !== 1 ? "s" : ""} need{unresolvedBuilds.length === 1 ? "s" : ""} a Docker image
+                  </p>
+                  <p className="text-xs text-amber-300/70 mt-0.5">
+                    Zenith deploys images, not source code. For each service below, pick how to provide the image.
+                  </p>
                 </div>
-                <p className="text-xs text-amber-300/70">
-                  Zenith deploys images — it does not build source code. Services using <code className="bg-amber-500/20 px-1 rounded">build:</code> must be built and pushed to a registry first, or you can provide an external image URL.
-                </p>
-                {unresolvedBuilds.map((svc) => {
-                  const pushTarget = `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`;
-                  return (
-                    <div key={svc.name} className="rounded border border-amber-500/20 bg-neutral-900/60 p-3 space-y-1.5">
-                      <p className="text-xs font-medium text-amber-400">
-                        <Server className="inline h-3 w-3 mr-1" />
-                        {svc.name}
-                        {svc.build_context && (
-                          <span className="ml-2 font-mono text-[10px] text-neutral-500">build: {svc.build_context}</span>
-                        )}
-                      </p>
-                      <CopyLine label="build" value={`docker build -t ${pushTarget} ${svc.build_context || "."}`} />
-                      <CopyLine label="push" value={`docker push ${pushTarget}`} />
-                    </div>
-                  );
-                })}
               </div>
             )}
 
@@ -755,6 +753,11 @@ export default function NewProjectPage() {
                     isPublic={exposureOverrides[svc.name] ?? svc.is_public}
                     imageOverride={imageOverrides[svc.name] || ""}
                     confirmed={confirmedPushes.has(svc.name)}
+                    registryCreds={registryCreds}
+                    privateRegCred={privateRegCreds[svc.name] || { username: "", password: "" }}
+                    onPrivateRegCredChange={(cred) =>
+                      setPrivateRegCreds((prev) => ({ ...prev, [svc.name]: cred }))
+                    }
                     onToggleExposure={() =>
                       setExposureOverrides((prev) => ({
                         ...prev,
@@ -1340,12 +1343,23 @@ function StepDot({
   );
 }
 
+function isPrivateRegistryHost(url: string): boolean {
+  if (!url) return false;
+  const firstSlash = url.indexOf("/");
+  if (firstSlash === -1) return false;
+  const seg = url.substring(0, firstSlash);
+  return seg.includes(".") || seg.includes(":");
+}
+
 function ServiceCard({
   service,
   projectId,
   isPublic,
   imageOverride,
   confirmed,
+  registryCreds,
+  privateRegCred,
+  onPrivateRegCredChange,
   onToggleExposure,
   onImageChange,
   onConfirm,
@@ -1355,106 +1369,187 @@ function ServiceCard({
   isPublic: boolean;
   imageOverride: string;
   confirmed: boolean;
+  registryCreds: import("@/lib/api").RegistryCredentials | null;
+  privateRegCred: { username: string; password: string };
+  onPrivateRegCredChange: (cred: { username: string; password: string }) => void;
   onToggleExposure: () => void;
   onImageChange: (url: string) => void;
   onConfirm: () => void;
 }) {
+  const [showRegPass, setShowRegPass] = useState(false);
   const hasBuildContext = !!service.build_context;
   const isResolved = !hasBuildContext || !!imageOverride || confirmed;
-  const defaultPushTarget = `registry.stage.freezenith.com/${projectId}/${service.name}:latest`;
-  const effectiveImage = imageOverride || service.image || (hasBuildContext ? defaultPushTarget : "");
+  const zenithPushTarget = `${registryCreds?.push_prefix ?? `registry.stage.freezenith.com/${projectId}`}/${service.name}:latest`;
+  const isPrivate = isPrivateRegistryHost(imageOverride);
 
   return (
     <div className={`rounded-lg border bg-surface-200 p-4 transition-colors ${
       hasBuildContext && !isResolved ? "border-amber-500/40" : isResolved ? "border-emerald-500/20" : "border-border"
     }`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Server className={`h-4 w-4 ${hasBuildContext && !isResolved ? "text-amber-400" : isResolved ? "text-emerald-400" : "text-brand"}`} />
-          <span className="text-sm font-medium text-white">{service.name}</span>
-          {service.port > 0 && (
-            <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] text-neutral-300">
-              :{service.port}
-            </span>
-          )}
-          {hasBuildContext && !isResolved && (
-            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-400">needs image</span>
-          )}
-          {isResolved && hasBuildContext && (
-            <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-              <Check className="h-2.5 w-2.5" /> image set
-            </span>
-          )}
-          {!hasBuildContext && service.image && (
-            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">public image</span>
-          )}
-        </div>
+      <div className="flex items-center gap-3">
+        <Server className={`h-4 w-4 shrink-0 ${hasBuildContext && !isResolved ? "text-amber-400" : isResolved ? "text-emerald-400" : "text-brand"}`} />
+        <span className="text-sm font-medium text-white">{service.name}</span>
+        {service.port > 0 && (
+          <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] text-neutral-300">:{service.port}</span>
+        )}
+        {hasBuildContext && !isResolved && (
+          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-400">no image yet</span>
+        )}
+        {isResolved && hasBuildContext && (
+          <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+            <Check className="h-2.5 w-2.5" /> image ready
+          </span>
+        )}
+        {!hasBuildContext && service.image && (
+          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">image ready</span>
+        )}
       </div>
 
-      {/* Image info for non-build services */}
+      {/* Public image — nothing to do */}
       {!hasBuildContext && service.image && (
         <div className="mt-2 flex items-center gap-2 rounded-md bg-emerald-500/5 border border-emerald-500/20 px-3 py-2">
           <Check className="h-3 w-3 text-emerald-400 shrink-0" />
           <span className="font-mono text-[11px] text-neutral-300">{service.image}</span>
-          <span className="ml-auto text-[10px] text-emerald-400/70">ready — will pull automatically</span>
+          <span className="ml-auto text-[10px] text-neutral-500">pulled automatically at deploy</span>
         </div>
       )}
 
-      {/* Build context resolution */}
+      {/* Build context — needs image resolution */}
       {hasBuildContext && (
-        <div className="mt-3 space-y-2">
-          {/* Option A: provide external image URL */}
-          <div>
-            <p className="mb-1 text-[11px] text-neutral-400 font-medium">
-              Option A — Use external image URL
-              <span className="ml-1 text-neutral-600">(Docker Hub, GHCR, etc.)</span>
+        <div className="mt-3 space-y-3">
+          <p className="text-[11px] text-neutral-500">
+            Uses <code className="bg-neutral-800 px-1 rounded text-neutral-300">build: {service.build_context}</code> — Zenith deploys images, not source code. Choose one option below:
+          </p>
+
+          {/* ── Path 1: Already have an image ── */}
+          <div className="rounded-lg border border-border bg-neutral-900/60 p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-white">
+              I already have a Docker image
+            </p>
+            <p className="text-[10px] text-neutral-500">
+              Enter the full image URL — Docker Hub, GHCR, or any registry you use.
             </p>
             <input
               type="text"
               value={imageOverride}
               onChange={(e) => onImageChange(e.target.value)}
-              placeholder="e.g. myuser/my-backend:latest"
-              className={`w-full rounded bg-neutral-900 px-3 py-2 font-mono text-[11px] placeholder:text-neutral-600 border focus:outline-none ${
+              placeholder="e.g. myuser/backend:latest  or  ghcr.io/org/backend:v1.0"
+              className={`w-full rounded bg-neutral-800 px-3 py-2 font-mono text-[11px] placeholder:text-neutral-600 border focus:outline-none ${
                 imageOverride ? "border-emerald-500/40 text-emerald-300 focus:border-emerald-500" : "border-border text-neutral-300 focus:border-accent-500"
               }`}
             />
+            {/* Private registry credential fields */}
+            {isPrivate && (
+              <div className="space-y-1.5 pt-1">
+                <p className="text-[10px] text-amber-400/80">Private registry detected — enter credentials so Zenith can pull the image:</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={privateRegCred.username}
+                    onChange={(e) => onPrivateRegCredChange({ ...privateRegCred, username: e.target.value })}
+                    placeholder="Username"
+                    className="flex-1 rounded bg-neutral-800 border border-border px-2 py-1.5 font-mono text-[11px] text-neutral-300 placeholder:text-neutral-600 focus:outline-none focus:border-accent-500"
+                  />
+                  <input
+                    type="password"
+                    value={privateRegCred.password}
+                    onChange={(e) => onPrivateRegCredChange({ ...privateRegCred, password: e.target.value })}
+                    placeholder="Password / token"
+                    className="flex-1 rounded bg-neutral-800 border border-border px-2 py-1.5 font-mono text-[11px] text-neutral-300 placeholder:text-neutral-600 focus:outline-none focus:border-accent-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Divider */}
+          {/* ── Divider ── */}
           <div className="flex items-center gap-2 text-[10px] text-neutral-600">
             <div className="flex-1 h-px bg-neutral-800" />
-            or push to Zenith registry
+            or
             <div className="flex-1 h-px bg-neutral-800" />
           </div>
 
-          {/* Option B: push to Zenith registry */}
-          <div className="space-y-1">
-            <p className="text-[11px] text-neutral-400 font-medium">
-              Option B — Push to Zenith registry
+          {/* ── Path 2: Push to Zenith registry ── */}
+          <div className="rounded-lg border border-border bg-neutral-900/60 p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-white">
+              Build and push to Zenith registry
             </p>
-            <CopyLine label="build" value={`docker build -t ${effectiveImage} ${service.build_context || "."}`} />
-            <CopyLine label="push" value={`docker push ${effectiveImage}`} />
+            <p className="text-[10px] text-neutral-500">
+              Use the private registry included with your project. Run these commands once:
+            </p>
+
+            {/* Login */}
+            <div className="space-y-1">
+              <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-medium">1 — Login</p>
+              {registryCreds?.available ? (
+                <div className="rounded bg-neutral-800 border border-neutral-700 px-3 py-2 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-14 shrink-0">user</span>
+                    <code className="flex-1 font-mono text-[11px] text-neutral-300">{registryCreds.username}</code>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-14 shrink-0">password</span>
+                    <code className="flex-1 font-mono text-[11px] text-neutral-300">
+                      {showRegPass ? registryCreds.password : "••••••••••••"}
+                    </code>
+                    <button onClick={() => setShowRegPass((v) => !v)} className="shrink-0 text-neutral-500 hover:text-white">
+                      {showRegPass ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded bg-neutral-800 border border-neutral-700 px-3 py-2">
+                  <code className="font-mono text-[11px] text-neutral-500">Loading credentials...</code>
+                </div>
+              )}
+              <CopyLine
+                label="login"
+                value={`docker login ${registryCreds?.push_prefix?.split("/")[0] ?? "registry.stage.freezenith.com"} -u ${registryCreds?.username ?? "<user>"} -p ${registryCreds?.password ?? "<pass>"}`}
+              />
+            </div>
+
+            {/* Build + Push */}
+            <div className="space-y-1">
+              <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-medium">2 — Build &amp; Push</p>
+              <CopyLine label="build" value={`docker build -t ${zenithPushTarget} ${service.build_context || "."}`} />
+              <CopyLine label="push" value={`docker push ${zenithPushTarget}`} />
+              <p className="text-[10px] text-neutral-600">
+                The <code className="text-neutral-500">-t</code> flag names the image with the registry address — this is what tells Docker where to push it.
+              </p>
+            </div>
+
+            {/* Confirm button */}
+            {!imageOverride && (
+              <button
+                onClick={onConfirm}
+                disabled={confirmed}
+                className={`mt-1 flex w-full items-center justify-center gap-2 rounded-lg border py-2 text-xs font-medium transition-colors ${
+                  confirmed
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
+                    : "border-brand/40 text-brand hover:bg-brand/10"
+                }`}
+              >
+                {confirmed ? (
+                  <><Check className="h-3.5 w-3.5" /> Image pushed — ready to deploy</>
+                ) : (
+                  <><Check className="h-3.5 w-3.5" /> I&apos;ve pushed this image</>
+                )}
+              </button>
+            )}
           </div>
 
-          {/* Confirm pushed button */}
-          {!imageOverride && (
-            <button
-              onClick={onConfirm}
-              disabled={confirmed}
-              className={`mt-1 flex w-full items-center justify-center gap-2 rounded-lg border py-2 text-xs font-medium transition-colors ${
-                confirmed
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
-                  : "border-brand/40 text-brand hover:bg-brand/10"
-              }`}
-            >
-              {confirmed ? (
-                <><Check className="h-3.5 w-3.5" /> Image confirmed — ready to deploy</>
-              ) : (
-                <><Check className="h-3.5 w-3.5" /> I&apos;ve built and pushed this image</>
-              )}
-            </button>
-          )}
+          {/* ── Tip: GitHub Actions ── */}
+          <div className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+            <span className="text-blue-400 shrink-0 mt-0.5">💡</span>
+            <p className="text-[11px] text-blue-300/80">
+              <span className="font-medium text-blue-300">Automate this.</span>{" "}
+              Set up GitHub Actions to build and push images automatically on every commit —{" "}
+              <a href="/ci" className="underline hover:text-blue-200 inline-flex items-center gap-0.5">
+                CI/CD settings <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+            </p>
+          </div>
         </div>
       )}
 
@@ -1496,7 +1591,7 @@ function ServiceCard({
         <div className="mt-2 flex items-center gap-2 rounded-md bg-blue-500/10 px-3 py-1.5">
           <Shield className="h-3 w-3 text-blue-400 shrink-0" />
           <span className="text-[10px] text-blue-300">
-            Routed through API Gateway with rate limiting & security
+            Routed through API Gateway with rate limiting &amp; security
           </span>
         </div>
       )}
