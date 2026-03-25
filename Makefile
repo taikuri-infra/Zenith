@@ -176,7 +176,8 @@ ci: ## Run CI tests locally via act
 	act -j test -W .github/workflows/ci.yml --secret-file .secrets
 
 # Manual deploy targets (bypass act — use when Docker dead-container issue blocks act)
-manual-deploy-web: ## Manually build, push, and update values for zenith-web
+# Runs lint + tests locally before building, same gates as CI, no act container needed.
+manual-deploy-web: lint-web ## Manually lint, build, push, and deploy zenith-web (bypasses act)
 	docker build --platform linux/amd64 -f apps/web/Dockerfile \
 		--build-arg NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com \
 		--build-arg NEXT_PUBLIC_LANDING_URL=https://stage.freezenith.com \
@@ -189,7 +190,7 @@ manual-deploy-web: ## Manually build, push, and update values for zenith-web
 	git pull --rebase origin staging && git push origin staging
 	ssh zen-stage "kubectl rollout restart deployment/zenith-web -n zenith-staging && kubectl rollout status deployment/zenith-web -n zenith-staging"
 
-manual-deploy-api: ## Manually build, push, and update values for zenith-api
+manual-deploy-api: test-api lint-api ## Manually test, lint, build, push, and deploy zenith-api (bypasses act)
 	docker build --platform linux/amd64 -f services/api/Dockerfile \
 		-t $(REGISTRY)/zenith-api:$(MANUAL_TAG) -t $(REGISTRY)/zenith-api:latest .
 	docker push $(REGISTRY)/zenith-api:$(MANUAL_TAG)
