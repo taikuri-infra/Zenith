@@ -11,6 +11,10 @@ STAGING_HOST ?= 77.42.88.149
 
 IMAGES := zenith-api zenith-landing zenith-mc zenith-web zenith-operator
 
+# Manual deploy helper (bypasses act when it's broken due to dead containers)
+# Usage: make manual-deploy-web
+MANUAL_TAG ?= sha-$(shell git rev-parse --short HEAD)
+
 .PHONY: help version \
 	test test-api test-web lint lint-api lint-web \
 	security \
@@ -170,4 +174,29 @@ deploy-all: ## Deploy ALL components to staging
 
 ci: ## Run CI tests locally via act
 	act -j test -W .github/workflows/ci.yml --secret-file .secrets
+
+# Manual deploy targets (bypass act — use when Docker dead-container issue blocks act)
+manual-deploy-web: ## Manually build, push, and update values for zenith-web
+	docker build --platform linux/amd64 -f apps/web/Dockerfile \
+		--build-arg NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com \
+		--build-arg NEXT_PUBLIC_LANDING_URL=https://stage.freezenith.com \
+		-t $(REGISTRY)/zenith-web:$(MANUAL_TAG) -t $(REGISTRY)/zenith-web:latest .
+	docker push $(REGISTRY)/zenith-web:$(MANUAL_TAG)
+	docker push $(REGISTRY)/zenith-web:latest
+	sed -i '' "s|^image: zenith-web:.*|image: zenith-web:$(MANUAL_TAG)|" infra/helm/zenith-web/values-staging.yaml
+	git add infra/helm/zenith-web/values-staging.yaml
+	git commit -m "chore: bump staging web -- zenith-web:$(MANUAL_TAG)"
+	git pull --rebase origin staging && git push origin staging
+	ssh zen-stage "kubectl rollout restart deployment/zenith-web -n zenith-staging && kubectl rollout status deployment/zenith-web -n zenith-staging"
+
+manual-deploy-api: ## Manually build, push, and update values for zenith-api
+	docker build --platform linux/amd64 -f services/api/Dockerfile \
+		-t $(REGISTRY)/zenith-api:$(MANUAL_TAG) -t $(REGISTRY)/zenith-api:latest .
+	docker push $(REGISTRY)/zenith-api:$(MANUAL_TAG)
+	docker push $(REGISTRY)/zenith-api:latest
+	sed -i '' "s|^image: zenith-api:.*|image: zenith-api:$(MANUAL_TAG)|" infra/helm/zenith-api/values-staging.yaml
+	git add infra/helm/zenith-api/values-staging.yaml
+	git commit -m "chore: bump staging api -- zenith-api:$(MANUAL_TAG)"
+	git pull --rebase origin staging && git push origin staging
+	ssh zen-stage "kubectl rollout restart deployment/zenith-api -n zenith-staging && kubectl rollout status deployment/zenith-api -n zenith-staging"
 
