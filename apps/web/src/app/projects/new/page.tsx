@@ -119,6 +119,10 @@ export default function NewProjectPage() {
   // Confirmed pushes: build-context services where user confirmed they've pushed
   const [confirmedPushes, setConfirmedPushes] = useState<Set<string>>(new Set());
 
+  // Image verification state (Step 2 → Step 3 gate)
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResults, setVerifyResults] = useState<Record<string, { reachable: boolean; error?: string }>>({});
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
@@ -792,27 +796,91 @@ export default function NewProjectPage() {
               </div>
             )}
 
+            {/* Per-service verification results */}
+            {Object.keys(verifyResults).length > 0 && (
+              <div className="space-y-1.5">
+                {services.map((svc) => {
+                  const res = verifyResults[svc.name];
+                  if (!res) return null;
+                  return (
+                    <div
+                      key={svc.name}
+                      className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+                        res.reachable
+                          ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                          : "bg-red-500/10 border border-red-500/20 text-red-400"
+                      }`}
+                    >
+                      {res.reachable ? (
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <span className="font-medium">{svc.name}</span>
+                      <span className="text-[10px] opacity-70">
+                        {res.reachable ? "image verified ✓" : res.error || "not reachable"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="flex justify-between">
               <button
-                onClick={() => setStep(1)}
+                onClick={() => { setVerifyResults({}); setStep(1); }}
                 className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm text-neutral-300 hover:text-white"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back
               </button>
               <button
-                onClick={() => {
+                disabled={verifying}
+                onClick={async () => {
                   if (unresolvedBuilds.length > 0) {
                     toast("error", `Resolve images for: ${unresolvedBuilds.map((s) => s.name).join(", ")}. Provide an image URL or confirm you've pushed.`);
                     return;
                   }
+
+                  // Build the list of images to verify
+                  const imagesToVerify = services.map((svc) => ({
+                    name: svc.name,
+                    image: imageOverrides[svc.name] || svc.image ||
+                      `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`,
+                  }));
+
+                  setVerifying(true);
+                  setVerifyResults({});
+                  try {
+                    const result = await api.imageVerify.verify(projectId, imagesToVerify);
+                    const resultMap: Record<string, { reachable: boolean; error?: string }> = {};
+                    for (const r of result.results) {
+                      resultMap[r.name] = { reachable: r.reachable, error: r.error };
+                    }
+                    setVerifyResults(resultMap);
+
+                    if (!result.all_ready) {
+                      const failed = result.results.filter((r) => !r.reachable).map((r) => r.name);
+                      toast("error", `Images not ready: ${failed.join(", ")}. Push them and try again.`);
+                      return;
+                    }
+                  } catch {
+                    // Verification failed (network error, etc.) — don't block proceed
+                    toast("warning", "Could not verify images (registry unreachable). Proceeding anyway.");
+                  } finally {
+                    setVerifying(false);
+                  }
+
                   if (parseResult) initEnvVarEdits(parseResult);
                   setStep(3);
                 }}
-                className="flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand/90"
+                className="flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-60"
               >
-                <ArrowRight className="h-4 w-4" />
-                Configure Env Vars
+                {verifying ? (
+                  <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Verifying images...</>
+                ) : (
+                  <><ArrowRight className="h-4 w-4" />Verify &amp; Configure Env Vars</>
+                )}
               </button>
             </div>
           </div>

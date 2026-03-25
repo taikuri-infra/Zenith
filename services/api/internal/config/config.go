@@ -39,9 +39,11 @@ type Config struct {
 	// Deploy
 	BaseDomain    string
 	GatewayDomain string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
-	Registry      string // container registry for user images
+	Registry         string // container registry for user images (e.g. "registry.stage.freezenith.com")
+	RegistryUser     string // robot account for internal registry (same as kaniko-registry-auth)
+	RegistryPassword string // robot account token for internal registry
 
-	// Harbor Registry API
+	// Harbor Registry API (customer Harbor at hub.*)
 	HarborURL      string // e.g. "https://hub.stage.freezenith.com"
 	HarborUser     string // robot account username
 	HarborPassword string // robot account token
@@ -149,8 +151,10 @@ func Load() *Config {
 		InternalSecret: getEnv("INTERNAL_SECRET", ""),
 		BaseDomain:    getEnv("BASE_DOMAIN", "freezenith.com"),
 		GatewayDomain: getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
-		Registry:       getEnv("REGISTRY", "registry.freezenith.com"),
-		HarborURL:      getEnv("HARBOR_URL", ""),
+		Registry:         getEnv("REGISTRY", "registry.freezenith.com"),
+		RegistryUser:     getEnv("REGISTRY_USER", ""),
+		RegistryPassword: getEnv("REGISTRY_PASSWORD", ""),
+		HarborURL:        getEnv("HARBOR_URL", ""),
 		HarborUser:     getEnv("HARBOR_USER", ""),
 		HarborPassword: getEnv("HARBOR_PASSWORD", ""),
 		MaxConcurrentDeploys: getEnvInt("MAX_CONCURRENT_DEPLOYS", 5),

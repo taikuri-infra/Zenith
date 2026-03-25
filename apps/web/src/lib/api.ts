@@ -370,6 +370,28 @@ export const composeImport = {
     ),
 };
 
+// ---- Image Verification ----
+
+export interface ImageVerifyResult {
+  name: string;
+  image: string;
+  reachable: boolean;
+  error?: string;
+}
+
+export interface VerifyImagesResponse {
+  all_ready: boolean;
+  results: ImageVerifyResult[];
+}
+
+export const imageVerify = {
+  verify: (projectId: string, images: { name: string; image: string }[]) =>
+    apiFetch<VerifyImagesResponse>(
+      `/api/v1/projects/${projectId}/verify-images`,
+      { method: "POST", body: JSON.stringify({ images }) }
+    ),
+};
+
 // ---- Enhanced Env Vars API (V2) ----
 
 export interface AppEnvVar {

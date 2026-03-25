@@ -1847,6 +1847,15 @@ export const demoApi = {
       return { formatted: "" };
     },
   },
+  imageVerify: {
+    verify: async (_projectId: string, images: { name: string; image: string }[]): Promise<import("./api").VerifyImagesResponse> => {
+      await delay(800);
+      return {
+        all_ready: true,
+        results: images.map((img) => ({ name: img.name, image: img.image, reachable: true })),
+      };
+    },
+  },
   envVarsV2: {
     list: async () => {
       await delay();
