@@ -2,10 +2,10 @@
 
 import { Shell } from "@/components/shell";
 import { useProject, useProjectContext } from "@/hooks/use-project";
-import { useApi } from "@/hooks/use-api";
 import { getApi } from "@/lib/get-api";
 import { useState, useEffect } from "react";
-import { Copy, Check, FileCode2, Terminal } from "lucide-react";
+import { Copy, Check, FileCode2, Terminal, Eye, EyeOff, AlertTriangle } from "lucide-react";
+import type { RegistryCredentials } from "@/lib/api";
 
 const FRAMEWORKS = [
   { id: "go", label: "Go", icon: "🐹" },
@@ -18,43 +18,49 @@ const FRAMEWORKS = [
 export default function CIPage() {
   const projectId = useProject();
   const { currentProject } = useProjectContext();
+  const api = getApi();
+
   const [framework, setFramework] = useState("go");
   const [template, setTemplate] = useState<string>("");
   const [copied, setCopied] = useState<string | null>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const [creds, setCreds] = useState<RegistryCredentials | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const projectSlug = currentProject?.slug || "<your-project>";
+  const projectSlug = currentProject?.slug || "";
 
+  // Load CI template
   useEffect(() => {
+    if (!projectSlug) return;
     setLoadingTemplate(true);
-    const api = getApi();
-    // CI template endpoint returns text, handle it
-    fetch(`/api/v1/ci-templates/${framework}?project=${projectSlug}&service=app`, {
-      headers: { Authorization: `Bearer ${typeof window !== "undefined" ? localStorage.getItem("zenith_access_token") || "" : ""}` },
-    })
-      .then(async (res) => {
-        if (res.ok) {
-          setTemplate(await res.text());
-        } else {
-          setTemplate("# Failed to load template");
-        }
-      })
-      .catch(() => setTemplate("# Failed to load template"))
+    api.ciTemplates
+      .get(framework, projectSlug, "app")
+      .then((text) => setTemplate(text))
+      .catch(() => setTemplate("# Failed to load template\n# Make sure you are logged in and have a project selected."))
       .finally(() => setLoadingTemplate(false));
   }, [framework, projectSlug]);
 
-  const copyToClipboard = (text: string, id: string) => {
+  // Load registry credentials
+  useEffect(() => {
+    if (!projectId) return;
+    api.registryCredentials
+      .get(projectId)
+      .then(setCreds)
+      .catch(() => setCreds(null));
+  }, [projectId]);
+
+  const copy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopied(id);
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const CopyButton = ({ text, id }: { text: string; id: string }) => (
+  const CopyBtn = ({ text, id }: { text: string; id: string }) => (
     <button
-      onClick={() => copyToClipboard(text, id)}
-      className="rounded p-1 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+      onClick={() => copy(text, id)}
+      className="shrink-0 rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
     >
-      {copied === id ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+      {copied === id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
   );
 
@@ -62,72 +68,142 @@ export default function CIPage() {
     <Shell>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">CI/CD Setup</h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Add a GitHub Actions workflow to automatically build and deploy your app on every push.
+          <h1 className="text-xl font-semibold text-white">CI/CD Setup</h1>
+          <p className="text-sm text-neutral-400 mt-1">
+            Add a GitHub Actions workflow to automatically build and push your image on every commit.
           </p>
+        </div>
+
+        {/* No project selected */}
+        {!projectId && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+            <AlertTriangle className="inline h-4 w-4 mr-2" />
+            Select a project from the sidebar to see your credentials and personalized templates.
+          </div>
+        )}
+
+        {/* Registry credentials */}
+        <div className="rounded-lg border border-border bg-surface-50 p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-accent-400" />
+            Registry Credentials
+          </h3>
+          <p className="text-xs text-neutral-500">
+            Add these as secrets in your GitHub repository:
+            <span className="ml-1 font-mono text-neutral-400">Settings → Secrets → Actions</span>
+          </p>
+
+          {creds === null && projectId && (
+            <p className="text-xs text-neutral-500">Loading credentials...</p>
+          )}
+
+          {creds !== null && !creds.available && (
+            <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+              <AlertTriangle className="inline h-3.5 w-3.5 mr-1.5" />
+              {creds.message || "Registry credentials not available. Contact support."}
+            </div>
+          )}
+
+          {creds?.available && (
+            <div className="space-y-2">
+              {/* ZENITH_REGISTRY_USER */}
+              <div className="flex items-center justify-between rounded-lg bg-surface-200 border border-border px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-mono font-medium text-neutral-300">ZENITH_REGISTRY_USER</span>
+                  <span className="ml-2 font-mono text-xs text-accent-400">{creds.username}</span>
+                </div>
+                <CopyBtn text={creds.username} id="reg-user" />
+              </div>
+
+              {/* ZENITH_REGISTRY_PASS */}
+              <div className="flex items-center justify-between rounded-lg bg-surface-200 border border-border px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-mono font-medium text-neutral-300">ZENITH_REGISTRY_PASS</span>
+                  <span className="ml-2 font-mono text-xs text-neutral-400">
+                    {showPassword ? creds.password : "••••••••••••••••"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="rounded p-1 text-neutral-400 hover:text-white transition-colors"
+                    title={showPassword ? "Hide" : "Reveal"}
+                  >
+                    {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                  <CopyBtn text={creds.password} id="reg-pass" />
+                </div>
+              </div>
+
+              {/* Push prefix info */}
+              <div className="rounded-lg bg-surface-200 border border-border px-3 py-2">
+                <p className="text-[10px] text-neutral-500 mb-1 uppercase tracking-wider font-medium">Your push path</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 font-mono text-xs text-neutral-300">{creds.push_prefix}/&lt;service&gt;:latest</code>
+                  <CopyBtn text={creds.push_prefix} id="push-prefix" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Framework selector */}
-        <div className="flex gap-2">
-          {FRAMEWORKS.map((fw) => (
-            <button
-              key={fw.id}
-              onClick={() => setFramework(fw.id)}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                framework === fw.id
-                  ? "bg-blue-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
-              }`}
-            >
-              <span>{fw.icon}</span>
-              {fw.label}
-            </button>
-          ))}
+        <div>
+          <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Framework</p>
+          <div className="flex gap-2 flex-wrap">
+            {FRAMEWORKS.map((fw) => (
+              <button
+                key={fw.id}
+                onClick={() => setFramework(fw.id)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  framework === fw.id
+                    ? "bg-accent-500 text-white"
+                    : "border border-border bg-surface-200 text-neutral-400 hover:text-white"
+                }`}
+              >
+                <span>{fw.icon}</span>
+                {fw.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Template */}
-        <div className="rounded-lg border border-zinc-700 bg-zinc-900">
-          <div className="flex items-center justify-between border-b border-zinc-700 px-4 py-2">
-            <div className="flex items-center gap-2 text-sm text-zinc-400">
-              <FileCode2 className="h-4 w-4" />
-              .github/workflows/zenith-deploy.yml
+        {/* Workflow template */}
+        <div className="rounded-lg border border-border bg-surface-50 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5 bg-surface-100">
+            <div className="flex items-center gap-2 text-xs text-neutral-400">
+              <FileCode2 className="h-3.5 w-3.5" />
+              <span className="font-mono">.github/workflows/zenith-deploy.yml</span>
             </div>
-            <CopyButton text={template} id="template" />
+            <CopyBtn text={template} id="template" />
           </div>
-          <pre className="overflow-x-auto p-4 text-sm text-zinc-300 max-h-96">
-            {loadingTemplate ? "Loading..." : template}
+          <pre className="overflow-x-auto p-4 text-xs text-neutral-300 max-h-[400px] leading-5 font-mono">
+            {loadingTemplate ? (
+              <span className="text-neutral-600">Loading template...</span>
+            ) : (
+              template
+            )}
           </pre>
         </div>
 
-        {/* Secrets to add */}
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-            <Terminal className="h-4 w-4" />
-            Secrets to add to your GitHub repository
-          </h3>
-          <p className="text-xs text-zinc-500">
-            Go to your repo Settings &rarr; Secrets &rarr; Actions and add these:
-          </p>
-          <div className="space-y-2">
+        {/* Quick steps */}
+        <div className="rounded-lg border border-border bg-surface-50 p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-white">Quick Setup Steps</h3>
+          <ol className="space-y-2 text-sm text-neutral-400 list-none">
             {[
-              { name: "ZENITH_REGISTRY_USER", value: currentProject?.harbor_robot_user || "<robot-user>", secret: false },
-              { name: "ZENITH_REGISTRY_PASS", value: "••••••••", secret: true },
-            ].map((s) => (
-              <div
-                key={s.name}
-                className="flex items-center justify-between rounded bg-zinc-900 px-3 py-2"
-              >
-                <div>
-                  <span className="text-sm font-mono text-zinc-300">{s.name}</span>
-                  <span className="ml-2 text-xs text-zinc-500">
-                    {s.secret ? "(from project credentials)" : `= ${s.value}`}
-                  </span>
-                </div>
-                {!s.secret && <CopyButton text={s.value} id={s.name} />}
-              </div>
+              "Copy the workflow file above into .github/workflows/zenith-deploy.yml in your repo",
+              "Add ZENITH_REGISTRY_USER and ZENITH_REGISTRY_PASS to your GitHub repo secrets",
+              "Push a commit to main — GitHub Actions will build and push your image automatically",
+              "Come back here and deploy the project using your new image",
+            ].map((step, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <span className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-accent-500/20 text-[10px] font-bold text-accent-400 mt-0.5">
+                  {i + 1}
+                </span>
+                {step}
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       </div>
     </Shell>

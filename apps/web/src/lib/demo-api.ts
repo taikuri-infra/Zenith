@@ -1898,6 +1898,18 @@ export const demoApi = {
       return "name: Deploy to Zenith\non:\n  push:\n    branches: [main]\n# ... template content";
     },
   },
+  registryCredentials: {
+    get: async (): Promise<import("./api").RegistryCredentials> => {
+      await delay();
+      return {
+        registry: "registry.stage.freezenith.com",
+        username: "robot$zenith-demo",
+        password: "demo-token-hidden",
+        push_prefix: "registry.stage.freezenith.com/demo-project",
+        available: true,
+      };
+    },
+  },
   environments: {
     list: async () => {
       await delay();

@@ -1280,6 +1280,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	projectDeployHandler := handlers.NewProjectDeployHandler(projectRepo, appRepo, msRepo, pipeline)
 	protected.Get("/projects/:projectId/images/status", imageStatusHandler.GetImageStatus)
 	protected.Post("/projects/:projectId/verify-images", imageVerifyHandler.VerifyImages)
+	protected.Get("/projects/:projectId/registry-credentials", imageVerifyHandler.GetRegistryCredentials)
 	protected.Post("/projects/:projectId/deploy", projectDeployHandler.DeployProject)
 
 	// Pod Exec — SSH-to-pod terminal access (Business+ only)

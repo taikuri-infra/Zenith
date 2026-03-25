@@ -50,6 +50,46 @@ type VerifyImagesResponse struct {
 	Results  []ImageVerifyResult `json:"results"`
 }
 
+// GetRegistryCredentials handles GET /projects/:projectId/registry-credentials
+// Returns the registry hostname and push credentials the user needs for their CI/CD pipeline.
+func (h *ImageVerifyHandler) GetRegistryCredentials(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	if userID == "" {
+		return NewUnauthorized("authentication required")
+	}
+
+	projectID := c.Params("projectId")
+	project, err := h.projectRepo.GetProject(c.Context(), projectID)
+	if err != nil {
+		return NewNotFound("project not found")
+	}
+	if project.UserID != userID {
+		return NewForbidden("not your project")
+	}
+
+	slug := project.Slug
+	if slug == "" {
+		slug = projectID
+	}
+
+	if h.registryUser == "" {
+		return c.JSON(fiber.Map{
+			"registry":    h.registryHost,
+			"available":   false,
+			"push_prefix": h.registryHost + "/" + slug,
+			"message":     "Registry credentials are not yet configured for this platform. Contact support.",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"registry":    h.registryHost,
+		"username":    h.registryUser,
+		"password":    h.registryPass,
+		"push_prefix": h.registryHost + "/" + slug,
+		"available":   true,
+	})
+}
+
 // VerifyImages handles POST /projects/:projectId/verify-images
 // Checks each provided image against its registry to confirm it exists and is pullable.
 func (h *ImageVerifyHandler) VerifyImages(c *fiber.Ctx) error {

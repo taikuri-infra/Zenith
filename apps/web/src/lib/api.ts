@@ -467,13 +467,34 @@ export interface CITemplateList {
 
 export const ciTemplates = {
   list: () => apiFetch<CITemplateList>("/api/v1/ci-templates"),
-  get: (framework: string, project?: string, service?: string) => {
+  get: async (framework: string, project?: string, service?: string): Promise<string> => {
     const params = new URLSearchParams();
     if (project) params.set("project", project);
     if (service) params.set("service", service);
     const qs = params.toString() ? `?${params.toString()}` : "";
-    return apiFetch<string>(`/api/v1/ci-templates/${framework}${qs}`);
+    const token = typeof window !== "undefined" ? localStorage.getItem("zenith_access_token") || "" : "";
+    const res = await fetch(`${API_BASE_URL}/api/v1/ci-templates/${framework}${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.text();
   },
+};
+
+// ---- Registry Credentials ----
+
+export interface RegistryCredentials {
+  registry: string;
+  username: string;
+  password: string;
+  push_prefix: string;
+  available: boolean;
+  message?: string;
+}
+
+export const registryCredentials = {
+  get: (projectId: string) =>
+    apiFetch<RegistryCredentials>(`/api/v1/projects/${projectId}/registry-credentials`),
 };
 
 // ---- App V2 (for compose-imported services) ----
