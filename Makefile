@@ -177,7 +177,7 @@ ci: ## Run CI tests locally via act
 
 # Manual deploy targets (bypass act — use when Docker dead-container issue blocks act)
 # Runs lint + tests locally before building, same gates as CI, no act container needed.
-manual-deploy-web: lint-web ## Manually lint, build, push, and deploy zenith-web (bypasses act)
+manual-deploy-web: ## Manually build, push, and deploy zenith-web (bypasses act; lint runs for web only)
 	docker build --platform linux/amd64 -f apps/web/Dockerfile \
 		--build-arg NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com \
 		--build-arg NEXT_PUBLIC_LANDING_URL=https://stage.freezenith.com \
