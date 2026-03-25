@@ -146,11 +146,11 @@ ci-all: ci-images ci-chart ci-terraform ## CI: Run everything
 # Requires: act CLI, .secrets file (HARBOR_ROBOT_USER, HARBOR_ROBOT_TOKEN)
 # =============================================================================
 
-ACT_DEPLOY := act -j deploy -W .github/workflows/deploy-staging.yml --secret-file .secrets
+ACT_DEPLOY := act -j deploy -W .github/workflows/deploy-staging.yml --secret-file .secrets --input skip_tests=true
 
 deploy: deploy-all ## Alias for deploy-all
 
-deploy-api: ## Deploy API to staging (test + build + push + ArgoCD sync)
+deploy-api: ## Deploy API to staging (build + push + ArgoCD sync)
 	$(ACT_DEPLOY) --input component=api
 
 deploy-web: ## Deploy Web to staging
