@@ -39,7 +39,8 @@ type Config struct {
 	// Deploy
 	BaseDomain    string
 	GatewayDomain string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
-	Registry         string // container registry for user images (e.g. "registry.stage.freezenith.com")
+	Registry         string // container registry host (e.g. "registry.stage.freezenith.com")
+	RegistryProject  string // Harbor project for user images (e.g. "zenith-stage") — robot account must have push access here
 	RegistryUser     string // robot account for internal registry (same as kaniko-registry-auth)
 	RegistryPassword string // robot account token for internal registry
 
@@ -152,6 +153,7 @@ func Load() *Config {
 		BaseDomain:    getEnv("BASE_DOMAIN", "freezenith.com"),
 		GatewayDomain: getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
 		Registry:         getEnv("REGISTRY", "registry.freezenith.com"),
+		RegistryProject:  getEnv("REGISTRY_PROJECT", ""),
 		RegistryUser:     getEnv("REGISTRY_USER", ""),
 		RegistryPassword: getEnv("REGISTRY_PASSWORD", ""),
 		HarborURL:        getEnv("HARBOR_URL", ""),

@@ -13,19 +13,21 @@ import (
 
 // ImageVerifyHandler verifies whether Docker images are accessible before deploy.
 type ImageVerifyHandler struct {
-	projectRepo  ports.ProjectRepository
-	registryHost string // e.g. "registry.stage.freezenith.com"
-	registryUser string // robot account for internal registry
-	registryPass string
+	projectRepo     ports.ProjectRepository
+	registryHost    string // e.g. "registry.stage.freezenith.com"
+	registryProject string // Harbor project name, e.g. "zenith-stage" — robot account must have push access here
+	registryUser    string // robot account for internal registry
+	registryPass    string
 }
 
 // NewImageVerifyHandler creates a new ImageVerifyHandler.
-func NewImageVerifyHandler(projectRepo ports.ProjectRepository, registryHost, registryUser, registryPass string) *ImageVerifyHandler {
+func NewImageVerifyHandler(projectRepo ports.ProjectRepository, registryHost, registryProject, registryUser, registryPass string) *ImageVerifyHandler {
 	return &ImageVerifyHandler{
-		projectRepo:  projectRepo,
-		registryHost: registryHost,
-		registryUser: registryUser,
-		registryPass: registryPass,
+		projectRepo:     projectRepo,
+		registryHost:    registryHost,
+		registryProject: registryProject,
+		registryUser:    registryUser,
+		registryPass:    registryPass,
 	}
 }
 
@@ -72,11 +74,21 @@ func (h *ImageVerifyHandler) GetRegistryCredentials(c *fiber.Ctx) error {
 		slug = projectID
 	}
 
+	// push_prefix is where the user should tag and push their images.
+	// The robot account only has push access to registryProject (e.g. "zenith-stage"),
+	// so the path must be: <host>/<registryProject>/<project-slug>
+	// e.g. registry.stage.freezenith.com/zenith-stage/my-project
+	pushBase := h.registryHost
+	if h.registryProject != "" {
+		pushBase = h.registryHost + "/" + h.registryProject
+	}
+	pushPrefix := pushBase + "/" + slug
+
 	if h.registryUser == "" {
 		return c.JSON(fiber.Map{
 			"registry":    h.registryHost,
 			"available":   false,
-			"push_prefix": h.registryHost + "/" + slug,
+			"push_prefix": pushPrefix,
 			"message":     "Registry credentials are not yet configured for this platform. Contact support.",
 		})
 	}
@@ -85,7 +97,7 @@ func (h *ImageVerifyHandler) GetRegistryCredentials(c *fiber.Ctx) error {
 		"registry":    h.registryHost,
 		"username":    h.registryUser,
 		"password":    h.registryPass,
-		"push_prefix": h.registryHost + "/" + slug,
+		"push_prefix": pushPrefix,
 		"available":   true,
 	})
 }

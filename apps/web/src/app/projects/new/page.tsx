@@ -1505,7 +1505,7 @@ function ServiceCard({
               )}
               <CopyLine
                 label="login"
-                value={`docker login ${registryCreds?.push_prefix?.split("/")[0] ?? "registry.stage.freezenith.com"} -u ${registryCreds?.username ?? "<user>"} -p ${registryCreds?.password ?? "<pass>"}`}
+                value={`docker login ${registryCreds?.push_prefix?.split("/")[0] ?? "registry.stage.freezenith.com"} -u '${registryCreds?.username ?? "<user>"}' -p '${registryCreds?.password ?? "<pass>"}'`}
               />
             </div>
 

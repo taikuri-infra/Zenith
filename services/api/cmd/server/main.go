@@ -1276,7 +1276,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Image status + verify + Project deploy (Phase 2)
 	imageStatusHandler := handlers.NewImageStatusHandler(projectRepo, appRepo, harborClient)
-	imageVerifyHandler := handlers.NewImageVerifyHandler(projectRepo, cfg.Registry, cfg.RegistryUser, cfg.RegistryPassword)
+	imageVerifyHandler := handlers.NewImageVerifyHandler(projectRepo, cfg.Registry, cfg.RegistryProject, cfg.RegistryUser, cfg.RegistryPassword)
 	projectDeployHandler := handlers.NewProjectDeployHandler(projectRepo, appRepo, msRepo, pipeline)
 	protected.Get("/projects/:projectId/images/status", imageStatusHandler.GetImageStatus)
 	protected.Post("/projects/:projectId/verify-images", imageVerifyHandler.VerifyImages)
