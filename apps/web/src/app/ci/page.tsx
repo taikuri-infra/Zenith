@@ -29,14 +29,13 @@ export default function CIPage() {
 
   const projectSlug = currentProject?.slug || "";
 
-  // Load CI template
+  // Load CI template — always load, substitute project slug if available
   useEffect(() => {
-    if (!projectSlug) return;
     setLoadingTemplate(true);
     api.ciTemplates
-      .get(framework, projectSlug, "app")
+      .get(framework, projectSlug || undefined, "app")
       .then((text) => setTemplate(text))
-      .catch(() => setTemplate("# Failed to load template\n# Make sure you are logged in and have a project selected."))
+      .catch(() => setTemplate("# Failed to load template\n# Make sure you are logged in."))
       .finally(() => setLoadingTemplate(false));
   }, [framework, projectSlug]);
 
