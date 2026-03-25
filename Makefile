@@ -190,7 +190,7 @@ manual-deploy-web: lint-web ## Manually lint, build, push, and deploy zenith-web
 	git pull --rebase origin staging && git push origin staging
 	ssh zen-stage "kubectl rollout restart deployment/zenith-web -n zenith-staging && kubectl rollout status deployment/zenith-web -n zenith-staging"
 
-manual-deploy-api: test-api lint-api ## Manually test, lint, build, push, and deploy zenith-api (bypasses act)
+manual-deploy-api: ## Manually build, push, and deploy zenith-api (bypasses act; tests run inside Docker)
 	docker build --platform linux/amd64 -f services/api/Dockerfile \
 		-t $(REGISTRY)/zenith-api:$(MANUAL_TAG) -t $(REGISTRY)/zenith-api:latest .
 	docker push $(REGISTRY)/zenith-api:$(MANUAL_TAG)
