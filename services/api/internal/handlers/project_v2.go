@@ -59,6 +59,7 @@ type ProjectV2Response struct {
 	Name        string    `json:"name"`
 	Slug        string    `json:"slug"`
 	Description string    `json:"description"`
+	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -114,6 +115,7 @@ func (h *ProjectHandlerV2) Create(c *fiber.Ctx) error {
 		Name:        project.Name,
 		Slug:        project.Slug,
 		Description: project.Description,
+		Status:      string(project.Status),
 		CreatedAt:   project.CreatedAt,
 		UpdatedAt:   project.UpdatedAt,
 	})
@@ -138,6 +140,7 @@ func (h *ProjectHandlerV2) List(c *fiber.Ctx) error {
 			Name:        p.Name,
 			Slug:        p.Slug,
 			Description: p.Description,
+			Status:      string(p.Status),
 			CreatedAt:   p.CreatedAt,
 			UpdatedAt:   p.UpdatedAt,
 		})
@@ -167,6 +170,7 @@ func (h *ProjectHandlerV2) Get(c *fiber.Ctx) error {
 		Name:        project.Name,
 		Slug:        project.Slug,
 		Description: project.Description,
+		Status:      string(project.Status),
 		CreatedAt:   project.CreatedAt,
 		UpdatedAt:   project.UpdatedAt,
 	})
@@ -188,6 +192,7 @@ func (h *ProjectHandlerV2) Update(c *fiber.Ctx) error {
 	var req struct {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
+		Status      *string `json:"status"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return NewBadRequest("invalid request body")
@@ -198,11 +203,21 @@ func (h *ProjectHandlerV2) Update(c *fiber.Ctx) error {
 		return NewInternal("failed to update project")
 	}
 
+	// Allow activating a draft project (e.g. after first successful deploy)
+	if req.Status != nil && *req.Status == string(entities.ProjectStatusActive) {
+		if err := h.projectRepo.UpdateProjectStatus(c.Context(), projectID, entities.ProjectStatusActive); err != nil {
+			slog.Error("failed to activate project", "project", projectID, "error", err)
+		} else {
+			updated.Status = entities.ProjectStatusActive
+		}
+	}
+
 	return c.JSON(ProjectV2Response{
 		ID:          updated.ID,
 		Name:        updated.Name,
 		Slug:        updated.Slug,
 		Description: updated.Description,
+		Status:      string(updated.Status),
 		CreatedAt:   updated.CreatedAt,
 		UpdatedAt:   updated.UpdatedAt,
 	})
@@ -221,13 +236,15 @@ func (h *ProjectHandlerV2) Delete(c *fiber.Ctx) error {
 		return NewForbidden("not your project")
 	}
 
-	// Prevent deletion of last project
-	count, err := h.projectRepo.CountProjectsByUser(c.Context(), userID)
-	if err != nil {
-		return NewInternal("failed to check project count")
-	}
-	if count <= 1 {
-		return NewBadRequest("cannot delete your only project")
+	// Prevent deletion of last active project (drafts can always be deleted)
+	if project.Status != entities.ProjectStatusDraft {
+		count, err := h.projectRepo.CountProjectsByUser(c.Context(), userID)
+		if err != nil {
+			return NewInternal("failed to check project count")
+		}
+		if count <= 1 {
+			return NewBadRequest("cannot delete your only project")
+		}
 	}
 
 	// Cleanup K8s resources for all managed services in this project

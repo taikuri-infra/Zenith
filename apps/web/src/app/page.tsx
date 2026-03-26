@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
@@ -12,7 +12,7 @@ import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type App, type AppDatabase, type DeployApp, type Project, type UserPlanResponse } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
-import { ArrowUpRight, Rocket, GitBranch, Box, Database, HardDrive, Activity, Globe, Cog, Clock } from "lucide-react";
+import { ArrowUpRight, Rocket, GitBranch, Box, Database, HardDrive, Activity, Globe, Cog, Clock, Trash2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 const engineBadge: Record<string, { label: string; className: string }> = {
@@ -25,6 +25,8 @@ export default function OverviewPage() {
   const router = useRouter();
   const projectId = useProject();
   const { projects, apps, appsDeploy, standaloneDatabases, userPlan } = getApi();
+  const [deletingProject, setDeletingProject] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const {
     data: projectData,
@@ -141,6 +143,19 @@ export default function OverviewPage() {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!projectId) return;
+    setDeletingProject(true);
+    try {
+      await projects.delete(projectId);
+      router.push("/");
+      router.refresh();
+    } catch {
+      setDeletingProject(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   const frameworkLabel = (fw: string) => {
     const labels: Record<string, string> = {
       nextjs: "Next.js",
@@ -159,12 +174,87 @@ export default function OverviewPage() {
   return (
     <Shell>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-lg font-semibold text-white">
-            {project?.name || "Project"}
-          </h1>
-          <p className="text-sm text-neutral-500">Project overview</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold text-white">
+                {project?.name || "Project"}
+              </h1>
+              {project?.status === "draft" && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+                  <AlertTriangle className="h-3 w-3" />
+                  Setup Incomplete
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-neutral-500">Project overview</p>
+          </div>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete Project
+          </button>
         </div>
+
+        {/* Draft project banner */}
+        {project?.status === "draft" && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+              <div>
+                <p className="text-sm font-medium text-amber-300">Setup not completed</p>
+                <p className="mt-0.5 text-xs text-amber-400/80">
+                  This project was created but never fully deployed. Go through the New Project wizard to deploy your services, or delete this project below.
+                </p>
+                <Link
+                  href="/projects/new"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-amber-300 hover:text-amber-200"
+                >
+                  <Rocket className="h-3 w-3" />
+                  Start a new project
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete confirmation modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-surface-100 p-6 shadow-xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
+                  <Trash2 className="h-5 w-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Delete Project</h3>
+                  <p className="text-xs text-neutral-500">This cannot be undone</p>
+                </div>
+              </div>
+              <p className="text-sm text-neutral-400 mb-6">
+                All apps, databases, and managed services in <span className="font-medium text-white">{project?.name}</span> will be permanently deleted.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deletingProject}
+                  className="flex-1 rounded-lg border border-border bg-surface-200 px-4 py-2 text-sm text-neutral-300 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteProject}
+                  disabled={deletingProject}
+                  className="flex-1 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50 transition-colors"
+                >
+                  {deletingProject ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
@@ -331,7 +421,8 @@ export default function OverviewPage() {
                     <div className="mt-1.5 flex items-center gap-3 text-[11px] text-neutral-500">
                       <span className="flex items-center gap-1">
                         <HardDrive className="h-3 w-3" />
-                        {db.size_mb} / {db.max_size_mb} MB
+                        {db.size_mb} MB used
+                        {db.max_size_mb > 0 && ` / ${db.max_size_mb >= 1024 ? `${(db.max_size_mb / 1024).toFixed(0)} GB` : `${db.max_size_mb} MB`} disk`}
                       </span>
                       <span className={statusColor(db.status)}>{db.status}</span>
                     </div>

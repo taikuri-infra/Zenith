@@ -43,7 +43,7 @@ func (r *PostgresProjectRepository) CreateProject(ctx context.Context, userID, n
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO projects (id, user_id, name, slug, description, status, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		id, userID, name, slug, description, entities.ProjectStatusActive, now, now,
+		id, userID, name, slug, description, entities.ProjectStatusDraft, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_projects_user_slug") {
@@ -58,7 +58,7 @@ func (r *PostgresProjectRepository) CreateProject(ctx context.Context, userID, n
 		Name:        name,
 		Slug:        slug,
 		Description: description,
-		Status:      entities.ProjectStatusActive,
+		Status:      entities.ProjectStatusDraft,
 		Timestamps:  entities.Timestamps{CreatedAt: now, UpdatedAt: now},
 	}, nil
 }

@@ -94,8 +94,6 @@ export default function NewProjectPage() {
   // Step 2: Review & Push
   const [projectId, setProjectId] = useState("");
   const [parseResult, setParseResult] = useState<ComposeImportResult | null>(null);
-  const [provisionedServices, setProvisionedServices] = useState<ManagedService[]>([]);
-  const [provisioning, setProvisioning] = useState(false);
 
   // Step 3: Env vars
   const [envVarEdits, setEnvVarEdits] = useState<Record<string, EnvVarEdit[]>>({});
@@ -386,6 +384,22 @@ export default function NewProjectPage() {
     return { ok: false, error: "Timed out (90s). The app may still be starting — check the Logs tab." };
   }, [api]);
 
+  // Poll managed service until ready or error (max 3 min)
+  const waitForManagedService = useCallback(async (serviceId: string, name: string): Promise<{ ok: boolean; error?: string }> => {
+    const maxAttempts = 36; // 36 × 5s = 3 min
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      try {
+        const svc = await api.managedServices.get(projectId, serviceId);
+        if (svc.status === "ready") return { ok: true };
+        if (svc.status === "error") return { ok: false, error: svc.status_message || `${name} failed to provision` };
+      } catch {
+        // ignore transient errors
+      }
+    }
+    return { ok: false, error: `${name} timed out (3 min). Check the admin panel.` };
+  }, [api, projectId]);
+
   // Step 3: Deploy with phases: managed → backend → frontend
   const handleDeploy = useCallback(async () => {
     if (!parseResult || !projectId) return;
@@ -420,29 +434,33 @@ export default function NewProjectPage() {
         setDeployStatus({ ...status });
         addLog(`Provisioning ${ms.type} "${ms.name}" v${ms.version}...`);
 
-        // Already provisioned in step 1, just mark done
-        const existing = provisionedServices.find((p) => p.name === ms.name);
-        if (existing) {
-          status[key] = { state: "running" };
+        try {
+          const provisioned = await api.managedServices.provision(projectId, {
+            service_type: ms.type,
+            name: ms.name,
+            version: ms.version,
+          });
+          status[key] = { state: "waiting" };
           setDeployStatus({ ...status });
-          addLog(`✓ ${ms.name} already provisioned (${existing.status})`);
-        } else {
-          try {
-            await api.managedServices.provision(projectId, {
-              service_type: ms.type,
-              name: ms.name,
-              version: ms.version,
-            });
+          addLog(`Waiting for ${ms.name} to become ready...`);
+
+          const result = await waitForManagedService(provisioned.id, ms.name);
+          if (result.ok) {
             status[key] = { state: "running" };
             setDeployStatus({ ...status });
-            addLog(`✓ ${ms.name} provisioned`);
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            status[key] = { state: "error", error: msg };
+            addLog(`✓ ${ms.name} is ready`);
+          } else {
+            status[key] = { state: "error", error: result.error };
             setDeployStatus({ ...status });
-            addLog(`✗ ${ms.name} failed: ${msg}`);
+            addLog(`✗ ${ms.name} failed: ${result.error}`);
             allOk = false;
           }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          status[key] = { state: "error", error: msg };
+          setDeployStatus({ ...status });
+          addLog(`✗ ${ms.name} failed: ${msg}`);
+          allOk = false;
         }
       }
     }
@@ -528,6 +546,12 @@ export default function NewProjectPage() {
     }
 
     if (allOk) {
+      // Mark project as active — it was created as draft
+      try {
+        await api.projects.update(projectId, { status: "active" });
+      } catch {
+        // Non-fatal — project is deployed, just status update failed
+      }
       setDeployPhase("done");
       setDeployDone(true);
       addLog("All services deployed successfully!");
@@ -537,7 +561,7 @@ export default function NewProjectPage() {
       toast("error", "Some services failed to deploy.");
     }
     setDeploying(false);
-  }, [parseResult, projectId, name, api, toast, exposureOverrides, imageOverrides, provisionedServices, addLog, waitForApp, envVarEdits]);
+  }, [parseResult, projectId, name, api, toast, exposureOverrides, imageOverrides, addLog, waitForApp, waitForManagedService, envVarEdits]);
 
   return (
     <Shell>
@@ -791,8 +815,6 @@ export default function NewProjectPage() {
                     <ManagedServiceCard
                       key={ms.name}
                       managed={ms}
-                      provisioned={provisionedServices.find((p) => p.name === ms.name)}
-                      provisioning={provisioning}
                     />
                   ))}
                 </div>
@@ -1599,15 +1621,7 @@ function ServiceCard({
   );
 }
 
-function ManagedServiceCard({
-  managed,
-  provisioned,
-  provisioning,
-}: {
-  managed: ParsedManaged;
-  provisioned?: ManagedService;
-  provisioning: boolean;
-}) {
+function ManagedServiceCard({ managed }: { managed: ParsedManaged }) {
   const typeConfig: Record<string, { icon: string; color: string }> = {
     postgresql: { icon: "P", color: "bg-blue-500/20 text-blue-400" },
     redis: { icon: "R", color: "bg-red-500/20 text-red-400" },
@@ -1620,9 +1634,7 @@ function ManagedServiceCard({
   return (
     <div className="flex items-center justify-between rounded-lg border border-border bg-surface-200 px-4 py-3">
       <div className="flex items-center gap-3">
-        <span
-          className={`flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold ${cfg.color}`}
-        >
+        <span className={`flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold ${cfg.color}`}>
           {cfg.icon}
         </span>
         <div>
@@ -1632,21 +1644,7 @@ function ManagedServiceCard({
           </span>
         </div>
       </div>
-      <div>
-        {provisioned ? (
-          <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-            <Check className="h-3.5 w-3.5" />
-            {provisioned.status}
-          </span>
-        ) : provisioning ? (
-          <span className="flex items-center gap-1.5 text-xs text-brand">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Provisioning...
-          </span>
-        ) : (
-          <span className="text-xs text-neutral-500">Detected</span>
-        )}
-      </div>
+      <span className="text-xs text-neutral-500">Will be provisioned on Deploy</span>
     </div>
   );
 }

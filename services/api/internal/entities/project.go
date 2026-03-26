@@ -4,6 +4,7 @@ package entities
 type ProjectStatus string
 
 const (
+	ProjectStatusDraft    ProjectStatus = "draft"
 	ProjectStatusActive   ProjectStatus = "active"
 	ProjectStatusArchived ProjectStatus = "archived"
 )
