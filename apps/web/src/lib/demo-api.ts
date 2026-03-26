@@ -1820,7 +1820,7 @@ export const demoApi = {
     },
     get: async () => {
       await delay();
-      return { id: "ms-1", project_id: "demo-project", service_type: "postgresql", name: "main-db", version: "16", status: "ready", storage_gb: 10, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:02:00Z" };
+      return { id: "ms-1", project_id: "demo-project", service_type: "postgresql", name: "main-db", version: "16", status: "ready", status_message: undefined as string | undefined, storage_gb: 10, created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-01T10:02:00Z" };
     },
     provision: async () => { throw new Error("Not available in demo mode"); },
     delete: async () => { throw new Error("Not available in demo mode"); },
