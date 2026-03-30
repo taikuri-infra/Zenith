@@ -61,11 +61,27 @@ jobs:
       - name: Run infrastructure E2E test
         run: ./infra/scripts/e2e-test-staging.sh --verbose
 
+  audit-features:
+    name: Audit Features
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run audit features smoke test
+        env:
+          ZENITH_API_URL: ${{ env.API_URL }}
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          STAGING_ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+          STAGING_ADMIN_PASSWORD: ${{ secrets.STAGING_ADMIN_PASSWORD }}
+        run: ./infra/scripts/smoke-test-audit-features.sh --verbose
+
   notify:
     name: DR Test Report
     runs-on: ubuntu-latest
     if: always()
-    needs: [customer-smoke-test, owner-smoke-test, infrastructure-e2e]
+    needs: [customer-smoke-test, owner-smoke-test, infrastructure-e2e, audit-features]
     steps:
       - name: Determine overall status
         id: status
@@ -73,8 +89,9 @@ jobs:
           CUSTOMER="${{ needs.customer-smoke-test.result }}"
           OWNER="${{ needs.owner-smoke-test.result }}"
           INFRA="${{ needs.infrastructure-e2e.result }}"
+          AUDIT="${{ needs.audit-features.result }}"
 
-          if [ "$CUSTOMER" = "success" ] && [ "$OWNER" = "success" ] && [ "$INFRA" = "success" ]; then
+          if [ "$CUSTOMER" = "success" ] && [ "$OWNER" = "success" ] && [ "$INFRA" = "success" ] && [ "$AUDIT" = "success" ]; then
             echo "overall=success" >> "$GITHUB_OUTPUT"
             echo "emoji=✅" >> "$GITHUB_OUTPUT"
             echo "color=good" >> "$GITHUB_OUTPUT"
@@ -89,6 +106,7 @@ jobs:
           echo "customer=$CUSTOMER" >> "$GITHUB_OUTPUT"
           echo "owner=$OWNER" >> "$GITHUB_OUTPUT"
           echo "infra=$INFRA" >> "$GITHUB_OUTPUT"
+          echo "audit=$AUDIT" >> "$GITHUB_OUTPUT"
 
       - name: Send Slack notification
         if: env.SLACK_WEBHOOK_URL != ''
@@ -99,6 +117,7 @@ jobs:
           STATUS_CUSTOMER: ${{ steps.status.outputs.customer }}
           STATUS_OWNER: ${{ steps.status.outputs.owner }}
           STATUS_INFRA: ${{ steps.status.outputs.infra }}
+          STATUS_AUDIT: ${{ steps.status.outputs.audit }}
           TARGET_URL: ${{ env.API_URL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TRIGGER: ${{ github.event_name }}
@@ -110,6 +129,7 @@ jobs:
             --arg customer "$(icon "$STATUS_CUSTOMER") $STATUS_CUSTOMER" \
             --arg owner "$(icon "$STATUS_OWNER") $STATUS_OWNER" \
             --arg infra "$(icon "$STATUS_INFRA") $STATUS_INFRA" \
+            --arg audit "$(icon "$STATUS_AUDIT") $STATUS_AUDIT" \
             --arg target "$TARGET_URL" \
             --arg ctx "<${RUN_URL}|View Run> | Trigger: ${TRIGGER} | $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{attachments:[{color:$color,blocks:[
@@ -118,6 +138,9 @@ jobs:
                 {type:"mrkdwn",text:("*Customer:*\n"+$customer)},
                 {type:"mrkdwn",text:("*Owner:*\n"+$owner)},
                 {type:"mrkdwn",text:("*Infra E2E:*\n"+$infra)},
+                {type:"mrkdwn",text:("*Audit Features:*\n"+$audit)}
+              ]},
+              {type:"section",fields:[
                 {type:"mrkdwn",text:("*Target:*\n"+$target)}
               ]},
               {type:"context",elements:[{type:"mrkdwn",text:$ctx}]}
@@ -133,6 +156,7 @@ jobs:
           STATUS_CUSTOMER: ${{ steps.status.outputs.customer }}
           STATUS_OWNER: ${{ steps.status.outputs.owner }}
           STATUS_INFRA: ${{ steps.status.outputs.infra }}
+          STATUS_AUDIT: ${{ steps.status.outputs.audit }}
           TARGET_URL: ${{ env.API_URL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TRIGGER: ${{ github.event_name }}
@@ -143,6 +167,7 @@ jobs:
           $(icon "$STATUS_CUSTOMER") Customer Userflow: ${STATUS_CUSTOMER}
           $(icon "$STATUS_OWNER") Owner Userflow: ${STATUS_OWNER}
           $(icon "$STATUS_INFRA") Infrastructure E2E: ${STATUS_INFRA}
+          $(icon "$STATUS_AUDIT") Audit Features: ${STATUS_AUDIT}
 
           Target: \`${TARGET_URL}\`
           Trigger: ${TRIGGER}
