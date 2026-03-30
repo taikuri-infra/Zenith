@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotechhq/zenith/services/api/internal/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
@@ -80,6 +81,7 @@ type AppHandlerV2 struct {
 	gwService    AppGatewayService
 	onAppDeleted func(ctx context.Context, appID string) // callback for cascade (e.g. stop gateway routes)
 	eventRepo    ports.UserEventRepository
+	envCrypto    *crypto.EnvCrypto
 }
 
 // NewAppHandlerV2 creates a new AppHandlerV2.
@@ -110,6 +112,11 @@ func (h *AppHandlerV2) SetPlanRepo(repo ports.UserPlanRepository) {
 // SetEventRepo enables event tracking on app actions.
 func (h *AppHandlerV2) SetEventRepo(repo ports.UserEventRepository) {
 	h.eventRepo = repo
+}
+
+// SetEnvCrypto enables AES-256-GCM encryption for registry passwords at rest.
+func (h *AppHandlerV2) SetEnvCrypto(c *crypto.EnvCrypto) {
+	h.envCrypto = c
 }
 
 // wellKnownPorts maps popular base image names to their default listening port.
@@ -158,20 +165,25 @@ func resolveWellKnownPort(imageRef string) int {
 
 // CreateAppV2Request is the request body for creating a new app.
 type CreateAppV2Request struct {
-	ProjectID        string `json:"project_id,omitempty"`
-	Name             string `json:"name"`
-	DeploySource     string `json:"deploy_source"`
-	RepoURL          string `json:"repo_url,omitempty"`
-	Branch           string `json:"branch,omitempty"`
-	ImageURL         string `json:"image_url,omitempty"`
-	Port             int    `json:"port,omitempty"`
-	RegistryUsername string `json:"registry_username,omitempty"`
-	RegistryPassword string `json:"registry_password,omitempty"`
-	AppType          string `json:"app_type,omitempty"`
-	Command          string `json:"command,omitempty"`
-	CronSchedule     string `json:"cron_schedule,omitempty"`
-	Exposure         string `json:"exposure,omitempty"` // "public" or "protected"
-	EnvVars          []struct {
+	ProjectID        string   `json:"project_id,omitempty"`
+	Name             string   `json:"name"`
+	DeploySource     string   `json:"deploy_source"`
+	RepoURL          string   `json:"repo_url,omitempty"`
+	Branch           string   `json:"branch,omitempty"`
+	ImageURL         string   `json:"image_url,omitempty"`
+	Port             int      `json:"port,omitempty"`
+	RegistryUsername string   `json:"registry_username,omitempty"`
+	RegistryPassword string   `json:"registry_password,omitempty"`
+	AppType          string   `json:"app_type,omitempty"`
+	Command          string   `json:"command,omitempty"`
+	CronSchedule     string   `json:"cron_schedule,omitempty"`
+	Exposure         string   `json:"exposure,omitempty"`         // "public" or "protected"
+	HealthCheckPath  string   `json:"health_check_path,omitempty"` // custom liveness/readiness probe path (default "/")
+	EnvironmentID    string   `json:"environment_id,omitempty"`    // link to a specific environment
+	// DependsOn is a list of K8s service names (app subdomains) this app waits for.
+	// The deployer generates init containers for each dependency.
+	DependsOn []string `json:"depends_on,omitempty"`
+	EnvVars   []struct {
 		Key   string `json:"key"`
 		Value string `json:"value"`
 	} `json:"env_vars,omitempty"`
@@ -179,25 +191,29 @@ type CreateAppV2Request struct {
 
 // AppV2Response is the API response for an app.
 type AppV2Response struct {
-	ID            string    `json:"id"`
-	ProjectID     string    `json:"project_id"`
-	Name          string    `json:"name"`
-	DeploySource  string    `json:"deploy_source"`
-	RepoURL       string    `json:"repo_url,omitempty"`
-	Branch        string    `json:"branch,omitempty"`
-	ImageURL      string    `json:"image_url,omitempty"`
-	Framework     string    `json:"framework"`
-	Status        string    `json:"status"`
-	Subdomain     string    `json:"subdomain"`
-	URL           string    `json:"url"`
-	Port          int       `json:"port"`
-	AppType       string    `json:"app_type"`
-	Command       string    `json:"command,omitempty"`
-	CronSchedule  string    `json:"cron_schedule,omitempty"`
-	Exposure      string    `json:"exposure"`
-	AutoGatewayID string    `json:"auto_gateway_id,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID              string     `json:"id"`
+	ProjectID       string     `json:"project_id"`
+	EnvironmentID   string     `json:"environment_id,omitempty"`
+	Name            string     `json:"name"`
+	DeploySource    string     `json:"deploy_source"`
+	RepoURL         string     `json:"repo_url,omitempty"`
+	Branch          string     `json:"branch,omitempty"`
+	ImageURL        string     `json:"image_url,omitempty"`
+	Framework       string     `json:"framework"`
+	Status          string     `json:"status"`
+	Subdomain       string     `json:"subdomain"`
+	URL             string     `json:"url"`
+	Port            int        `json:"port"`
+	Replicas        int        `json:"replicas"`
+	HealthCheckPath string     `json:"health_check_path"`
+	AppType         string     `json:"app_type"`
+	Command         string     `json:"command,omitempty"`
+	CronSchedule    string     `json:"cron_schedule,omitempty"`
+	Exposure        string     `json:"exposure"`
+	AutoGatewayID   string     `json:"auto_gateway_id,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
 }
 
 func (h *AppHandlerV2) appToResponse(app *entities.App) AppV2Response {
@@ -213,26 +229,38 @@ func (h *AppHandlerV2) appToResponse(app *entities.App) AppV2Response {
 	if exposure == "" {
 		exposure = "public"
 	}
+	replicas := app.Replicas
+	if replicas == 0 {
+		replicas = 1
+	}
+	healthCheckPath := app.HealthCheckPath
+	if healthCheckPath == "" {
+		healthCheckPath = "/"
+	}
 	return AppV2Response{
-		ID:            app.ID,
-		ProjectID:     app.ProjectID,
-		Name:          app.Name,
-		DeploySource:  string(app.DeploySource),
-		RepoURL:       app.RepoURL,
-		Branch:        app.Branch,
-		ImageURL:      app.ImageURL,
-		Framework:     string(app.Framework),
-		Status:        string(app.Status),
-		Subdomain:     app.Subdomain,
-		URL:           url,
-		Port:          app.Port,
-		AppType:       appType,
-		Command:       app.Command,
-		CronSchedule:  app.CronSchedule,
-		Exposure:      exposure,
-		AutoGatewayID: app.AutoGatewayID,
-		CreatedAt:     app.CreatedAt,
-		UpdatedAt:     app.UpdatedAt,
+		ID:              app.ID,
+		ProjectID:       app.ProjectID,
+		EnvironmentID:   app.EnvironmentID,
+		Name:            app.Name,
+		DeploySource:    string(app.DeploySource),
+		RepoURL:         app.RepoURL,
+		Branch:          app.Branch,
+		ImageURL:        app.ImageURL,
+		Framework:       string(app.Framework),
+		Status:          string(app.Status),
+		Subdomain:       app.Subdomain,
+		URL:             url,
+		Port:            app.Port,
+		Replicas:        replicas,
+		HealthCheckPath: healthCheckPath,
+		AppType:         appType,
+		Command:         app.Command,
+		CronSchedule:    app.CronSchedule,
+		Exposure:        exposure,
+		AutoGatewayID:   app.AutoGatewayID,
+		CreatedAt:       app.CreatedAt,
+		UpdatedAt:       app.UpdatedAt,
+		DeletedAt:       app.DeletedAt,
 	}
 }
 
@@ -316,7 +344,15 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 
 	// Resolve project_id: use provided or fall back to default project
 	projectID := req.ProjectID
-	if projectID == "" && h.projectRepo != nil {
+	if projectID != "" && h.projectRepo != nil {
+		proj, pErr := h.projectRepo.GetProject(c.Context(), projectID)
+		if pErr != nil {
+			return NewNotFound("project")
+		}
+		if proj.UserID != userID.(string) {
+			return NewForbidden("not your project")
+		}
+	} else if projectID == "" && h.projectRepo != nil {
 		if dp, err := h.projectRepo.GetDefaultProject(c.Context(), userID.(string)); err == nil {
 			projectID = dp.ID
 		}
@@ -331,21 +367,44 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		return NewBadRequest("exposure must be 'public' or 'protected'")
 	}
 
+	// Validate health check path
+	healthCheckPath := strings.TrimSpace(req.HealthCheckPath)
+	if healthCheckPath != "" && !strings.HasPrefix(healthCheckPath, "/") {
+		return NewBadRequest("health_check_path must start with /")
+	}
+	if len(healthCheckPath) > 512 {
+		return NewBadRequest("health_check_path too long (max 512)")
+	}
+
+	// Encrypt the registry password before persisting it.
+	registryPassword := req.RegistryPassword
+	if registryPassword != "" && h.envCrypto != nil {
+		encrypted, encErr := h.envCrypto.Encrypt(userID.(string), registryPassword)
+		if encErr != nil {
+			slog.Error("failed to encrypt registry password", "error", encErr)
+			return NewInternal("failed to secure registry credentials")
+		}
+		registryPassword = encrypted
+	}
+
 	app, err := h.appRepo.CreateApp(c.Context(), &dto.CreateAppInput{
 		UserID:           userID.(string),
 		ProjectID:        projectID,
+		EnvironmentID:    req.EnvironmentID,
 		Name:             req.Name,
 		DeploySource:     deploySource,
 		RepoURL:          req.RepoURL,
 		Branch:           req.Branch,
 		ImageURL:         req.ImageURL,
 		Port:             req.Port,
-		RegistryUsername:  req.RegistryUsername,
-		RegistryPassword: req.RegistryPassword,
+		RegistryUsername: req.RegistryUsername,
+		RegistryPassword: registryPassword,
 		AppType:          appType,
 		Command:          req.Command,
 		CronSchedule:     req.CronSchedule,
 		Exposure:         exposure,
+		HealthCheckPath:  healthCheckPath,
+		DependsOn:        req.DependsOn,
 	})
 	if err != nil {
 		if isAlreadyExists(err) {
@@ -434,6 +493,16 @@ func (h *AppHandlerV2) List(c *fiber.Ctx) error {
 	var err error
 	projectID := c.Query("project_id")
 	if projectID != "" {
+		// Verify project ownership before listing
+		if h.projectRepo != nil {
+			proj, pErr := h.projectRepo.GetProject(c.Context(), projectID)
+			if pErr != nil {
+				return NewNotFound("project")
+			}
+			if proj.UserID != userID.(string) {
+				return NewForbidden("not your project")
+			}
+		}
 		apps, err = h.appRepo.ListAppsByProject(c.Context(), projectID)
 	} else {
 		apps, err = h.appRepo.ListAppsByUser(c.Context(), userID.(string))
@@ -469,6 +538,8 @@ func (h *AppHandlerV2) Get(c *fiber.Ctx) error {
 }
 
 // Delete handles DELETE /api/v1/apps/:id
+// Uses soft delete — the app is marked as deleted but can be restored.
+// Pass ?hard=true to permanently delete (also cleans up K8s resources).
 func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 	appID := c.Params("appId")
 	if appID == "" {
@@ -481,15 +552,28 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 		return NewNotFound("app not found")
 	}
 
-	// Clean up K8s resources (Deployment, Service, IngressRoute, HTTPScaledObject)
-	if h.deployer != nil && app.Status != entities.AppStatusPending {
-		if err := h.deployer.DeleteApp(context.Background(), app); err != nil {
-			slog.Warn("failed to delete K8s resources for app", "app_id", app.Name, "error", err)
-		}
-	}
+	hard := c.Query("hard") == "true"
 
-	if err := h.appRepo.DeleteApp(c.Context(), appID); err != nil {
-		return NewNotFound("app not found")
+	if hard {
+		// Hard delete: clean up K8s resources and permanently remove from DB
+		if h.deployer != nil && app.Status != entities.AppStatusPending {
+			if err := h.deployer.DeleteApp(context.Background(), app); err != nil {
+				slog.Warn("failed to delete K8s resources for app", "app_id", app.Name, "error", err)
+			}
+		}
+		if err := h.appRepo.DeleteApp(c.Context(), appID); err != nil {
+			return NewNotFound("app not found")
+		}
+	} else {
+		// Soft delete: mark as deleted, stop K8s resources
+		if h.deployer != nil && app.Status != entities.AppStatusPending {
+			if err := h.deployer.DeleteApp(context.Background(), app); err != nil {
+				slog.Warn("failed to delete K8s resources for app", "app_id", app.Name, "error", err)
+			}
+		}
+		if err := h.appRepo.SoftDeleteApp(c.Context(), appID); err != nil {
+			return NewInternal("failed to delete app")
+		}
 	}
 
 	// Cascade: stop gateway routes pointing to this app
@@ -506,11 +590,62 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 			Properties: map[string]interface{}{
 				"app_id":   app.ID,
 				"app_name": app.Name,
+				"hard":     hard,
 			},
 		})
 	}
 
 	return c.JSON(fiber.Map{"message": "app deleted"})
+}
+
+// Restore handles POST /api/v1/apps/:appId/restore
+// Undeletes a soft-deleted app.
+func (h *AppHandlerV2) Restore(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	if userID == "" {
+		return NewUnauthorized("authentication required")
+	}
+
+	appID := c.Params("appId")
+	if appID == "" {
+		return NewBadRequest("app ID is required")
+	}
+
+	app, err := h.appRepo.RestoreApp(c.Context(), appID)
+	if err != nil {
+		return NewNotFound("app not found or not deleted")
+	}
+
+	// Ownership check
+	if app.UserID != userID {
+		return NewNotFound("app not found or not deleted")
+	}
+
+	return c.JSON(h.appToResponse(app))
+}
+
+// ListDeleted handles GET /api/v1/apps/trash
+// Returns all soft-deleted apps for the current user.
+func (h *AppHandlerV2) ListDeleted(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	if userID == "" {
+		return NewUnauthorized("authentication required")
+	}
+
+	apps, err := h.appRepo.ListDeletedAppsByUser(c.Context(), userID)
+	if err != nil {
+		return NewInternal("failed to list deleted apps")
+	}
+
+	items := make([]AppV2Response, 0, len(apps))
+	for i := range apps {
+		items = append(items, h.appToResponse(&apps[i]))
+	}
+
+	return c.JSON(fiber.Map{
+		"items": items,
+		"total": len(items),
+	})
 }
 
 // CheckName handles GET /api/v1/apps/check-name?name=xxx&project_id=yyy

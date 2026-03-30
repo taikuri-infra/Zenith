@@ -123,7 +123,7 @@ func (r *MemoryAppRepository) GetApp(ctx context.Context, id string) (*entities.
 	defer r.mu.RUnlock()
 
 	app, ok := r.apps[id]
-	if !ok {
+	if !ok || app.DeletedAt != nil {
 		return nil, fmt.Errorf("app not found")
 	}
 	return app, nil
@@ -134,7 +134,7 @@ func (r *MemoryAppRepository) GetAppBySubdomain(ctx context.Context, subdomain s
 	defer r.mu.RUnlock()
 
 	for _, a := range r.apps {
-		if a.Subdomain == subdomain {
+		if a.Subdomain == subdomain && a.DeletedAt == nil {
 			return a, nil
 		}
 	}
@@ -147,7 +147,7 @@ func (r *MemoryAppRepository) ListAppsByUser(ctx context.Context, userID string)
 
 	var result []entities.App
 	for _, a := range r.apps {
-		if a.UserID == userID {
+		if a.UserID == userID && a.DeletedAt == nil {
 			result = append(result, *a)
 		}
 	}
@@ -166,7 +166,7 @@ func (r *MemoryAppRepository) ListAppsByProject(ctx context.Context, projectID s
 
 	var result []entities.App
 	for _, a := range r.apps {
-		if a.ProjectID == projectID {
+		if a.ProjectID == projectID && a.DeletedAt == nil {
 			result = append(result, *a)
 		}
 	}
@@ -196,6 +196,15 @@ func (r *MemoryAppRepository) UpdateApp(ctx context.Context, id string, input *d
 	}
 	if input.Branch != nil {
 		app.Branch = *input.Branch
+	}
+	if input.Replicas != nil {
+		app.Replicas = *input.Replicas
+	}
+	if input.HealthCheckPath != nil {
+		app.HealthCheckPath = *input.HealthCheckPath
+	}
+	if input.EnvironmentID != nil {
+		app.EnvironmentID = *input.EnvironmentID
 	}
 	app.UpdatedAt = time.Now()
 
@@ -236,6 +245,45 @@ func (r *MemoryAppRepository) DeleteApp(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *MemoryAppRepository) SoftDeleteApp(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	app, ok := r.apps[id]
+	if !ok || app.DeletedAt != nil {
+		return fmt.Errorf("app not found")
+	}
+	now := time.Now()
+	app.DeletedAt = &now
+	return nil
+}
+
+func (r *MemoryAppRepository) RestoreApp(_ context.Context, id string) (*entities.App, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	app, ok := r.apps[id]
+	if !ok || app.DeletedAt == nil {
+		return nil, fmt.Errorf("app not found or not deleted")
+	}
+	app.DeletedAt = nil
+	app.UpdatedAt = time.Now()
+	return app, nil
+}
+
+func (r *MemoryAppRepository) ListDeletedAppsByUser(_ context.Context, userID string) ([]entities.App, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var result []entities.App
+	for _, a := range r.apps {
+		if a.UserID == userID && a.DeletedAt != nil {
+			result = append(result, *a)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].DeletedAt.After(*result[j].DeletedAt)
+	})
+	return result, nil
+}
+
 func (r *MemoryAppRepository) SetAutoGatewayID(_ context.Context, appID, gatewayID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -255,7 +303,7 @@ func (r *MemoryAppRepository) CountAppsByUser(ctx context.Context, userID string
 
 	count := 0
 	for _, a := range r.apps {
-		if a.UserID == userID {
+		if a.UserID == userID && a.DeletedAt == nil {
 			count++
 		}
 	}
@@ -265,7 +313,25 @@ func (r *MemoryAppRepository) CountAppsByUser(ctx context.Context, userID string
 func (r *MemoryAppRepository) CountApps(ctx context.Context) (int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.apps), nil
+	count := 0
+	for _, a := range r.apps {
+		if a.DeletedAt == nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (r *MemoryAppRepository) ListAllApps(_ context.Context) ([]entities.App, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var apps []entities.App
+	for _, a := range r.apps {
+		if a.DeletedAt == nil {
+			apps = append(apps, *a)
+		}
+	}
+	return apps, nil
 }
 
 // --- Deployments ---

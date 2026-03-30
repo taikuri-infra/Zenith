@@ -132,6 +132,16 @@ func (h *StripeWebhookHandler) handleCheckoutCompleted(c *fiber.Ctx, event *gost
 		slog.Error("failed to create subscription", "user_id", userID, "error", err)
 	}
 
+	// Capture old tier BEFORE saving the new plan
+	var oldTier entities.PlanTier
+	if h.onPlanChange != nil {
+		if oldPlan, pErr := planRepo.GetUserPlan(c.Context(), userID); pErr == nil {
+			oldTier = oldPlan.Tier
+		} else {
+			oldTier = entities.PlanFree
+		}
+	}
+
 	if _, err := planRepo.SetUserPlan(c.Context(), userID, tier); err != nil {
 		slog.Error("failed to set user plan", "user_id", userID, "tier", tier, "error", err)
 	}
@@ -141,11 +151,6 @@ func (h *StripeWebhookHandler) handleCheckoutCompleted(c *fiber.Ctx, event *gost
 
 	// Trigger PlanOrchestrator workflow (async via Temporal if configured)
 	if h.onPlanChange != nil {
-		oldPlan, _ := planRepo.GetUserPlan(c.Context(), userID)
-		oldTier := entities.PlanFree
-		if oldPlan.Tier != tier {
-			oldTier = oldPlan.Tier
-		}
 		h.onPlanChange(c.Context(), userID, "", oldTier, tier, subscriptionID, customerID)
 	}
 

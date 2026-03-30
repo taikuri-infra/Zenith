@@ -8,6 +8,7 @@ import "github.com/dotechhq/zenith/services/api/internal/entities"
 type CreateAppInput struct {
 	UserID           string                `json:"user_id" validate:"required"`
 	ProjectID        string                `json:"project_id"`
+	EnvironmentID    string                `json:"environment_id,omitempty"`
 	Name             string                `json:"name" validate:"required"`
 	DeploySource     entities.DeploySource `json:"deploy_source"`
 	RepoURL          string                `json:"repo_url"`
@@ -20,14 +21,21 @@ type CreateAppInput struct {
 	Command          string                `json:"command"`
 	CronSchedule     string                `json:"cron_schedule"`
 	Exposure         entities.AppExposure  `json:"exposure"`
+	HealthCheckPath  string                `json:"health_check_path,omitempty"`
+	// DependsOn is a list of K8s service names (app subdomains) this app depends on.
+	// The deployer generates init containers that wait for each dependency before starting.
+	DependsOn []string `json:"depends_on,omitempty"`
 }
 
 // UpdateAppInput is the request body for updating an existing app.
 type UpdateAppInput struct {
-	Status    *entities.AppStatus `json:"status,omitempty"`
-	Framework *entities.Framework `json:"framework,omitempty"`
-	Port      *int                `json:"port,omitempty"`
-	Branch    *string             `json:"branch,omitempty"`
+	Status          *entities.AppStatus `json:"status,omitempty"`
+	Framework       *entities.Framework `json:"framework,omitempty"`
+	Port            *int                `json:"port,omitempty"`
+	Branch          *string             `json:"branch,omitempty"`
+	Replicas        *int                `json:"replicas,omitempty"`
+	HealthCheckPath *string             `json:"health_check_path,omitempty"`
+	EnvironmentID   *string             `json:"environment_id,omitempty"`
 }
 
 // --- Deployment DTOs ---

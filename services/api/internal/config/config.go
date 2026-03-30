@@ -1,6 +1,9 @@
 package config
 
 import (
+	"encoding/hex"
+	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -53,7 +56,8 @@ type Config struct {
 	MaxConcurrentDeploys int
 
 	// Secrets encryption
-	SecretsKey string // SECRETS_ENCRYPTION_KEY: 64-char hex (32 bytes)
+	SecretsKey     string // SECRETS_ENCRYPTION_KEY: 64-char hex (32 bytes)
+	OldSecretsKeys string // OLD_SECRETS_KEYS: comma-separated "version:hex_key" pairs for key rotation
 
 	// OpenTelemetry (opt-in: only active when OTELEndpoint is set)
 	OTELEndpoint   string  // OTEL_EXPORTER_OTLP_ENDPOINT
@@ -161,6 +165,7 @@ func Load() *Config {
 		HarborPassword: getEnv("HARBOR_PASSWORD", ""),
 		MaxConcurrentDeploys: getEnvInt("MAX_CONCURRENT_DEPLOYS", 5),
 		SecretsKey:          getEnv("SECRETS_ENCRYPTION_KEY", ""),
+		OldSecretsKeys:      getEnv("OLD_SECRETS_KEYS", ""),
 		OTELEndpoint:        getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTELInsecure:        getEnvBool("OTEL_INSECURE", true),
 		OTELSampleRate:      getEnvFloat("OTEL_SAMPLE_RATE", 1.0),
@@ -239,7 +244,26 @@ func buildDatabaseURL() string {
 	pass := os.Getenv("DB_PASSWORD")
 	name := getEnv("DB_NAME", "zenith")
 	sslmode := getEnv("DB_SSLMODE", "require")
-	return "postgres://" + user + ":" + pass + "@" + host + ":" + port + "/" + name + "?sslmode=" + sslmode
+	return "postgres://" + user + ":" + url.QueryEscape(pass) + "@" + host + ":" + port + "/" + name + "?sslmode=" + sslmode
+}
+
+// Validate checks that critical config values are present and well-formed.
+func (c *Config) Validate() error {
+	if c.JWTSecret == "" {
+		return fmt.Errorf("JWT_SECRET is required")
+	}
+	if len(c.JWTSecret) < 32 {
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters")
+	}
+	if c.SecretsKey != "" {
+		if len(c.SecretsKey) != 64 {
+			return fmt.Errorf("SECRETS_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)")
+		}
+		if _, err := hex.DecodeString(c.SecretsKey); err != nil {
+			return fmt.Errorf("SECRETS_ENCRYPTION_KEY must be valid hex: %w", err)
+		}
+	}
+	return nil
 }
 
 func getEnvBool(key string, fallback bool) bool {

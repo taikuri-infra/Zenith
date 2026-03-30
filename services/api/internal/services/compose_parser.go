@@ -39,14 +39,18 @@ type ParsedCompose struct {
 
 // ParsedService represents a detected app service.
 type ParsedService struct {
-	Name         string           `json:"name"`
-	BuildContext string           `json:"build_context,omitempty"`
-	Image        string           `json:"image,omitempty"`
-	Port         int              `json:"port"`
-	IsPublic     bool             `json:"is_public"`
-	URL          string           `json:"url,omitempty"`
-	EnvVars      []ParsedEnvVar   `json:"env_vars"`
-	DependsOn    []string         `json:"depends_on"`
+	Name         string         `json:"name"`
+	BuildContext string         `json:"build_context,omitempty"`
+	Image        string         `json:"image,omitempty"`
+	Port         int            `json:"port"`
+	IsPublic     bool           `json:"is_public"`
+	URL          string         `json:"url,omitempty"`
+	EnvVars      []ParsedEnvVar `json:"env_vars"`
+	DependsOn    []string       `json:"depends_on"`
+	// Command is the compose `command:` override (maps to K8s container args).
+	Command string `json:"command,omitempty"`
+	// HasVolumes is true if the service declares any volumes (data will be ephemeral).
+	HasVolumes bool `json:"has_volumes,omitempty"`
 }
 
 // ParsedEnvVar represents an environment variable translation.
@@ -66,22 +70,35 @@ type ParsedManaged struct {
 
 // managedImages maps docker image names to platform service types.
 var managedImages = map[string]entities.ServiceType{
-	"postgres":   entities.ServiceTypePostgreSQL,
-	"postgresql": entities.ServiceTypePostgreSQL,
-	"redis":      entities.ServiceTypeRedis,
-	"valkey":     entities.ServiceTypeRedis,
-	"mysql":      entities.ServiceTypeMySQL,
-	"mariadb":    entities.ServiceTypeMySQL,
-	"mongo":      entities.ServiceTypeMongoDB,
-	"mongodb":    entities.ServiceTypeMongoDB,
-	"rabbitmq":   entities.ServiceTypeRabbitMQ,
+	"postgres":      entities.ServiceTypePostgreSQL,
+	"postgresql":    entities.ServiceTypePostgreSQL,
+	"redis":         entities.ServiceTypeRedis,
+	"valkey":        entities.ServiceTypeRedis,
+	"mysql":         entities.ServiceTypeMySQL,
+	"mariadb":       entities.ServiceTypeMySQL,
+	"mongo":         entities.ServiceTypeMongoDB,
+	"mongodb":       entities.ServiceTypeMongoDB,
+	"rabbitmq":      entities.ServiceTypeRabbitMQ,
+	"elasticsearch": entities.ServiceTypeElasticsearch,
+	"opensearch":    entities.ServiceTypeOpenSearch,
+	"kafka":         entities.ServiceTypeKafka,
+	"nats":          entities.ServiceTypeNATS,
+	"memcached":     entities.ServiceTypeMemcached,
+	"minio":         entities.ServiceTypeMinIO,
+	"clickhouse":    entities.ServiceTypeClickHouse,
+	"zookeeper":     entities.ServiceTypeKafka, // Kafka dependency — treat as infrastructure
 }
 
-// serviceURLPattern matches service references like http://api:8080 or postgres://db:5432
+// serviceURLPattern matches URL-style service references like http://api:8080 or postgres://db:5432
 var serviceURLPattern = regexp.MustCompile(`(https?|postgresql|postgres|redis|amqp|amqps|mysql|mongodb|mongodb\+srv)://([a-zA-Z0-9_-]+):(\d+)`)
 
+// plainHostPattern matches plain hostname env var values like DB_HOST=postgres or REDIS_HOST=cache
+var plainHostPattern = regexp.MustCompile(`^([a-zA-Z0-9_-]+)$`)
+
 // ParseCompose parses a docker-compose.yml content and detects services and managed services.
-func ParseCompose(content string, projectSlug, namespace string) (*ParsedCompose, error) {
+// baseDomain is the platform base domain (e.g. "apps.stage.freezenith.com") used to generate
+// preview URLs for public services. Pass "" to omit URL generation.
+func ParseCompose(content string, projectSlug, namespace, baseDomain string) (*ParsedCompose, error) {
 	result := &ParsedCompose{
 		Valid:           true,
 		Services:        make([]ParsedService, 0),
@@ -134,6 +151,12 @@ func ParseCompose(content string, projectSlug, namespace string) (*ParsedCompose
 		var envVars []ParsedEnvVar
 		for key, val := range envMap {
 			zenithVal := translateServiceURL(val, projectSlug, namespace, serviceNames)
+			// Also translate plain hostname values like DB_HOST=postgres → DB_HOST=postgres-slug.ns.svc
+			if zenithVal == val && projectSlug != "" && namespace != "" {
+				if plainHostPattern.MatchString(val) && serviceNames[val] {
+					zenithVal = fmt.Sprintf("%s-%s.%s.svc", val, projectSlug, namespace)
+				}
+			}
 			envVars = append(envVars, ParsedEnvVar{
 				Key:      key,
 				Original: val,
@@ -145,8 +168,8 @@ func ParseCompose(content string, projectSlug, namespace string) (*ParsedCompose
 		// Services named "api", "backend", "worker", "server", "grpc" etc. stay internal.
 		isPublic := port > 0 && isFrontendService(name, svc.Image, port)
 		var url string
-		if isPublic && projectSlug != "" {
-			url = fmt.Sprintf("https://%s-%s.apps.stage.freezenith.com", name, projectSlug)
+		if isPublic && projectSlug != "" && baseDomain != "" {
+			url = fmt.Sprintf("https://%s-%s.%s", name, projectSlug, baseDomain)
 		}
 
 		buildCtx := ""
@@ -161,6 +184,9 @@ func ParseCompose(content string, projectSlug, namespace string) (*ParsedCompose
 			}
 		}
 
+		// Extract command (compose `command:` overrides the image CMD → K8s args).
+		command := extractCommand(svc.Command)
+
 		result.Services = append(result.Services, ParsedService{
 			Name:         name,
 			BuildContext: buildCtx,
@@ -170,6 +196,8 @@ func ParseCompose(content string, projectSlug, namespace string) (*ParsedCompose
 			URL:          url,
 			EnvVars:      envVars,
 			DependsOn:    dependsOn,
+			Command:      command,
+			HasVolumes:   len(svc.Volumes) > 0,
 		})
 	}
 
@@ -186,6 +214,9 @@ func ParseCompose(content string, projectSlug, namespace string) (*ParsedCompose
 		}
 		if svc.Port == 0 && svc.BuildContext != "" {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("service '%s': no port detected — you may need to configure the port manually", svc.Name))
+		}
+		if svc.HasVolumes {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("service '%s': declares volumes — data will be EPHEMERAL on Zenith (no persistent storage by default)", svc.Name))
 		}
 	}
 
@@ -323,6 +354,27 @@ var backendNames = []string{"api", "backend", "server", "worker", "grpc", "queue
 
 // frontendImages lists image names that are always public.
 var frontendImages = []string{"nginx", "httpd", "apache", "caddy", "traefik"}
+
+// extractCommand converts a compose `command:` value (string or list) to a single string.
+// The compose `command:` overrides the image CMD; in K8s this maps to container args.
+func extractCommand(cmd interface{}) string {
+	if cmd == nil {
+		return ""
+	}
+	switch c := cmd.(type) {
+	case string:
+		return c
+	case []interface{}:
+		parts := make([]string, 0, len(c))
+		for _, v := range c {
+			if s, ok := v.(string); ok {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, " ")
+	}
+	return ""
+}
 
 // isFrontendService determines if a service should be publicly exposed.
 // Public: services on port 80/443/3000 with frontend-like names/images.

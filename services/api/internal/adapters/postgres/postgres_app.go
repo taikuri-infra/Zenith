@@ -140,13 +140,25 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 		exposure = entities.ExposurePublic
 	}
 
+	healthCheckPath := input.HealthCheckPath
+	if healthCheckPath == "" {
+		healthCheckPath = "/"
+	}
+
+	// Use nil for empty environment_id (nullable TEXT column)
+	var envID interface{}
+	if input.EnvironmentID != "" {
+		envID = input.EnvironmentID
+	}
+
 	_, err = r.pool.Exec(ctx,
-		`INSERT INTO apps (id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+		`INSERT INTO apps (id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, environment_id, health_check_path, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
 		id, input.UserID, input.ProjectID, input.Name, string(deploySource), input.RepoURL, branch,
 		input.ImageURL, input.RegistryUsername, input.RegistryPassword,
 		string(entities.FrameworkUnknown), string(entities.AppStatusPending), subdomain, port,
-		string(appType), input.Command, input.CronSchedule, string(exposure), now, now,
+		string(appType), input.Command, input.CronSchedule, string(exposure),
+		envID, healthCheckPath, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_apps_project_name") {
@@ -162,6 +174,7 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 		ID:               id,
 		UserID:           input.UserID,
 		ProjectID:        input.ProjectID,
+		EnvironmentID:    input.EnvironmentID,
 		Name:             input.Name,
 		DeploySource:     deploySource,
 		RepoURL:          input.RepoURL,
@@ -177,6 +190,8 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 		Command:          input.Command,
 		CronSchedule:     input.CronSchedule,
 		Exposure:         exposure,
+		Replicas:         1,
+		HealthCheckPath:  healthCheckPath,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -187,13 +202,14 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	var app entities.App
 	var framework, status, deploySource, appType, exposure string
-	var autoGatewayID *string
+	var autoGatewayID, environmentID *string
 
 	err := scan(&app.ID, &app.UserID, &app.ProjectID, &app.Name, &deploySource, &app.RepoURL, &app.Branch,
 		&app.ImageURL, &app.RegistryUser, &app.RegistryPassword,
 		&framework, &status, &app.Subdomain, &app.Port,
 		&appType, &app.Command, &app.CronSchedule,
-		&exposure, &autoGatewayID,
+		&exposure, &autoGatewayID, &environmentID, &app.Replicas,
+		&app.HealthCheckPath, &app.DeletedAt,
 		&app.CreatedAt, &app.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -213,14 +229,23 @@ func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	if autoGatewayID != nil {
 		app.AutoGatewayID = *autoGatewayID
 	}
+	if environmentID != nil {
+		app.EnvironmentID = *environmentID
+	}
+	if app.Replicas <= 0 {
+		app.Replicas = 1
+	}
+	if app.HealthCheckPath == "" {
+		app.HealthCheckPath = "/"
+	}
 	return &app, nil
 }
 
-const appColumns = `id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, auto_gateway_id, created_at, updated_at`
+const appColumns = `id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, auto_gateway_id, environment_id, replicas, health_check_path, deleted_at, created_at, updated_at`
 
 func (r *PostgresAppRepository) GetApp(ctx context.Context, id string) (*entities.App, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT `+appColumns+` FROM apps WHERE id = $1`, id)
+		`SELECT `+appColumns+` FROM apps WHERE id = $1 AND deleted_at IS NULL`, id)
 	app, err := scanApp(row.Scan)
 	if err != nil {
 		return nil, fmt.Errorf("app not found")
@@ -230,7 +255,7 @@ func (r *PostgresAppRepository) GetApp(ctx context.Context, id string) (*entitie
 
 func (r *PostgresAppRepository) GetAppBySubdomain(ctx context.Context, subdomain string) (*entities.App, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT `+appColumns+` FROM apps WHERE subdomain = $1`, subdomain)
+		`SELECT `+appColumns+` FROM apps WHERE subdomain = $1 AND deleted_at IS NULL`, subdomain)
 	app, err := scanApp(row.Scan)
 	if err != nil {
 		return nil, fmt.Errorf("app not found for subdomain '%s'", subdomain)
@@ -239,10 +264,10 @@ func (r *PostgresAppRepository) GetAppBySubdomain(ctx context.Context, subdomain
 }
 
 func (r *PostgresAppRepository) ListAppsByUser(ctx context.Context, userID string) ([]entities.App, error) {
-	query := `SELECT ` + appColumns + ` FROM apps`
+	query := `SELECT ` + appColumns + ` FROM apps WHERE deleted_at IS NULL`
 	var args []interface{}
 	if userID != "" {
-		query += ` WHERE user_id = $1`
+		query += ` AND user_id = $1`
 		args = append(args, userID)
 	}
 	query += ` ORDER BY created_at DESC`
@@ -266,7 +291,7 @@ func (r *PostgresAppRepository) ListAppsByUser(ctx context.Context, userID strin
 
 func (r *PostgresAppRepository) ListAppsByProject(ctx context.Context, projectID string) ([]entities.App, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+appColumns+` FROM apps WHERE project_id = $1 ORDER BY created_at DESC`, projectID,
+		`SELECT `+appColumns+` FROM apps WHERE project_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC`, projectID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list apps by project: %w", err)
@@ -310,6 +335,21 @@ func (r *PostgresAppRepository) UpdateApp(ctx context.Context, id string, input 
 		args = append(args, *input.Branch)
 		argIdx++
 	}
+	if input.Replicas != nil {
+		sets = append(sets, fmt.Sprintf("replicas = $%d", argIdx))
+		args = append(args, *input.Replicas)
+		argIdx++
+	}
+	if input.HealthCheckPath != nil {
+		sets = append(sets, fmt.Sprintf("health_check_path = $%d", argIdx))
+		args = append(args, *input.HealthCheckPath)
+		argIdx++
+	}
+	if input.EnvironmentID != nil {
+		sets = append(sets, fmt.Sprintf("environment_id = $%d", argIdx))
+		args = append(args, *input.EnvironmentID)
+		argIdx++
+	}
 
 	args = append(args, id)
 	query := fmt.Sprintf("UPDATE apps SET %s WHERE id = $%d", strings.Join(sets, ", "), argIdx)
@@ -336,6 +376,50 @@ func (r *PostgresAppRepository) DeleteApp(ctx context.Context, id string) error 
 	return nil
 }
 
+func (r *PostgresAppRepository) SoftDeleteApp(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx,
+		"UPDATE apps SET deleted_at = now(), updated_at = now() WHERE id = $1 AND deleted_at IS NULL", id)
+	if err != nil {
+		return fmt.Errorf("failed to soft delete app: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("app not found")
+	}
+	return nil
+}
+
+func (r *PostgresAppRepository) RestoreApp(ctx context.Context, id string) (*entities.App, error) {
+	tag, err := r.pool.Exec(ctx,
+		"UPDATE apps SET deleted_at = NULL, updated_at = now() WHERE id = $1 AND deleted_at IS NOT NULL", id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore app: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, fmt.Errorf("app not found or not deleted")
+	}
+	row := r.pool.QueryRow(ctx, `SELECT `+appColumns+` FROM apps WHERE id = $1`, id)
+	return scanApp(row.Scan)
+}
+
+func (r *PostgresAppRepository) ListDeletedAppsByUser(ctx context.Context, userID string) ([]entities.App, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+appColumns+` FROM apps WHERE user_id = $1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list deleted apps: %w", err)
+	}
+	defer rows.Close()
+
+	var apps []entities.App
+	for rows.Next() {
+		app, err := scanApp(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan app: %w", err)
+		}
+		apps = append(apps, *app)
+	}
+	return apps, nil
+}
+
 func (r *PostgresAppRepository) SetAutoGatewayID(ctx context.Context, appID, gatewayID string) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE apps SET auto_gateway_id = $1, updated_at = now() WHERE id = $2`,
@@ -349,7 +433,7 @@ func (r *PostgresAppRepository) SetAutoGatewayID(ctx context.Context, appID, gat
 
 func (r *PostgresAppRepository) CountAppsByUser(ctx context.Context, userID string) (int, error) {
 	var count int
-	err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM apps WHERE user_id = $1", userID).Scan(&count)
+	err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM apps WHERE user_id = $1 AND deleted_at IS NULL", userID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count apps: %w", err)
 	}
@@ -358,11 +442,30 @@ func (r *PostgresAppRepository) CountAppsByUser(ctx context.Context, userID stri
 
 func (r *PostgresAppRepository) CountApps(ctx context.Context) (int, error) {
 	var count int
-	err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM apps").Scan(&count)
+	err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM apps WHERE deleted_at IS NULL").Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count apps: %w", err)
 	}
 	return count, nil
+}
+
+func (r *PostgresAppRepository) ListAllApps(ctx context.Context) ([]entities.App, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+appColumns+` FROM apps WHERE deleted_at IS NULL ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list all apps: %w", err)
+	}
+	defer rows.Close()
+
+	var apps []entities.App
+	for rows.Next() {
+		app, err := scanApp(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		apps = append(apps, *app)
+	}
+	return apps, nil
 }
 
 // --- Deployments ---

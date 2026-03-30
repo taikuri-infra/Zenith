@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"os/signal"
 	"syscall"
 	"time"
@@ -54,6 +55,10 @@ var (
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		slog.Error("invalid configuration", "error", err)
+		os.Exit(1)
+	}
 
 	// Initialize structured JSON logging
 	logHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -542,6 +547,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	deployTokenHandler := handlers.NewDeployTokenHandler(deployTokenRepo, projectRepo)
 
 	composeHandler := handlers.NewComposeHandler(projectRepo)
+	composeHandler.SetBaseDomain(cfg.BaseDomain)
 	msHandler := handlers.NewManagedServiceHandler(projectRepo, msRepo)
 	envVarHandler := handlers.NewEnvVarHandler(appRepo, envVarRepo)
 
@@ -574,11 +580,41 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 			os.Exit(1)
 		}
 		envCrypto = crypto.NewEnvCrypto(keyBytes)
+
+		// Register old master keys for key rotation (OLD_SECRETS_KEYS="version:hex_key,version:hex_key")
+		if cfg.OldSecretsKeys != "" {
+			for _, entry := range strings.Split(cfg.OldSecretsKeys, ",") {
+				entry = strings.TrimSpace(entry)
+				if entry == "" {
+					continue
+				}
+				parts := strings.SplitN(entry, ":", 2)
+				if len(parts) != 2 {
+					slog.Error("invalid OLD_SECRETS_KEYS entry (expected version:hex_key)", "entry", entry)
+					os.Exit(1)
+				}
+				version := 0
+				fmt.Sscanf(parts[0], "%d", &version)
+				if version <= 0 {
+					slog.Error("invalid OLD_SECRETS_KEYS version (must be positive int)", "entry", entry)
+					os.Exit(1)
+				}
+				oldKeyBytes, oldErr := pkgCrypto.KeyFromHex(parts[1])
+				if oldErr != nil {
+					slog.Error("invalid OLD_SECRETS_KEYS hex key", "version", version, "error", oldErr)
+					os.Exit(1)
+				}
+				envCrypto.AddOldKey(version, oldKeyBytes)
+				slog.Info("registered old encryption key", "version", version)
+			}
+		}
+
 		slog.Info("env var encryption enabled")
 	} else {
 		slog.Warn("SECRETS_ENCRYPTION_KEY not set — env var encryption disabled")
 	}
 	envVarHandler.SetEnvCrypto(envCrypto)
+	appHandlerV2.SetEnvCrypto(envCrypto)
 
 	eventHandler := handlers.NewEventHandler(eventHub)
 	backstageHandler := handlers.NewBackstageHandler(k8sClient)
@@ -679,6 +715,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protectedMiddlewares = append(protectedMiddlewares, middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist))
 	protected := api.Group("", protectedMiddlewares...)
 
+	// CI/CD deploy endpoints (used by GitHub Action and zen CLI via DeployToken auth)
+	ciDeployHandler := handlers.NewCIDeployHandler(appRepo, projectRepo, envRepo, pipeline, cfg.BaseDomain)
+	protected.Post("/deploy", ciDeployHandler.Deploy)
+	protected.Get("/deployments/:deploymentId", ciDeployHandler.GetDeployment)
+
 	// Team members (IAM)
 	protected.Post("/team/invite", teamHandler.InviteMember)
 	protected.Get("/team/members", teamHandler.ListMembers)
@@ -728,6 +769,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Apps — Phase 2 (under /apps)
 	apps := protected.Group("/apps")
 	apps.Get("/check-name", appHandlerV2.CheckName)
+	apps.Get("/trash", appHandlerV2.ListDeleted)
 	apps.Post("/", handlers.CheckLimit(planRepo, "apps", func(c *fiber.Ctx, userID string) (int, error) {
 		return appRepo.CountAppsByUser(c.Context(), userID)
 	}), appHandlerV2.Create)
@@ -737,6 +779,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID := apps.Group("/:appId", middleware.RequireAppOwnership(appRepo))
 	appByID.Get("/", appHandlerV2.Get)
 	appByID.Delete("/", appHandlerV2.Delete)
+	appByID.Post("/restore", appHandlerV2.Restore)
 
 	// Deployments (nested under /apps/:appId)
 	appByID.Get("/deployments", deployHandler.ListDeployments)
@@ -1159,6 +1202,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	deployer.SetDomainRepo(domainRepo)
 	deployer.SetEnvVarRepo(envVarRepo)
 	deployer.SetEnvCrypto(envCrypto)
+	deployer.SetEnvRepo(envRepo)
 	envVarHandler.SetRestarter(deployer)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(deployer)
@@ -1220,6 +1264,24 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Delete("/webhooks/:webhookId", userWebhookHandler.Delete)
 	protected.Get("/webhooks/:webhookId/deliveries", userWebhookHandler.ListDeliveries)
 
+	// Webhook delivery service — fires HTTP requests to registered webhook URLs on deploy events
+	webhookDeliverySvc := services.NewWebhookDeliveryService(userWebhookRepo)
+	pipeline.SetWebhookService(webhookDeliverySvc)
+
+	// Deploy hooks
+	var hookRepo ports.DeployHookRepository
+	if pool != nil {
+		hookRepo = postgres.NewPostgresDeployHookRepository(pool)
+	} else {
+		hookRepo = memory.NewMemoryDeployHookRepository()
+	}
+	pipeline.SetHookRepo(hookRepo)
+	hookHandler := handlers.NewDeployHookHandler(hookRepo)
+	appByID.Post("/hooks", hookHandler.Create)
+	appByID.Get("/hooks", hookHandler.List)
+	appByID.Put("/hooks/:hookId", hookHandler.Update)
+	appByID.Delete("/hooks/:hookId", hookHandler.Delete)
+
 	// Custom Roles / RBAC (Phase 6.5 — Team+ only)
 	var roleRepo ports.RoleRepository
 	if pool != nil {
@@ -1278,6 +1340,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	imageStatusHandler := handlers.NewImageStatusHandler(projectRepo, appRepo, harborClient)
 	imageVerifyHandler := handlers.NewImageVerifyHandler(projectRepo, cfg.Registry, cfg.RegistryProject, cfg.RegistryUser, cfg.RegistryPassword)
 	projectDeployHandler := handlers.NewProjectDeployHandler(projectRepo, appRepo, msRepo, pipeline)
+	projectDeployHandler.SetRegistry(cfg.Registry, cfg.RegistryProject)
 	protected.Get("/projects/:projectId/images/status", imageStatusHandler.GetImageStatus)
 	protected.Post("/projects/:projectId/verify-images", imageVerifyHandler.VerifyImages)
 	protected.Get("/projects/:projectId/registry-credentials", imageVerifyHandler.GetRegistryCredentials)
@@ -1486,6 +1549,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	auditExportHandler := handlers.NewAuditExportHandler(adminRepo)
 	admin.Get("/audit/export/csv", auditExportHandler.ExportCSV)
 	admin.Get("/audit/export/json", auditExportHandler.ExportJSON)
+
+	// Crypto key rotation (admin only)
+	if envCrypto != nil {
+		cryptoHandler := handlers.NewAdminCryptoHandler(envCrypto, envVarRepo, appRepo)
+		admin.Post("/crypto/rotate", cryptoHandler.RotateKeys)
+	}
 
 	// Platform updates
 	admin.Get("/updates/check", adminHandler.CheckUpdates)

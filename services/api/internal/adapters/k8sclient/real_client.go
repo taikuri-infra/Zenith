@@ -3,6 +3,7 @@ package k8sclient
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -322,6 +324,59 @@ func (c *RealClient) GetSecret(ctx context.Context, namespace, name string) (map
 
 func (c *RealClient) DeleteSecret(ctx context.Context, namespace, name string) error {
 	return c.clientset.CoreV1().Secrets(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// UpsertDockerRegistrySecret creates or updates a kubernetes.io/dockerconfigjson secret.
+// It is idempotent: creates on first deploy, updates on subsequent deploys.
+func (c *RealClient) UpsertDockerRegistrySecret(ctx context.Context, namespace, name, server, username, password string) error {
+	type dockerAuth struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Auth     string `json:"auth"`
+	}
+	type dockerConfig struct {
+		Auths map[string]dockerAuth `json:"auths"`
+	}
+
+	cfg := dockerConfig{
+		Auths: map[string]dockerAuth{
+			server: {
+				Username: username,
+				Password: password,
+				Auth:     base64.StdEncoding.EncodeToString([]byte(username + ":" + password)),
+			},
+		},
+	}
+	cfgJSON, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal dockerconfig: %w", err)
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Type: corev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			corev1.DockerConfigJsonKey: cfgJSON,
+		},
+	}
+
+	_, err = c.clientset.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		if !k8serrors.IsAlreadyExists(err) {
+			return err
+		}
+		existing, getErr := c.clientset.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get existing registry secret: %w", getErr)
+		}
+		existing.Data = secret.Data
+		_, err = c.clientset.CoreV1().Secrets(namespace).Update(ctx, existing, metav1.UpdateOptions{})
+		return err
+	}
+	return nil
 }
 
 // --- ResourceQuota methods ---

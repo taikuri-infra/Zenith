@@ -369,7 +369,9 @@ export default function NewProjectPage() {
           return { ok: true, url: app.url };
         }
         if (app.status === "error" || app.status === "failed" || app.status === "crash_loop") {
-          const hint = imageUrl.includes("registry.stage.freezenith.com")
+          const registryHost = registryCreds?.registry ?? "";
+          const isInternalRegistry = registryHost !== "" && imageUrl.startsWith(registryHost + "/");
+          const hint = isInternalRegistry
             ? `Image not found in registry. Push your image first:\n  docker build -t ${imageUrl} .\n  docker push ${imageUrl}`
             : app.status === "crash_loop"
             ? "App is crash-looping. Check your env vars and startup command. View the Logs tab for details."
@@ -465,6 +467,25 @@ export default function NewProjectPage() {
       }
     }
 
+    // Compute the deterministic subdomain for an app (mirrors Go sha256 logic in apps_v2.go).
+    // Used to pass correct depends_on subdomains when creating apps.
+    const computeSubdomain = async (pid: string, appName: string): Promise<string> => {
+      const appSlug = appName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const enc = new TextEncoder();
+      const buf = await crypto.subtle.digest("SHA-256", enc.encode(pid + appName));
+      const hex = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      return appSlug + "-" + hex.substring(0, 4);
+    };
+
+    // Pre-compute all app subdomains so we can wire depends_on correctly.
+    const allAppNames = services.map((s) => `${slug}-${s.name}`);
+    const subdomainMap: Record<string, string> = {};
+    await Promise.all(
+      allAppNames.map(async (appName) => {
+        subdomainMap[appName] = await computeSubdomain(projectId, appName);
+      })
+    );
+
     // Helper to deploy a service
     const deploySvc = async (svc: ParsedService) => {
       status[svc.name] = { state: "creating" };
@@ -472,17 +493,27 @@ export default function NewProjectPage() {
 
       let imageUrl = imageOverrides[svc.name] || svc.image || "";
       if (!imageUrl && svc.build_context) {
-        imageUrl = `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`;
+        // Use the push_prefix from registry credentials (no hardcoded domain)
+        const pushPrefix = registryCreds?.push_prefix ?? "";
+        imageUrl = pushPrefix
+          ? `${pushPrefix}/${svc.name}:latest`
+          : `${projectId}/${svc.name}:latest`;
       }
 
       const envVars = (envVarEdits[svc.name] || svc.env_vars.map((ev) => ({
         key: ev.key, value: ev.zenith || ev.original || "", is_secret: false, fromCompose: true,
       })))
-        .filter((ev) => ev.key.trim() && ev.value.trim())
+        // Only drop entries with empty KEYS — empty values are valid (e.g. DEBUG=)
+        .filter((ev) => ev.key.trim())
         .map((ev) => ({ key: ev.key.trim(), value: ev.value }));
 
       const appName = `${slug}-${svc.name}`;
       const isPublic = exposureOverrides[svc.name] ?? svc.is_public;
+
+      // Resolve depends_on: map compose service names → subdomains of the corresponding apps
+      const dependsOnSubdomains = (svc.depends_on ?? [])
+        .map((dep) => subdomainMap[`${slug}-${dep}`])
+        .filter((s): s is string => !!s);
 
       if (svc.build_context && !svc.image && !imageOverrides[svc.name]) {
         addLog(`⚠ ${svc.name} uses build: context — push image first:`);
@@ -491,6 +522,9 @@ export default function NewProjectPage() {
       }
       addLog(`Creating ${appName} (${isPublic ? "public" : "private"}, port ${svc.port || 8080})...`);
 
+      // Private registry credentials for this service (if user provided them in Step 2)
+      const privCred = privateRegCreds[svc.name];
+
       try {
         const app = await api.appsDeploy.create({
           project_id: projectId,
@@ -498,9 +532,18 @@ export default function NewProjectPage() {
           deploy_source: "image",
           image_url: imageUrl,
           port: svc.port || 8080,
-          app_type: isPublic ? "web" : "worker",
+          // All services are app_type "web" — they serve HTTP (even private ones).
+          // "worker" type disables HTTP probes and K8s Service port routing, which
+          // breaks inter-service HTTP calls. Exposure controls ingress, not app type.
+          app_type: "web",
           exposure: isPublic ? "public" : "protected",
           env_vars: envVars.length > 0 ? envVars : undefined,
+          depends_on: dependsOnSubdomains.length > 0 ? dependsOnSubdomains : undefined,
+          // Pass private registry credentials so the deployer can create a K8s pull secret.
+          registry_username: privCred?.username || undefined,
+          registry_password: privCred?.password || undefined,
+          // Pass compose `command:` override → K8s container args.
+          command: svc.command || undefined,
         });
 
         status[svc.name] = { state: "waiting" };
@@ -867,12 +910,15 @@ export default function NewProjectPage() {
                     return;
                   }
 
-                  // Build the list of images to verify
+                  // Build the list of images to verify.
+                  // For build-context services, use the push_prefix from registry creds
+                  // (already fetched from API — no hardcoded domain).
+                  const pushPrefix = registryCreds?.push_prefix ?? "";
                   const imagesToVerify = services.map((svc) => ({
                     name: svc.name,
                     image: imageOverrides[svc.name] || svc.image ||
-                      `registry.stage.freezenith.com/${projectId}/${svc.name}:latest`,
-                  }));
+                      (pushPrefix ? `${pushPrefix}/${svc.name}:latest` : ""),
+                  })).filter((s) => s.image !== "");
 
                   setVerifying(true);
                   setVerifyResults({});

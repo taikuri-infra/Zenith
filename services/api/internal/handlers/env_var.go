@@ -3,6 +3,7 @@ package handlers
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -147,6 +148,9 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 	if len(req.Vars) == 0 {
 		return NewBadRequest("vars is required and must not be empty")
 	}
+	if len(req.Vars) > 100 {
+		return NewBadRequest("too many variables (max 100 per request)")
+	}
 
 	seen := make(map[string]bool)
 	for _, v := range req.Vars {
@@ -188,7 +192,17 @@ func (h *EnvVarHandler) Set(c *fiber.Ctx) error {
 	}
 
 	if h.k8s != nil {
-		h.syncEnvVarsToK8s(c.Context(), appID, allVars)
+		if syncErr := h.syncEnvVarsToK8s(c.Context(), appID, allVars); syncErr != nil {
+			items := make([]envVarResponse, 0, len(allVars))
+			for i := range allVars {
+				items = append(items, toEnvVarResponse(&allVars[i]))
+			}
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"error": "environment variables saved but failed to sync to cluster",
+				"items": items,
+				"total": len(items),
+			})
+		}
 	}
 
 	items := make([]envVarResponse, 0, len(allVars))
@@ -235,12 +249,12 @@ func (h *EnvVarHandler) Delete(c *fiber.Ctx) error {
 		return NewNotFound("environment variable not found")
 	}
 
-	// Re-sync remaining env vars to K8s (best-effort)
+	// Re-sync remaining env vars to K8s (best-effort — var already deleted from DB)
 	if h.k8s != nil {
 		environmentID := envFromQuery(c)
 		remaining, rerr := h.envVarRepo.GetEnvVarsByEnvironment(c.Context(), appID, environmentID)
 		if rerr == nil {
-			h.syncEnvVarsToK8s(c.Context(), appID, remaining)
+			_ = h.syncEnvVarsToK8s(c.Context(), appID, remaining)
 		}
 	}
 
@@ -307,7 +321,17 @@ func (h *EnvVarHandler) ImportDotEnv(c *fiber.Ctx) error {
 	}
 
 	if h.k8s != nil {
-		h.syncEnvVarsToK8s(c.Context(), appID, allVars)
+		if syncErr := h.syncEnvVarsToK8s(c.Context(), appID, allVars); syncErr != nil {
+			items := make([]envVarResponse, 0, len(allVars))
+			for i := range allVars {
+				items = append(items, toEnvVarResponse(&allVars[i]))
+			}
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"error": "environment variables imported but failed to sync to cluster",
+				"items": items,
+				"total": len(items),
+			})
+		}
 	}
 
 	items := make([]envVarResponse, 0, len(allVars))
@@ -398,7 +422,7 @@ func looksLikeSecret(key string) bool {
 }
 
 // syncEnvVarsToK8s syncs env vars to K8s Secret (secrets) and ConfigMap (plain vars).
-func (h *EnvVarHandler) syncEnvVarsToK8s(ctx context.Context, appID string, vars []entities.AppEnvVar) {
+func (h *EnvVarHandler) syncEnvVarsToK8s(ctx context.Context, appID string, vars []entities.AppEnvVar) error {
 	secretData := make(map[string][]byte)
 	configData := make(map[string]string)
 
@@ -421,14 +445,17 @@ func (h *EnvVarHandler) syncEnvVarsToK8s(ctx context.Context, appID string, vars
 	if len(secretData) > 0 {
 		if err := h.k8s.CreateSecret(ctx, h.namespace, secretName, secretData, labels); err != nil {
 			slog.Warn("failed to sync env secrets to K8s", "app_id", appID, "error", err)
+			return fmt.Errorf("failed to sync secrets to cluster: %w", err)
 		}
 	}
 
 	if len(configData) > 0 {
 		if err := h.k8s.CreateConfigMap(ctx, h.namespace, configName, configData); err != nil {
 			slog.Warn("failed to sync env config to K8s", "app_id", appID, "error", err)
+			return fmt.Errorf("failed to sync config to cluster: %w", err)
 		}
 	}
+	return nil
 }
 
 // Apply handles POST /apps/:appId/env/apply

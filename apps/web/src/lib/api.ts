@@ -689,6 +689,8 @@ export interface CreateDeployAppRequest {
   registry_password?: string;
   // Environment variables (set on create)
   env_vars?: { key: string; value: string }[];
+  // K8s service names (subdomains) of apps this app depends on — generates init containers
+  depends_on?: string[];
 }
 
 export interface Deployment {

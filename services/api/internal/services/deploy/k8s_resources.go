@@ -119,9 +119,37 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 
 func generateDeployment(app *entities.App, imageTag, namespace string, labels map[string]string, envVars []entities.EnvVar, tier entities.PlanTier) map[string]interface{} {
 	replicas := int32(1)
+	if app.Replicas > 1 {
+		replicas = int32(app.Replicas)
+	}
 	port := app.Port
 	if port == 0 {
 		port = 8080
+	}
+
+	// Build init containers for depends_on: wait until each dependency is reachable
+	// via TCP before starting the main container. Uses busybox nc (netcat).
+	var initContainers []map[string]interface{}
+	for _, dep := range app.DependsOn {
+		depName := dep
+		initContainers = append(initContainers, map[string]interface{}{
+			"name":  "wait-for-" + depName,
+			"image": "busybox:1.36",
+			"command": []string{
+				"sh", "-c",
+				// All K8s Services expose port 80 (see generateService).
+				// nc -z polls TCP connectivity without sending data.
+				// 300s timeout prevents infinite hang if dependency never starts.
+				fmt.Sprintf(
+					"timeout=300; elapsed=0; until nc -z %s.%s.svc 80 2>/dev/null; do if [ $elapsed -ge $timeout ]; then echo '%s not ready after ${timeout}s, giving up'; exit 1; fi; echo 'waiting for %s... (${elapsed}s/${timeout}s)'; sleep 2; elapsed=$((elapsed+2)); done; echo '%s is ready'",
+					depName, namespace, depName, depName, depName,
+				),
+			},
+			"securityContext": map[string]interface{}{
+				"allowPrivilegeEscalation": false,
+				"capabilities":             map[string]interface{}{"drop": []string{"ALL"}},
+			},
+		})
 	}
 
 	// Convert env vars to K8s env spec
@@ -162,28 +190,59 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 		},
 	}
 
+	// Propagate compose `command:` override → K8s container args.
+	// In compose, `command:` overrides the image CMD (not ENTRYPOINT).
+	// In K8s, `args` maps to CMD. Split on spaces for simple cases.
+	if app.Command != "" {
+		args := strings.Fields(app.Command)
+		if len(args) > 0 {
+			container["args"] = args
+		}
+	}
+
 	// Conditional probes and ports by app type
 	switch app.AppType {
 	case entities.AppTypeWorker:
-		// Workers don't serve HTTP — use exec probe with generous intervals
-		container["readinessProbe"] = map[string]interface{}{
-			"exec": map[string]interface{}{
-				"command": []string{"/bin/sh", "-c", "true"},
-			},
-			"initialDelaySeconds": 5,
-			"periodSeconds":       30,
-		}
-		container["livenessProbe"] = map[string]interface{}{
-			"exec": map[string]interface{}{
-				"command": []string{"/bin/sh", "-c", "true"},
-			},
-			"initialDelaySeconds": 15,
-			"periodSeconds":       60,
+		// Workers don't serve HTTP — use TCP socket probe on their port if set,
+		// otherwise a permissive exec probe. This is more meaningful than `/bin/sh -c true`.
+		if port > 0 {
+			container["ports"] = []map[string]interface{}{
+				{"containerPort": port, "protocol": "TCP"},
+			}
+			container["readinessProbe"] = map[string]interface{}{
+				"tcpSocket":           map[string]interface{}{"port": port},
+				"initialDelaySeconds": 5,
+				"periodSeconds":       15,
+				"failureThreshold":    5,
+			}
+			container["livenessProbe"] = map[string]interface{}{
+				"tcpSocket":           map[string]interface{}{"port": port},
+				"initialDelaySeconds": 20,
+				"periodSeconds":       30,
+				"failureThreshold":    3,
+			}
+		} else {
+			container["readinessProbe"] = map[string]interface{}{
+				"exec":                map[string]interface{}{"command": []string{"/bin/sh", "-c", "true"}},
+				"initialDelaySeconds": 5,
+				"periodSeconds":       30,
+			}
+			container["livenessProbe"] = map[string]interface{}{
+				"exec":                map[string]interface{}{"command": []string{"/bin/sh", "-c", "true"}},
+				"initialDelaySeconds": 15,
+				"periodSeconds":       60,
+			}
 		}
 	case entities.AppTypeCron:
 		// Cron jobs run and exit — no probes needed
 	default:
-		// Web apps: HTTP probes on the app port
+		// Web apps: HTTP probes on the app port.
+		// Use a generous failureThreshold so apps that are slow to start (e.g. JVM, Next.js)
+		// don't get killed before they're ready. 10 failures × 10s = 100s of grace.
+		healthPath := app.HealthCheckPath
+		if healthPath == "" {
+			healthPath = "/"
+		}
 		container["ports"] = []map[string]interface{}{
 			{
 				"containerPort": port,
@@ -192,19 +251,22 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 		}
 		container["readinessProbe"] = map[string]interface{}{
 			"httpGet": map[string]interface{}{
-				"path": "/",
+				"path": healthPath,
 				"port": port,
 			},
 			"initialDelaySeconds": 5,
 			"periodSeconds":       10,
+			// 10 failures × 10s = 100s grace period for slow-starting apps (JVM, Next.js, etc.)
+			"failureThreshold": 10,
 		}
 		container["livenessProbe"] = map[string]interface{}{
 			"httpGet": map[string]interface{}{
-				"path": "/",
+				"path": healthPath,
 				"port": port,
 			},
 			"initialDelaySeconds": 15,
 			"periodSeconds":       20,
+			"failureThreshold":    5,
 		}
 	}
 
@@ -227,14 +289,27 @@ func generateDeployment(app *entities.App, imageTag, namespace string, labels ma
 				"metadata": map[string]interface{}{
 					"labels": labels,
 				},
-				"spec": map[string]interface{}{
-					"imagePullSecrets": []map[string]interface{}{
+				"spec": func() map[string]interface{} {
+					pullSecrets := []map[string]interface{}{
 						{"name": "app-registry-auth"},
-					},
-					"containers": []map[string]interface{}{
-						container,
-					},
-				},
+					}
+					// Per-app custom registry secret (created by deployer when RegistryUser is set)
+					if app.RegistryUser != "" {
+						pullSecrets = append(pullSecrets, map[string]interface{}{
+							"name": "regcred-" + app.Subdomain,
+						})
+					}
+					podSpec := map[string]interface{}{
+						"imagePullSecrets": pullSecrets,
+						"containers": []map[string]interface{}{
+							container,
+						},
+					}
+					if len(initContainers) > 0 {
+						podSpec["initContainers"] = initContainers
+					}
+					return podSpec
+				}(),
 			},
 		},
 	}

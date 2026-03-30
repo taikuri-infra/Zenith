@@ -1,11 +1,29 @@
 package handlers
 
 import (
+	"strings"
+
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
+
+// validateRoutePath checks that a gateway route path is safe and well-formed.
+func validateRoutePath(path string) error {
+	if len(path) > 512 {
+		return fiber.NewError(fiber.StatusBadRequest, "path too long (max 512 characters)")
+	}
+	if !strings.HasPrefix(path, "/") {
+		return fiber.NewError(fiber.StatusBadRequest, "path must start with /")
+	}
+	for _, blocked := range []string{".{1000", "(.+)+", "((", "\\x"} {
+		if strings.Contains(path, blocked) {
+			return fiber.NewError(fiber.StatusBadRequest, "path contains invalid pattern")
+		}
+	}
+	return nil
+}
 
 // requireProPlan checks that the user is on Pro plan or higher.
 func requireProPlan(planRepo ports.UserPlanRepository, c *fiber.Ctx) error {
@@ -210,6 +228,9 @@ func (h *GatewayHandler) CreateRoute(c *fiber.Ctx) error {
 	if input.Name == "" || input.Path == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "name and path are required")
 	}
+	if err := validateRoutePath(input.Path); err != nil {
+		return err
+	}
 	// app_id is required for standalone routes (not in a group)
 	if input.AppID == "" && input.GroupID == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "app_id is required (or assign to a group)")
@@ -294,6 +315,11 @@ func (h *GatewayHandler) UpdateRoute(c *fiber.Ctx) error {
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if input.Path != "" {
+		if err := validateRoutePath(input.Path); err != nil {
+			return err
+		}
 	}
 
 	route := &entities.GatewayRoute{

@@ -1,15 +1,19 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 )
 
 // runningBuild tracks a single in-progress deploy.
@@ -25,6 +29,8 @@ type Pipeline struct {
 	logHub        *LogHub
 	eventHub      *EventHub
 	eventBus      ports.EventBus // NATS JetStream (optional)
+	webhookSvc    *services.WebhookDeliveryService
+	hookRepo      ports.DeployHookRepository
 	mu            sync.Mutex
 	running       map[string]*runningBuild // deploymentID -> build info
 	maxConcurrent int
@@ -66,7 +72,8 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 		return fmt.Errorf("max concurrent deploys reached for this user (%d/%d)", userDeploys, p.maxPerUser)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// 20-minute hard timeout per deploy — prevents hung K8s API calls from leaking slots forever.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	p.running[deployment.ID] = &runningBuild{Cancel: cancel, UserID: app.UserID}
 	p.mu.Unlock()
 
@@ -99,6 +106,16 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 				p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusFailed, "", err.Error())
 				failedStatus := entities.AppStatusFailed
 				p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &failedStatus})
+				if p.webhookSvc != nil {
+					p.webhookSvc.DispatchEvent(ctx, app.UserID, entities.WebhookEventDeployFailed, map[string]interface{}{
+						"app":           app.Name,
+						"app_id":        app.ID,
+						"deployment_id": deployment.ID,
+						"image":         image,
+						"status":        "failed",
+						"error":         err.Error(),
+					})
+				}
 				return
 			}
 		} else {
@@ -110,6 +127,37 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusActive, "", "")
 		p.emitLog(deployment.ID, "deploy", fmt.Sprintf("✓ %s is live — %s", app.Name, image))
 		p.emitEvent(EventDeployComplete, app, deployment, image, fmt.Sprintf("%s is live", app.Name))
+
+		// Fire webhook delivery for deploy.success
+		if p.webhookSvc != nil {
+			p.webhookSvc.DispatchEvent(ctx, app.UserID, entities.WebhookEventDeploySuccess, map[string]interface{}{
+				"app":           app.Name,
+				"app_id":        app.ID,
+				"deployment_id": deployment.ID,
+				"image":         image,
+				"status":        "success",
+			})
+		}
+
+		// Execute post-deploy hooks
+		if p.hookRepo != nil {
+			hooks, hErr := p.hookRepo.ListHooksByApp(ctx, app.ID)
+			if hErr == nil {
+				for _, hook := range hooks {
+					if !hook.Active {
+						continue
+					}
+					p.emitLog(deployment.ID, "hook", fmt.Sprintf("Running hook: %s", hook.Name))
+					if hook.Type == entities.DeployHookHTTP && hook.URL != "" {
+						p.executeHTTPHook(hook, app, deployment, image)
+					}
+					// Command hooks would need kubectl exec — log for now
+					if hook.Type == entities.DeployHookCommand {
+						slog.Info("command hook registered (exec not yet wired)", "hook", hook.Name, "command", hook.Command)
+					}
+				}
+			}
+		}
 	}()
 
 	return nil
@@ -160,6 +208,46 @@ func (p *Pipeline) emitLog(deploymentID, level, message string) {
 // SetEventBus configures the NATS event bus for durable event publishing.
 func (p *Pipeline) SetEventBus(bus ports.EventBus) {
 	p.eventBus = bus
+}
+
+// SetWebhookService configures the webhook delivery service.
+func (p *Pipeline) SetWebhookService(svc *services.WebhookDeliveryService) {
+	p.webhookSvc = svc
+}
+
+// SetHookRepo configures the deploy hook repository for post-deploy hooks.
+func (p *Pipeline) SetHookRepo(repo ports.DeployHookRepository) {
+	p.hookRepo = repo
+}
+
+// executeHTTPHook sends an HTTP POST to the hook URL with deploy context.
+func (p *Pipeline) executeHTTPHook(hook entities.DeployHook, app *entities.App, deployment *entities.Deployment, image string) {
+	payload, _ := json.Marshal(map[string]string{
+		"app":           app.Name,
+		"app_id":        app.ID,
+		"deployment_id": deployment.ID,
+		"image":         image,
+		"status":        "success",
+		"hook":          hook.Name,
+	})
+	req, err := http.NewRequest("POST", hook.URL, bytes.NewReader(payload))
+	if err != nil {
+		slog.Warn("hook: failed to create request", "hook", hook.Name, "error", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Zenith-Hook", hook.Name)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Warn("hook: request failed", "hook", hook.Name, "error", err)
+		return
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		slog.Warn("hook: returned error", "hook", hook.Name, "status", resp.StatusCode)
+	}
 }
 
 // emitEvent publishes a deployment event if an EventHub is configured.

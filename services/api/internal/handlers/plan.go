@@ -55,7 +55,7 @@ func CheckLimit(planRepo ports.UserPlanRepository, resource string, countFn func
 	return func(c *fiber.Ctx) error {
 		userID, _ := c.Locals("user_id").(string)
 		if userID == "" {
-			return c.Next()
+			return fiber.NewError(fiber.StatusUnauthorized, "authentication required")
 		}
 
 		plan, err := planRepo.GetUserPlan(c.Context(), userID)

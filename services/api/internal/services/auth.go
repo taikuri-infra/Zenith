@@ -110,12 +110,39 @@ type AuthService struct {
 
 // NewAuthService creates a new AuthService.
 func NewAuthService(users ports.UserRepository, jwtSecret string, planRepo ports.UserPlanRepository) *AuthService {
-	return &AuthService{
+	s := &AuthService{
 		users:      users,
 		jwtSecret:  jwtSecret,
 		planRepo:   planRepo,
 		oauthCodes: make(map[string]*oauthCodeEntry),
 		mfaCodes:   make(map[string]*mfaCodeEntry),
+	}
+	go s.cleanupExpiredCodes()
+	return s
+}
+
+// cleanupExpiredCodes periodically removes expired OAuth and MFA codes.
+func (s *AuthService) cleanupExpiredCodes() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+
+		s.oauthCodesMu.Lock()
+		for k, v := range s.oauthCodes {
+			if now.After(v.expiresAt) {
+				delete(s.oauthCodes, k)
+			}
+		}
+		s.oauthCodesMu.Unlock()
+
+		s.mfaCodesMu.Lock()
+		for k, v := range s.mfaCodes {
+			if now.After(v.expiresAt) {
+				delete(s.mfaCodes, k)
+			}
+		}
+		s.mfaCodesMu.Unlock()
 	}
 }
 

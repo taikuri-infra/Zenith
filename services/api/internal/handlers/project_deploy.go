@@ -10,10 +10,12 @@ import (
 
 // ProjectDeployHandler handles deploying all services in a project at once.
 type ProjectDeployHandler struct {
-	projectRepo ports.ProjectRepository
-	appRepo     ports.AppRepository
-	msRepo      ports.ManagedServiceRepository
-	deployer    AppImageDeployer // uses TriggerImageDeploy
+	projectRepo     ports.ProjectRepository
+	appRepo         ports.AppRepository
+	msRepo          ports.ManagedServiceRepository
+	deployer        AppImageDeployer // uses TriggerImageDeploy
+	registry        string           // container registry host (e.g. "registry.stage.freezenith.com")
+	registryProject string           // Harbor project name for user images (e.g. "zenith-stage")
 }
 
 // NewProjectDeployHandler creates a new ProjectDeployHandler.
@@ -29,6 +31,12 @@ func NewProjectDeployHandler(
 		msRepo:      msRepo,
 		deployer:    deployer,
 	}
+}
+
+// SetRegistry configures the container registry for image URL fallback.
+func (h *ProjectDeployHandler) SetRegistry(registry, registryProject string) {
+	h.registry = registry
+	h.registryProject = registryProject
 }
 
 type serviceDeployStatus struct {
@@ -108,10 +116,16 @@ func (h *ProjectDeployHandler) DeployProject(c *fiber.Ctx) error {
 			continue
 		}
 
-		// Determine image URL
+		// Determine image URL: prefer stored imageURL, then fall back to platform registry
 		imageURL := app.ImageURL
-		if imageURL == "" && project.HarborProjectName != "" {
-			imageURL = "registry.stage.freezenith.com/" + project.HarborProjectName + "/" + app.Name + ":latest"
+		if imageURL == "" && h.registry != "" {
+			regProject := h.registryProject
+			if regProject == "" {
+				regProject = project.HarborProjectName
+			}
+			if regProject != "" {
+				imageURL = h.registry + "/" + regProject + "/" + app.Name + ":latest"
+			}
 		}
 
 		if imageURL == "" {

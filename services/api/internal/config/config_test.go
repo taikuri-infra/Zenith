@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +67,63 @@ func TestGetEnvBool(t *testing.T) {
 	val := getEnvBool("IN_CLUSTER", false)
 	if !val {
 		t.Error("Expected true for IN_CLUSTER=true")
+	}
+}
+
+func TestValidate_EmptyJWTSecret(t *testing.T) {
+	cfg := &Config{}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for empty JWT_SECRET")
+	}
+}
+
+func TestValidate_ShortJWTSecret(t *testing.T) {
+	cfg := &Config{JWTSecret: "tooshort"}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for short JWT_SECRET")
+	}
+}
+
+func TestValidate_BadSecretsKey(t *testing.T) {
+	cfg := &Config{JWTSecret: strings.Repeat("a", 32), SecretsKey: "not-hex"}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for invalid SECRETS_ENCRYPTION_KEY")
+	}
+}
+
+func TestValidate_WrongLengthSecretsKey(t *testing.T) {
+	cfg := &Config{JWTSecret: strings.Repeat("a", 32), SecretsKey: "aabbcc"}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for wrong-length SECRETS_ENCRYPTION_KEY")
+	}
+}
+
+func TestValidate_ValidConfig(t *testing.T) {
+	cfg := &Config{JWTSecret: strings.Repeat("a", 32)}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_ValidConfigWithSecretsKey(t *testing.T) {
+	cfg := &Config{
+		JWTSecret:  strings.Repeat("a", 32),
+		SecretsKey: strings.Repeat("ab", 32), // 64 hex chars
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildDatabaseURL_SpecialCharsInPassword(t *testing.T) {
+	os.Setenv("DB_HOST", "localhost")
+	os.Setenv("DB_PASSWORD", "p@ss#word")
+	defer func() {
+		os.Unsetenv("DB_HOST")
+		os.Unsetenv("DB_PASSWORD")
+	}()
+	u := buildDatabaseURL()
+	if !strings.Contains(u, "p%40ss%23word") {
+		t.Errorf("expected URL-escaped password, got: %s", u)
 	}
 }

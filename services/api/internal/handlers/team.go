@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/mail"
+
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
@@ -36,6 +38,9 @@ func (h *TeamMemberHandler) InviteMember(c *fiber.Ctx) error {
 	}
 	if input.Email == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "email is required")
+	}
+	if _, err := mail.ParseAddress(input.Email); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid email format")
 	}
 	if input.Role == "" {
 		input.Role = "viewer"

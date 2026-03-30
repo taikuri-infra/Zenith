@@ -1,0 +1,1 @@
+ALTER TABLE apps ADD COLUMN IF NOT EXISTS health_check_path TEXT NOT NULL DEFAULT '/';

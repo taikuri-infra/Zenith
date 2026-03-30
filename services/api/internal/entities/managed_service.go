@@ -9,6 +9,15 @@ const (
 	ServiceTypeMySQL      ServiceType = "mysql"
 	ServiceTypeMongoDB    ServiceType = "mongodb"
 	ServiceTypeRabbitMQ   ServiceType = "rabbitmq"
+
+	// Recognized but not yet provisionable — detected by the compose parser for informational purposes.
+	ServiceTypeElasticsearch ServiceType = "elasticsearch"
+	ServiceTypeOpenSearch    ServiceType = "opensearch"
+	ServiceTypeKafka         ServiceType = "kafka"
+	ServiceTypeNATS          ServiceType = "nats"
+	ServiceTypeMemcached     ServiceType = "memcached"
+	ServiceTypeMinIO         ServiceType = "minio"
+	ServiceTypeClickHouse    ServiceType = "clickhouse"
 )
 
 // ValidServiceType returns true if the given service type is supported.

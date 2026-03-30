@@ -53,6 +53,9 @@ type Client interface {
 	CreateSecret(ctx context.Context, namespace, name string, data map[string][]byte, labels map[string]string) error
 	GetSecret(ctx context.Context, namespace, name string) (map[string][]byte, error)
 	DeleteSecret(ctx context.Context, namespace, name string) error
+	// UpsertDockerRegistrySecret creates or updates a kubernetes.io/dockerconfigjson secret
+	// for pulling images from a private registry. Safe to call on every deploy.
+	UpsertDockerRegistrySecret(ctx context.Context, namespace, name, server, username, password string) error
 
 	// ResourceQuota operations (tenant limits)
 	CreateResourceQuota(ctx context.Context, namespace, name string, hard map[string]string) error
@@ -307,6 +310,16 @@ func (c *MemoryClient) DeleteSecret(ctx context.Context, namespace, name string)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.secrets, namespace+"/"+name)
+	return nil
+}
+
+// UpsertDockerRegistrySecret stores a fake dockerconfigjson secret (in-memory mode).
+func (c *MemoryClient) UpsertDockerRegistrySecret(ctx context.Context, namespace, name, server, username, password string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.secrets[namespace+"/"+name] = map[string][]byte{
+		".dockerconfigjson": []byte(fmt.Sprintf(`{"auths":{%q:{"username":%q,"password":%q}}}`, server, username, password)),
+	}
 	return nil
 }
 

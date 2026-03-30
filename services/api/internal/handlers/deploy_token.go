@@ -75,8 +75,8 @@ func (h *DeployTokenHandler) Create(c *fiber.Ctx) error {
 		expiresAt = &t
 	}
 
-	// Max expiry: 1 year
-	maxExpiry := time.Now().Add(366 * 24 * time.Hour)
+	// Max expiry: 365 days
+	maxExpiry := time.Now().Add(365 * 24 * time.Hour)
 	if expiresAt.After(maxExpiry) {
 		return NewBadRequest("expires_in cannot exceed 365 days")
 	}

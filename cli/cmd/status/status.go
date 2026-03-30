@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	cliapi "github.com/dotechhq/zenith/cli/internal/api"
+	"github.com/dotechhq/zenith/cli/internal/config"
 	"github.com/dotechhq/zenith/cli/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -51,42 +53,101 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		Foreground(tui.ColorText).
 		MarginTop(1)
 
+	infoStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
+	valStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
+	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
+
+	// Load config and create API client
+	cfg, err := config.Load()
+	if err != nil || cfg.Token == "" {
+		fmt.Println(errStyle.Render("  Not logged in — run: zen login"))
+		return nil
+	}
+
+	client := cliapi.NewClient(cfg.APIEndpoint, cfg.Token)
+
 	// Header
 	fmt.Println(titleStyle.Render("  Zenith Project Status"))
 
-	// Project info
-	infoStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
-	valStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
-	fmt.Printf("  %s %s\n", infoStyle.Render("Project:"), valStyle.Render("my-project"))
-	fmt.Printf("  %s %s\n", infoStyle.Render("Region:"), valStyle.Render("fsn1"))
-	fmt.Printf("  %s %s\n", infoStyle.Render("Plan:"), valStyle.Render("pro"))
+	// Fetch projects
+	projects, err := client.ListProjects()
+	if err != nil {
+		fmt.Println(errStyle.Render("  Failed to fetch projects: " + err.Error()))
+		return nil
+	}
+	if len(projects) == 0 {
+		fmt.Println(infoStyle.Render("  No projects found. Create one at the dashboard."))
+		return nil
+	}
+
+	// Select current project: prefer cfg.Project match by name or ID, else first project
+	current := projects[0]
+	for _, p := range projects {
+		if cfg.Project != "" && (p.ID == cfg.Project || p.Name == cfg.Project || p.DisplayName == cfg.Project) {
+			current = p
+			break
+		}
+	}
+
+	displayName := current.DisplayName
+	if displayName == "" {
+		displayName = current.Name
+	}
+	region := current.Region
+	if region == "" {
+		region = cfg.Region
+	}
+	plan := current.Plan
+	if plan == "" {
+		plan = "free"
+	}
+
+	fmt.Printf("  %s %s\n", infoStyle.Render("Project:"), valStyle.Render(displayName))
+	fmt.Printf("  %s %s\n", infoStyle.Render("Region: "), valStyle.Render(region))
+	fmt.Printf("  %s %s\n", infoStyle.Render("Plan:   "), valStyle.Render(plan))
 
 	// Apps section
 	fmt.Println()
 	fmt.Println(sectionStyle.Render("  Apps"))
-	fmt.Println(renderTable(
-		[]string{"NAME", "STATUS", "REPLICAS", "CPU", "MEMORY"},
-		[][]string{},
-		headerStyle, cellStyle,
-	))
+
+	apps, err := client.ListApps(current.ID)
+	if err != nil {
+		fmt.Println("  " + errStyle.Render("Failed to fetch apps: "+err.Error()))
+	} else {
+		appRows := make([][]string, 0, len(apps))
+		for _, a := range apps {
+			replicas := fmt.Sprintf("%d", a.Replicas)
+			if replicas == "0" {
+				replicas = "—"
+			}
+			appRows = append(appRows, []string{a.Name, a.Status, replicas, a.CPU, a.Memory})
+		}
+		fmt.Println(renderTable(
+			[]string{"NAME", "STATUS", "REPLICAS", "CPU", "MEMORY"},
+			appRows,
+			headerStyle, cellStyle,
+		))
+	}
 
 	// Databases section
 	fmt.Println(sectionStyle.Render("  Databases"))
-	fmt.Println(renderTable(
-		[]string{"NAME", "ENGINE", "STORAGE", "BACKUP", "STATUS"},
-		[][]string{},
-		headerStyle, cellStyle,
-	))
 
-	// Nodes section
-	fmt.Println(sectionStyle.Render("  Nodes"))
-	fmt.Println(renderTable(
-		[]string{"NAME", "TYPE", "CPU", "MEMORY", "STATUS"},
-		[][]string{},
-		headerStyle, cellStyle,
-	))
+	dbs, err := client.ListDatabases(current.ID)
+	if err != nil {
+		fmt.Println("  " + errStyle.Render("Failed to fetch databases: "+err.Error()))
+	} else {
+		dbRows := make([][]string, 0, len(dbs))
+		for _, d := range dbs {
+			dbRows = append(dbRows, []string{d.Name, d.Engine, d.Storage, "—", d.Status})
+		}
+		fmt.Println(renderTable(
+			[]string{"NAME", "ENGINE", "STORAGE", "BACKUP", "STATUS"},
+			dbRows,
+			headerStyle, cellStyle,
+		))
+	}
 
-	// Cost summary
+	// Cost summary (placeholder — requires billing API)
 	fmt.Println(sectionStyle.Render("  Cost Estimate"))
 	fmt.Printf("  %s %s\n\n",
 		infoStyle.Render("Monthly:"),

@@ -22,6 +22,7 @@ type Deployer struct {
 	envVarRepo ports.EnvVarRepository
 	planRepo   ports.UserPlanRepository
 	domainRepo ports.DomainRepository
+	envRepo    ports.EnvironmentRepository
 	envCrypto  *crypto.EnvCrypto
 	baseDomain string
 }
@@ -49,6 +50,11 @@ func (d *Deployer) SetEnvVarRepo(repo ports.EnvVarRepository) {
 // SetEnvCrypto injects the encryption helper to decrypt secret env vars before K8s injection.
 func (d *Deployer) SetEnvCrypto(c *crypto.EnvCrypto) {
 	d.envCrypto = c
+}
+
+// SetEnvRepo injects the environment repository for staging detection.
+func (d *Deployer) SetEnvRepo(repo ports.EnvironmentRepository) {
+	d.envRepo = repo
 }
 
 // DeployApp deploys an app's built image to Kubernetes.
@@ -86,10 +92,26 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 			})
 		}
 	} else {
-		var err error
-		envVars, err = d.appRepo.GetEnvVars(ctx, app.ID)
+		legacyVars, err := d.appRepo.GetEnvVars(ctx, app.ID)
 		if err != nil {
 			return fmt.Errorf("failed to get env vars: %w", err)
+		}
+		for _, v := range legacyVars {
+			value := v.Value
+			if d.envCrypto != nil && crypto.IsEncrypted(value) {
+				decrypted, decErr := d.envCrypto.Decrypt(app.UserID, value)
+				if decErr != nil {
+					slog.Error("failed to decrypt legacy env var, skipping", "key", v.Key, "error", decErr)
+					continue
+				}
+				value = decrypted
+			}
+			envVars = append(envVars, entities.EnvVar{
+				ID:    v.ID,
+				AppID: v.AppID,
+				Key:   v.Key,
+				Value: value,
+			})
 		}
 	}
 
@@ -121,8 +143,39 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 		}
 	}
 
+	// If the app has custom registry credentials, create/update a per-app
+	// dockerconfigjson pull secret before applying the Deployment manifest.
+	if app.RegistryUser != "" && app.RegistryPassword != "" {
+		password := app.RegistryPassword
+		if d.envCrypto != nil && crypto.IsEncrypted(password) {
+			decrypted, decErr := d.envCrypto.Decrypt(app.UserID, password)
+			if decErr != nil {
+				slog.Error("failed to decrypt registry password, skipping pull secret", "app_id", app.ID, "error", decErr)
+			} else {
+				password = decrypted
+			}
+		}
+		// Extract the registry hostname from the image URL (everything before the first "/")
+		regServer := imageTag
+		if idx := strings.Index(regServer, "/"); idx > 0 {
+			regServer = regServer[:idx]
+		}
+		secretName := "regcred-" + app.Subdomain
+		if upsertErr := d.k8sClient.UpsertDockerRegistrySecret(ctx, "zenith-apps", secretName, regServer, app.RegistryUser, password); upsertErr != nil {
+			slog.Error("failed to upsert registry pull secret", "app_id", app.ID, "error", upsertErr)
+		}
+	}
+
+	// Determine if this app belongs to a staging environment.
+	isStaging := false
+	if app.EnvironmentID != "" && d.envRepo != nil {
+		if env, envErr := d.envRepo.GetEnvironment(ctx, app.EnvironmentID); envErr == nil {
+			isStaging = env.IsStaging()
+		}
+	}
+
 	// Generate K8s resources
-	resources := GenerateK8sResources(app, imageTag, d.baseDomain, envVars, planLimits, tier, customDomains)
+	resources := GenerateK8sResources(app, imageTag, d.baseDomain, envVars, planLimits, tier, customDomains, isStaging)
 
 	// Apply Deployment
 	if err := d.applyCRD(ctx, "Deployment", "zenith-apps", app.Subdomain, resources.Deployment); err != nil {
@@ -184,6 +237,13 @@ func (d *Deployer) DeleteApp(ctx context.Context, app *entities.App) error {
 
 	// Each resource type has its own apiVersion — must use DeleteCRDWithVersion
 	// to correctly resolve the GroupVersionResource.
+	// Best-effort: clean up the per-app registry pull secret if it exists.
+	if app.RegistryUser != "" {
+		if err := d.k8sClient.DeleteSecret(ctx, namespace, "regcred-"+app.Subdomain); err != nil && !k8serrors.IsNotFound(err) {
+			slog.Warn("failed to delete registry pull secret", "app_id", app.ID, "error", err)
+		}
+	}
+
 	resources := []struct {
 		apiVersion string
 		kind       string

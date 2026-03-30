@@ -12,11 +12,18 @@ import (
 type ComposeHandler struct {
 	projectRepo ports.ProjectRepository
 	aiValidator *services.AIComposeValidator
+	baseDomain  string // platform base domain for preview URL generation
 }
 
 // NewComposeHandler creates a new ComposeHandler.
 func NewComposeHandler(projectRepo ports.ProjectRepository) *ComposeHandler {
 	return &ComposeHandler{projectRepo: projectRepo}
+}
+
+// SetBaseDomain configures the platform base domain used to generate preview URLs
+// for public services (e.g. "apps.stage.freezenith.com").
+func (h *ComposeHandler) SetBaseDomain(baseDomain string) {
+	h.baseDomain = baseDomain
 }
 
 // SetAIValidator sets the AI compose validator for smart suggestions.
@@ -86,7 +93,7 @@ func (h *ComposeHandler) ImportCompose(c *fiber.Ctx) error {
 	}
 
 	// Parse compose (Layer 1)
-	parsed, err := services.ParseCompose(req.ComposeContent, project.Slug, "zenith-apps")
+	parsed, err := services.ParseCompose(req.ComposeContent, project.Slug, "zenith-apps", h.baseDomain)
 	if err != nil {
 		slog.Error("failed to parse compose", "error", err)
 		return NewInternal("failed to parse compose file")

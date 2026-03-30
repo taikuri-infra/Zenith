@@ -122,9 +122,13 @@ type AppRepository interface {
 	ListAppsByProject(ctx context.Context, projectID string) ([]entities.App, error)
 	UpdateApp(ctx context.Context, id string, input *dto.UpdateAppInput) (*entities.App, error)
 	DeleteApp(ctx context.Context, id string) error
+	SoftDeleteApp(ctx context.Context, id string) error
+	RestoreApp(ctx context.Context, id string) (*entities.App, error)
+	ListDeletedAppsByUser(ctx context.Context, userID string) ([]entities.App, error)
 	SetAutoGatewayID(ctx context.Context, appID, gatewayID string) error
 	CountAppsByUser(ctx context.Context, userID string) (int, error)
 	CountApps(ctx context.Context) (int, error)
+	ListAllApps(ctx context.Context) ([]entities.App, error) // admin only: all apps for crypto rotation
 
 	// Deployments
 	CreateDeployment(ctx context.Context, appID, gitSHA string) (*entities.Deployment, error)
@@ -274,6 +278,16 @@ type UserWebhookRepository interface {
 	CountWebhooksByUser(ctx context.Context, userID string) (int, error)
 	RecordDelivery(ctx context.Context, webhookID string, event entities.WebhookEvent, payload string, status entities.WebhookDeliveryStatus, statusCode int, errMsg string) (*entities.WebhookDelivery, error)
 	ListDeliveries(ctx context.Context, webhookID string, limit int) ([]entities.WebhookDelivery, error)
+}
+
+// DeployHookRepository defines post-deploy hook operations.
+type DeployHookRepository interface {
+	CreateHook(ctx context.Context, hook *entities.DeployHook) (*entities.DeployHook, error)
+	GetHook(ctx context.Context, id string) (*entities.DeployHook, error)
+	ListHooksByApp(ctx context.Context, appID string) ([]entities.DeployHook, error)
+	UpdateHook(ctx context.Context, id string, name *string, url *string, command *string, order *int, active *bool) (*entities.DeployHook, error)
+	DeleteHook(ctx context.Context, id string) error
+	CountHooksByApp(ctx context.Context, appID string) (int, error)
 }
 
 // RoleRepository defines custom role (RBAC) operations.

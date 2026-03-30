@@ -77,5 +77,12 @@ type App struct {
 	CronSchedule     string       `json:"cron_schedule,omitempty"`
 	Exposure         AppExposure  `json:"exposure"`
 	AutoGatewayID    string       `json:"auto_gateway_id,omitempty"`
+	// Replicas is the desired number of pod replicas. Defaults to 1.
+	Replicas int `json:"replicas"`
+	// HealthCheckPath is the HTTP path for K8s liveness/readiness probes. Defaults to "/".
+	HealthCheckPath string `json:"health_check_path"`
+	// DependsOn lists the K8s service names (subdomains) of apps this app depends on.
+	// Used to generate init containers that wait for dependencies before starting.
+	DependsOn []string `json:"depends_on,omitempty"`
 	Timestamps
 }
