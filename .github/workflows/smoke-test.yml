@@ -77,11 +77,39 @@ jobs:
           STAGING_ADMIN_PASSWORD: ${{ secrets.STAGING_ADMIN_PASSWORD }}
         run: ./infra/scripts/smoke-test-audit-features.sh --verbose
 
+  deploy-lifecycle-e2e:
+    name: Deploy Lifecycle E2E
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run deploy lifecycle E2E test
+        env:
+          ZENITH_API_URL: ${{ env.API_URL }}
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+        run: ./infra/scripts/e2e-deploy-lifecycle.sh --verbose
+
+  database-provision-e2e:
+    name: Database Provisioning E2E
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run database provisioning E2E test
+        env:
+          ZENITH_API_URL: ${{ env.API_URL }}
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+        run: ./infra/scripts/e2e-database-provision.sh --verbose
+
   notify:
     name: DR Test Report
     runs-on: ubuntu-latest
     if: always()
-    needs: [customer-smoke-test, owner-smoke-test, infrastructure-e2e, audit-features]
+    needs: [customer-smoke-test, owner-smoke-test, infrastructure-e2e, audit-features, deploy-lifecycle-e2e, database-provision-e2e]
     steps:
       - name: Determine overall status
         id: status
@@ -90,8 +118,10 @@ jobs:
           OWNER="${{ needs.owner-smoke-test.result }}"
           INFRA="${{ needs.infrastructure-e2e.result }}"
           AUDIT="${{ needs.audit-features.result }}"
+          DEPLOY="${{ needs.deploy-lifecycle-e2e.result }}"
+          DATABASE="${{ needs.database-provision-e2e.result }}"
 
-          if [ "$CUSTOMER" = "success" ] && [ "$OWNER" = "success" ] && [ "$INFRA" = "success" ] && [ "$AUDIT" = "success" ]; then
+          if [ "$CUSTOMER" = "success" ] && [ "$OWNER" = "success" ] && [ "$INFRA" = "success" ] && [ "$AUDIT" = "success" ] && [ "$DEPLOY" = "success" ] && [ "$DATABASE" = "success" ]; then
             echo "overall=success" >> "$GITHUB_OUTPUT"
             echo "emoji=✅" >> "$GITHUB_OUTPUT"
             echo "color=good" >> "$GITHUB_OUTPUT"
@@ -107,6 +137,8 @@ jobs:
           echo "owner=$OWNER" >> "$GITHUB_OUTPUT"
           echo "infra=$INFRA" >> "$GITHUB_OUTPUT"
           echo "audit=$AUDIT" >> "$GITHUB_OUTPUT"
+          echo "deploy=$DEPLOY" >> "$GITHUB_OUTPUT"
+          echo "database=$DATABASE" >> "$GITHUB_OUTPUT"
 
       - name: Send Slack notification
         if: env.SLACK_WEBHOOK_URL != ''
@@ -118,6 +150,8 @@ jobs:
           STATUS_OWNER: ${{ steps.status.outputs.owner }}
           STATUS_INFRA: ${{ steps.status.outputs.infra }}
           STATUS_AUDIT: ${{ steps.status.outputs.audit }}
+          STATUS_DEPLOY: ${{ steps.status.outputs.deploy }}
+          STATUS_DATABASE: ${{ steps.status.outputs.database }}
           TARGET_URL: ${{ env.API_URL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TRIGGER: ${{ github.event_name }}
@@ -130,6 +164,8 @@ jobs:
             --arg owner "$(icon "$STATUS_OWNER") $STATUS_OWNER" \
             --arg infra "$(icon "$STATUS_INFRA") $STATUS_INFRA" \
             --arg audit "$(icon "$STATUS_AUDIT") $STATUS_AUDIT" \
+            --arg deploy "$(icon "$STATUS_DEPLOY") $STATUS_DEPLOY" \
+            --arg database "$(icon "$STATUS_DATABASE") $STATUS_DATABASE" \
             --arg target "$TARGET_URL" \
             --arg ctx "<${RUN_URL}|View Run> | Trigger: ${TRIGGER} | $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{attachments:[{color:$color,blocks:[
@@ -139,6 +175,10 @@ jobs:
                 {type:"mrkdwn",text:("*Owner:*\n"+$owner)},
                 {type:"mrkdwn",text:("*Infra E2E:*\n"+$infra)},
                 {type:"mrkdwn",text:("*Audit Features:*\n"+$audit)}
+              ]},
+              {type:"section",fields:[
+                {type:"mrkdwn",text:("*Deploy E2E:*\n"+$deploy)},
+                {type:"mrkdwn",text:("*Database E2E:*\n"+$database)}
               ]},
               {type:"section",fields:[
                 {type:"mrkdwn",text:("*Target:*\n"+$target)}
@@ -157,6 +197,8 @@ jobs:
           STATUS_OWNER: ${{ steps.status.outputs.owner }}
           STATUS_INFRA: ${{ steps.status.outputs.infra }}
           STATUS_AUDIT: ${{ steps.status.outputs.audit }}
+          STATUS_DEPLOY: ${{ steps.status.outputs.deploy }}
+          STATUS_DATABASE: ${{ steps.status.outputs.database }}
           TARGET_URL: ${{ env.API_URL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TRIGGER: ${{ github.event_name }}
@@ -168,6 +210,8 @@ jobs:
           $(icon "$STATUS_OWNER") Owner Userflow: ${STATUS_OWNER}
           $(icon "$STATUS_INFRA") Infrastructure E2E: ${STATUS_INFRA}
           $(icon "$STATUS_AUDIT") Audit Features: ${STATUS_AUDIT}
+          $(icon "$STATUS_DEPLOY") Deploy Lifecycle: ${STATUS_DEPLOY}
+          $(icon "$STATUS_DATABASE") Database Provisioning: ${STATUS_DATABASE}
 
           Target: \`${TARGET_URL}\`
           Trigger: ${TRIGGER}

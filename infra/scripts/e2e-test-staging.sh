@@ -90,8 +90,9 @@ else
   fail "registry.stage.freezenith.com -> no DNS response"
 fi
 check_dns "hub.stage.freezenith.com"       "$SERVER_IP"
-check_dns "argocd.stage.freezenith.com"    "$SERVER_IP"
-check_dns "grafana.stage.freezenith.com"   "$SERVER_IP"
+# ArgoCD and Grafana are behind zero trust — no public DNS/IngressRoute
+# check_dns "argocd.stage.freezenith.com"    "$SERVER_IP"
+# check_dns "grafana.stage.freezenith.com"   "$SERVER_IP"
 
 # -------------------------------------------------------
 # Section 2: HTTPS Connectivity
@@ -116,7 +117,8 @@ check_https "https://stage.freezenith.com"              "200"
 check_https "https://api.stage.freezenith.com/health"   "200"
 check_https "https://app.stage.freezenith.com"          "200"
 check_https "https://auth.stage.freezenith.com"         "302"  # Keycloak redirects to login page
-check_https "https://argocd.stage.freezenith.com"       "200"
+# ArgoCD behind zero trust — no public HTTPS
+# check_https "https://argocd.stage.freezenith.com"       "200"
 
 # -------------------------------------------------------
 # Section 3: HTTP -> HTTPS Redirect
@@ -176,8 +178,9 @@ check_ssl "app.stage.freezenith.com"
 check_ssl "auth.stage.freezenith.com"
 check_ssl "registry.stage.freezenith.com"
 check_ssl "hub.stage.freezenith.com"
-check_ssl "argocd.stage.freezenith.com"
-check_ssl "grafana.stage.freezenith.com"
+# ArgoCD and Grafana behind zero trust — no public SSL
+# check_ssl "argocd.stage.freezenith.com"
+# check_ssl "grafana.stage.freezenith.com"
 
 # -------------------------------------------------------
 # Section 5: Content Checks

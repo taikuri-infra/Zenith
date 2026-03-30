@@ -17,6 +17,13 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
 
+## 🚨 STRICT LANGUAGE RULE — NO EXCEPTIONS
+**ALWAYS respond in English only.**
+The user may write in Persian, Finglish (Persian in Latin script), or English.
+Your response must ALWAYS be in English. Never switch to Persian or Finglish under any circumstances.
+
+---
+
 # 🧙 CLAUDE.MD - AI AGENT CONFIGURATION
 
 > **⚠️ CRITICAL: This file is identical to `AGENTS.md`.**
