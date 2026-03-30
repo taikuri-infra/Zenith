@@ -907,11 +907,19 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		backupRepo = memory.NewMemoryBackupRepository()
 	}
 	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo, planRepo)
+	// Wire real backup service when S3 + K8s are configured
+	if cfg.S3Endpoint != "" && k8sClient != nil {
+		backupS3 := s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+		backupSvc := services.NewBackupService(k8sClient, backupRepo, dbRepo, dbSvc, backupS3, cfg.S3PlatformBucket, "zenith-apps")
+		backupHandler.SetBackupService(backupSvc)
+		slog.Info("real backup service enabled (K8s Jobs + S3)")
+	}
 	appByID.Post("/databases/:dbId/backups", backupHandler.Create)
 	appByID.Get("/databases/:dbId/backups", backupHandler.List)
 	appByID.Get("/databases/:dbId/backups/:backupId", backupHandler.Get)
 	appByID.Delete("/databases/:dbId/backups/:backupId", backupHandler.Delete)
 	appByID.Post("/databases/:dbId/backups/:backupId/restore", backupHandler.Restore)
+	appByID.Get("/databases/:dbId/backups/:backupId/download", backupHandler.Download)
 	protected.Get("/backups", backupHandler.ListByUser)
 
 	// Storage (Phase 3 — per-app S3-compatible storage)

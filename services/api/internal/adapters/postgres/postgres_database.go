@@ -53,6 +53,22 @@ func (r *PostgresDatabaseRepository) CreateDatabase(ctx context.Context, appID, 
 		name = string(engine)
 	}
 
+	// Resolve project_id: use input, fall back to user's default project
+	projectID := input.ProjectID
+	if projectID == "" {
+		// Look up the user's default project
+		var defaultProjID string
+		err := r.pool.QueryRow(ctx,
+			`SELECT id FROM projects WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1`, userID,
+		).Scan(&defaultProjID)
+		if err == nil && defaultProjID != "" {
+			projectID = defaultProjID
+		}
+	}
+	if projectID == "" {
+		return nil, fmt.Errorf("project_id is required: no project found for user")
+	}
+
 	id := uuid.New().String()
 	now := time.Now()
 	dbName := "db_" + strings.ReplaceAll(id[:8], "-", "")
@@ -66,7 +82,7 @@ func (r *PostgresDatabaseRepository) CreateDatabase(ctx context.Context, appID, 
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO user_databases (id, app_id, user_id, project_id, name, engine, db_name, db_user, host, port, size_mb, max_size_mb, status, provisioner, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-		id, appID, userID, "", name, string(engine), dbName, dbUser, "", 5432, 0, maxSizeMB,
+		id, appID, userID, projectID, name, string(engine), dbName, dbUser, "", 5432, 0, maxSizeMB,
 		string(entities.DatabaseStatusProvisioning), string(entities.DBProvisionerShared), now, now,
 	)
 	if err != nil {
@@ -83,6 +99,7 @@ func (r *PostgresDatabaseRepository) CreateDatabase(ctx context.Context, appID, 
 		ID:          id,
 		AppID:       appID,
 		UserID:      userID,
+		ProjectID:   projectID,
 		Name:        name,
 		Engine:      engine,
 		DBName:      dbName,

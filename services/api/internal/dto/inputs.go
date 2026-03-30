@@ -158,6 +158,7 @@ type ApplyUpdateInput struct {
 type CreateDatabaseInput struct {
 	Engine    entities.DatabaseEngine `json:"engine" validate:"required"`
 	Name      string                 `json:"name"`
+	ProjectID string                 `json:"project_id,omitempty"`
 	MaxSizeMB int                    `json:"max_size_mb,omitempty"` // set by service from plan limits
 }
 

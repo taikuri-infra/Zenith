@@ -137,3 +137,15 @@ func (r *PostgresBackupRepository) CountBackupsByUser(ctx context.Context, userI
 	}
 	return count, nil
 }
+
+// SetStorageKey updates the storage_key for a backup.
+func (r *PostgresBackupRepository) SetStorageKey(ctx context.Context, id, key string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE database_backups SET storage_key = $1, updated_at = $2 WHERE id = $3`,
+		key, time.Now(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("set storage key: %w", err)
+	}
+	return nil
+}

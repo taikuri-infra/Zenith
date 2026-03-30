@@ -213,16 +213,16 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 		}
 		// KEDA-managed: starts sleeping, will wake on first request
 		status := entities.AppStatusSleeping
-		d.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{
-			Status: &status,
-		})
+		if err := d.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &status}); err != nil {
+			slog.Error("failed to update app status to sleeping", "app_id", app.ID, "error", err)
+		}
 		slog.Info("app deployed (sleeping)", "app", app.Name, "subdomain", app.Subdomain, "base_domain", d.baseDomain)
 	} else {
 		// Always-on: set status to running
 		status := entities.AppStatusRunning
-		d.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{
-			Status: &status,
-		})
+		if err := d.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &status}); err != nil {
+			slog.Error("failed to update app status to running", "app_id", app.ID, "error", err)
+		}
 		slog.Info("app deployed", "app", app.Name, "subdomain", app.Subdomain, "base_domain", d.baseDomain)
 	}
 

@@ -56,6 +56,7 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 	namespace := "zenith-apps"
 	labels := map[string]string{
 		"app":                   app.Subdomain,
+		"zenith.dev/app":        app.Name,
 		"zenith.dev/app-id":     app.ID,
 		"zenith.dev/managed-by": "zenith",
 	}
