@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"os/signal"
 	"syscall"
@@ -593,9 +594,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 					slog.Error("invalid OLD_SECRETS_KEYS entry (expected version:hex_key)", "entry", entry)
 					os.Exit(1)
 				}
-				version := 0
-				fmt.Sscanf(parts[0], "%d", &version)
-				if version <= 0 {
+				version, parseErr := strconv.Atoi(strings.TrimSpace(parts[0]))
+				if parseErr != nil || version <= 0 {
 					slog.Error("invalid OLD_SECRETS_KEYS version (must be positive int)", "entry", entry)
 					os.Exit(1)
 				}
@@ -770,6 +770,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	apps := protected.Group("/apps")
 	apps.Get("/check-name", appHandlerV2.CheckName)
 	apps.Get("/trash", appHandlerV2.ListDeleted)
+	apps.Post("/:appId/restore", appHandlerV2.Restore) // outside appByID — soft-deleted apps aren't found by GetApp
 	apps.Post("/", handlers.CheckLimit(planRepo, "apps", func(c *fiber.Ctx, userID string) (int, error) {
 		return appRepo.CountAppsByUser(c.Context(), userID)
 	}), appHandlerV2.Create)
@@ -779,7 +780,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID := apps.Group("/:appId", middleware.RequireAppOwnership(appRepo))
 	appByID.Get("/", appHandlerV2.Get)
 	appByID.Delete("/", appHandlerV2.Delete)
-	appByID.Post("/restore", appHandlerV2.Restore)
 
 	// Deployments (nested under /apps/:appId)
 	appByID.Get("/deployments", deployHandler.ListDeployments)
