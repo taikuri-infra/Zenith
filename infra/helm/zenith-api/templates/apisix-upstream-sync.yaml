@@ -1,0 +1,153 @@
+{{- if .Values.ingress.apisixEnabled }}
+---
+# CronJob to fix APISIX upstreams with empty nodes after pod restarts.
+# When APISIX restarts, the ingress controller may create upstreams with
+# empty nodes: [], causing 503 errors. This job detects and fixes them.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: apisix-upstream-sync
+  namespace: apisix
+  labels:
+    app.kubernetes.io/name: apisix-upstream-sync
+    app.kubernetes.io/part-of: zenith-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 50
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: apisix-upstream-sync
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sync
+              image: curlimages/curl:8.7.1
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  APISIX_ADMIN="http://apisix-admin.apisix.svc.cluster.local:9180"
+                  API_KEY="edd1c9f034335f136f87ad84b625c8f1"
+                  SERVICE_HOST="zenith-api.{{ .Values.namespace }}.svc.cluster.local"
+                  SERVICE_PORT={{ .Values.port }}
+                  MATCH_PATTERN="zenith-staging_zenith-api"
+
+                  echo "[$(date -Iseconds)] Checking APISIX upstreams..."
+
+                  # Fetch all upstreams
+                  RESPONSE=$(curl -s -S -f \
+                    -H "X-API-KEY: ${API_KEY}" \
+                    "${APISIX_ADMIN}/apisix/admin/upstreams" 2>&1) || {
+                    echo "ERROR: Failed to query APISIX admin API"
+                    echo "${RESPONSE}"
+                    exit 1
+                  }
+
+                  # Extract upstream IDs that match our pattern and have empty nodes
+                  # Using pure shell + curl (no jq available in curlimages/curl)
+                  # The response is JSON; we parse it minimally with sed/grep
+                  #
+                  # Strategy: split response into per-upstream blocks, find ones with
+                  # our name pattern that have empty nodes, extract their IDs.
+
+                  # Check if any upstreams exist at all
+                  echo "${RESPONSE}" | grep -q '"list":\[\]' && {
+                    echo "No upstreams found. Nothing to do."
+                    exit 0
+                  }
+
+                  # Resolve the service IP via DNS
+                  IP=$(nslookup "${SERVICE_HOST}" 2>/dev/null | grep -A1 "Name:" | grep "Address:" | head -1 | awk '{print $2}')
+
+                  if [ -z "${IP}" ]; then
+                    # Fallback: try parsing nslookup differently (busybox vs bind)
+                    IP=$(nslookup "${SERVICE_HOST}" 2>/dev/null | tail -n +3 | grep "Address" | head -1 | awk '{print $NF}' | sed 's/#.*//')
+                  fi
+
+                  if [ -z "${IP}" ]; then
+                    echo "ERROR: Could not resolve ${SERVICE_HOST}"
+                    exit 1
+                  fi
+
+                  echo "Resolved ${SERVICE_HOST} -> ${IP}"
+
+                  # Find upstreams matching our service with empty nodes.
+                  # We look for blocks containing our pattern AND "nodes":[] or "nodes": []
+                  # Since we don't have jq, we use a pragmatic approach:
+                  # dump each upstream as a separate line-group and check.
+
+                  FIXED=0
+                  CHECKED=0
+
+                  # Get the list of upstream IDs and their node status
+                  # Parse the JSON array by extracting id + nodes pairs
+                  # The APISIX admin API returns: {"list":[{"value":{...},"key":"/apisix/upstreams/<id>"},...]}
+
+                  # Extract each upstream entry: find all "key" values (upstream IDs)
+                  UPSTREAM_IDS=$(echo "${RESPONSE}" | sed 's/},{"value/}\n{"value/g' | grep "${MATCH_PATTERN}" | sed 's|.*"/apisix/upstreams/\([^"]*\)".*|\1|')
+
+                  if [ -z "${UPSTREAM_IDS}" ]; then
+                    echo "No upstreams matching '${MATCH_PATTERN}' found. Nothing to do."
+                    exit 0
+                  fi
+
+                  for UPSTREAM_ID in ${UPSTREAM_IDS}; do
+                    CHECKED=$((CHECKED + 1))
+                    echo "Checking upstream ${UPSTREAM_ID}..."
+
+                    # Fetch the individual upstream to get accurate node data
+                    UPSTREAM_DATA=$(curl -s -S -f \
+                      -H "X-API-KEY: ${API_KEY}" \
+                      "${APISIX_ADMIN}/apisix/admin/upstreams/${UPSTREAM_ID}" 2>&1) || {
+                      echo "  WARNING: Failed to fetch upstream ${UPSTREAM_ID}, skipping"
+                      continue
+                    }
+
+                    # Check if nodes is empty: "nodes":[] or "nodes": [] or "nodes":{} or "nodes": {}
+                    HAS_EMPTY_NODES=false
+                    echo "${UPSTREAM_DATA}" | grep -qE '"nodes":\s*\[\]' && HAS_EMPTY_NODES=true
+                    echo "${UPSTREAM_DATA}" | grep -qE '"nodes":\s*\{\}' && HAS_EMPTY_NODES=true
+
+                    # Also check if nodes key is missing entirely
+                    echo "${UPSTREAM_DATA}" | grep -q '"nodes"' || HAS_EMPTY_NODES=true
+
+                    if [ "${HAS_EMPTY_NODES}" = "true" ]; then
+                      echo "  Upstream ${UPSTREAM_ID} has empty nodes. Patching with ${IP}:${SERVICE_PORT}..."
+
+                      PATCH_RESULT=$(curl -s -S -f -X PATCH \
+                        -H "X-API-KEY: ${API_KEY}" \
+                        -H "Content-Type: application/json" \
+                        -d "{\"nodes\":{\"${IP}:${SERVICE_PORT}\":1}}" \
+                        "${APISIX_ADMIN}/apisix/admin/upstreams/${UPSTREAM_ID}" 2>&1) || {
+                        echo "  ERROR: Failed to patch upstream ${UPSTREAM_ID}"
+                        echo "  ${PATCH_RESULT}"
+                        continue
+                      }
+
+                      echo "  FIXED upstream ${UPSTREAM_ID}"
+                      FIXED=$((FIXED + 1))
+                    else
+                      echo "  Upstream ${UPSTREAM_ID} has healthy nodes. Skipping."
+                    fi
+                  done
+
+                  echo "[$(date -Iseconds)] Done. Checked: ${CHECKED}, Fixed: ${FIXED}"
+              resources:
+                requests:
+                  memory: 16Mi
+                  cpu: 10m
+                limits:
+                  memory: 32Mi
+                  cpu: 50m
+{{- end }}

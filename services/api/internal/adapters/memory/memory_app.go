@@ -90,10 +90,16 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 	}
 
 	now := time.Now()
+	exposure := input.Exposure
+	if exposure == "" {
+		exposure = entities.ExposurePublic
+	}
+
 	app := &entities.App{
 		ID:               uuid.New().String(),
 		UserID:           input.UserID,
 		ProjectID:        input.ProjectID,
+		EnvironmentID:    input.EnvironmentID,
 		Name:             input.Name,
 		DeploySource:     deploySource,
 		RepoURL:          input.RepoURL,
@@ -108,6 +114,9 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 		AppType:          appType,
 		Command:          input.Command,
 		CronSchedule:     input.CronSchedule,
+		Exposure:         exposure,
+		HealthCheckPath:  input.HealthCheckPath,
+		DependsOn:        input.DependsOn,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
