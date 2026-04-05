@@ -757,8 +757,28 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	projectByID.Get("/managed-services/:msId", msHandler.Get)
 	projectByID.Delete("/managed-services/:msId", msHandler.Delete)
 
+	// Legacy V1 project ownership middleware — verifies CRD owner label matches JWT email
+	legacyProjectOwner := func(c *fiber.Ctx) error {
+		projectID := c.Params("id")
+		if projectID == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "project id is required")
+		}
+		email, _ := c.Locals("email").(string)
+		if email == "" {
+			return fiber.NewError(fiber.StatusUnauthorized, "authentication required")
+		}
+		proj, err := k8sClient.GetCRD(c.Context(), "Project", "", projectID)
+		if err != nil {
+			return fiber.NewError(fiber.StatusNotFound, "project not found")
+		}
+		if proj.Metadata.Labels["zenith.dev/owner"] != email {
+			return fiber.NewError(fiber.StatusNotFound, "project not found")
+		}
+		return c.Next()
+	}
+
 	// Apps — legacy CRD-based (under /projects/:id/apps)
-	legacyApps := protected.Group("/projects/:id/apps")
+	legacyApps := protected.Group("/projects/:id/apps", legacyProjectOwner)
 	legacyApps.Post("/", appHandler.Create)
 	legacyApps.Get("/", appHandler.List)
 	legacyApps.Get("/:name", appHandler.Get)
@@ -1467,8 +1487,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/backstage/catalog", backstageHandler.GetCatalog)
 	protected.Get("/backstage/catalog/:kind", backstageHandler.GetCatalogByKind)
 
-	// Databases (nested under projects)
-	databases := protected.Group("/projects/:id/databases")
+	// Databases (nested under projects) — with ownership check
+	databases := protected.Group("/projects/:id/databases", legacyProjectOwner)
 	databases.Post("/", dbHandler.Create)
 	databases.Get("/", dbHandler.List)
 	databases.Get("/:name", dbHandler.Get)
@@ -1476,8 +1496,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	databases.Get("/:name/backups", dbHandler.ListBackups)
 	databases.Post("/:name/backups", dbHandler.CreateBackup)
 
-	// Storage (nested under projects)
-	storage := protected.Group("/projects/:id/storage")
+	// Storage (nested under projects) — with ownership check
+	storage := protected.Group("/projects/:id/storage", legacyProjectOwner)
 	storage.Post("/", storageHandler.Create)
 	storage.Get("/", storageHandler.List)
 	storage.Get("/:name", storageHandler.Get)

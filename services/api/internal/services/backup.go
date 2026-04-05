@@ -164,24 +164,18 @@ func (s *BackupService) GenerateDownloadURL(ctx context.Context, backup *entitie
 }
 
 // buildBackupJobSpec creates the K8s Job spec for pg_dump → S3.
+// Credentials are passed via K8s env vars (not shell interpolation) to prevent injection.
 func (s *BackupService) buildBackupJobSpec(db *entities.UserDatabase, password, storageKey, jobName string) map[string]interface{} {
-	// Shell script: pg_dump | gzip | aws s3 cp
-	script := fmt.Sprintf(`set -e
-echo "Starting backup: %s on %s"
-export PGPASSWORD="%s"
-pg_dump -h "%s" -p %d -U "%s" -d "%s" --no-owner --no-privileges | gzip | \
-  aws s3 cp - "s3://%s/%s" \
+	// Shell script references env vars set by K8s — no credential interpolation.
+	script := `set -e
+echo "Starting backup: $PGDB on $PGHOST"
+pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDB" --no-owner --no-privileges | gzip | \
+  aws s3 cp - "s3://$S3_BUCKET/$S3_KEY" \
   --endpoint-url "$AWS_ENDPOINT_URL" \
   --region fsn1
-SIZE=$(aws s3api head-object --bucket "%s" --key "%s" --endpoint-url "$AWS_ENDPOINT_URL" --region fsn1 --query ContentLength --output text 2>/dev/null || echo "0")
+SIZE=$(aws s3api head-object --bucket "$S3_BUCKET" --key "$S3_KEY" --endpoint-url "$AWS_ENDPOINT_URL" --region fsn1 --query ContentLength --output text 2>/dev/null || echo "0")
 echo "BACKUP_SIZE_BYTES=$SIZE"
-echo "Backup complete"`,
-		db.DBName, db.Host,
-		password,
-		db.Host, db.Port, db.DBUser, db.DBName,
-		s.s3Bucket, storageKey,
-		s.s3Bucket, storageKey,
-	)
+echo "Backup complete"`
 
 	return map[string]interface{}{
 		"apiVersion": "batch/v1",
@@ -206,6 +200,13 @@ echo "Backup complete"`,
 								fmt.Sprintf(`apk add --no-cache aws-cli >/dev/null 2>&1 && %s`, script),
 							},
 							"env": []map[string]interface{}{
+								{"name": "PGPASSWORD", "value": password},
+								{"name": "PGHOST", "value": db.Host},
+								{"name": "PGPORT", "value": fmt.Sprintf("%d", db.Port)},
+								{"name": "PGUSER", "value": db.DBUser},
+								{"name": "PGDB", "value": db.DBName},
+								{"name": "S3_BUCKET", "value": s.s3Bucket},
+								{"name": "S3_KEY", "value": storageKey},
 								{"name": "AWS_ACCESS_KEY_ID", "valueFrom": map[string]interface{}{
 									"secretKeyRef": map[string]interface{}{
 										"name": "cnpg-s3-credentials",
@@ -239,20 +240,16 @@ echo "Backup complete"`,
 }
 
 // buildRestoreJobSpec creates the K8s Job spec for S3 → pg_restore.
+// Credentials are passed via K8s env vars (not shell interpolation) to prevent injection.
 func (s *BackupService) buildRestoreJobSpec(db *entities.UserDatabase, password, storageKey, jobName string) map[string]interface{} {
-	script := fmt.Sprintf(`set -e
-echo "Starting restore: %s on %s"
-export PGPASSWORD="%s"
-aws s3 cp "s3://%s/%s" - \
+	// Shell script references env vars set by K8s — no credential interpolation.
+	script := `set -e
+echo "Starting restore: $PGDB on $PGHOST"
+aws s3 cp "s3://$S3_BUCKET/$S3_KEY" - \
   --endpoint-url "$AWS_ENDPOINT_URL" \
   --region fsn1 | gunzip | \
-  psql -h "%s" -p %d -U "%s" -d "%s" --no-password
-echo "Restore complete"`,
-		db.DBName, db.Host,
-		password,
-		s.s3Bucket, storageKey,
-		db.Host, db.Port, db.DBUser, db.DBName,
-	)
+  psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDB" --no-password
+echo "Restore complete"`
 
 	return map[string]interface{}{
 		"apiVersion": "batch/v1",
@@ -276,6 +273,13 @@ echo "Restore complete"`,
 								fmt.Sprintf(`apk add --no-cache aws-cli >/dev/null 2>&1 && %s`, script),
 							},
 							"env": []map[string]interface{}{
+								{"name": "PGPASSWORD", "value": password},
+								{"name": "PGHOST", "value": db.Host},
+								{"name": "PGPORT", "value": fmt.Sprintf("%d", db.Port)},
+								{"name": "PGUSER", "value": db.DBUser},
+								{"name": "PGDB", "value": db.DBName},
+								{"name": "S3_BUCKET", "value": s.s3Bucket},
+								{"name": "S3_KEY", "value": storageKey},
 								{"name": "AWS_ACCESS_KEY_ID", "valueFrom": map[string]interface{}{
 									"secretKeyRef": map[string]interface{}{
 										"name": "cnpg-s3-credentials",

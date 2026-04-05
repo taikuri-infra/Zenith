@@ -524,6 +524,11 @@ func (h *AppHandlerV2) List(c *fiber.Ctx) error {
 
 // Get handles GET /api/v1/apps/:id
 func (h *AppHandlerV2) Get(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	if userID == "" {
+		return NewUnauthorized("authentication required")
+	}
+
 	appID := c.Params("appId")
 	if appID == "" {
 		return NewBadRequest("app ID is required")
@@ -531,6 +536,9 @@ func (h *AppHandlerV2) Get(c *fiber.Ctx) error {
 
 	app, err := h.appRepo.GetApp(c.Context(), appID)
 	if err != nil {
+		return NewNotFound("app not found")
+	}
+	if app.UserID != userID {
 		return NewNotFound("app not found")
 	}
 
@@ -541,6 +549,11 @@ func (h *AppHandlerV2) Get(c *fiber.Ctx) error {
 // Uses soft delete — the app is marked as deleted but can be restored.
 // Pass ?hard=true to permanently delete (also cleans up K8s resources).
 func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(string)
+	if userID == "" {
+		return NewUnauthorized("authentication required")
+	}
+
 	appID := c.Params("appId")
 	if appID == "" {
 		return NewBadRequest("app ID is required")
@@ -549,6 +562,9 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 	// Fetch app first so we can clean up K8s resources
 	app, err := h.appRepo.GetApp(c.Context(), appID)
 	if err != nil {
+		return NewNotFound("app not found")
+	}
+	if app.UserID != userID {
 		return NewNotFound("app not found")
 	}
 
@@ -583,7 +599,6 @@ func (h *AppHandlerV2) Delete(c *fiber.Ctx) error {
 
 	// Track app deletion event
 	if h.eventRepo != nil {
-		userID, _ := c.Locals("user_id").(string)
 		go h.eventRepo.Track(context.Background(), &entities.UserEvent{
 			UserID:    userID,
 			EventType: entities.EventAppDelete,

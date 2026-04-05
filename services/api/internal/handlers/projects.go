@@ -172,6 +172,12 @@ func (h *ProjectHandler) Get(c *fiber.Ctx) error {
 		return NewNotFound("project")
 	}
 
+	// Verify ownership
+	email, _ := c.Locals("email").(string)
+	if email == "" || proj.Metadata.Labels["zenith.dev/owner"] != email {
+		return NewNotFound("project")
+	}
+
 	var spec map[string]interface{}
 	_ = json.Unmarshal(proj.Spec, &spec)
 
@@ -204,6 +210,12 @@ func (h *ProjectHandler) Update(c *fiber.Ctx) error {
 
 	proj, err := h.k8sClient.GetCRD(c.Context(), "Project", "", id)
 	if err != nil {
+		return NewNotFound("project")
+	}
+
+	// Verify ownership
+	email, _ := c.Locals("email").(string)
+	if email == "" || proj.Metadata.Labels["zenith.dev/owner"] != email {
 		return NewNotFound("project")
 	}
 
@@ -248,8 +260,13 @@ func (h *ProjectHandler) Delete(c *fiber.Ctx) error {
 		return NewBadRequest("project id is required")
 	}
 
-	// Verify project exists
-	if _, err := h.k8sClient.GetCRD(c.Context(), "Project", "", id); err != nil {
+	// Verify project exists and ownership
+	proj, err := h.k8sClient.GetCRD(c.Context(), "Project", "", id)
+	if err != nil {
+		return NewNotFound("project")
+	}
+	email, _ := c.Locals("email").(string)
+	if email == "" || proj.Metadata.Labels["zenith.dev/owner"] != email {
 		return NewNotFound("project")
 	}
 

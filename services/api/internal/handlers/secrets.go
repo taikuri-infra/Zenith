@@ -26,12 +26,31 @@ func NewSecretHandler(appRepo ports.AppRepository, hexKey string) (*SecretHandle
 	return &SecretHandler{appRepo: appRepo, cryptoKey: key}, nil
 }
 
+// verifyAppOwner checks that the authenticated user owns the app.
+func (h *SecretHandler) verifyAppOwner(c *fiber.Ctx, appID string) error {
+	userID, _ := c.Locals("user_id").(string)
+	if userID == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "authentication required")
+	}
+	app, err := h.appRepo.GetApp(c.Context(), appID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "app not found")
+	}
+	if app.UserID != userID {
+		return fiber.NewError(fiber.StatusNotFound, "app not found")
+	}
+	return nil
+}
+
 // ListSecrets GET /api/v1/apps/:appId/secrets
 // Returns all secret keys (never values). Decrypted values require POST individual key.
 func (h *SecretHandler) ListSecrets(c *fiber.Ctx) error {
 	appID := c.Params("appId")
 	if appID == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "appId is required")
+	}
+	if err := h.verifyAppOwner(c, appID); err != nil {
+		return err
 	}
 
 	secrets, err := h.appRepo.GetSecrets(c.Context(), appID)
@@ -47,6 +66,9 @@ func (h *SecretHandler) ListSecrets(c *fiber.Ctx) error {
 func (h *SecretHandler) GetSecretValue(c *fiber.Ctx) error {
 	appID := c.Params("appId")
 	key := c.Params("key")
+	if err := h.verifyAppOwner(c, appID); err != nil {
+		return err
+	}
 
 	enc, err := h.appRepo.GetSecretValue(c.Context(), appID, key)
 	if err != nil {
@@ -65,6 +87,9 @@ func (h *SecretHandler) GetSecretValue(c *fiber.Ctx) error {
 // Creates or updates a secret (value is encrypted before storage).
 func (h *SecretHandler) SetSecret(c *fiber.Ctx) error {
 	appID := c.Params("appId")
+	if err := h.verifyAppOwner(c, appID); err != nil {
+		return err
+	}
 
 	var input dto.CreateSecretInput
 	if err := c.BodyParser(&input); err != nil {
@@ -93,6 +118,9 @@ func (h *SecretHandler) SetSecret(c *fiber.Ctx) error {
 func (h *SecretHandler) DeleteSecret(c *fiber.Ctx) error {
 	appID := c.Params("appId")
 	key := c.Params("key")
+	if err := h.verifyAppOwner(c, appID); err != nil {
+		return err
+	}
 
 	if err := h.appRepo.DeleteSecret(c.Context(), appID, key); err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "secret not found")

@@ -78,6 +78,16 @@ func (h *BackupHandlerV2) Create(c *fiber.Ctx) error {
 // GET /api/v1/apps/:appId/databases/:dbId/backups
 func (h *BackupHandlerV2) List(c *fiber.Ctx) error {
 	dbID := c.Params("dbId")
+	userID, _ := c.Locals("user_id").(string)
+
+	// Verify the user owns the database
+	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "database not found")
+	}
+	if db.UserID != userID {
+		return fiber.NewError(fiber.StatusNotFound, "database not found")
+	}
 
 	backups, err := h.backupRepo.ListBackupsByDatabase(c.Context(), dbID)
 	if err != nil {
@@ -95,9 +105,13 @@ func (h *BackupHandlerV2) List(c *fiber.Ctx) error {
 // GET /api/v1/apps/:appId/databases/:dbId/backups/:backupId
 func (h *BackupHandlerV2) Get(c *fiber.Ctx) error {
 	backupID := c.Params("backupId")
+	userID, _ := c.Locals("user_id").(string)
 
 	backup, err := h.backupRepo.GetBackup(c.Context(), backupID)
 	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "backup not found")
+	}
+	if backup.UserID != userID {
 		return fiber.NewError(fiber.StatusNotFound, "backup not found")
 	}
 

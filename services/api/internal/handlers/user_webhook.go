@@ -30,6 +30,9 @@ func (h *UserWebhookHandler) Create(c *fiber.Ctx) error {
 	if body.URL == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "url is required")
 	}
+	if err := validateWebhookURL(body.URL); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
 	if len(body.Events) == 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "at least one event is required")
 	}
@@ -102,6 +105,11 @@ func (h *UserWebhookHandler) Update(c *fiber.Ctx) error {
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if body.URL != nil && *body.URL != "" {
+		if err := validateWebhookURL(*body.URL); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
 	}
 
 	updated, err := h.webhookRepo.UpdateWebhook(c.Context(), webhookID, body.URL, body.Events, body.Active)
