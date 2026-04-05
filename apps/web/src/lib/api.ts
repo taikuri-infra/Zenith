@@ -333,6 +333,7 @@ export interface ParsedService {
   url?: string;
   env_vars: ParsedEnvVar[];
   depends_on: string[];
+  command?: string;
 }
 
 export interface ParsedEnvVar {
