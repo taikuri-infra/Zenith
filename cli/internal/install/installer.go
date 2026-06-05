@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"math/big"
 	"os"
@@ -83,6 +84,7 @@ type Config struct {
 	ClusterSSHUser      string
 
 	// Set during installation (internal use)
+	AdminEmail    string // defaults to "admin@<domain>" if empty
 	AdminPassword string // password configured on the server during installPlatform
 	AdminToken    string // JWT token obtained after createFirstCluster login
 
@@ -208,6 +210,14 @@ func GetInstallSteps(cfg *Config) []Step {
 			Duration:    90 * time.Second,
 			Action: func(cfg *Config) error {
 				return installPlatform(cfg)
+			},
+		},
+		{
+			Name:        "Install Zenith chart",
+			Description: fmt.Sprintf("Installing Zenith via Helm on %s...", cfg.SSHHost),
+			Duration:    2 * time.Minute,
+			Action: func(cfg *Config) error {
+				return installZenithChart(cfg)
 			},
 		},
 		{
@@ -434,6 +444,58 @@ func installPlatform(cfg *Config) error {
 		return fmt.Errorf("k3s not ready: %w", err)
 	}
 
+	return nil
+}
+
+// installZenithChart installs helm on the remote server, writes a temp values
+// file via base64, runs helm upgrade --install for the Zenith chart, then cleans up.
+func installZenithChart(cfg *Config) error {
+	if cfg.DryRun {
+		return nil
+	}
+
+	sshCli, err := dialSSH(cfg)
+	if err != nil {
+		return fmt.Errorf("ssh connect: %w", err)
+	}
+	defer sshCli.Close()
+
+	// Install helm if not already present
+	out, err := sshCli.Run("which helm >/dev/null 2>&1 || (curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash 2>&1)")
+	if err != nil {
+		return fmt.Errorf("install helm: %w\nOutput: %s", err, out)
+	}
+
+	adminEmail := cfg.AdminEmail
+	if adminEmail == "" {
+		adminEmail = "admin@" + cfg.Domain
+	}
+	hetznerToken := cfg.HetznerToken
+	if hetznerToken == "" {
+		hetznerToken = "none"
+	}
+
+	valuesYAML := fmt.Sprintf("global:\n  domain: %s\n  hetznerToken: %s\nsecrets:\n  adminEmail: %s\n  adminPassword: %s\n",
+		cfg.Domain, hetznerToken, adminEmail, cfg.AdminPassword)
+
+	// Write via base64 to handle special characters in passwords
+	encoded := base64.StdEncoding.EncodeToString([]byte(valuesYAML))
+	writeCmd := fmt.Sprintf("echo '%s' | base64 -d > /tmp/zenith-install-values.yaml", encoded)
+	if _, err := sshCli.Run(writeCmd); err != nil {
+		return fmt.Errorf("write values file: %w", err)
+	}
+
+	helmCmd := "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install zenith " +
+		"oci://ghcr.io/dotechhq/zenith/charts/zenith " +
+		"--namespace zenith-system --create-namespace " +
+		"-f /tmp/zenith-install-values.yaml " +
+		"--wait --timeout 10m 2>&1"
+	if out, err := sshCli.Run(helmCmd); err != nil {
+		sshCli.Run("rm -f /tmp/zenith-install-values.yaml") //nolint:errcheck
+		return fmt.Errorf("helm install: %w\nOutput: %s", err, out)
+	}
+
+	sshCli.Run("rm -f /tmp/zenith-install-values.yaml") //nolint:errcheck
 	return nil
 }
 

@@ -16,8 +16,8 @@ func TestInstallDryRun_FullFlow(t *testing.T) {
 	}
 
 	steps := GetInstallSteps(cfg)
-	if len(steps) != 5 {
-		t.Fatalf("expected 5 steps, got %d", len(steps))
+	if len(steps) != 6 {
+		t.Fatalf("expected 6 steps, got %d", len(steps))
 	}
 
 	for i, step := range steps {
@@ -48,8 +48,8 @@ func TestInstallDryRun_WithCluster(t *testing.T) {
 	}
 
 	steps := GetInstallSteps(cfg)
-	if len(steps) != 6 {
-		t.Fatalf("expected 6 steps with cluster, got %d", len(steps))
+	if len(steps) != 7 {
+		t.Fatalf("expected 7 steps with cluster, got %d", len(steps))
 	}
 
 	for i, step := range steps {

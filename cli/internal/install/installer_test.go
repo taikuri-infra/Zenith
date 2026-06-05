@@ -71,8 +71,8 @@ func TestGetInstallSteps(t *testing.T) {
 	}
 
 	steps := GetInstallSteps(cfg)
-	if len(steps) != 5 {
-		t.Errorf("Expected 5 install steps (no cluster), got %d", len(steps))
+	if len(steps) != 6 {
+		t.Errorf("Expected 6 install steps (no cluster), got %d", len(steps))
 	}
 
 	// Verify steps execute without error
@@ -98,8 +98,8 @@ func TestGetInstallSteps_WithCluster(t *testing.T) {
 	}
 
 	steps := GetInstallSteps(cfg)
-	if len(steps) != 6 {
-		t.Errorf("Expected 6 install steps (with cluster), got %d", len(steps))
+	if len(steps) != 7 {
+		t.Errorf("Expected 7 install steps (with cluster), got %d", len(steps))
 	}
 
 	// Last step should be the cluster creation
@@ -124,6 +124,7 @@ func TestGetInstallSteps_StepNames(t *testing.T) {
 	expectedNames := []string{
 		"Provision server",
 		"Install platform",
+		"Install Zenith chart",
 		"Configure DNS",
 		"Issue SSL certificates",
 		"Wait for Mission Control",
