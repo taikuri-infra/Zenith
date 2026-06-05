@@ -613,6 +613,51 @@ func TestListDatabases_EmptyResponse(t *testing.T) {
 	}
 }
 
+func TestClient_Login_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/auth/login" {
+			http.Error(w, "unexpected request", 404)
+			return
+		}
+		var body map[string]string
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["email"] == "" || body["password"] == "" {
+			http.Error(w, "missing fields", 400)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"access_token":  "jwt.token.here",
+			"refresh_token": "refresh.token.here",
+			"token_type":    "bearer",
+			"expires_in":    3600,
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "")
+	token, err := c.Login("admin@example.com", "secret")
+	if err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	if token != "jwt.token.here" {
+		t.Errorf("Expected access_token 'jwt.token.here', got %q", token)
+	}
+}
+
+func TestClient_Login_InvalidCredentials(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"message":"invalid credentials"}`, http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "")
+	_, err := c.Login("bad@example.com", "wrong")
+	if err == nil {
+		t.Error("Expected error for invalid credentials, got nil")
+	}
+}
+
 func TestListApps_MultipleApps(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

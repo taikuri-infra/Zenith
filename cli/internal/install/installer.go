@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	cliapi "github.com/dotechhq/zenith/cli/internal/api"
 	"github.com/dotechhq/zenith/cli/internal/cloudflare"
 	"github.com/dotechhq/zenith/cli/internal/healthcheck"
 	"github.com/dotechhq/zenith/cli/internal/hetzner"
@@ -557,13 +558,31 @@ func waitForHealthy(cfg *Config) error {
 	})
 }
 
-// createFirstCluster registers the first cluster with Mission Control.
+// createFirstCluster logs in to Mission Control with admin credentials and saves
+// the JWT token to cfg for state persistence. This enables zen status / zen deploy
+// to work immediately after install without requiring a separate zen login.
 func createFirstCluster(cfg *Config) error {
 	if cfg.DryRun {
 		return nil
 	}
-	// Real implementation: POST to Mission Control API with cluster config.
-	// Placeholder until Mission Control API client is available.
+	if cfg.AdminPassword == "" {
+		return fmt.Errorf("admin password not set — run zen install first")
+	}
+
+	mcURL := fmt.Sprintf("https://mission.%s", cfg.Domain)
+	apiClient := cliapi.NewClient(mcURL, "")
+
+	adminEmail := cfg.AdminEmail
+	if adminEmail == "" {
+		adminEmail = "admin@" + cfg.Domain
+	}
+
+	token, err := apiClient.Login(adminEmail, cfg.AdminPassword)
+	if err != nil {
+		return fmt.Errorf("login to Mission Control at %s: %w", mcURL, err)
+	}
+
+	cfg.AdminToken = token
 	return nil
 }
 

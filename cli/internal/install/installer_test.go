@@ -880,6 +880,31 @@ func TestGetInstallSteps_AdminPasswordPreserved(t *testing.T) {
 	}
 }
 
+func TestCreateFirstCluster_DryRun(t *testing.T) {
+	cfgWithCluster := &Config{
+		DryRun:        true,
+		Domain:        "example.com",
+		AdminPassword: "test-password",
+		WithCluster:   true,
+	}
+	steps := GetInstallSteps(cfgWithCluster)
+
+	var clusterStep *Step
+	for i := range steps {
+		if steps[i].Name == "Create first cluster" {
+			clusterStep = &steps[i]
+			break
+		}
+	}
+	if clusterStep == nil {
+		t.Fatal("Expected 'Create first cluster' step with WithCluster=true")
+	}
+
+	if err := clusterStep.Action(cfgWithCluster); err != nil {
+		t.Errorf("createFirstCluster dry-run failed: %v", err)
+	}
+}
+
 func TestGeneratePassword_Length(t *testing.T) {
 	for _, n := range []int{8, 16, 24, 32} {
 		p := GeneratePassword(n)

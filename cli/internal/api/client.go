@@ -74,6 +74,29 @@ func (c *Client) do(method, path string, body interface{}, result interface{}) e
 	return nil
 }
 
+// Auth operations
+
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type loginTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+// Login authenticates with email+password and returns the access token.
+func (c *Client) Login(email, password string) (string, error) {
+	var resp loginTokenResponse
+	if err := c.do("POST", "/api/v1/auth/login", loginRequest{email, password}, &resp); err != nil {
+		return "", err
+	}
+	return resp.AccessToken, nil
+}
+
 // Project operations
 
 type Project struct {
