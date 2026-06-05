@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -79,6 +81,10 @@ type Config struct {
 	ClusterServerType   string
 	ClusterSSHHost      string
 	ClusterSSHUser      string
+
+	// Set during installation (internal use)
+	AdminPassword string // password configured on the server during installPlatform
+	AdminToken    string // JWT token obtained after createFirstCluster login
 
 	// Set during provisioning (internal use)
 	HetznerSSHKeyID        int64
@@ -251,13 +257,18 @@ func BuildResult(cfg *Config) *InstallResult {
 		ip = "203.0.113.42" // fallback placeholder
 	}
 
+	adminPassword := cfg.AdminPassword
+	if adminPassword == "" {
+		adminPassword = generatePassword(16)
+	}
+
 	result := &InstallResult{
 		ServerIP:          ip,
 		Domain:            cfg.Domain,
 		MissionControlURL: fmt.Sprintf("https://mission.%s", cfg.Domain),
 		CloudURL:          fmt.Sprintf("https://cloud.%s", cfg.Domain),
 		AdminUser:         "admin",
-		AdminPassword:     generatePassword(16),
+		AdminPassword:     adminPassword,
 	}
 
 	if cfg.WithCluster {
@@ -265,8 +276,8 @@ func BuildResult(cfg *Config) *InstallResult {
 		result.ClusterIP = "203.0.113.100"
 	}
 
-	// Persist to disk (best-effort — don't fail the install on save error)
-	_ = installstate.SaveTo(&installstate.State{
+	// Persist installation state to ~/.zen/install-state.yaml
+	saveState := &installstate.State{
 		Domain:            cfg.Domain,
 		ServerIP:          ip,
 		MissionControlURL: result.MissionControlURL,
@@ -277,10 +288,33 @@ func BuildResult(cfg *Config) *InstallResult {
 		Region:            cfg.Region,
 		ServerID:          fmt.Sprintf("%d", cfg.ProvisionedServerID),
 		SSHKeyID:          fmt.Sprintf("%d", cfg.HetznerSSHKeyID),
+		SSHKeyPath:        cfg.SSHKeyPath,
 		InstalledAt:       time.Now().UTC(),
-	}, "")
+	}
+	if cfg.AdminToken != "" {
+		saveState.AdminToken = cfg.AdminToken
+	}
+	_ = installstate.Save(saveState)
 
 	return result
+}
+
+// dialSSH creates an SSH client from the current install config.
+func dialSSH(cfg *Config) (*sshclient.Client, error) {
+	user := cfg.SSHUser
+	if user == "" {
+		user = "root"
+	}
+	sshCfg := sshclient.Config{
+		Host:    cfg.SSHHost,
+		Port:    22,
+		User:    user,
+		Timeout: 30 * time.Second,
+	}
+	if len(cfg.GeneratedSSHPrivateKey) > 0 {
+		sshCfg.PrivateKey = cfg.GeneratedSSHPrivateKey
+	}
+	return sshclient.DialWithRetry(sshCfg, 10, 15*time.Second)
 }
 
 // provisionHetznerServer creates a Hetzner server and waits until running.
@@ -312,6 +346,16 @@ func provisionHetznerServer(cfg *Config) error {
 
 	cfg.HetznerSSHKeyID = sshKey.ID
 	cfg.GeneratedSSHPrivateKey = kp.PrivateKeyPEM
+
+	// Save key to disk so zen upgrade can SSH back in
+	if home, err := os.UserHomeDir(); err == nil {
+		keyPath := filepath.Join(home, ".zen", "install-key.pem")
+		if mkErr := os.MkdirAll(filepath.Dir(keyPath), 0o700); mkErr == nil {
+			if writeErr := os.WriteFile(keyPath, kp.PrivateKeyPEM, 0o600); writeErr == nil {
+				cfg.SSHKeyPath = keyPath
+			}
+		}
+	}
 
 	// Create the server
 	serverResp, err := client.CreateServer(ctx, hetzner.CreateServerRequest{
@@ -349,20 +393,7 @@ func verifyExistingServer(cfg *Config) error {
 		return nil
 	}
 
-	sshCfg := sshclient.Config{
-		Host:    cfg.SSHHost,
-		Port:    22,
-		User:    cfg.SSHUser,
-		Timeout: 10 * time.Second,
-	}
-	if sshCfg.User == "" {
-		sshCfg.User = "root"
-	}
-	if len(cfg.GeneratedSSHPrivateKey) > 0 {
-		sshCfg.PrivateKey = cfg.GeneratedSSHPrivateKey
-	}
-
-	client, err := sshclient.Dial(sshCfg)
+	client, err := dialSSH(cfg)
 	if err != nil {
 		return fmt.Errorf("cannot connect to %s: %w", cfg.SSHHost, err)
 	}
@@ -384,20 +415,7 @@ func installPlatform(cfg *Config) error {
 		return nil
 	}
 
-	user := cfg.SSHUser
-	if user == "" {
-		user = "root"
-	}
-
-	sshCfg := sshclient.Config{
-		Host:       cfg.SSHHost,
-		Port:       22,
-		User:       user,
-		PrivateKey: cfg.GeneratedSSHPrivateKey,
-		Timeout:    30 * time.Second,
-	}
-
-	client, err := sshclient.DialWithRetry(sshCfg, 10, 15*time.Second)
+	client, err := dialSSH(cfg)
 	if err != nil {
 		return fmt.Errorf("ssh connect: %w", err)
 	}

@@ -4,9 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
-func TestSaveAndLoad(t *testing.T) {
+func TestSaveAndLoad_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "install-state.yaml")
 
@@ -17,19 +18,20 @@ func TestSaveAndLoad(t *testing.T) {
 		CloudURL:          "https://cloud.example.com",
 		AdminUser:         "admin",
 		AdminPassword:     "secret123",
+		SSHKeyPath:        "/home/user/.zen/install-key.pem",
 		Provider:          "hetzner",
 		Region:            "fsn1",
-		ServerID:          42,
-		InstalledAt:       "2026-06-05T12:00:00Z",
+		InstalledAt:       time.Now().UTC().Truncate(time.Second),
+		CompletedSteps:    []string{"Provision server", "Install platform"},
 	}
 
 	if err := SaveTo(s, path); err != nil {
-		t.Fatalf("SaveTo error: %v", err)
+		t.Fatalf("SaveTo failed: %v", err)
 	}
 
 	loaded, err := LoadFrom(path)
 	if err != nil {
-		t.Fatalf("LoadFrom error: %v", err)
+		t.Fatalf("LoadFrom failed: %v", err)
 	}
 
 	if loaded.Domain != s.Domain {
@@ -41,11 +43,58 @@ func TestSaveAndLoad(t *testing.T) {
 	if loaded.AdminPassword != s.AdminPassword {
 		t.Errorf("AdminPassword: got %q, want %q", loaded.AdminPassword, s.AdminPassword)
 	}
-	if loaded.ServerID != s.ServerID {
-		t.Errorf("ServerID: got %d, want %d", loaded.ServerID, s.ServerID)
+	if loaded.SSHKeyPath != s.SSHKeyPath {
+		t.Errorf("SSHKeyPath: got %q, want %q", loaded.SSHKeyPath, s.SSHKeyPath)
 	}
-	if loaded.MissionControlURL != s.MissionControlURL {
-		t.Errorf("MissionControlURL: got %q, want %q", loaded.MissionControlURL, s.MissionControlURL)
+	if len(loaded.CompletedSteps) != 2 {
+		t.Errorf("CompletedSteps: got %d, want 2", len(loaded.CompletedSteps))
+	}
+}
+
+func TestSave_DefaultPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	s := &State{Domain: "test.example.com", ServerIP: "5.6.7.8"}
+	if err := Save(s); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	expectedPath := filepath.Join(dir, ".zen", "install-state.yaml")
+	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+		t.Errorf("Expected state file at %s, does not exist", expectedPath)
+	}
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if loaded.Domain != "test.example.com" {
+		t.Errorf("Domain: got %q, want %q", loaded.Domain, "test.example.com")
+	}
+}
+
+func TestMarkStepComplete(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	s := &State{Domain: "example.com"}
+
+	if err := MarkStepComplete(s, "Provision server"); err != nil {
+		t.Fatalf("MarkStepComplete failed: %v", err)
+	}
+	if !IsStepComplete(s, "Provision server") {
+		t.Error("Expected step to be complete")
+	}
+	if IsStepComplete(s, "Install platform") {
+		t.Error("Expected unregistered step to not be complete")
+	}
+
+	if err := MarkStepComplete(s, "Provision server"); err != nil {
+		t.Fatalf("Second MarkStepComplete failed: %v", err)
+	}
+	if len(s.CompletedSteps) != 1 {
+		t.Errorf("Expected 1 completed step, got %d", len(s.CompletedSteps))
 	}
 }
 
@@ -102,9 +151,9 @@ func TestRoundtrip_AllFields(t *testing.T) {
 		SSHKeyPath:        "/home/user/.zen/keys/id_rsa",
 		Provider:          "hetzner",
 		Region:            "fsn1",
-		ServerID:          100,
-		SSHKeyID:          200,
-		InstalledAt:       "2026-06-05T12:00:00Z",
+		ServerID:          "100",
+		SSHKeyID:          "200",
+		InstalledAt:       time.Now().UTC().Truncate(time.Second),
 	}
 
 	if err := SaveTo(s, path); err != nil {
@@ -118,6 +167,33 @@ func TestRoundtrip_AllFields(t *testing.T) {
 		t.Errorf("SSHKeyPath: got %q, want %q", loaded.SSHKeyPath, s.SSHKeyPath)
 	}
 	if loaded.SSHKeyID != s.SSHKeyID {
-		t.Errorf("SSHKeyID: got %d, want %d", loaded.SSHKeyID, s.SSHKeyID)
+		t.Errorf("SSHKeyID: got %q, want %q", loaded.SSHKeyID, s.SSHKeyID)
+	}
+	if loaded.ServerID != s.ServerID {
+		t.Errorf("ServerID: got %q, want %q", loaded.ServerID, s.ServerID)
+	}
+}
+
+func TestState_NewFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.yaml")
+
+	s := &State{
+		Domain:        "example.com",
+		AdminToken:    "jwt.token.abc",
+		ZenithVersion: "1.2.3",
+	}
+	if err := SaveTo(s, path); err != nil {
+		t.Fatalf("SaveTo failed: %v", err)
+	}
+	loaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom failed: %v", err)
+	}
+	if loaded.AdminToken != "jwt.token.abc" {
+		t.Errorf("AdminToken: got %q, want %q", loaded.AdminToken, "jwt.token.abc")
+	}
+	if loaded.ZenithVersion != "1.2.3" {
+		t.Errorf("ZenithVersion: got %q, want %q", loaded.ZenithVersion, "1.2.3")
 	}
 }

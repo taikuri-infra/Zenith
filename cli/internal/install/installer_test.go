@@ -2,6 +2,8 @@ package install
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -851,5 +853,24 @@ func TestProviderConstants(t *testing.T) {
 	}
 	if DNSManual != "manual" {
 		t.Errorf("Expected DNSManual 'manual', got '%s'", DNSManual)
+	}
+}
+
+func TestBuildResult_PersistsStateToDefaultPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	cfg := &Config{
+		MCProvider:    ProviderHetzner,
+		Domain:        "example.com",
+		SSHHost:       "10.0.0.1",
+		AdminPassword: "pre-generated-pass",
+	}
+
+	BuildResult(cfg)
+
+	statePath := filepath.Join(dir, ".zen", "install-state.yaml")
+	if _, err := os.Stat(statePath); os.IsNotExist(err) {
+		t.Errorf("Expected install-state.yaml at %s to exist after BuildResult", statePath)
 	}
 }
