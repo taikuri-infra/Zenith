@@ -92,7 +92,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 
 	if flagDryRun {
-		printDryRun(state, flagVersion, flagSkipBackup)
+		runDryRun(state, flagVersion, flagSkipBackup)
 		return nil
 	}
 
@@ -321,6 +321,30 @@ func buildSteps(cli *sshclient.Client, state *installstate.State, version string
 	return steps
 }
 
+// buildHelmDiffCmd returns the helm diff upgrade command for the given version.
+func buildHelmDiffCmd(version string) string {
+	cmd := "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm diff upgrade zenith " +
+		"oci://ghcr.io/dotechhq/zenith/charts/zenith " +
+		"-n zenith-system"
+	if version != "" {
+		cmd += " --version " + version
+	}
+	return cmd + " 2>&1"
+}
+
+// ensureHelmDiff installs the helm-diff plugin on the remote server if not present.
+func ensureHelmDiff(cli *sshclient.Client) error {
+	out, _ := cli.Run("helm plugin list 2>/dev/null | grep -c diff")
+	if strings.TrimSpace(out) == "1" {
+		return nil
+	}
+	installOut, err := cli.Run("helm plugin install https://github.com/databus23/helm-diff 2>&1")
+	if err != nil {
+		return fmt.Errorf("install helm-diff plugin: %w\n%s", err, installOut)
+	}
+	return nil
+}
+
 // buildHelmUpgradeCmd returns the helm upgrade command string for the given version.
 func buildHelmUpgradeCmd(version string) string {
 	cmd := "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade zenith " +
@@ -395,30 +419,60 @@ func triggerAndWaitBackup(cli *sshclient.Client) error {
 	return fmt.Errorf("timed out waiting for pre-upgrade backup")
 }
 
-// printDryRun shows what would happen without executing.
-func printDryRun(state *installstate.State, version string, skipBackup bool) {
+// runDryRun connects via SSH and runs helm diff upgrade to show what would change.
+// Falls back to printing a static plan if SSH connection fails.
+func runDryRun(state *installstate.State, version string, skipBackup bool) {
 	muted := lipgloss.NewStyle().Foreground(tui.ColorMuted).PaddingLeft(2)
 	info := lipgloss.NewStyle().Foreground(tui.ColorText).PaddingLeft(2)
 	bold := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2)
+	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError).PaddingLeft(2)
 
 	fmt.Println(bold.Render("Dry-run plan:"))
 	fmt.Println()
 
-	stepNum := 1
-	if !skipBackup {
-		fmt.Println(info.Render(fmt.Sprintf("  %d. Pre-upgrade backup — CNPG immediate annotation", stepNum)))
-		stepNum++
-	}
 	versionStr := "latest"
 	if version != "" {
 		versionStr = version
 	}
-	fmt.Println(info.Render(fmt.Sprintf("  %d. Helm upgrade — zenith@%s in zenith-system", stepNum, versionStr)))
-	stepNum++
-	fmt.Println(info.Render(fmt.Sprintf("  %d. Wait for rollout — deployments + statefulsets in zenith-system", stepNum)))
-	stepNum++
-	fmt.Println(info.Render(fmt.Sprintf("  %d. Health check — %s/health", stepNum, state.MissionControlURL)))
+	if !skipBackup {
+		fmt.Println(info.Render("  1. Pre-upgrade backup — CNPG immediate annotation"))
+	}
+	fmt.Println(info.Render(fmt.Sprintf("  Helm upgrade: zenith@%s in zenith-system", versionStr)))
 	fmt.Println()
+
+	if state.ServerIP == "" {
+		fmt.Println(muted.Render("No server IP in state — skipping helm diff."))
+		return
+	}
+
+	fmt.Println(muted.Render("Connecting to server for helm diff..."))
+	sshCfg := sshclient.Config{
+		Host:    state.ServerIP,
+		User:    "root",
+		Timeout: 15 * time.Second,
+	}
+	if state.SSHKeyPath != "" {
+		if keyData, err := os.ReadFile(state.SSHKeyPath); err == nil {
+			sshCfg.PrivateKey = keyData
+		}
+	}
+	cli, err := sshclient.DialWithRetry(sshCfg, 3, 5*time.Second)
+	if err != nil {
+		fmt.Println(errStyle.Render("  Could not connect: " + err.Error()))
+		fmt.Println(muted.Render("  Showing static plan above only."))
+		return
+	}
+	defer cli.Close()
+
+	if err := ensureHelmDiff(cli); err != nil {
+		fmt.Println(errStyle.Render("  helm-diff not available: " + err.Error()))
+		return
+	}
+
+	fmt.Println(bold.Render("helm diff output:"))
+	fmt.Println()
+	out, _ := cli.Run(buildHelmDiffCmd(version))
+	fmt.Println(out)
 	fmt.Println(muted.Render("No changes made (dry-run)."))
 	fmt.Println()
 }

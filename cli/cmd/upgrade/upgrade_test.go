@@ -83,3 +83,26 @@ func TestBuildSteps_SkipBackupRemovesOneStep(t *testing.T) {
 func buildStepsForTest(skipBackup bool) []stepFunc {
 	return buildSteps(nil, &installstate.State{Domain: "test.example.com"}, "", skipBackup)
 }
+
+func TestBuildHelmDiffCmd(t *testing.T) {
+	cmd := buildHelmDiffCmd("1.2.3")
+	if !strings.Contains(cmd, "helm diff upgrade") {
+		t.Errorf("Expected 'helm diff upgrade' in cmd, got: %s", cmd)
+	}
+	if !strings.Contains(cmd, "zenith") {
+		t.Errorf("Expected release name 'zenith' in cmd, got: %s", cmd)
+	}
+	if !strings.Contains(cmd, "oci://ghcr.io/dotechhq/zenith/charts/zenith") {
+		t.Errorf("Expected OCI chart ref in diff cmd, got: %s", cmd)
+	}
+	if !strings.Contains(cmd, "1.2.3") {
+		t.Errorf("Expected version 1.2.3 in diff cmd, got: %s", cmd)
+	}
+}
+
+func TestBuildHelmDiffCmd_NoVersion(t *testing.T) {
+	cmd := buildHelmDiffCmd("")
+	if strings.Contains(cmd, "--version") {
+		t.Errorf("Expected no --version flag when version is empty, got: %s", cmd)
+	}
+}
