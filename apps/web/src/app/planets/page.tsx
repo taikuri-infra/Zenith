@@ -8,7 +8,6 @@ import { EmptyState } from "@/components/empty-state";
 import { getApi } from "@/lib/get-api";
 import { useApi } from "@/hooks/use-api";
 import type { HetznerNode } from "@/lib/api";
-import { Server } from "lucide-react";
 
 function formatRam(mb: number): string {
   if (mb >= 1024) return `${(mb / 1024).toFixed(0)} GB`;
@@ -52,7 +51,6 @@ export default function PlanetsPage() {
 
         {nodes.length === 0 ? (
           <EmptyState
-            icon={Server}
             title="No nodes yet"
             description="Planets are provisioned automatically as your platform scales."
           />
