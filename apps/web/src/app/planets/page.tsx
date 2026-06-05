@@ -36,7 +36,7 @@ export default function PlanetsPage() {
   const runningCount = nodes.filter((n) => n.status === "running").length;
 
   if (loading) return <Shell><TableSkeleton /></Shell>;
-  if (error) return <Shell><ErrorState error={error} /></Shell>;
+  if (error) return <Shell><ErrorState message={error} /></Shell>;
 
   return (
     <Shell>
