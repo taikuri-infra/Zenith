@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dotechhq/zenith/cli/internal/install"
+	"github.com/dotechhq/zenith/cli/internal/installstate"
 	"github.com/dotechhq/zenith/cli/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -23,6 +24,7 @@ var (
 	flagSSHHost      string
 	flagSSHUser      string
 	flagServerType   string
+	flagResume       bool
 	flagDryRun       bool
 )
 
@@ -56,6 +58,7 @@ func init() {
 	f.StringVar(&flagSSHHost, "ssh-host", "", "SSH host/IP for existing server")
 	f.StringVar(&flagSSHUser, "ssh-user", "root", "SSH user for existing server")
 	f.BoolVar(&flagDryRun, "dry-run", false, "Simulate installation without making real API calls")
+	f.BoolVar(&flagResume, "resume", false, "Resume a previously interrupted installation, skipping completed steps")
 
 	// Accept legacy --token flag as alias for --hetzner-token
 	f.String("token", "", "Alias for --hetzner-token (deprecated)")
@@ -77,6 +80,33 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	fmt.Println(subtitle)
 	fmt.Println()
 
+	// Handle --resume: load saved state and populate config from it
+	var resumeState *installstate.State
+	if flagResume {
+		if !installstate.Exists() {
+			return fmt.Errorf("--resume: no saved installation state found at ~/.zen/install-state.yaml")
+		}
+		var err error
+		resumeState, err = installstate.Load()
+		if err != nil {
+			return fmt.Errorf("--resume: failed to load state: %w", err)
+		}
+		if len(resumeState.CompletedSteps) == 0 {
+			fmt.Println(lipgloss.NewStyle().
+				Foreground(tui.ColorMuted).
+				PaddingLeft(2).
+				Render("No completed steps found — starting from the beginning."))
+		} else {
+			fmt.Println(lipgloss.NewStyle().
+				Foreground(tui.ColorMuted).
+				PaddingLeft(2).
+				Render(fmt.Sprintf("Resuming install — skipping %d completed step(s): %s",
+					len(resumeState.CompletedSteps),
+					strings.Join(resumeState.CompletedSteps, ", "))))
+		}
+		fmt.Println()
+	}
+
 	var cfg *install.Config
 
 	if isNonInteractive(cmd) {
@@ -86,6 +116,9 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+	} else if flagResume && resumeState != nil {
+		// Resume mode without explicit flags: rebuild config from saved state
+		cfg = configFromState(resumeState)
 	} else {
 		// Interactive wizard
 		result, err := install.RunWizard()
@@ -103,7 +136,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run installation steps with progress display
-	if err := runSteps(cfg); err != nil {
+	if err := runSteps(cfg, resumeState); err != nil {
 		return err
 	}
 
@@ -205,7 +238,6 @@ func buildConfigFromFlags(cmd *cobra.Command) (*install.Config, error) {
 	}
 
 	cfg.DryRun = flagDryRun
-
 	return cfg, nil
 }
 
@@ -238,11 +270,25 @@ func resolveRegion(input string) string {
 }
 
 // runSteps executes all installation steps with a progress display.
-func runSteps(cfg *install.Config) error {
+// If resumeState is non-nil, steps already in resumeState.CompletedSteps are skipped.
+// After each successful step the step name is persisted to resumeState (or a fresh state).
+func runSteps(cfg *install.Config, resumeState *installstate.State) error {
 	steps := install.GetInstallSteps(cfg)
+
+	// Ensure we always have a state object for tracking progress.
+	state := resumeState
+	if state == nil {
+		state = &installstate.State{
+			Domain:    cfg.Domain,
+			Provider:  string(cfg.MCProvider),
+			Region:    cfg.Region,
+			SSHKeyPath: cfg.SSHKeyPath,
+		}
+	}
 
 	// Styles
 	checkStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+	skipStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
 	spinStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
 	stepStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
@@ -254,6 +300,16 @@ func runSteps(cfg *install.Config) error {
 	fmt.Println()
 	for i, step := range steps {
 		stepNum := fmt.Sprintf("[%d/%d]", i+1, len(steps))
+
+		// Skip already-completed steps when resuming
+		if installstate.IsStepComplete(state, step.Name) {
+			fmt.Printf("  %s %s %s\n",
+				skipStyle.Render("- "+stepNum),
+				stepStyle.Render(step.Name),
+				skipStyle.Render("(skipped — already completed)"),
+			)
+			continue
+		}
 
 		// Show spinner line
 		fmt.Printf("  %s %s %s\n",
@@ -281,6 +337,12 @@ func runSteps(cfg *install.Config) error {
 			stepStyle.Render(step.Name),
 			timeStyle.Render(fmt.Sprintf("(%s)", formatDuration(elapsed))),
 		)
+
+		// Persist completed step so --resume can skip it next time
+		if err := installstate.MarkStepComplete(state, step.Name); err != nil {
+			// Non-fatal: warn but do not abort the installation
+			fmt.Printf("  %s\n", descStyle.Render(fmt.Sprintf("warning: failed to save step state: %v", err)))
+		}
 	}
 
 	totalElapsed := time.Since(totalStart)
@@ -291,6 +353,26 @@ func runSteps(cfg *install.Config) error {
 	)
 
 	return nil
+}
+
+// configFromState reconstructs a minimal install.Config from persisted state,
+// used when --resume is passed without explicit flags.
+func configFromState(s *installstate.State) *install.Config {
+	cfg := &install.Config{
+		Domain:     s.Domain,
+		SSHKeyPath: s.SSHKeyPath,
+		Region:     s.Region,
+	}
+	switch install.ServerProvider(s.Provider) {
+	case install.ProviderHetzner:
+		cfg.MCProvider = install.ProviderHetzner
+	case install.ProviderExisting:
+		cfg.MCProvider = install.ProviderExisting
+		cfg.SSHHost = s.ServerIP
+	default:
+		cfg.MCProvider = install.ProviderHetzner
+	}
+	return cfg
 }
 
 // showResult displays the final success box with credentials and URLs.

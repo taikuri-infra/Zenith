@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -89,7 +91,29 @@ func (h *AdminCRMHandler) GetHealthScores(c *fiber.Ctx) error {
 
 			hs.UsageScore = min(100, appCount*25)
 			hs.SupportScore = max(0, 100-ticketCount*20)
-			hs.LoginScore = 70 // placeholder
+
+			// Login score: based on recency of last login
+			// 100 = logged in within 7d, 70 = within 30d, 40 = within 90d, 0 = never/older
+			var lastLogin *time.Time
+			_ = h.pool.QueryRow(c.Context(),
+				"SELECT last_login_at FROM users WHERE id = $1", hs.UserID,
+			).Scan(&lastLogin)
+			if lastLogin == nil {
+				hs.LoginScore = 0
+			} else {
+				daysSince := int(time.Since(*lastLogin).Hours() / 24)
+				switch {
+				case daysSince <= 7:
+					hs.LoginScore = 100
+				case daysSince <= 30:
+					hs.LoginScore = 70
+				case daysSince <= 90:
+					hs.LoginScore = 40
+				default:
+					hs.LoginScore = 10
+				}
+			}
+
 			hs.Score = (hs.UsageScore + hs.SupportScore + hs.LoginScore) / 3
 
 			if hs.Score >= 70 {

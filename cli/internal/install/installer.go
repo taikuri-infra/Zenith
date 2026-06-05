@@ -275,9 +275,9 @@ func BuildResult(cfg *Config) *InstallResult {
 		AdminPassword:     result.AdminPassword,
 		Provider:          string(cfg.MCProvider),
 		Region:            cfg.Region,
-		ServerID:          cfg.ProvisionedServerID,
-		SSHKeyID:          cfg.HetznerSSHKeyID,
-		InstalledAt:       time.Now().UTC().Format(time.RFC3339),
+		ServerID:          fmt.Sprintf("%d", cfg.ProvisionedServerID),
+		SSHKeyID:          fmt.Sprintf("%d", cfg.HetznerSSHKeyID),
+		InstalledAt:       time.Now().UTC(),
 	}, "")
 
 	return result

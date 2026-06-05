@@ -1,14 +1,13 @@
+// Package upgrade provides the `zen upgrade` command for upgrading a Zenith
+// installation via Helm, with automated rollback on failure.
 package upgrade
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dotechhq/zenith/cli/internal/healthcheck"
 	"github.com/dotechhq/zenith/cli/internal/installstate"
 	"github.com/dotechhq/zenith/cli/internal/sshclient"
 	"github.com/dotechhq/zenith/cli/internal/tui"
@@ -16,289 +15,301 @@ import (
 )
 
 var (
-	flagVersion string
-	flagDryRun  bool
+	flagVersion  string
+	flagDryRun   bool
+	flagSkipBackup bool
 )
 
+// Cmd is the `zen upgrade` command.
 var Cmd = &cobra.Command{
 	Use:   "upgrade",
-	Short: "Upgrade Zenith to a newer version",
-	Long: `Upgrade an existing Zenith installation to a newer chart version.
+	Short: "Upgrade Zenith Mission Control to a new version",
+	Long: `Upgrade the Zenith platform using Helm. The process:
 
-  zen upgrade                    # upgrade to latest
-  zen upgrade --version v1.2.0   # upgrade to specific version
-  zen upgrade --dry-run          # show what would change (requires helm-diff)`,
+  1. (Optional) Trigger a database backup
+  2. Run helm upgrade for zenith-platform
+  3. Wait for all deployments and statefulsets to roll out
+  4. Health-check the Mission Control API
+  5. Roll back automatically if any step fails
+
+Examples:
+  zen upgrade
+  zen upgrade --version 1.5.0
+  zen upgrade --skip-backup
+  zen upgrade --dry-run`,
 	RunE: runUpgrade,
 }
 
 func init() {
-	f := Cmd.Flags()
-	f.StringVar(&flagVersion, "version", "", "Chart version to upgrade to (default: latest)")
-	f.BoolVar(&flagDryRun, "dry-run", false, "Show diff without applying changes (requires helm-diff plugin)")
+	Cmd.Flags().StringVar(&flagVersion, "version", "", "Target chart version (uses latest if empty)")
+	Cmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "Print upgrade plan without executing")
+	Cmd.Flags().BoolVar(&flagSkipBackup, "skip-backup", false, "Skip the pre-upgrade database backup")
+}
+
+// stepFuncs are the ordered upgrade steps.
+// Each returns an error; on failure the caller rolls back.
+type stepFunc struct {
+	name string
+	desc string
+	fn   func(cli *sshclient.Client) error
 }
 
 func runUpgrade(cmd *cobra.Command, args []string) error {
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2)
+	muted := lipgloss.NewStyle().Foreground(tui.ColorMuted).PaddingLeft(2)
 	checkStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
+	spinStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
 	stepStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
-	descStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
+	timeStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
 
 	fmt.Println()
-	fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2).Render("Zenith Upgrade"))
+	fmt.Println(headerStyle.Render("Zenith Upgrade"))
+	if flagVersion != "" {
+		fmt.Println(muted.Render("Target version: " + flagVersion))
+	} else {
+		fmt.Println(muted.Render("Target version: latest"))
+	}
+	if flagDryRun {
+		fmt.Println(muted.Render("(dry-run mode — no changes will be made)"))
+	}
 	fmt.Println()
 
 	// Load install state
-	state, err := loadState()
+	if !installstate.Exists() {
+		return fmt.Errorf("no Zenith installation state found — run 'zen install' first")
+	}
+	state, err := installstate.Load()
 	if err != nil {
-		return fmt.Errorf("could not find install state: %w\n\nRun 'zen install' first", err)
+		return fmt.Errorf("failed to load installation state: %w", err)
+	}
+	if state.ServerIP == "" {
+		return fmt.Errorf("server IP not found in installation state")
 	}
 
-	domain := state.Domain
-	serverIP := state.ServerIP
+	if flagDryRun {
+		printDryRun(state, flagVersion, flagSkipBackup)
+		return nil
+	}
 
-	step := func(num, total int, name, desc string) {
+	// Establish SSH connection
+	fmt.Println(muted.Render(fmt.Sprintf("Connecting to %s...", state.ServerIP)))
+	sshCfg := sshclient.Config{
+		Host:    state.ServerIP,
+		User:    "root",
+		Timeout: 15 * time.Second,
+	}
+	if state.SSHKeyPath != "" {
+		if keyData, readErr := os.ReadFile(state.SSHKeyPath); readErr == nil {
+			sshCfg.PrivateKey = keyData
+		}
+	}
+
+	sshCli, err := sshclient.DialWithRetry(sshCfg, 3, 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("SSH connection failed: %w", err)
+	}
+	defer sshCli.Close()
+	fmt.Println(muted.Render("Connected."))
+	fmt.Println()
+
+	// Build the step list dynamically
+	steps := buildSteps(sshCli, state, flagVersion, flagSkipBackup)
+	total := len(steps)
+
+	step := func(num int, name, desc string) {
+		stepNum := fmt.Sprintf("[%d/%d]", num, total)
 		fmt.Printf("  %s %s %s\n",
-			warnStyle.Render(fmt.Sprintf("[%d/%d]", num, total)),
+			spinStyle.Render("  "+stepNum),
 			stepStyle.Render(name),
-			descStyle.Render("- "+desc),
+			lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("- "+desc),
 		)
 	}
-	ok := func(num, total int, name string, elapsed time.Duration) {
+	ok := func(num int, name string, elapsed time.Duration) {
+		stepNum := fmt.Sprintf("[%d/%d]", num, total)
 		fmt.Printf("\033[1A\r  %s %s %s\n",
-			checkStyle.Render(fmt.Sprintf("v [%d/%d]", num, total)),
+			checkStyle.Render("v "+stepNum),
 			stepStyle.Render(name),
-			descStyle.Render(fmt.Sprintf("(%s)", formatDuration(elapsed))),
+			timeStyle.Render(fmt.Sprintf("(%s)", formatDuration(elapsed))),
 		)
 	}
-	fail := func(num, total int, name, msg string) {
+	fail := func(num int, name, msg string) {
+		stepNum := fmt.Sprintf("[%d/%d]", num, total)
 		fmt.Printf("\033[1A\r  %s %s %s\n",
-			errStyle.Render(fmt.Sprintf("x [%d/%d]", num, total)),
+			errStyle.Render("x "+stepNum),
 			stepStyle.Render(name),
 			errStyle.Render("- "+msg),
 		)
 	}
 
-	total := 5
-	if flagDryRun {
-		total = 3
-	}
+	totalStart := time.Now()
 
-	// Step 1: Pre-flight
-	step(1, total, "Pre-flight check", "verifying cluster reachability and current version")
-	t := time.Now()
-	currentVersion, sshCli, err := preflight(serverIP, state.SSHKeyPath)
-	if err != nil {
-		fail(1, total, "Pre-flight check", err.Error())
-		return err
-	}
-	defer sshCli.Close()
-	ok(1, total, "Pre-flight check", time.Since(t))
-	fmt.Printf("  %s current version: %s\n", descStyle.Render("  ->"), currentVersion)
+	for i, s := range steps {
+		num := i + 1
+		step(num, s.name, s.desc)
+		t := time.Now()
+		if err := s.fn(sshCli); err != nil {
+			fail(num, s.name, err.Error())
 
-	// Resolve target version
-	targetVersion := flagVersion
-	if targetVersion == "" {
-		targetVersion = "latest"
-	}
-
-	// Step 2: Compatibility check
-	step(2, total, "Compatibility check", fmt.Sprintf("checking %s → %s migration path", currentVersion, targetVersion))
-	t = time.Now()
-	if err := checkCompatibility(currentVersion, targetVersion); err != nil {
-		fail(2, total, "Compatibility check", err.Error())
-		return err
-	}
-	ok(2, total, "Compatibility check", time.Since(t))
-
-	// Step 3: Dry run or real upgrade
-	if flagDryRun {
-		step(3, total, "Diff", "running helm diff upgrade to show changes")
-		t = time.Now()
-		diff, err := helmDiff(sshCli, targetVersion)
-		if err != nil {
-			fail(3, total, "Diff", err.Error())
-			return err
+			// Attempt Helm rollback for upgrade failure
+			if s.name == "Helm upgrade" {
+				fmt.Println()
+				fmt.Println(errStyle.Render("  Upgrade failed — attempting rollback..."))
+				if rbErr := helmRollback(sshCli); rbErr != nil {
+					fmt.Println(errStyle.Render("  Rollback also failed: " + rbErr.Error()))
+				} else {
+					fmt.Println(checkStyle.Render("  Rollback successful."))
+				}
+			}
+			return fmt.Errorf("upgrade step %q failed: %w", s.name, err)
 		}
-		ok(3, total, "Diff", time.Since(t))
-		fmt.Println()
-		fmt.Println(descStyle.Render("  Changes that would be applied:"))
-		fmt.Println()
-		for _, line := range strings.Split(diff, "\n") {
-			fmt.Println("  " + line)
-		}
-		return nil
+		ok(num, s.name, time.Since(t))
 	}
 
-	// Step 3: Upgrade
-	step(3, total, "Upgrade", fmt.Sprintf("helm upgrade zenith → %s", targetVersion))
-	t = time.Now()
-	if err := helmUpgrade(sshCli, targetVersion); err != nil {
-		fail(3, total, "Upgrade", err.Error())
-		// Rollback
-		fmt.Println()
-		fmt.Println(warnStyle.Render("  Upgrade failed — initiating rollback..."))
-		if rbErr := helmRollback(sshCli); rbErr != nil {
-			fmt.Println(errStyle.Render("  Rollback also failed: " + rbErr.Error()))
-		} else {
-			fmt.Println(checkStyle.Render("  Rollback complete — previous version restored"))
-		}
-		return err
-	}
-	ok(3, total, "Upgrade", time.Since(t))
-
-	// Step 4: Health check
-	step(4, total, "Health check", "waiting for all components to become healthy")
-	t = time.Now()
-	healthURL := fmt.Sprintf("https://cloud.%s/api/health", domain)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	if err := healthcheck.WaitUntilHealthy(ctx, healthcheck.Options{URL: healthURL}); err != nil {
-		fail(4, total, "Health check", err.Error())
-		fmt.Println()
-		fmt.Println(warnStyle.Render("  Health check failed — initiating rollback..."))
-		if rbErr := helmRollback(sshCli); rbErr != nil {
-			fmt.Println(errStyle.Render("  Rollback also failed: " + rbErr.Error()))
-		} else {
-			fmt.Println(checkStyle.Render("  Rollback complete — previous version restored"))
-		}
-		return fmt.Errorf("health check failed after upgrade: %w", err)
-	}
-	ok(4, total, "Health check", time.Since(t))
-
-	// Step 5: Report
-	step(5, total, "Complete", "upgrade finished successfully")
-	ok(5, total, "Complete", 0)
-
+	totalElapsed := time.Since(totalStart)
 	fmt.Println()
-	fmt.Println(checkStyle.Render("  Zenith upgraded successfully to " + targetVersion))
+	fmt.Printf("  %s %s\n",
+		checkStyle.Render("v Upgrade complete"),
+		timeStyle.Render(fmt.Sprintf("in %s", formatDuration(totalElapsed))),
+	)
 	fmt.Println()
-
 	return nil
 }
 
-func loadState() (*installstate.State, error) {
-	return installstate.Load()
+// buildSteps constructs the ordered list of upgrade steps.
+func buildSteps(cli *sshclient.Client, state *installstate.State, version string, skipBackup bool) []stepFunc {
+	var steps []stepFunc
+
+	if !skipBackup {
+		steps = append(steps, stepFunc{
+			name: "Pre-upgrade backup",
+			desc: "Triggering immediate CNPG database backup...",
+			fn: func(cli *sshclient.Client) error {
+				return triggerAndWaitBackup(cli)
+			},
+		})
+	}
+
+	steps = append(steps, stepFunc{
+		name: "Helm upgrade",
+		desc: "Running helm upgrade for zenith-platform...",
+		fn: func(cli *sshclient.Client) error {
+			return helmUpgrade(cli, version)
+		},
+	})
+
+	steps = append(steps, stepFunc{
+		name: "Wait for rollout",
+		desc: "Waiting for all pods to roll over...",
+		fn: func(cli *sshclient.Client) error {
+			return waitForRollout(cli)
+		},
+	})
+
+	steps = append(steps, stepFunc{
+		name: "Health check",
+		desc: "Verifying Mission Control API is healthy...",
+		fn: func(cli *sshclient.Client) error {
+			return healthCheck(cli, state)
+		},
+	})
+
+	return steps
 }
 
-func preflight(serverIP, sshKeyPath string) (currentVersion string, cli *sshclient.Client, err error) {
-	cfg := sshclient.Config{
-		Host:    serverIP,
-		Port:    22,
-		User:    "root",
-		Timeout: 15 * time.Second,
-	}
-	if sshKeyPath != "" {
-		key, readErr := os.ReadFile(sshKeyPath)
-		if readErr != nil {
-			return "", nil, fmt.Errorf("read SSH key %s: %w", sshKeyPath, readErr)
-		}
-		cfg.PrivateKey = key
-	}
-	cli, err = sshclient.DialWithRetry(cfg, 3, 10*time.Second)
-	if err != nil {
-		return "", nil, fmt.Errorf("cannot reach server %s: %w", serverIP, err)
-	}
-
-	// Get current helm release version
-	out, err := cli.Run("helm list -n zenith-system -o json 2>/dev/null | grep -o '\"chart\":\"[^\"]*\"' | head -1")
-	if err != nil {
-		out = "unknown"
-	}
-	currentVersion = strings.TrimSpace(out)
-	if currentVersion == "" {
-		currentVersion = "unknown"
-	}
-
-	// Check disk space (warn if < 2GB free)
-	diskOut, _ := cli.Run("df -BG / | tail -1 | awk '{print $4}' | tr -d 'G'")
-	diskOut = strings.TrimSpace(diskOut)
-	if diskOut != "" && diskOut < "2" {
-		return currentVersion, cli, fmt.Errorf("insufficient disk space: %sGB free (need at least 2GB)", diskOut)
-	}
-
-	return currentVersion, cli, nil
-}
-
-// checkCompatibility blocks upgrades that skip more than one minor version.
-func checkCompatibility(current, target string) error {
-	// If either is unknown or "latest", allow
-	if current == "unknown" || target == "latest" || target == "" {
-		return nil
-	}
-	// Parse major.minor from semver strings
-	cv := parseMajorMinor(current)
-	tv := parseMajorMinor(target)
-	if cv[0] == 0 && cv[1] == 0 {
-		return nil // can't parse, allow
-	}
-	if tv[0] == 0 && tv[1] == 0 {
-		return nil
-	}
-	minorDiff := tv[1] - cv[1]
-	if tv[0] > cv[0] {
-		return fmt.Errorf("major version upgrades must be done one step at a time (current: %s, target: %s)", current, target)
-	}
-	if minorDiff > 1 {
-		return fmt.Errorf(
-			"cannot skip minor versions: upgrade one minor version at a time (current: %s, target: %s)\n"+
-				"  Upgrade path: %s → v%d.%d.0 first",
-			current, target, current, cv[0], cv[1]+1,
-		)
-	}
-	return nil
-}
-
-func helmDiff(cli *sshclient.Client, version string) (string, error) {
-	chartRef := "oci://ghcr.io/dotechhq/zenith/charts/zenith"
-	versionFlag := ""
-	if version != "" && version != "latest" {
-		versionFlag = " --version " + version
-	}
-	out, err := cli.Run(fmt.Sprintf(
-		"helm diff upgrade zenith %s%s -n zenith-system 2>&1 || echo 'helm-diff plugin not installed — run: helm plugin install https://github.com/databus23/helm-diff'",
-		chartRef, versionFlag,
-	))
-	return out, err
-}
-
+// helmUpgrade runs helm upgrade for the zenith-platform chart.
 func helmUpgrade(cli *sshclient.Client, version string) error {
-	chartRef := "oci://ghcr.io/dotechhq/zenith/charts/zenith"
-	versionFlag := ""
-	if version != "" && version != "latest" {
-		versionFlag = " --version " + version
+	cmd := "helm upgrade zenith-platform zenith/zenith-platform -n zenith-system --wait --timeout=10m"
+	if version != "" {
+		cmd += " --version " + version
 	}
-	_, err := cli.Run(fmt.Sprintf(
-		"helm upgrade zenith %s%s -n zenith-system --reuse-values --wait --timeout 15m 2>&1",
-		chartRef, versionFlag,
-	))
+	cmd += " 2>&1"
+	_, err := cli.Run(cmd)
 	return err
 }
 
+// helmRollback rolls back the zenith-platform Helm release.
 func helmRollback(cli *sshclient.Client) error {
-	_, err := cli.Run("helm rollback zenith -n zenith-system --wait --timeout 5m 2>&1")
+	cmd := "helm rollback zenith-platform -n zenith-system --wait --timeout=5m 2>&1"
+	_, err := cli.Run(cmd)
 	return err
 }
 
-func parseMajorMinor(version string) [2]int {
-	// Strip leading 'v' and 'zenith-' prefix
-	v := strings.TrimPrefix(version, "v")
-	v = strings.TrimPrefix(v, "zenith-")
-	parts := strings.SplitN(v, ".", 3)
-	if len(parts) < 2 {
-		return [2]int{0, 0}
-	}
-	var major, minor int
-	fmt.Sscanf(parts[0], "%d", &major)
-	fmt.Sscanf(parts[1], "%d", &minor)
-	return [2]int{major, minor}
+// waitForRollout waits for all deployments and statefulsets in zenith-system to finish rolling out.
+func waitForRollout(cli *sshclient.Client) error {
+	cmd := "kubectl rollout status deployment -n zenith-system --timeout=10m 2>&1 && kubectl rollout status statefulset -n zenith-system --timeout=10m 2>&1"
+	_, err := cli.Run(cmd)
+	return err
 }
 
-
-func formatDuration(d time.Duration) string {
-	if d == 0 {
-		return "done"
+// healthCheck verifies the Mission Control API returns a healthy response.
+func healthCheck(cli *sshclient.Client, state *installstate.State) error {
+	url := state.MissionControlURL
+	if url == "" && state.Domain != "" {
+		url = fmt.Sprintf("https://mission.%s", state.Domain)
 	}
+	if url == "" {
+		// Fall back to localhost inside the cluster
+		url = "http://localhost:8080"
+	}
+	cmd := fmt.Sprintf(`curl -sf --max-time 10 "%s/health" -o /dev/null 2>&1`, url)
+	_, err := cli.Run(cmd)
+	return err
+}
+
+// triggerAndWaitBackup triggers a CNPG backup and waits up to 5 minutes for it to complete.
+func triggerAndWaitBackup(cli *sshclient.Client) error {
+	annotateCmd := `kubectl annotate cluster.postgresql.cnpg.io/zenith-postgres -n zenith-system backup.cnpg.io/immediate="true" --overwrite 2>&1`
+	if _, err := cli.Run(annotateCmd); err != nil {
+		return fmt.Errorf("trigger backup: %w", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Minute)
+	pollCmd := `kubectl get backup -n zenith-system --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].status.phase}' 2>/dev/null`
+
+	for time.Now().Before(deadline) {
+		phase, _ := cli.Run(pollCmd)
+		switch phase {
+		case "completed":
+			return nil
+		case "failed":
+			return fmt.Errorf("CNPG backup phase=failed")
+		}
+		time.Sleep(5 * time.Second)
+	}
+	return fmt.Errorf("timed out waiting for pre-upgrade backup")
+}
+
+// printDryRun shows what would happen without executing.
+func printDryRun(state *installstate.State, version string, skipBackup bool) {
+	muted := lipgloss.NewStyle().Foreground(tui.ColorMuted).PaddingLeft(2)
+	info := lipgloss.NewStyle().Foreground(tui.ColorText).PaddingLeft(2)
+	bold := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2)
+
+	fmt.Println(bold.Render("Dry-run plan:"))
+	fmt.Println()
+
+	stepNum := 1
+	if !skipBackup {
+		fmt.Println(info.Render(fmt.Sprintf("  %d. Pre-upgrade backup — CNPG immediate annotation", stepNum)))
+		stepNum++
+	}
+	versionStr := "latest"
+	if version != "" {
+		versionStr = version
+	}
+	fmt.Println(info.Render(fmt.Sprintf("  %d. Helm upgrade — zenith-platform@%s in zenith-system", stepNum, versionStr)))
+	stepNum++
+	fmt.Println(info.Render(fmt.Sprintf("  %d. Wait for rollout — deployments + statefulsets in zenith-system", stepNum)))
+	stepNum++
+	fmt.Println(info.Render(fmt.Sprintf("  %d. Health check — %s/health", stepNum, state.MissionControlURL)))
+	fmt.Println()
+	fmt.Println(muted.Render("No changes made (dry-run)."))
+	fmt.Println()
+}
+
+// formatDuration produces a human-friendly duration string.
+func formatDuration(d time.Duration) string {
 	if d < time.Second {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}

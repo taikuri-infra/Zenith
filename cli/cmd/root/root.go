@@ -2,6 +2,7 @@ package root
 
 import (
 	"github.com/dotechhq/zenith/cli/cmd/apply"
+	"github.com/dotechhq/zenith/cli/cmd/backup"
 	"github.com/dotechhq/zenith/cli/cmd/db"
 	"github.com/dotechhq/zenith/cli/cmd/deploy"
 	"github.com/dotechhq/zenith/cli/cmd/dev"
@@ -44,6 +45,7 @@ func init() {
 	rootCmd.AddCommand(apply.Cmd)
 	rootCmd.AddCommand(diff.Cmd)
 	rootCmd.AddCommand(upgrade.Cmd)
+	rootCmd.AddCommand(backup.Cmd)
 }
 
 func Execute() error {
