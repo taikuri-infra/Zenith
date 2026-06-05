@@ -3,6 +3,8 @@ package upgrade
 import (
 	"strings"
 	"testing"
+
+	"github.com/dotechhq/zenith/cli/internal/installstate"
 )
 
 func TestHelmUpgradeCommand_ReleaseName(t *testing.T) {
@@ -40,4 +42,44 @@ func TestHelmRollbackCommand_ReleaseName(t *testing.T) {
 	if strings.Contains(cmd, "zenith-platform") {
 		t.Errorf("Expected 'zenith-platform' to be gone from rollback, got: %s", cmd)
 	}
+}
+
+func TestParseDiskSpaceFreeGB(t *testing.T) {
+	tests := []struct {
+		input  string
+		wantGB float64
+		wantOK bool
+	}{
+		{"10G", 10.0, true},
+		{"5.5G", 5.5, true},
+		{"512M", 0.5, true},
+		{"2048M", 2.0, true},
+		{"100K", 0.0001, true},
+		{"", 0, false},
+		{"garbage", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			gb, ok := parseDiskSpaceFreeGB(tt.input)
+			if ok != tt.wantOK {
+				t.Errorf("parseDiskSpaceFreeGB(%q) ok=%v, want %v", tt.input, ok, tt.wantOK)
+				return
+			}
+			if ok && (gb < tt.wantGB*0.99 || gb > tt.wantGB*1.01) {
+				t.Errorf("parseDiskSpaceFreeGB(%q) = %.4f, want %.4f", tt.input, gb, tt.wantGB)
+			}
+		})
+	}
+}
+
+func TestBuildSteps_SkipBackupRemovesOneStep(t *testing.T) {
+	stepsWithBackup := len(buildStepsForTest(false))
+	stepsNoBackup := len(buildStepsForTest(true))
+	if stepsNoBackup != stepsWithBackup-1 {
+		t.Errorf("--skip-backup should remove exactly 1 step: got %d vs %d", stepsNoBackup, stepsWithBackup)
+	}
+}
+
+func buildStepsForTest(skipBackup bool) []stepFunc {
+	return buildSteps(nil, &installstate.State{Domain: "test.example.com"}, "", skipBackup)
 }

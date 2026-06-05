@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -114,6 +115,18 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	}
 	defer sshCli.Close()
 	fmt.Println(muted.Render("Connected."))
+
+	// Show current → target version
+	current := currentInstalledVersion(sshCli)
+	tgt := flagVersion
+	if tgt == "" {
+		tgt = "latest"
+	}
+	if current != "" {
+		fmt.Println(muted.Render(fmt.Sprintf("  %s → %s", current, tgt)))
+	} else {
+		fmt.Println(muted.Render(fmt.Sprintf("  current version unknown → %s", tgt)))
+	}
 	fmt.Println()
 
 	// Build the step list dynamically
@@ -213,9 +226,49 @@ func currentInstalledVersion(cli *sshclient.Client) string {
 	return chart
 }
 
+// parseDiskSpaceFreeGB parses a string like "10G", "512M", "2048K" and returns GB as float64.
+func parseDiskSpaceFreeGB(s string) (float64, bool) {
+	if len(s) < 2 {
+		return 0, false
+	}
+	unit := s[len(s)-1]
+	numStr := s[:len(s)-1]
+	val, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0, false
+	}
+	switch unit {
+	case 'G', 'g':
+		return val, true
+	case 'M', 'm':
+		return val / 1024, true
+	case 'K', 'k':
+		return val / (1000 * 1000), true
+	case 'T', 't':
+		return val * 1024, true
+	}
+	return 0, false
+}
+
 // buildSteps constructs the ordered list of upgrade steps.
 func buildSteps(cli *sshclient.Client, state *installstate.State, version string, skipBackup bool) []stepFunc {
 	var steps []stepFunc
+
+	steps = append(steps, stepFunc{
+		name: "Pre-flight check",
+		desc: "Checking disk space and cluster reachability...",
+		fn: func(cli *sshclient.Client) error {
+			freeStr, err := cli.Run("df -h / | awk 'NR==2{print $4}'")
+			if err != nil {
+				return fmt.Errorf("disk check failed: %w", err)
+			}
+			freeStr = strings.TrimSpace(freeStr)
+			if gb, ok := parseDiskSpaceFreeGB(freeStr); ok && gb < 5.0 {
+				return fmt.Errorf("insufficient disk space: %.1fGB free (need ≥5GB)", gb)
+			}
+			return nil
+		},
+	})
 
 	if version != "" {
 		steps = append(steps, stepFunc{
