@@ -1,10 +1,20 @@
 package install
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
+
+	"github.com/dotechhq/zenith/cli/internal/cloudflare"
+	"github.com/dotechhq/zenith/cli/internal/healthcheck"
+	"github.com/dotechhq/zenith/cli/internal/hetzner"
+	"github.com/dotechhq/zenith/cli/internal/installstate"
+	"github.com/dotechhq/zenith/cli/internal/k3s"
+	"github.com/dotechhq/zenith/cli/internal/sshclient"
+	"github.com/dotechhq/zenith/cli/internal/sshkeys"
 )
 
 // Step represents a single installation step.
@@ -17,14 +27,14 @@ type Step struct {
 
 // InstallResult holds the output from a completed installation.
 type InstallResult struct {
-	ServerIP        string
-	Domain          string
+	ServerIP          string
+	Domain            string
 	MissionControlURL string
-	CloudURL        string
-	AdminUser       string
-	AdminPassword   string
-	ClusterName     string // empty if no first cluster was created
-	ClusterIP       string // empty if no first cluster was created
+	CloudURL          string
+	AdminUser         string
+	AdminPassword     string
+	ClusterName       string // empty if no first cluster was created
+	ClusterIP         string // empty if no first cluster was created
 }
 
 // ServerProvider indicates how the management server is obtained.
@@ -46,29 +56,37 @@ const (
 // Config holds the installation configuration gathered from the wizard.
 type Config struct {
 	// Mission Control Server
-	MCProvider    ServerProvider
-	HetznerToken  string // only if MCProvider == ProviderHetzner
-	Region        string // only if MCProvider == ProviderHetzner
-	ServerType    string // only if MCProvider == ProviderHetzner
-	SSHHost       string // only if MCProvider == ProviderExisting
-	SSHUser       string // only if MCProvider == ProviderExisting
-	SSHKeyPath    string
+	MCProvider   ServerProvider
+	HetznerToken string // only if MCProvider == ProviderHetzner
+	Region       string // only if MCProvider == ProviderHetzner
+	ServerType   string // only if MCProvider == ProviderHetzner
+	SSHHost      string // set by provisioning or by user for existing server
+	SSHUser      string
+	SSHKeyPath   string
 
 	// Domain
 	Domain string
 
 	// DNS
-	DNSProvider    DNSProvider
+	DNSProvider     DNSProvider
 	CloudflareToken string // only if DNSProvider == DNSCloudflare
 
 	// First Cluster (optional)
-	WithCluster       bool
-	ClusterProvider   ServerProvider // same options as MCProvider
-	ClusterHetznerToken string      // reuses MCProvider token if same provider
-	ClusterRegion     string
-	ClusterServerType string
-	ClusterSSHHost    string // only if ClusterProvider == ProviderExisting
-	ClusterSSHUser    string // only if ClusterProvider == ProviderExisting
+	WithCluster         bool
+	ClusterProvider     ServerProvider
+	ClusterHetznerToken string
+	ClusterRegion       string
+	ClusterServerType   string
+	ClusterSSHHost      string
+	ClusterSSHUser      string
+
+	// Set during provisioning (internal use)
+	HetznerSSHKeyID        int64
+	GeneratedSSHPrivateKey []byte
+	ProvisionedServerID    int64
+
+	// DryRun skips all real API calls for testing the installer flow.
+	DryRun bool
 }
 
 // Regions available for Hetzner Cloud.
@@ -79,6 +97,7 @@ var Regions = []Region{
 	{ID: "ash", Name: "Ashburn", Country: "USA"},
 }
 
+// Region is a Hetzner datacenter location.
 type Region struct {
 	ID      string
 	Name    string
@@ -92,6 +111,7 @@ var ServerTypes = []ServerType{
 	{ID: "cx42", Name: "CX42", CPUs: 8, RAM: 16, Price: 14.55, Description: "8 vCPU, 16 GB RAM"},
 }
 
+// ServerType is a Hetzner machine type.
 type ServerType struct {
 	ID          string
 	Name        string
@@ -101,7 +121,7 @@ type ServerType struct {
 	Description string
 }
 
-// ValidateToken checks if the Hetzner API token is valid format.
+// ValidateToken checks if the Hetzner API token has a valid format.
 func ValidateToken(token string) error {
 	if len(token) < 10 {
 		return fmt.Errorf("token is too short")
@@ -224,12 +244,11 @@ func GetInstallSteps(cfg *Config) []Step {
 	return steps
 }
 
-// BuildResult constructs the installation result from config.
-// In production this would query the actual provisioned resources.
+// BuildResult constructs the installation result from config and persists state.
 func BuildResult(cfg *Config) *InstallResult {
-	ip := "203.0.113.42" // placeholder
-	if cfg.MCProvider == ProviderExisting {
-		ip = cfg.SSHHost
+	ip := cfg.SSHHost
+	if ip == "" {
+		ip = "203.0.113.42" // fallback placeholder
 	}
 
 	result := &InstallResult{
@@ -246,53 +265,220 @@ func BuildResult(cfg *Config) *InstallResult {
 		result.ClusterIP = "203.0.113.100"
 	}
 
+	// Persist to disk (best-effort — don't fail the install on save error)
+	_ = installstate.SaveTo(&installstate.State{
+		Domain:            cfg.Domain,
+		ServerIP:          ip,
+		MissionControlURL: result.MissionControlURL,
+		CloudURL:          result.CloudURL,
+		AdminUser:         result.AdminUser,
+		AdminPassword:     result.AdminPassword,
+		Provider:          string(cfg.MCProvider),
+		Region:            cfg.Region,
+		ServerID:          cfg.ProvisionedServerID,
+		SSHKeyID:          cfg.HetznerSSHKeyID,
+		InstalledAt:       time.Now().UTC().Format(time.RFC3339),
+	}, "")
+
 	return result
 }
 
-// --- Placeholder provisioning functions ---
-// These will be replaced with real implementations.
-
+// provisionHetznerServer creates a Hetzner server and waits until running.
 func provisionHetznerServer(cfg *Config) error {
-	// TODO: Use hcloud API to create server
-	// hcloud server create --name zenith-mc --type cx22 --image ubuntu-22.04 --location fsn1
-	time.Sleep(100 * time.Millisecond) // simulate work
+	if cfg.DryRun {
+		cfg.SSHHost = "203.0.113.1"
+		cfg.ProvisionedServerID = 0
+		return nil
+	}
+
+	ctx := context.Background()
+	client := hetzner.NewClient(cfg.HetznerToken)
+
+	// Generate an ephemeral SSH key for this install
+	kp, err := sshkeys.Generate()
+	if err != nil {
+		return fmt.Errorf("generate SSH key: %w", err)
+	}
+
+	// Upload key to Hetzner
+	keyName := fmt.Sprintf("zenith-install-%d", time.Now().Unix())
+	sshKey, err := client.CreateSSHKey(ctx, hetzner.CreateSSHKeyRequest{
+		Name:      keyName,
+		PublicKey: strings.TrimSpace(kp.PublicKeySSH),
+	})
+	if err != nil {
+		return fmt.Errorf("create SSH key: %w", err)
+	}
+
+	cfg.HetznerSSHKeyID = sshKey.ID
+	cfg.GeneratedSSHPrivateKey = kp.PrivateKeyPEM
+
+	// Create the server
+	serverResp, err := client.CreateServer(ctx, hetzner.CreateServerRequest{
+		Name:       fmt.Sprintf("zenith-mc-%d", time.Now().Unix()),
+		ServerType: cfg.ServerType,
+		Image:      "ubuntu-22.04",
+		Location:   cfg.Region,
+		SSHKeys:    []string{fmt.Sprintf("%d", sshKey.ID)},
+		Labels: map[string]string{
+			"managed-by": "zenith-installer",
+			"role":       "mission-control",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create server: %w", err)
+	}
+	cfg.ProvisionedServerID = serverResp.Server.ID
+
+	// Wait for it to be running (5-minute timeout)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	srv, err := client.WaitForServerRunning(timeoutCtx, serverResp.Server.ID)
+	if err != nil {
+		return fmt.Errorf("server never became running: %w", err)
+	}
+	cfg.SSHHost = srv.PublicNet.IPv4.IP
+
 	return nil
 }
 
+// verifyExistingServer SSH-connects to an existing server and checks basic requirements.
 func verifyExistingServer(cfg *Config) error {
-	// TODO: SSH into server and verify it meets requirements
-	time.Sleep(50 * time.Millisecond)
+	if cfg.DryRun {
+		return nil
+	}
+
+	sshCfg := sshclient.Config{
+		Host:    cfg.SSHHost,
+		Port:    22,
+		User:    cfg.SSHUser,
+		Timeout: 10 * time.Second,
+	}
+	if sshCfg.User == "" {
+		sshCfg.User = "root"
+	}
+	if len(cfg.GeneratedSSHPrivateKey) > 0 {
+		sshCfg.PrivateKey = cfg.GeneratedSSHPrivateKey
+	}
+
+	client, err := sshclient.Dial(sshCfg)
+	if err != nil {
+		return fmt.Errorf("cannot connect to %s: %w", cfg.SSHHost, err)
+	}
+	defer client.Close()
+
+	out, err := client.Run("uname -s && free -m | awk '/^Mem:/ {print $2}'")
+	if err != nil {
+		return fmt.Errorf("server check failed: %w", err)
+	}
+	if out == "" {
+		return fmt.Errorf("server returned empty response")
+	}
 	return nil
 }
 
+// installPlatform installs k3s on the remote server via SSH.
 func installPlatform(cfg *Config) error {
-	// TODO: SSH + install k3s, CAPI, Helm charts
-	time.Sleep(100 * time.Millisecond)
+	if cfg.DryRun {
+		return nil
+	}
+
+	user := cfg.SSHUser
+	if user == "" {
+		user = "root"
+	}
+
+	sshCfg := sshclient.Config{
+		Host:       cfg.SSHHost,
+		Port:       22,
+		User:       user,
+		PrivateKey: cfg.GeneratedSSHPrivateKey,
+		Timeout:    30 * time.Second,
+	}
+
+	client, err := sshclient.DialWithRetry(sshCfg, 10, 15*time.Second)
+	if err != nil {
+		return fmt.Errorf("ssh connect: %w", err)
+	}
+	defer client.Close()
+
+	if err := k3s.Install(client, k3s.Options{}); err != nil {
+		return fmt.Errorf("k3s install: %w", err)
+	}
+
+	if err := k3s.WaitForReady(client, 120); err != nil {
+		return fmt.Errorf("k3s not ready: %w", err)
+	}
+
 	return nil
 }
 
+// configureDNS creates DNS records via Cloudflare or does nothing for manual DNS.
 func configureDNS(cfg *Config) error {
-	// TODO: If Cloudflare, use API to create DNS records
-	// Otherwise, print manual DNS instructions
-	time.Sleep(50 * time.Millisecond)
-	return nil
+	if cfg.DryRun {
+		return nil
+	}
+
+	if cfg.DNSProvider == DNSManual {
+		return nil
+	}
+
+	if cfg.DNSProvider == DNSCloudflare {
+		client := cloudflare.NewClient(cfg.CloudflareToken)
+
+		zone, err := client.FindZone(cfg.Domain)
+		if err != nil {
+			return fmt.Errorf("find Cloudflare zone: %w", err)
+		}
+
+		ip := cfg.SSHHost
+		if ip == "" {
+			return fmt.Errorf("server IP not set — provisioning step may have failed")
+		}
+
+		for _, sub := range []string{
+			fmt.Sprintf("mission.%s", cfg.Domain),
+			fmt.Sprintf("cloud.%s", cfg.Domain),
+		} {
+			if err := client.UpsertRecord(zone.ID, sub, ip); err != nil {
+				return fmt.Errorf("upsert DNS record for %s: %w", sub, err)
+			}
+		}
+		return nil
+	}
+
+	return fmt.Errorf("unknown DNS provider: %s", cfg.DNSProvider)
 }
 
+// issueSSL is a no-op — cert-manager handles certificates automatically.
 func issueSSL(cfg *Config) error {
-	// TODO: cert-manager will handle this, just wait for certificate readiness
-	time.Sleep(50 * time.Millisecond)
 	return nil
 }
 
+// waitForHealthy polls the Mission Control health endpoint until it responds 200.
 func waitForHealthy(cfg *Config) error {
-	// TODO: Poll Mission Control health endpoint
-	time.Sleep(100 * time.Millisecond)
-	return nil
+	if cfg.DryRun {
+		return nil
+	}
+
+	url := fmt.Sprintf("https://mission.%s/health", cfg.Domain)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	return healthcheck.WaitUntilHealthy(ctx, healthcheck.Options{
+		URL:      url,
+		Interval: 10 * time.Second,
+	})
 }
 
+// createFirstCluster registers the first cluster with Mission Control.
 func createFirstCluster(cfg *Config) error {
-	// TODO: POST to Mission Control API with cluster config
-	time.Sleep(100 * time.Millisecond)
+	if cfg.DryRun {
+		return nil
+	}
+	// Real implementation: POST to Mission Control API with cluster config.
+	// Placeholder until Mission Control API client is available.
 	return nil
 }
 

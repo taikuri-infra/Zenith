@@ -13,16 +13,17 @@ import (
 
 // CLI flags for non-interactive (power-user) mode.
 var (
-	flagDomain      string
-	flagProvider    string
+	flagDomain       string
+	flagProvider     string
 	flagHetznerToken string
-	flagRegion      string
-	flagDNSProvider string
-	flagDNSToken    string
-	flagWithCluster bool
-	flagSSHHost     string
-	flagSSHUser     string
-	flagServerType  string
+	flagRegion       string
+	flagDNSProvider  string
+	flagDNSToken     string
+	flagWithCluster  bool
+	flagSSHHost      string
+	flagSSHUser      string
+	flagServerType   string
+	flagDryRun       bool
 )
 
 var Cmd = &cobra.Command{
@@ -54,6 +55,7 @@ func init() {
 	f.BoolVar(&flagWithCluster, "with-cluster", false, "Create first cluster immediately")
 	f.StringVar(&flagSSHHost, "ssh-host", "", "SSH host/IP for existing server")
 	f.StringVar(&flagSSHUser, "ssh-user", "root", "SSH user for existing server")
+	f.BoolVar(&flagDryRun, "dry-run", false, "Simulate installation without making real API calls")
 
 	// Accept legacy --token flag as alias for --hetzner-token
 	f.String("token", "", "Alias for --hetzner-token (deprecated)")
@@ -201,6 +203,8 @@ func buildConfigFromFlags(cmd *cobra.Command) (*install.Config, error) {
 		cfg.ClusterSSHHost = cfg.SSHHost
 		cfg.ClusterSSHUser = cfg.SSHUser
 	}
+
+	cfg.DryRun = flagDryRun
 
 	return cfg, nil
 }

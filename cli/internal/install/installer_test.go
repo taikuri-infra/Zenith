@@ -65,6 +65,7 @@ func TestGetInstallSteps(t *testing.T) {
 		Region:       "fsn1",
 		Domain:       "example.com",
 		DNSProvider:  DNSManual,
+		DryRun:       true,
 	}
 
 	steps := GetInstallSteps(cfg)

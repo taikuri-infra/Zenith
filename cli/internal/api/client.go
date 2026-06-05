@@ -126,7 +126,7 @@ type App struct {
 func (c *Client) ListApps(projectID string) ([]App, error) {
 	path := "/api/v1/apps"
 	if projectID != "" {
-		path += "?project_id=" + projectID
+		path = fmt.Sprintf("/api/v1/projects/%s/apps", projectID)
 	}
 	var resp struct {
 		Items []App `json:"items"`
