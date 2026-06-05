@@ -14,13 +14,13 @@ function formatRam(mb: number): string {
   return `${mb} MB`;
 }
 
-function nodeStatus(status: string): "running" | "stopped" | "error" | "idle" {
+function nodeStatus(status: string): "running" | "stopped" | "error" | "provisioning" {
   switch (status) {
     case "running": return "running";
     case "off":
     case "stopped": return "stopped";
     case "initializing":
-    case "starting": return "idle";
+    case "starting": return "provisioning";
     default: return "error";
   }
 }
