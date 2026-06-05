@@ -31,6 +31,13 @@ func IsSafeUpgrade(current, target string) error {
 		return fmt.Errorf("target version: %w", err)
 	}
 
+	if tgtMaj < curMaj || (tgtMaj == curMaj && tgtMin < curMin) {
+		return fmt.Errorf(
+			"downgrade from v%d.%d to v%d.%d is not supported; restore from backup if needed",
+			curMaj, curMin, tgtMaj, tgtMin,
+		)
+	}
+
 	if curMaj == tgtMaj {
 		// Same major: only one minor version increment allowed
 		if tgtMin-curMin > 1 {

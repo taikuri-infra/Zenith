@@ -94,6 +94,9 @@ type Config struct {
 	GeneratedSSHPrivateKey []byte
 	ProvisionedServerID    int64
 
+	// ChartVersion is set after installZenithChart succeeds (from helm list).
+	ChartVersion string
+
 	// DryRun skips all real API calls for testing the installer flow.
 	DryRun bool
 }
@@ -305,6 +308,9 @@ func BuildResult(cfg *Config) *InstallResult {
 	if cfg.AdminToken != "" {
 		saveState.AdminToken = cfg.AdminToken
 	}
+	if cfg.ChartVersion != "" {
+		saveState.ZenithVersion = cfg.ChartVersion
+	}
 	_ = installstate.Save(saveState)
 
 	return result
@@ -476,7 +482,7 @@ func installZenithChart(cfg *Config) error {
 		hetznerToken = "none"
 	}
 
-	valuesYAML := fmt.Sprintf("global:\n  domain: %s\n  hetznerToken: %s\nsecrets:\n  adminEmail: %s\n  adminPassword: %s\n",
+	valuesYAML := fmt.Sprintf("global:\n  domain: %q\n  hetznerToken: %q\nsecrets:\n  adminEmail: %q\n  adminPassword: %q\n",
 		cfg.Domain, hetznerToken, adminEmail, cfg.AdminPassword)
 
 	// Write via base64 to handle special characters in passwords
@@ -497,6 +503,14 @@ func installZenithChart(cfg *Config) error {
 	}
 
 	sshCli.Run("rm -f /tmp/zenith-install-values.yaml") //nolint:errcheck
+
+	// Record the installed chart version so BuildResult can persist it to state.
+	if v, err := sshCli.Run(
+		"KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm list -n zenith-system --filter '^zenith$' -o json 2>/dev/null | " +
+			`grep -o '"chart":"[^"]*"' | head -1 | sed 's/.*zenith-//' | tr -d '"'`,
+	); err == nil && strings.TrimSpace(v) != "" {
+		cfg.ChartVersion = strings.TrimSpace(v)
+	}
 	return nil
 }
 

@@ -398,13 +398,13 @@ func healthCheck(cli *sshclient.Client, state *installstate.State) error {
 
 // triggerAndWaitBackup triggers a CNPG backup and waits up to 5 minutes for it to complete.
 func triggerAndWaitBackup(cli *sshclient.Client) error {
-	annotateCmd := `kubectl annotate cluster.postgresql.cnpg.io/zenith-postgres -n zenith-system backup.cnpg.io/immediate="true" --overwrite 2>&1`
+	annotateCmd := `KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl annotate cluster.postgresql.cnpg.io/zenith-postgres -n zenith-system backup.cnpg.io/immediate="true" --overwrite 2>&1`
 	if _, err := cli.Run(annotateCmd); err != nil {
 		return fmt.Errorf("trigger backup: %w", err)
 	}
 
 	deadline := time.Now().Add(5 * time.Minute)
-	pollCmd := `kubectl get backup -n zenith-system --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].status.phase}' 2>/dev/null`
+	pollCmd := `KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get backup -n zenith-system --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].status.phase}' 2>/dev/null`
 
 	for time.Now().Before(deadline) {
 		phase, _ := cli.Run(pollCmd)

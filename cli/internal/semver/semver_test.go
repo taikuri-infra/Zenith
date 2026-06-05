@@ -54,6 +54,9 @@ func TestIsSafeUpgrade(t *testing.T) {
 		{"0.9.0", "1.1.0", false}, // cross-major + minor: blocked
 		{"1.2.3", "1.3.0", true},  // minor +1: OK
 		{"1.2.3", "1.2.10", true}, // patch only: OK
+		{"1.1.0", "1.0.0", false}, // minor downgrade: blocked
+		{"2.0.0", "1.9.0", false}, // major downgrade: blocked
+		{"1.5.0", "1.4.9", false}, // patch downgrade: blocked
 	}
 	for _, tt := range tests {
 		t.Run(tt.current+"→"+tt.target, func(t *testing.T) {
