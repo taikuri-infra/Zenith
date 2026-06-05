@@ -3,12 +3,15 @@
 package upgrade
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dotechhq/zenith/cli/internal/installstate"
+	semverPkg "github.com/dotechhq/zenith/cli/internal/semver"
 	"github.com/dotechhq/zenith/cli/internal/sshclient"
 	"github.com/dotechhq/zenith/cli/internal/tui"
 	"github.com/spf13/cobra"
@@ -173,12 +176,60 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		timeStyle.Render(fmt.Sprintf("in %s", formatDuration(totalElapsed))),
 	)
 	fmt.Println()
+
+	// Persist the installed version to state
+	if savedState, loadErr := installstate.Load(); loadErr == nil {
+		if flagVersion != "" {
+			savedState.ZenithVersion = flagVersion
+		} else {
+			savedState.ZenithVersion = currentInstalledVersion(sshCli)
+		}
+		installstate.Save(savedState) //nolint:errcheck
+	}
+
 	return nil
+}
+
+// currentInstalledVersion reads the chart version of the zenith release via helm list.
+// Returns "" if the version cannot be determined (non-fatal).
+func currentInstalledVersion(cli *sshclient.Client) string {
+	out, err := cli.Run(
+		"KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm list -n zenith-system --filter '^zenith$' -o json 2>/dev/null",
+	)
+	if err != nil || out == "" {
+		return ""
+	}
+	type release struct {
+		Chart string `json:"chart"`
+	}
+	var releases []release
+	if err := json.Unmarshal([]byte(out), &releases); err != nil || len(releases) == 0 {
+		return ""
+	}
+	chart := releases[0].Chart
+	if idx := strings.LastIndex(chart, "-"); idx >= 0 {
+		return chart[idx+1:]
+	}
+	return chart
 }
 
 // buildSteps constructs the ordered list of upgrade steps.
 func buildSteps(cli *sshclient.Client, state *installstate.State, version string, skipBackup bool) []stepFunc {
 	var steps []stepFunc
+
+	if version != "" {
+		steps = append(steps, stepFunc{
+			name: "Version compatibility",
+			desc: "Checking semver compatibility...",
+			fn: func(cli *sshclient.Client) error {
+				current := currentInstalledVersion(cli)
+				if current == "" {
+					return nil // cannot determine — allow upgrade
+				}
+				return semverPkg.IsSafeUpgrade(current, version)
+			},
+		})
+	}
 
 	if !skipBackup {
 		steps = append(steps, stepFunc{
