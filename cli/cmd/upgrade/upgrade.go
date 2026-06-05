@@ -27,7 +27,7 @@ var Cmd = &cobra.Command{
 	Long: `Upgrade the Zenith platform using Helm. The process:
 
   1. (Optional) Trigger a database backup
-  2. Run helm upgrade for zenith-platform
+  2. Run helm upgrade for the zenith release
   3. Wait for all deployments and statefulsets to roll out
   4. Health-check the Mission Control API
   5. Roll back automatically if any step fails
@@ -192,7 +192,7 @@ func buildSteps(cli *sshclient.Client, state *installstate.State, version string
 
 	steps = append(steps, stepFunc{
 		name: "Helm upgrade",
-		desc: "Running helm upgrade for zenith-platform...",
+		desc: "Running helm upgrade for the zenith release...",
 		fn: func(cli *sshclient.Client) error {
 			return helmUpgrade(cli, version)
 		},
@@ -217,27 +217,38 @@ func buildSteps(cli *sshclient.Client, state *installstate.State, version string
 	return steps
 }
 
-// helmUpgrade runs helm upgrade for the zenith-platform chart.
-func helmUpgrade(cli *sshclient.Client, version string) error {
-	cmd := "helm upgrade zenith-platform zenith/zenith-platform -n zenith-system --wait --timeout=10m"
+// buildHelmUpgradeCmd returns the helm upgrade command string for the given version.
+func buildHelmUpgradeCmd(version string) string {
+	cmd := "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade zenith " +
+		"oci://ghcr.io/dotechhq/zenith/charts/zenith " +
+		"-n zenith-system --wait --timeout=10m"
 	if version != "" {
 		cmd += " --version " + version
 	}
-	cmd += " 2>&1"
-	_, err := cli.Run(cmd)
+	return cmd + " 2>&1"
+}
+
+// buildHelmRollbackCmd returns the helm rollback command string.
+func buildHelmRollbackCmd() string {
+	return "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm rollback zenith -n zenith-system --wait --timeout=5m 2>&1"
+}
+
+// helmUpgrade runs helm upgrade for the zenith chart.
+func helmUpgrade(cli *sshclient.Client, version string) error {
+	_, err := cli.Run(buildHelmUpgradeCmd(version))
 	return err
 }
 
-// helmRollback rolls back the zenith-platform Helm release.
+// helmRollback rolls back the zenith Helm release.
 func helmRollback(cli *sshclient.Client) error {
-	cmd := "helm rollback zenith-platform -n zenith-system --wait --timeout=5m 2>&1"
-	_, err := cli.Run(cmd)
+	_, err := cli.Run(buildHelmRollbackCmd())
 	return err
 }
 
 // waitForRollout waits for all deployments and statefulsets in zenith-system to finish rolling out.
 func waitForRollout(cli *sshclient.Client) error {
-	cmd := "kubectl rollout status deployment -n zenith-system --timeout=10m 2>&1 && kubectl rollout status statefulset -n zenith-system --timeout=10m 2>&1"
+	cmd := "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl rollout status deployment -n zenith-system --timeout=10m 2>&1 && " +
+		"KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl rollout status statefulset -n zenith-system --timeout=10m 2>&1"
 	_, err := cli.Run(cmd)
 	return err
 }
@@ -298,7 +309,7 @@ func printDryRun(state *installstate.State, version string, skipBackup bool) {
 	if version != "" {
 		versionStr = version
 	}
-	fmt.Println(info.Render(fmt.Sprintf("  %d. Helm upgrade — zenith-platform@%s in zenith-system", stepNum, versionStr)))
+	fmt.Println(info.Render(fmt.Sprintf("  %d. Helm upgrade — zenith@%s in zenith-system", stepNum, versionStr)))
 	stepNum++
 	fmt.Println(info.Render(fmt.Sprintf("  %d. Wait for rollout — deployments + statefulsets in zenith-system", stepNum)))
 	stepNum++
