@@ -259,7 +259,7 @@ func BuildResult(cfg *Config) *InstallResult {
 
 	adminPassword := cfg.AdminPassword
 	if adminPassword == "" {
-		adminPassword = generatePassword(16)
+		adminPassword = GeneratePassword(16)
 	}
 
 	result := &InstallResult{
@@ -505,7 +505,7 @@ func createFirstCluster(cfg *Config) error {
 	return nil
 }
 
-func generatePassword(length int) string {
+func GeneratePassword(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%"
 	b := make([]byte, length)
 	for i := range b {

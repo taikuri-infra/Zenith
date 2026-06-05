@@ -273,6 +273,11 @@ func resolveRegion(input string) string {
 // If resumeState is non-nil, steps already in resumeState.CompletedSteps are skipped.
 // After each successful step the step name is persisted to resumeState (or a fresh state).
 func runSteps(cfg *install.Config, resumeState *installstate.State) error {
+	// Generate admin password before steps run so installZenithChart can pass it to Helm.
+	if cfg.AdminPassword == "" {
+		cfg.AdminPassword = install.GeneratePassword(16)
+	}
+
 	steps := install.GetInstallSteps(cfg)
 
 	// Ensure we always have a state object for tracking progress.

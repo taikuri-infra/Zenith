@@ -856,6 +856,46 @@ func TestProviderConstants(t *testing.T) {
 	}
 }
 
+func TestGetInstallSteps_AdminPasswordPreserved(t *testing.T) {
+	cfg := &Config{
+		MCProvider:    ProviderHetzner,
+		HetznerToken:  "test-token-1234567890",
+		Domain:        "example.com",
+		DNSProvider:   DNSManual,
+		DryRun:        true,
+		AdminPassword: "pre-set-password-16c",
+	}
+
+	steps := GetInstallSteps(cfg)
+
+	for _, step := range steps {
+		if err := step.Action(cfg); err != nil {
+			t.Errorf("Step %q failed: %v", step.Name, err)
+		}
+	}
+
+	if cfg.AdminPassword != "pre-set-password-16c" {
+		t.Errorf("Expected AdminPassword to be preserved, got %q", cfg.AdminPassword)
+	}
+}
+
+func TestGeneratePassword_Length(t *testing.T) {
+	for _, n := range []int{8, 16, 24, 32} {
+		p := GeneratePassword(n)
+		if len(p) != n {
+			t.Errorf("GeneratePassword(%d) returned length %d", n, len(p))
+		}
+	}
+}
+
+func TestGeneratePassword_Uniqueness(t *testing.T) {
+	p1 := GeneratePassword(16)
+	p2 := GeneratePassword(16)
+	if p1 == p2 {
+		t.Error("Two GeneratePassword calls returned identical passwords")
+	}
+}
+
 func TestBuildResult_PersistsStateToDefaultPath(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
