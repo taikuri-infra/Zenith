@@ -301,6 +301,9 @@ func BuildResult(cfg *Config) *InstallResult {
 
 // dialSSH creates an SSH client from the current install config.
 func dialSSH(cfg *Config) (*sshclient.Client, error) {
+	if cfg.SSHHost == "" {
+		return nil, fmt.Errorf("SSH host is not set (provisioning step may have failed)")
+	}
 	user := cfg.SSHUser
 	if user == "" {
 		user = "root"
@@ -350,10 +353,12 @@ func provisionHetznerServer(cfg *Config) error {
 	// Save key to disk so zen upgrade can SSH back in
 	if home, err := os.UserHomeDir(); err == nil {
 		keyPath := filepath.Join(home, ".zen", "install-key.pem")
-		if mkErr := os.MkdirAll(filepath.Dir(keyPath), 0o700); mkErr == nil {
-			if writeErr := os.WriteFile(keyPath, kp.PrivateKeyPEM, 0o600); writeErr == nil {
-				cfg.SSHKeyPath = keyPath
-			}
+		if mkErr := os.MkdirAll(filepath.Dir(keyPath), 0o700); mkErr != nil {
+			fmt.Printf("warning: could not create ~/.zen directory: %v\n", mkErr)
+		} else if writeErr := os.WriteFile(keyPath, kp.PrivateKeyPEM, 0o600); writeErr != nil {
+			fmt.Printf("warning: could not save SSH key to %s: %v\n", keyPath, writeErr)
+		} else {
+			cfg.SSHKeyPath = keyPath
 		}
 	}
 

@@ -97,7 +97,7 @@ func MarkStepComplete(s *State, stepName string) error {
 	// Avoid duplicates
 	for _, name := range s.CompletedSteps {
 		if name == stepName {
-			return Save(s)
+			return nil
 		}
 	}
 	s.CompletedSteps = append(s.CompletedSteps, stepName)
