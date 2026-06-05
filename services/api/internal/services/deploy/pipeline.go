@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,9 +153,8 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 					if hook.Type == entities.DeployHookHTTP && hook.URL != "" {
 						p.executeHTTPHook(hook, app, deployment, image)
 					}
-					// Command hooks would need kubectl exec — log for now
-					if hook.Type == entities.DeployHookCommand {
-						slog.Info("command hook registered (exec not yet wired)", "hook", hook.Name, "command", hook.Command)
+					if hook.Type == entities.DeployHookCommand && hook.Command != "" {
+						p.executeCommandHook(ctx, hook, app, deployment)
 					}
 				}
 			}
@@ -247,6 +248,60 @@ func (p *Pipeline) executeHTTPHook(hook entities.DeployHook, app *entities.App, 
 	resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		slog.Warn("hook: returned error", "hook", hook.Name, "status", resp.StatusCode)
+	}
+}
+
+// executeCommandHook runs a shell command inside the app's running container via kubectl exec.
+// Hooks are best-effort: failures are logged but never abort the deployment.
+func (p *Pipeline) executeCommandHook(ctx context.Context, hook entities.DeployHook, app *entities.App, deployment *entities.Deployment) {
+	// Step 1: find the name of a running pod for this app.
+	// Pods are labelled with app=<subdomain> by the k8s resource generator.
+	getPod := exec.CommandContext(ctx,
+		"kubectl", "get", "pods",
+		"-l", "app="+app.Subdomain,
+		"-n", "zenith-apps",
+		"--field-selector=status.phase=Running",
+		"-o", "jsonpath={.items[0].metadata.name}",
+	)
+	podOut, err := getPod.Output()
+	if err != nil {
+		slog.Warn("command hook: kubectl get pods failed",
+			"hook", hook.Name, "app", app.Subdomain, "error", err)
+		p.emitLog(deployment.ID, "hook", fmt.Sprintf("hook %s: could not find running pod for %s", hook.Name, app.Subdomain))
+		return
+	}
+
+	podName := strings.TrimSpace(string(podOut))
+	if podName == "" {
+		slog.Warn("command hook: no running pod found", "hook", hook.Name, "app", app.Subdomain)
+		p.emitLog(deployment.ID, "hook", fmt.Sprintf("hook %s: no running pod for %s — skipped", hook.Name, app.Subdomain))
+		return
+	}
+
+	// Step 2: exec the command inside the container.
+	execCmd := exec.CommandContext(ctx,
+		"kubectl", "exec", podName,
+		"-n", "zenith-apps",
+		"--", "sh", "-c", hook.Command,
+	)
+	var stdout, stderr bytes.Buffer
+	execCmd.Stdout = &stdout
+	execCmd.Stderr = &stderr
+
+	if err := execCmd.Run(); err != nil {
+		slog.Warn("command hook: exec failed",
+			"hook", hook.Name, "pod", podName,
+			"error", err,
+			"stderr", stderr.String(),
+		)
+		p.emitLog(deployment.ID, "hook", fmt.Sprintf("hook %s failed on pod %s: %v — %s", hook.Name, podName, err, strings.TrimSpace(stderr.String())))
+		return
+	}
+
+	output := strings.TrimSpace(stdout.String())
+	slog.Info("command hook executed", "hook", hook.Name, "pod", podName, "output", output)
+	if output != "" {
+		p.emitLog(deployment.ID, "hook", fmt.Sprintf("hook %s: %s", hook.Name, output))
 	}
 }
 
