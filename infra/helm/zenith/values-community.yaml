@@ -1,0 +1,157 @@
+# FreeZenith Community Edition — Helm Values
+#
+# Used by `zen install` when deploying a self-hosted CE instance.
+# All domain/credential values are injected by the installer at install time
+# via --set flags; this file sets CE-appropriate defaults and gates.
+#
+# Override example:
+#   helm upgrade --install zenith oci://ghcr.io/dotechhq/zenith/charts/zenith \
+#     -f values-community.yaml \
+#     --set global.domain=mycloud.example.com \
+#     --set secrets.adminEmail=admin@example.com \
+#     --set secrets.adminPassword=changeme
+
+global:
+  # domain is injected by `zen install --domain <domain>`
+  domain: ""
+  imageRegistry: "ghcr.io/dotechhq/zenith"
+  imagePullPolicy: IfNotPresent
+
+# Community Edition does not use a private Harbor registry by default.
+# Users can opt in later with `zen component add registry`.
+registry:
+  enabled: false
+
+platform:
+  namespace: zenith-system
+
+# -- API (Community Edition mode)
+api:
+  enabled: true
+  replicas: 1
+  image: zenith-api:latest
+  port: 8080
+  metricsPort: 9090
+  env:
+    ZENITH_MODE: standalone      # disables multi-tenancy, billing, SaaS-only handlers
+    CORS_ORIGINS: ""             # auto-set by installer from domain
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+# -- Web dashboard
+web:
+  enabled: true
+  replicas: 1
+  image: zenith-web:latest
+  port: 3000
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+# -- Mission Control (admin panel scoped to own install only)
+mc:
+  enabled: true
+  replicas: 1
+  image: zenith-mc:latest
+  port: 3002
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+# -- Landing page disabled in CE (not needed for self-hosted)
+landing:
+  enabled: false
+
+# -- PostgreSQL — single instance for CE
+postgres:
+  enabled: true
+  image: ghcr.io/cloudnative-pg/postgresql:16.6
+  instances: 1
+  storage: 10Gi
+  database: zenith
+  user: zenith
+  maxConnections: "100"
+  sharedBuffers: "256MB"
+  monitoring: true
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+
+# -- Observability (Loki + Prometheus + Grafana + Tempo)
+# All enabled in CE — this is a core differentiator vs Coolify/Dokku.
+observability:
+  enabled: true
+  loki:
+    enabled: true
+    retention: 168h    # 7 days
+    storage: 5Gi
+  prometheus:
+    enabled: true
+    storage: 5Gi
+    retention: 15d
+  grafana:
+    enabled: true
+    adminPassword: ""  # injected by installer
+  tempo:
+    enabled: true
+    storage: 5Gi
+
+# -- KEDA autoscaler
+keda:
+  enabled: true
+
+# -- cert-manager TLS
+certManager:
+  issuer: letsencrypt-prod
+  issuerKind: ClusterIssuer
+
+# -- Keycloak auth
+keycloak:
+  enabled: true
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+
+# -- APISIX API gateway
+apisix:
+  enabled: true
+
+# -- Multi-tenancy: DISABLED in Community Edition
+tenants: {}
+
+# -- Enterprise-only features: all disabled in CE
+billing:
+  enabled: false
+
+stripe:
+  enabled: false
+
+crm:
+  enabled: false
+
+scim:
+  enabled: false
+
+clusterAutoscaler:
+  enabled: false

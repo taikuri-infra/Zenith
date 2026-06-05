@@ -12,6 +12,7 @@ import (
 	"github.com/dotechhq/zenith/cli/cmd/logs"
 	"github.com/dotechhq/zenith/cli/cmd/status"
 	"github.com/dotechhq/zenith/cli/cmd/top"
+	"github.com/dotechhq/zenith/cli/cmd/upgrade"
 	"github.com/dotechhq/zenith/cli/cmd/version"
 	"github.com/spf13/cobra"
 )
@@ -42,6 +43,7 @@ func init() {
 	rootCmd.AddCommand(exportcmd.Cmd)
 	rootCmd.AddCommand(apply.Cmd)
 	rootCmd.AddCommand(diff.Cmd)
+	rootCmd.AddCommand(upgrade.Cmd)
 }
 
 func Execute() error {

@@ -1,0 +1,99 @@
+name: Publish Helm Chart (Release)
+
+# Triggered on version tags (v1.0.0, v1.2.3, etc.)
+# Packages the Zenith Helm chart and publishes it to the public OCI registry
+# at ghcr.io/dotechhq/zenith/charts/zenith so that `zen install` can pull it.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  packages: write   # needed to push to ghcr.io
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: dotechhq/zenith/charts
+
+jobs:
+  publish-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Extract version from tag
+        id: version
+        # GITHUB_REF_NAME is the tag (e.g. v1.2.3); strip leading v for semver
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing chart version ${VERSION} from tag ${GITHUB_REF_NAME}"
+
+      - name: Update Chart.yaml version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sed -i "s/^version:.*/version: ${VERSION}/" infra/helm/zenith/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" infra/helm/zenith/Chart.yaml
+
+      - name: Helm lint
+        run: helm lint infra/helm/zenith/
+
+      - name: Helm template (validate with community values)
+        run: |
+          helm template test infra/helm/zenith/ \
+            -f infra/helm/zenith/values-community.yaml \
+            --set global.domain=test.example.com \
+            --set secrets.jwtSecret=test \
+            --set secrets.adminEmail=test@test.com \
+            --set secrets.adminPassword=test \
+            > /dev/null
+
+      - name: Login to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login "$REGISTRY" \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Package chart
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          helm package infra/helm/zenith/ --destination /tmp/
+          echo "Packaged: $(ls /tmp/zenith-*.tgz)"
+
+      - name: Push chart to ghcr.io
+        id: push
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          OUTPUT=$(helm push \
+            "/tmp/zenith-${VERSION}.tgz" \
+            "oci://${REGISTRY}/${IMAGE_PREFIX}" 2>&1)
+          echo "$OUTPUT"
+          DIGEST=$(echo "$OUTPUT" | grep -oP 'Digest: \Ksha256:[a-f0-9]+' || true)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Chart published to oci://${REGISTRY}/${IMAGE_PREFIX}/zenith:${VERSION}"
+
+      - name: Print install instructions
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "## Helm Chart"
+          echo ""
+          echo "Install FreeZenith Community Edition:"
+          echo "  zen install --domain mycloud.example.com"
+          echo ""
+          echo "Or directly with Helm:"
+          echo "  helm upgrade --install zenith \\"
+          echo "    oci://ghcr.io/${IMAGE_PREFIX}/zenith \\"
+          echo "    --version ${VERSION} \\"
+          echo "    -f values-community.yaml \\"
+          echo "    --set global.domain=mycloud.example.com"

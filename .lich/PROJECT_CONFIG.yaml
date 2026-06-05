@@ -3,29 +3,36 @@
 # This file is machine-readable for AI agents
 
 project:
-  name: "moneyFactory"
-  slug: "moneyfactory"
-  type: "saas_platform"
-  description: "A brief description of the project"
+  name: "Zenith"
+  slug: "zenith"
+  type: "paas_platform"
+  description: "FreeZenith — open-source self-hosted PaaS for Hetzner Cloud"
+  edition: "community"   # community | enterprise
 
 author:
-  name: "Your Name"
-  email: "your@email.com"
+  name: "Babak Doraniarab"
+  email: "babak@dotech.fi"
 
 stack:
-  backend: fastapi
+  backend: go
   frontend: nextjs
-  landing: astro
+  landing: nextjs
   database: postgresql
-  cache: yes
-  auth: jwt_builtin
+  cache: redis
+  auth: keycloak
+  gateway: apisix
+  kubernetes: k3s
+  helm: true
+  operators: cnpg,keda,cert-manager
 
 features:
-  i18n: yes
   tls: yes
-  temporal: yes
-  wordpress: yes
+  observability: yes          # Loki, Prometheus, Grafana, Tempo
+  managed_databases: yes
+  auth_realms: yes
   structured_logging: yes
+  temporal: enterprise-only   # plan-upgrade workflows, cluster autoscaler
+  multi_tenant: enterprise-only
 
 settings:
   default_language: en
@@ -33,12 +40,8 @@ settings:
 
 ports:
   web: 3000
-  admin: 3002
+  mc: 3002
   landing: 4321
-  api: 8000
-  traefik: 8090
+  api: 8080
   postgres: 5432
   redis: 6379
-
-  temporal: 7233
-  temporal_ui: 8088
