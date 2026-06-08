@@ -15,8 +15,22 @@
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
-    "turbo": "^2.4.0",
+    "turbo": "^2.9.16",
     "typescript": "^5.7.0"
   },
-  "packageManager": "pnpm@10.29.3"
+  "packageManager": "pnpm@10.29.3",
+  "pnpm": {
+    "overrides": {
+      "vite": "7.3.5",
+      "minimatch": ">=9.0.7",
+      "picomatch": ">=4.0.4",
+      "brace-expansion": ">=2.0.3",
+      "flatted": ">=3.4.2",
+      "fast-uri": ">=3.1.2",
+      "ws": ">=8.20.1",
+      "lodash": ">=4.18.0",
+      "ajv": ">=6.14.0",
+      "postcss": ">=8.5.10"
+    }
+  }
 }
