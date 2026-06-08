@@ -180,7 +180,6 @@ func TestState_NewFields(t *testing.T) {
 
 	s := &State{
 		Domain:        "example.com",
-		AdminToken:    "jwt.token.abc",
 		ZenithVersion: "1.2.3",
 	}
 	if err := SaveTo(s, path); err != nil {
@@ -190,10 +189,27 @@ func TestState_NewFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom failed: %v", err)
 	}
-	if loaded.AdminToken != "jwt.token.abc" {
-		t.Errorf("AdminToken: got %q, want %q", loaded.AdminToken, "jwt.token.abc")
-	}
 	if loaded.ZenithVersion != "1.2.3" {
 		t.Errorf("ZenithVersion: got %q, want %q", loaded.ZenithVersion, "1.2.3")
+	}
+}
+
+func TestSaveAndLoad_ServerHostKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "install-state.yaml")
+
+	s := &State{
+		Domain:        "example.com",
+		ServerHostKey: "AAAAB3NzaC1yc2EAAAADAQAB...", // fake base64 key
+	}
+	if err := SaveTo(s, path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+	loaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if loaded.ServerHostKey != s.ServerHostKey {
+		t.Errorf("ServerHostKey: got %q, want %q", loaded.ServerHostKey, s.ServerHostKey)
 	}
 }

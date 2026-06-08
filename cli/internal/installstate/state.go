@@ -25,9 +25,11 @@ type State struct {
 	CloudURL          string    `yaml:"cloud_url"`
 	AdminUser         string    `yaml:"admin_user"`
 	AdminPassword     string    `yaml:"admin_password"`
-	AdminToken        string    `yaml:"admin_token,omitempty"`
 	ZenithVersion     string    `yaml:"zenith_version,omitempty"`
 	SSHKeyPath        string    `yaml:"ssh_key_path"`
+	// ServerHostKey is the base64-encoded SSH host public key captured on first connection.
+	// Used to prevent MITM attacks on subsequent connections.
+	ServerHostKey     string    `yaml:"server_host_key,omitempty"`
 	Provider          string    `yaml:"provider"`
 	Region            string    `yaml:"region"`
 	ServerID          string    `yaml:"server_id"`
