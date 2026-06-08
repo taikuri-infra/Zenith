@@ -87,11 +87,17 @@ type messageResponse struct {
 }
 
 // ProxyLogin authenticates via trusted Cf-Access-Authenticated-User-Email header.
-// Only for admin/owner users behind Cloudflare Zero Trust.
+// Only available in saas mode, behind Cloudflare Zero Trust.
+// Requires both the email header and the CF JWT assertion header to be present.
 func (h *AuthHandler) ProxyLogin(c *fiber.Ctx) error {
 	email := c.Get("Cf-Access-Authenticated-User-Email")
 	if email == "" {
 		return fiber.NewError(fiber.StatusUnauthorized, "missing proxy auth header")
+	}
+	// CF-Access-Jwt-Assertion is set by Cloudflare on every request through Zero Trust.
+	// Its absence means the request bypassed Cloudflare entirely (direct hit or internal hop).
+	if c.Get("Cf-Access-Jwt-Assertion") == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "missing CF JWT assertion")
 	}
 
 	tokens, err := h.svc.ProxyLogin(c.Context(), email)

@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"strings"
-
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/gofiber/fiber/v2"
@@ -48,8 +46,10 @@ func (h *DeployHookHandler) Create(c *fiber.Ctx) error {
 	if hookType == entities.DeployHookHTTP && req.URL == "" {
 		return NewBadRequest("url is required for http hooks")
 	}
-	if hookType == entities.DeployHookHTTP && !strings.HasPrefix(req.URL, "http") {
-		return NewBadRequest("url must start with http:// or https://")
+	if hookType == entities.DeployHookHTTP {
+		if err := validateWebhookURL(req.URL); err != nil {
+			return NewBadRequest(err.Error())
+		}
 	}
 	if hookType == entities.DeployHookCommand && req.Command == "" {
 		return NewBadRequest("command is required for command hooks")

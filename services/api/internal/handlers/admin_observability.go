@@ -6,10 +6,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/gofiber/fiber/v2"
 )
+
+var traceIDRe = regexp.MustCompile(`^[0-9a-fA-F]{1,128}$`)
 
 // AdminObservabilityHandler serves observability endpoints.
 type AdminObservabilityHandler struct {
@@ -203,6 +206,9 @@ func (h *AdminObservabilityHandler) GetTrace(c *fiber.Ctx) error {
 	traceID := c.Params("id")
 	if traceID == "" {
 		return NewBadRequest("trace ID is required")
+	}
+	if !traceIDRe.MatchString(traceID) {
+		return NewBadRequest("invalid trace ID format")
 	}
 	if h.tempoURL == "" {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "Tempo not configured")

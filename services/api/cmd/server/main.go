@@ -647,7 +647,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	authRoutes.Get("/me", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist), authHandler.GetMe)
 	authRoutes.Put("/onboarding", middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist), authHandler.UpdateOnboarding)
 	authRoutes.Post("/login", authHandler.Login)
-	authRoutes.Post("/proxy-login", authHandler.ProxyLogin)
+	if cfg.Mode == "saas" {
+		authRoutes.Post("/proxy-login", authHandler.ProxyLogin)
+	}
 	authRoutes.Post("/login/mfa", authHandler.MFALogin)
 	authRoutes.Post("/register", authHandler.Register)
 	authRoutes.Post("/refresh", authHandler.Refresh)
@@ -1143,9 +1145,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	protected.Get("/ci-templates/:framework", ciTemplateHandler.GetTemplate)
 
 	// Business metrics (Prometheus exporter for Grafana dashboards)
+	// Restricted to admin users — exposes sensitive business data (user/app counts, revenue).
 	bizMetrics := handlers.NewBusinessMetrics(userRepo, appRepo, dbRepo, planRepo)
 	bizMetrics.StartCollector(context.Background())
-	app.Get("/metrics", bizMetrics.Handler())
+	app.Get("/metrics",
+		middleware.RequireAuth(cfg.JWTSecret, tokenBlacklist),
+		middleware.RequireRole(entities.RoleAdmin),
+		bizMetrics.Handler(),
+	)
 
 	supportHandler := handlers.NewSupportHandler(supportSvc)
 

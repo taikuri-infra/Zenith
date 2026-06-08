@@ -33,9 +33,9 @@ func Install(c *sshclient.Client, opts Options) error {
 	env := buildEnv(opts)
 	var cmd string
 	if env != "" {
-		cmd = fmt.Sprintf("curl -sfL %s | %s sh -s - --write-kubeconfig-mode 644", installScriptURL, env)
+		cmd = fmt.Sprintf("curl -sfL %s | %s sh -s - --write-kubeconfig-mode 600", installScriptURL, env)
 	} else {
-		cmd = fmt.Sprintf("curl -sfL %s | sh -s - --write-kubeconfig-mode 644", installScriptURL)
+		cmd = fmt.Sprintf("curl -sfL %s | sh -s - --write-kubeconfig-mode 600", installScriptURL)
 	}
 	out, err := c.Run(cmd)
 	if err != nil {
