@@ -3,6 +3,7 @@
 package backup
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
@@ -79,12 +80,15 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 	fmt.Println(muted.Render(fmt.Sprintf("Connecting to %s...", state.ServerIP)))
 
 	// Build SSH config from saved state.
-	// TODO: wire state.ServerHostKey into KnownHostKey once installstate adds the field
-	// and sshclient.Config exposes KnownHostKey []byte (parallel tasks).
 	sshCfg := sshclient.Config{
 		Host:    state.ServerIP,
 		User:    "root",
 		Timeout: 15 * time.Second,
+	}
+	if state.ServerHostKey != "" {
+		if decoded, err := base64.StdEncoding.DecodeString(state.ServerHostKey); err == nil {
+			sshCfg.KnownHostKey = decoded
+		}
 	}
 	if state.SSHKeyPath != "" {
 		if keyData, readErr := os.ReadFile(state.SSHKeyPath); readErr == nil {

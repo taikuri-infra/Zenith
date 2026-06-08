@@ -19,6 +19,7 @@ import (
 	"github.com/dotechhq/zenith/cli/internal/k3s"
 	"github.com/dotechhq/zenith/cli/internal/sshclient"
 	"github.com/dotechhq/zenith/cli/internal/sshkeys"
+	"gopkg.in/yaml.v3"
 )
 
 // Step represents a single installation step.
@@ -88,6 +89,9 @@ type Config struct {
 	AdminEmail    string // defaults to "admin@<domain>" if empty
 	AdminPassword string // password configured on the server during installPlatform
 	AdminToken    string // JWT token obtained after createFirstCluster login
+	// KnownHostKey is the raw SSH wire-format public key captured on first connection.
+	// Nil on the first connect (TOFU mode); set to the captured key on all subsequent connects.
+	KnownHostKey []byte
 
 	// Set during provisioning (internal use)
 	HetznerSSHKeyID        int64
@@ -305,11 +309,11 @@ func BuildResult(cfg *Config) *InstallResult {
 		SSHKeyPath:        cfg.SSHKeyPath,
 		InstalledAt:       time.Now().UTC(),
 	}
-	if cfg.AdminToken != "" {
-		saveState.AdminToken = cfg.AdminToken
-	}
 	if cfg.ChartVersion != "" {
 		saveState.ZenithVersion = cfg.ChartVersion
+	}
+	if len(cfg.KnownHostKey) > 0 {
+		saveState.ServerHostKey = base64.StdEncoding.EncodeToString(cfg.KnownHostKey)
 	}
 	_ = installstate.Save(saveState)
 
@@ -326,15 +330,24 @@ func dialSSH(cfg *Config) (*sshclient.Client, error) {
 		user = "root"
 	}
 	sshCfg := sshclient.Config{
-		Host:    cfg.SSHHost,
-		Port:    22,
-		User:    user,
-		Timeout: 30 * time.Second,
+		Host:         cfg.SSHHost,
+		Port:         22,
+		User:         user,
+		Timeout:      30 * time.Second,
+		KnownHostKey: cfg.KnownHostKey, // nil → TOFU; non-nil → verify
 	}
 	if len(cfg.GeneratedSSHPrivateKey) > 0 {
 		sshCfg.PrivateKey = cfg.GeneratedSSHPrivateKey
 	}
-	return sshclient.DialWithRetry(sshCfg, 10, 15*time.Second)
+	cli, err := sshclient.DialWithRetry(sshCfg, 10, 15*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	// Pin the host key after first TOFU connect so all subsequent dials verify it.
+	if cfg.KnownHostKey == nil && len(cli.CapturedHostKey()) > 0 {
+		cfg.KnownHostKey = cli.CapturedHostKey()
+	}
+	return cli, nil
 }
 
 // provisionHetznerServer creates a Hetzner server and waits until running.
@@ -482,11 +495,26 @@ func installZenithChart(cfg *Config) error {
 		hetznerToken = "none"
 	}
 
-	valuesYAML := fmt.Sprintf("global:\n  domain: %q\n  hetznerToken: %q\nsecrets:\n  adminEmail: %q\n  adminPassword: %q\n",
-		cfg.Domain, hetznerToken, adminEmail, cfg.AdminPassword)
-
-	// Write via base64 to handle special characters in passwords
-	encoded := base64.StdEncoding.EncodeToString([]byte(valuesYAML))
+	type helmValues struct {
+		Global struct {
+			Domain       string `yaml:"domain"`
+			HetznerToken string `yaml:"hetznerToken"`
+		} `yaml:"global"`
+		Secrets struct {
+			AdminEmail    string `yaml:"adminEmail"`
+			AdminPassword string `yaml:"adminPassword"`
+		} `yaml:"secrets"`
+	}
+	var vals helmValues
+	vals.Global.Domain = cfg.Domain
+	vals.Global.HetznerToken = hetznerToken
+	vals.Secrets.AdminEmail = adminEmail
+	vals.Secrets.AdminPassword = cfg.AdminPassword
+	yamlBytes, err := yaml.Marshal(&vals)
+	if err != nil {
+		return fmt.Errorf("marshal helm values: %w", err)
+	}
+	encoded := base64.StdEncoding.EncodeToString(yamlBytes)
 	writeCmd := fmt.Sprintf("echo '%s' | base64 -d > /tmp/zenith-install-values.yaml", encoded)
 	if _, err := sshCli.Run(writeCmd); err != nil {
 		return fmt.Errorf("write values file: %w", err)

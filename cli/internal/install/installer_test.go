@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dotechhq/zenith/cli/internal/installstate"
 )
 
 func TestValidateToken(t *testing.T) {
@@ -938,5 +940,24 @@ func TestBuildResult_PersistsStateToDefaultPath(t *testing.T) {
 	statePath := filepath.Join(dir, ".zen", "install-state.yaml")
 	if _, err := os.Stat(statePath); os.IsNotExist(err) {
 		t.Errorf("Expected install-state.yaml at %s to exist after BuildResult", statePath)
+	}
+}
+
+func TestBuildResult_PersistsServerHostKey(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	cfg := &Config{
+		Domain:        "test.example.com",
+		SSHHost:       "1.2.3.4",
+		KnownHostKey:  []byte("fakekeydata"),
+		AdminPassword: "pass",
+	}
+	BuildResult(cfg)
+	state, err := installstate.Load()
+	if err != nil {
+		t.Fatalf("load state: %v", err)
+	}
+	if state.ServerHostKey == "" {
+		t.Error("expected ServerHostKey in state, got empty")
 	}
 }
