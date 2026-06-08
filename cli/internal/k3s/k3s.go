@@ -9,6 +9,10 @@ import (
 
 const installScriptURL = "https://get.k3s.io"
 
+// DefaultK3sVersion is the pinned k3s version used when no version is specified.
+// Exported so installer.go can reference it in log output and documentation.
+const DefaultK3sVersion = "v1.34.3+k3s1"
+
 // Options controls k3s installation behaviour.
 type Options struct {
 	// Version to install, e.g. "v1.29.4+k3s1". Empty = latest stable.
@@ -20,7 +24,12 @@ type Options struct {
 }
 
 // Install downloads and runs the k3s installer on the remote host.
+// If opts.Version is empty, DefaultK3sVersion is used to prevent supply chain risk
+// from pulling an unpinned "latest" release.
 func Install(c *sshclient.Client, opts Options) error {
+	if opts.Version == "" {
+		opts.Version = DefaultK3sVersion
+	}
 	env := buildEnv(opts)
 	var cmd string
 	if env != "" {

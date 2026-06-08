@@ -73,6 +73,26 @@ func TestInstallScriptURL(t *testing.T) {
 	}
 }
 
+func TestInstall_DefaultVersionUsed(t *testing.T) {
+	// Verify that buildEnv includes INSTALL_K3S_VERSION when an explicit version is set.
+	// This mirrors what Install() does after the fix: it sets opts.Version = DefaultK3sVersion
+	// before calling buildEnv, so an empty-version call results in a pinned version env var.
+	env := buildEnv(Options{Version: DefaultK3sVersion})
+	if !strings.Contains(env, "INSTALL_K3S_VERSION") {
+		t.Error("expected INSTALL_K3S_VERSION in env when version is set")
+	}
+	if !strings.Contains(env, DefaultK3sVersion) {
+		t.Errorf("expected DefaultK3sVersion %q in env, got: %q", DefaultK3sVersion, env)
+	}
+
+	// buildEnv with empty version should NOT include INSTALL_K3S_VERSION —
+	// the default injection happens in Install(), not buildEnv itself.
+	envEmpty := buildEnv(Options{})
+	if strings.Contains(envEmpty, "INSTALL_K3S_VERSION") {
+		t.Error("buildEnv with empty version should not include INSTALL_K3S_VERSION")
+	}
+}
+
 func TestBuildEnv_AllOptions(t *testing.T) {
 	env := buildEnv(Options{
 		Version:           "v1.29.4+k3s1",
