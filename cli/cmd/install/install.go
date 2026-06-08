@@ -14,18 +14,19 @@ import (
 
 // CLI flags for non-interactive (power-user) mode.
 var (
-	flagDomain       string
-	flagProvider     string
-	flagHetznerToken string
-	flagRegion       string
-	flagDNSProvider  string
-	flagDNSToken     string
-	flagWithCluster  bool
-	flagSSHHost      string
-	flagSSHUser      string
-	flagServerType   string
-	flagResume       bool
-	flagDryRun       bool
+	flagDomain        string
+	flagProvider      string
+	flagHetznerToken  string
+	flagRegion        string
+	flagDNSProvider   string
+	flagDNSToken      string
+	flagWithCluster   bool
+	flagSSHHost       string
+	flagSSHUser       string
+	flagServerType    string
+	flagResume        bool
+	flagDryRun        bool
+	flagChartVersion  string
 )
 
 var Cmd = &cobra.Command{
@@ -59,6 +60,7 @@ func init() {
 	f.StringVar(&flagSSHUser, "ssh-user", "root", "SSH user for existing server")
 	f.BoolVar(&flagDryRun, "dry-run", false, "Simulate installation without making real API calls")
 	f.BoolVar(&flagResume, "resume", false, "Resume a previously interrupted installation, skipping completed steps")
+	f.StringVar(&flagChartVersion, "chart-version", "", "Helm chart version to install (default: latest)")
 
 	// Accept legacy --token flag as alias for --hetzner-token
 	f.String("token", "", "Alias for --hetzner-token (deprecated)")
@@ -238,6 +240,7 @@ func buildConfigFromFlags(cmd *cobra.Command) (*install.Config, error) {
 	}
 
 	cfg.DryRun = flagDryRun
+	cfg.ChartVersion = flagChartVersion
 	return cfg, nil
 }
 
@@ -424,6 +427,9 @@ func showResult(cfg *install.Config, result *install.InstallResult) {
 	content.WriteString(fmt.Sprintf("  %s %s\n",
 		labelStyle.Render("Password:"),
 		warnStyle.Render(result.AdminPassword),
+	))
+	content.WriteString(fmt.Sprintf("  %s\n",
+		warnStyle.Render("!! SAVE THIS PASSWORD NOW — it will not be stored anywhere !!"),
 	))
 	content.WriteString("\n")
 

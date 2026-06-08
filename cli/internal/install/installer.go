@@ -294,14 +294,14 @@ func BuildResult(cfg *Config) *InstallResult {
 		result.ClusterIP = "203.0.113.100"
 	}
 
-	// Persist installation state to ~/.zen/install-state.yaml
+	// Persist installation state to ~/.zen/install-state.yaml.
+	// AdminPassword is intentionally NOT saved — display-once security model.
 	saveState := &installstate.State{
 		Domain:            cfg.Domain,
 		ServerIP:          ip,
 		MissionControlURL: result.MissionControlURL,
 		CloudURL:          result.CloudURL,
 		AdminUser:         result.AdminUser,
-		AdminPassword:     result.AdminPassword,
 		Provider:          string(cfg.MCProvider),
 		Region:            cfg.Region,
 		ServerID:          fmt.Sprintf("%d", cfg.ProvisionedServerID),
@@ -467,6 +467,10 @@ func installPlatform(cfg *Config) error {
 	return nil
 }
 
+// defaultHelmVersion is the pinned Helm version installed on remote servers.
+// Pinning prevents supply-chain attacks via a compromised "latest" installer.
+const defaultHelmVersion = "v3.17.3"
+
 // installZenithChart installs helm on the remote server, writes a temp values
 // file via base64, runs helm upgrade --install for the Zenith chart, then cleans up.
 func installZenithChart(cfg *Config) error {
@@ -480,8 +484,12 @@ func installZenithChart(cfg *Config) error {
 	}
 	defer sshCli.Close()
 
-	// Install helm if not already present
-	out, err := sshCli.Run("which helm >/dev/null 2>&1 || (curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash 2>&1)")
+	// Install helm at a pinned version if not already present.
+	helmInstallCmd := fmt.Sprintf(
+		"which helm >/dev/null 2>&1 || (DESIRED_VERSION=%s curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash 2>&1)",
+		defaultHelmVersion,
+	)
+	out, err := sshCli.Run(helmInstallCmd)
 	if err != nil {
 		return fmt.Errorf("install helm: %w\nOutput: %s", err, out)
 	}
@@ -525,6 +533,14 @@ func installZenithChart(cfg *Config) error {
 		"--namespace zenith-system --create-namespace " +
 		"-f /tmp/zenith-install-values.yaml " +
 		"--wait --timeout 10m 2>&1"
+	if cfg.ChartVersion != "" {
+		helmCmd = "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install zenith " +
+			"oci://ghcr.io/dotechhq/zenith/charts/zenith " +
+			"--namespace zenith-system --create-namespace " +
+			"--version " + cfg.ChartVersion + " " +
+			"-f /tmp/zenith-install-values.yaml " +
+			"--wait --timeout 10m 2>&1"
+	}
 	if out, err := sshCli.Run(helmCmd); err != nil {
 		sshCli.Run("rm -f /tmp/zenith-install-values.yaml") //nolint:errcheck
 		return fmt.Errorf("helm install: %w\nOutput: %s", err, out)

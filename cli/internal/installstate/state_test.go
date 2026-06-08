@@ -17,7 +17,6 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 		MissionControlURL: "https://mission.example.com",
 		CloudURL:          "https://cloud.example.com",
 		AdminUser:         "admin",
-		AdminPassword:     "secret123",
 		SSHKeyPath:        "/home/user/.zen/install-key.pem",
 		Provider:          "hetzner",
 		Region:            "fsn1",
@@ -39,9 +38,6 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 	}
 	if loaded.ServerIP != s.ServerIP {
 		t.Errorf("ServerIP: got %q, want %q", loaded.ServerIP, s.ServerIP)
-	}
-	if loaded.AdminPassword != s.AdminPassword {
-		t.Errorf("AdminPassword: got %q, want %q", loaded.AdminPassword, s.AdminPassword)
 	}
 	if loaded.SSHKeyPath != s.SSHKeyPath {
 		t.Errorf("SSHKeyPath: got %q, want %q", loaded.SSHKeyPath, s.SSHKeyPath)
@@ -123,7 +119,7 @@ func TestSave_FilePermissions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "install-state.yaml")
 
-	s := &State{Domain: "test.com", AdminPassword: "secret"}
+	s := &State{Domain: "test.com"}
 	if err := SaveTo(s, path); err != nil {
 		t.Fatalf("SaveTo error: %v", err)
 	}
@@ -147,7 +143,6 @@ func TestRoundtrip_AllFields(t *testing.T) {
 		MissionControlURL: "https://mc.example.com",
 		CloudURL:          "https://cloud.example.com",
 		AdminUser:         "admin",
-		AdminPassword:     "pass",
 		SSHKeyPath:        "/home/user/.zen/keys/id_rsa",
 		Provider:          "hetzner",
 		Region:            "fsn1",
