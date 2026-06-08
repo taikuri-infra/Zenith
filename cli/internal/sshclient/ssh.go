@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -11,17 +12,28 @@ import (
 
 // Client wraps an SSH connection.
 type Client struct {
-	inner *ssh.Client
+	inner           *ssh.Client
+	capturedHostKey []byte // set after Dial when KnownHostKey was nil (TOFU mode)
+}
+
+// CapturedHostKey returns the raw SSH wire-format public key that was presented
+// by the server during the most recent TOFU (Trust On First Use) Dial call.
+// Returns nil when Dial was called with a non-nil KnownHostKey (verify mode).
+func (c *Client) CapturedHostKey() []byte {
+	return c.capturedHostKey
 }
 
 // Config holds SSH connection parameters.
 type Config struct {
-	Host       string
-	Port       int
-	User       string
-	PrivateKey []byte // PEM-encoded private key; mutually exclusive with Password
-	Password   string
-	Timeout    time.Duration
+	Host         string
+	Port         int
+	User         string
+	PrivateKey   []byte // PEM-encoded private key; mutually exclusive with Password
+	Password     string
+	Timeout      time.Duration
+	KnownHostKey []byte // raw SSH wire-format public key bytes (from ssh.PublicKey.Marshal()).
+	// If nil, any host key is accepted and captured (TOFU mode).
+	// If non-nil, the server key must match exactly (verify mode).
 }
 
 // Dial connects to an SSH server and returns a Client.
@@ -48,10 +60,29 @@ func Dial(cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("no auth method provided (need PrivateKey or Password)")
 	}
 
+	// Build the host-key callback: TOFU mode when KnownHostKey is nil,
+	// fixed-key verification mode when it is set.
+	var capturedKey []byte
+	var hostKeyCallback ssh.HostKeyCallback
+	if cfg.KnownHostKey == nil {
+		// TOFU: accept any key on first connect and capture it for the caller.
+		hostKeyCallback = func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			capturedKey = key.Marshal()
+			return nil
+		}
+	} else {
+		// Verify: parse the stored key and enforce an exact match.
+		parsedKey, err := ssh.ParsePublicKey(cfg.KnownHostKey)
+		if err != nil {
+			return nil, fmt.Errorf("parse known host key: %w", err)
+		}
+		hostKeyCallback = ssh.FixedHostKey(parsedKey)
+	}
+
 	clientCfg := &ssh.ClientConfig{
 		User:            cfg.User,
 		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec — bootstrap installer; we just created the server
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         cfg.Timeout,
 	}
 
@@ -60,7 +91,7 @@ func Dial(cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ssh dial %s: %w", addr, err)
 	}
-	return &Client{inner: conn}, nil
+	return &Client{inner: conn, capturedHostKey: capturedKey}, nil
 }
 
 // Run executes a command and returns combined stdout+stderr output.
@@ -87,6 +118,12 @@ func (c *Client) RunIgnoreError(cmd string) string {
 	return out
 }
 
+// shellQuote wraps s in POSIX single quotes, escaping any embedded single
+// quotes using the '\'' idiom. This prevents path injection in shell commands.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // Upload writes data to a remote file path via stdin redirection.
 func (c *Client) Upload(remotePath string, data []byte) error {
 	sess, err := c.inner.NewSession()
@@ -96,7 +133,7 @@ func (c *Client) Upload(remotePath string, data []byte) error {
 	defer sess.Close()
 
 	sess.Stdin = bytes.NewReader(data)
-	if err := sess.Run(fmt.Sprintf("cat > %s", remotePath)); err != nil {
+	if err := sess.Run("cat > " + shellQuote(remotePath)); err != nil {
 		return fmt.Errorf("upload to %s: %w", remotePath, err)
 	}
 	return nil
