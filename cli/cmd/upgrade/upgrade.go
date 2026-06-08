@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,15 @@ import (
 	"github.com/dotechhq/zenith/cli/internal/tui"
 	"github.com/spf13/cobra"
 )
+
+var versionRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+
+func validateVersion(v string) error {
+	if !versionRe.MatchString(v) {
+		return fmt.Errorf("invalid version %q: must be in X.Y.Z format (e.g. 1.5.0)", v)
+	}
+	return nil
+}
 
 var (
 	flagVersion  string
@@ -66,6 +76,12 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
 	stepStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
 	timeStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
+
+	if flagVersion != "" {
+		if err := validateVersion(flagVersion); err != nil {
+			return err
+		}
+	}
 
 	fmt.Println()
 	fmt.Println(headerStyle.Render("Zenith Upgrade"))
@@ -332,13 +348,17 @@ func buildHelmDiffCmd(version string) string {
 	return cmd + " 2>&1"
 }
 
+const helmDiffVersion = "3.9.4"
+
 // ensureHelmDiff installs the helm-diff plugin on the remote server if not present.
 func ensureHelmDiff(cli *sshclient.Client) error {
 	out, _ := cli.Run("helm plugin list 2>/dev/null | grep -c diff")
 	if strings.TrimSpace(out) == "1" {
 		return nil
 	}
-	installOut, err := cli.Run("helm plugin install https://github.com/databus23/helm-diff 2>&1")
+	installOut, err := cli.Run(
+		"helm plugin install https://github.com/databus23/helm-diff --version " + helmDiffVersion + " 2>&1",
+	)
 	if err != nil {
 		return fmt.Errorf("install helm-diff plugin: %w\n%s", err, installOut)
 	}
@@ -388,8 +408,7 @@ func healthCheck(cli *sshclient.Client, state *installstate.State) error {
 		url = fmt.Sprintf("https://mission.%s", state.Domain)
 	}
 	if url == "" {
-		// Fall back to localhost inside the cluster
-		url = "http://localhost:8080"
+		return fmt.Errorf("cannot health-check: MissionControlURL not set in state (run 'zen install' to populate state)")
 	}
 	cmd := fmt.Sprintf(`curl -sf --max-time 10 "%s/health" -o /dev/null 2>&1`, url)
 	_, err := cli.Run(cmd)

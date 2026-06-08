@@ -7,6 +7,34 @@ import (
 	"github.com/dotechhq/zenith/cli/internal/installstate"
 )
 
+func TestValidateVersion(t *testing.T) {
+	valid := []string{"1.0.0", "1.5.0", "0.1.2", "10.20.30"}
+	for _, v := range valid {
+		if err := validateVersion(v); err != nil {
+			t.Errorf("validateVersion(%q) = %v, want nil", v, err)
+		}
+	}
+	invalid := []string{"1.0", "v1.0.0", "1.5.0; rm -rf /", "latest", "", "1.0.0-beta"}
+	for _, v := range invalid {
+		if err := validateVersion(v); err == nil {
+			t.Errorf("validateVersion(%q) = nil, want error", v)
+		}
+	}
+}
+
+func TestHealthCheck_EmptyState(t *testing.T) {
+	// healthCheck with empty state should return error, not use localhost
+	// Use a nil sshclient (we won't reach the curl call)
+	state := &installstate.State{} // empty
+	err := healthCheck(nil, state)
+	if err == nil {
+		t.Error("expected error for empty state, got nil")
+	}
+	if !strings.Contains(err.Error(), "MissionControlURL not set") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestHelmUpgradeCommand_ReleaseName(t *testing.T) {
 	cmd := buildHelmUpgradeCmd("1.2.3")
 	if !strings.Contains(cmd, "zenith ") {
