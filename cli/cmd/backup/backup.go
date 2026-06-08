@@ -59,7 +59,7 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println(headerStyle.Render("Zenith Backup"))
 	if flagReason != "" {
-		fmt.Println(muted.Render("Reason: " + flagReason))
+		fmt.Println(muted.Render("Reason: " + sanitizeReason(flagReason)))
 	}
 	fmt.Println()
 
@@ -78,7 +78,9 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(muted.Render(fmt.Sprintf("Connecting to %s...", state.ServerIP)))
 
-	// Build SSH config from saved state
+	// Build SSH config from saved state.
+	// TODO: wire state.ServerHostKey into KnownHostKey once installstate adds the field
+	// and sshclient.Config exposes KnownHostKey []byte (parallel tasks).
 	sshCfg := sshclient.Config{
 		Host:    state.ServerIP,
 		User:    "root",
@@ -98,8 +100,9 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(muted.Render("Connected. Triggering immediate backup..."))
 
-	// Trigger CNPG immediate backup via annotation
-	annotateCmd := `kubectl annotate cluster.postgresql.cnpg.io/zenith-postgres -n zenith-system backup.cnpg.io/immediate="true" --overwrite 2>&1`
+	// Trigger CNPG immediate backup via annotation.
+	// KUBECONFIG prefix is required on k3s hosts where the default path differs.
+	annotateCmd := `KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl annotate cluster.postgresql.cnpg.io/zenith-postgres -n zenith-system backup.cnpg.io/immediate="true" --overwrite 2>&1`
 	out, err := cli.Run(annotateCmd)
 	if err != nil {
 		fmt.Println(errStyle.Render("Failed to annotate cluster: " + out))
@@ -113,7 +116,7 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 		backupTimeout = 5 * time.Minute
 	)
 	deadline := time.Now().Add(backupTimeout)
-	pollCmd := `kubectl get backup -n zenith-system --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].status.phase}' 2>/dev/null`
+	pollCmd := `KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get backup -n zenith-system --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].status.phase}' 2>/dev/null`
 
 	for time.Now().Before(deadline) {
 		phase, pollErr := cli.Run(pollCmd)
@@ -143,4 +146,20 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	return fmt.Errorf("timed out waiting for backup to complete after %s", backupTimeout)
+}
+
+// sanitizeReason strips control characters and limits length to prevent terminal injection
+// when displaying the --reason flag value in output.
+func sanitizeReason(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= 32 && r != 127 { // printable ASCII and beyond, no DEL
+			b.WriteRune(r)
+		}
+	}
+	result := b.String()
+	if len(result) > 200 {
+		result = result[:200]
+	}
+	return result
 }
