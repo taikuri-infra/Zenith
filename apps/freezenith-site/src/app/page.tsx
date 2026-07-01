@@ -3,6 +3,7 @@ import { StackStrip } from "@/components/stack-strip";
 import { WhatIs } from "@/components/what-is";
 import { Stack } from "@/components/stack";
 import { Features } from "@/components/features";
+import { Comparison } from "@/components/comparison";
 import { Infra } from "@/components/infra";
 import { Demo } from "@/components/demo";
 import { QuickStart } from "@/components/quickstart";
@@ -16,6 +17,7 @@ export default function Home() {
       <WhatIs />
       <Stack />
       <Features />
+      <Comparison />
       <Infra />
       <Demo />
       <QuickStart />

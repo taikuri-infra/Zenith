@@ -11,7 +11,7 @@ import { Logo } from "./logo";
 const navLinks = [
   { href: "#what", label: "What it is" },
   { href: "#stack", label: "Stack" },
-  { href: "#features", label: "Features" },
+  { href: "#compare", label: "Compare" },
   { href: "#quickstart", label: "Self-host" },
 ];
 

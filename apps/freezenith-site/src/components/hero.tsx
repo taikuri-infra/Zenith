@@ -63,9 +63,9 @@ export function Hero() {
             className="mt-6 max-w-2xl text-pretty text-base leading-relaxed text-neutral-400 sm:text-lg md:text-xl"
           >
             FreeZenith turns raw servers into a full internal developer platform — a
-            private cloud on Kubernetes you host yourself. Bring your own infra on{" "}
-            <span className="font-mono text-neutral-200">Hetzner</span> or{" "}
-            <span className="font-mono text-neutral-200">on-premises</span>. No SaaS, no bill.
+            private cloud on Kubernetes you host yourself. Runs on your own{" "}
+            <span className="font-mono text-neutral-200">Hetzner</span> account today,
+            with <span className="font-mono text-neutral-200">on-premises</span> next. No SaaS, no bill.
           </motion.p>
 
           {/* CTAs */}
