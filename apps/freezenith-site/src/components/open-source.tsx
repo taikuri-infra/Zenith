@@ -67,7 +67,7 @@ export function OpenSource() {
             href={site.githubUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="group inline-flex items-center gap-2.5 rounded-xl bg-accent-500 px-6 py-3 text-sm font-semibold text-surface transition-all duration-300 hover:bg-accent-400 hover:shadow-lg hover:shadow-accent-500/25"
+            className="group inline-flex items-center gap-2.5 rounded-xl bg-accent-500 px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-500/25"
           >
             <Star className="h-4 w-4" />
             Star on GitHub

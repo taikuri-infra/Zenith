@@ -79,7 +79,7 @@ export function Hero() {
               href={site.githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="group inline-flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-7 py-3.5 text-sm font-semibold text-surface transition-all duration-300 hover:bg-accent-400 hover:shadow-xl hover:shadow-accent-500/25"
+              className="group inline-flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-7 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/25"
             >
               <Github className="h-4 w-4" />
               View on GitHub

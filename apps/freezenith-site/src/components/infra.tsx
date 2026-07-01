@@ -8,8 +8,8 @@ const options = [
     icon: Cloud,
     tag: "Cloud",
     title: "Hetzner",
-    body: "Spin up affordable dedicated or cloud servers, then let FreeZenith provision k3s and the full platform on top. Ideal for lean teams and startups.",
-    bullets: ["Provision servers in minutes", "Cheap, powerful EU hardware", "Full platform installed for you"],
+    body: "Bring your own Hetzner account, spin up affordable cloud or dedicated servers, and let FreeZenith provision k3s and the full platform on top. Ideal for lean teams and startups.",
+    bullets: ["Use your own Hetzner account", "Cheap, powerful EU hardware", "Full platform installed for you"],
   },
   {
     icon: Building2,
