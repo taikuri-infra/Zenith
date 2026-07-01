@@ -29,3 +29,7 @@ services/api/server
 
 # Python cache
 __pycache__/
+
+# Local AI tooling / private business strategy (never publish to the public repo)
+.claude/
+freezenith-strategy.md
