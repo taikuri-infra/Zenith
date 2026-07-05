@@ -1,7 +1,9 @@
 # Staging values for zenith-landing
+# NOTE: now serves the new source-available FreeZenith site (apps/freezenith-site).
+# Rollback: set image back to zenith-landing:sha-3882928 (the old commercial landing).
 namespace: zenith-staging
 replicas: 1
-image: zenith-landing:sha-3882928
+image: freezenith-site:sha-c824a5b
 imageRegistry: ""  # set via Terraform
 imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via Terraform
