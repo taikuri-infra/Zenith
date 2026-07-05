@@ -14,6 +14,16 @@ ingress:
     - stage.freezenith.com
   tlsSecret: staging-tls
 
+# Production marketing domains served by the same deployment on this cluster.
+# Uses its own cert (freezenith-tls) so it never touches the shared staging-tls cert.
+prodIngress:
+  enabled: true
+  hosts:
+    - freezenith.com
+    - www.freezenith.com
+  tlsSecret: freezenith-tls
+  issuer: letsencrypt-prod
+
 resources:
   requests:
     memory: 64Mi

@@ -8,7 +8,7 @@
 resource "cloudflare_record" "freezenith_root" {
   zone_id = var.freezenith_zone_id
   name    = "freezenith.com"
-  content = var.server_ip
+  content = var.landing_server_ip # FreeZenith marketing site on zen-stage
   type    = "A"
   proxied = false
   ttl     = 1
@@ -17,7 +17,7 @@ resource "cloudflare_record" "freezenith_root" {
 resource "cloudflare_record" "freezenith_www" {
   zone_id = var.freezenith_zone_id
   name    = "www"
-  content = var.server_ip
+  content = var.landing_server_ip # FreeZenith marketing site on zen-stage
   type    = "A"
   proxied = false
   ttl     = 1

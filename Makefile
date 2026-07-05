@@ -9,7 +9,7 @@ CHART_DIR    := infra/helm/zenith
 CHART_NAME   := zenith
 STAGING_HOST ?= 77.42.88.149
 
-IMAGES := zenith-api zenith-landing zenith-mc zenith-web zenith-operator
+IMAGES := zenith-api zenith-landing freezenith-site zenith-mc zenith-web zenith-operator
 
 # Manual deploy helper (bypasses act when it's broken due to dead containers)
 # Usage: make manual-deploy-web
@@ -18,12 +18,13 @@ MANUAL_TAG ?= sha-$(shell git rev-parse --short HEAD)
 .PHONY: help version \
 	test test-api test-web lint lint-api lint-web \
 	security \
-	build build-api build-landing build-mc build-web build-operator \
-	push push-api push-landing push-mc push-web push-operator push-all \
+	build build-api build-landing build-freezenith-site build-mc build-web build-operator \
+	push push-api push-landing push-freezenith-site push-mc push-web push-operator push-all \
 	chart-lint chart-package chart-push \
 	deploy-staging tf-plan tf-apply \
 	ci-images ci-chart ci-terraform ci-all \
-	deploy deploy-api deploy-web deploy-mc deploy-landing deploy-operator deploy-all ci
+	deploy deploy-api deploy-web deploy-mc deploy-landing deploy-operator deploy-all ci \
+	manual-deploy-freezenith-site
 
 # --- Help ---
 help: ## Show this help
@@ -63,13 +64,16 @@ security: ## Run Semgrep security scan
 # Docker Build (local, cross-compiled to linux/amd64)
 # =============================================================================
 
-build: build-api build-landing build-mc build-web build-operator ## Build all images
+build: build-api build-landing build-freezenith-site build-mc build-web build-operator ## Build all images
 
 build-api: ## Build zenith-api image
 	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-api:$(VERSION) -f services/api/Dockerfile --load .
 
-build-landing: ## Build zenith-landing image
+build-landing: ## Build zenith-landing image (OLD commercial landing — kept for rollback)
 	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-landing:$(VERSION) -f apps/landing/Dockerfile --load .
+
+build-freezenith-site: ## Build freezenith-site image (current source-available marketing site)
+	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/freezenith-site:$(VERSION) -f apps/freezenith-site/Dockerfile --load .
 
 build-mc: ## Build zenith-mc image
 	docker buildx build --platform $(PLATFORM) -t $(REGISTRY)/zenith-mc:$(VERSION) -f apps/mission-control/Dockerfile --load .
@@ -87,8 +91,11 @@ build-operator: ## Build zenith-operator image
 push-api: ## Push zenith-api to registry
 	docker push $(REGISTRY)/zenith-api:$(VERSION)
 
-push-landing: ## Push zenith-landing to registry
+push-landing: ## Push zenith-landing to registry (OLD commercial landing)
 	docker push $(REGISTRY)/zenith-landing:$(VERSION)
+
+push-freezenith-site: ## Push freezenith-site to registry
+	docker push $(REGISTRY)/freezenith-site:$(VERSION)
 
 push-mc: ## Push zenith-mc to registry
 	docker push $(REGISTRY)/zenith-mc:$(VERSION)
@@ -99,7 +106,7 @@ push-web: ## Push zenith-web to registry
 push-operator: ## Push zenith-operator to registry
 	docker push $(REGISTRY)/zenith-operator:$(VERSION)
 
-push-all: push-api push-landing push-mc push-web push-operator ## Push all images
+push-all: push-api push-landing push-freezenith-site push-mc push-web push-operator ## Push all images
 
 push: build push-all ## Build + push all images
 
@@ -189,6 +196,17 @@ manual-deploy-web: ## Manually build, push, and deploy zenith-web (bypasses act;
 	git commit -m "chore: bump staging web -- zenith-web:$(MANUAL_TAG)"
 	git pull --rebase origin staging && git push origin staging
 	ssh zen-stage "kubectl rollout restart deployment/zenith-web -n zenith-staging && kubectl rollout status deployment/zenith-web -n zenith-staging"
+
+manual-deploy-freezenith-site: ## Manually build, push, and deploy the FreeZenith marketing site (freezenith.com + stage.freezenith.com)
+	docker build --platform linux/amd64 -f apps/freezenith-site/Dockerfile \
+		-t $(REGISTRY)/freezenith-site:$(MANUAL_TAG) -t $(REGISTRY)/freezenith-site:latest .
+	docker push $(REGISTRY)/freezenith-site:$(MANUAL_TAG)
+	docker push $(REGISTRY)/freezenith-site:latest
+	sed -i '' "s|^image: freezenith-site:.*|image: freezenith-site:$(MANUAL_TAG)|" infra/helm/zenith-landing/values-staging.yaml
+	git add infra/helm/zenith-landing/values-staging.yaml
+	git commit -m "chore: bump landing -- freezenith-site:$(MANUAL_TAG)"
+	git pull --rebase origin staging && git push origin staging
+	ssh zen-stage "kubectl rollout restart deployment/zenith-landing -n zenith-staging && kubectl rollout status deployment/zenith-landing -n zenith-staging"
 
 manual-deploy-api: ## Manually build, push, and deploy zenith-api (bypasses act; tests run inside Docker)
 	docker build --platform linux/amd64 -f services/api/Dockerfile \
