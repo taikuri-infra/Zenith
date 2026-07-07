@@ -219,3 +219,7 @@ manual-deploy-api: ## Manually build, push, and deploy zenith-api (bypasses act;
 	git pull --rebase origin staging && git push origin staging
 	ssh zen-stage "kubectl rollout restart deployment/zenith-api -n zenith-staging && kubectl rollout status deployment/zenith-api -n zenith-staging"
 
+## Vault sync
+install-vault-hook:
+	@bash ~/.vault-sync/install-hook.sh
+
