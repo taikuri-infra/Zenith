@@ -98,7 +98,12 @@ var plainHostPattern = regexp.MustCompile(`^([a-zA-Z0-9_-]+)$`)
 // ParseCompose parses a docker-compose.yml content and detects services and managed services.
 // baseDomain is the platform base domain (e.g. "apps.stage.freezenith.com") used to generate
 // preview URLs for public services. Pass "" to omit URL generation.
-func ParseCompose(content string, projectSlug, namespace, baseDomain string) (*ParsedCompose, error) {
+// ParseCompose parses a docker-compose.yml. When standalone is true (self-host),
+// databases are kept as regular app containers instead of being converted to
+// managed services (there is no CNPG operator on a single box), and service
+// connection strings are left untouched — Docker network aliases resolve the
+// original service names as-is, so the customer's compose runs unchanged.
+func ParseCompose(content string, projectSlug, namespace, baseDomain string, standalone bool) (*ParsedCompose, error) {
 	result := &ParsedCompose{
 		Valid:           true,
 		Services:        make([]ParsedService, 0),
@@ -131,8 +136,10 @@ func ParseCompose(content string, projectSlug, namespace, baseDomain string) (*P
 	for name, svc := range compose.Services {
 		imageBase := extractImageBase(svc.Image)
 
-		// Check if this is a managed service (database/cache)
-		if st, ok := managedImages[imageBase]; ok {
+		// Check if this is a managed service (database/cache). On self-host we
+		// keep databases as plain app containers (no managed-DB operator), so
+		// the customer's compose runs unchanged.
+		if st, ok := managedImages[imageBase]; ok && !standalone {
 			version := detectVersion(svc.Image)
 			result.ManagedServices = append(result.ManagedServices, ParsedManaged{
 				Name:         name,
@@ -150,11 +157,17 @@ func ParseCompose(content string, projectSlug, namespace, baseDomain string) (*P
 
 		var envVars []ParsedEnvVar
 		for key, val := range envMap {
-			zenithVal := translateServiceURL(val, projectSlug, namespace, serviceNames)
-			// Also translate plain hostname values like DB_HOST=postgres → DB_HOST=postgres-slug.ns.svc
-			if zenithVal == val && projectSlug != "" && namespace != "" {
-				if plainHostPattern.MatchString(val) && serviceNames[val] {
-					zenithVal = fmt.Sprintf("%s-%s.%s.svc", val, projectSlug, namespace)
+			// On self-host, keep values as-is — Docker aliases resolve the
+			// original service names (e.g. "db:5432"). Only rewrite for the
+			// k8s/SaaS backend where services live at <name>-<slug>.<ns>.svc.
+			zenithVal := val
+			if !standalone {
+				zenithVal = translateServiceURL(val, projectSlug, namespace, serviceNames)
+				// Also translate plain hostname values like DB_HOST=postgres → DB_HOST=postgres-slug.ns.svc
+				if zenithVal == val && projectSlug != "" && namespace != "" {
+					if plainHostPattern.MatchString(val) && serviceNames[val] {
+						zenithVal = fmt.Sprintf("%s-%s.%s.svc", val, projectSlug, namespace)
+					}
 				}
 			}
 			envVars = append(envVars, ParsedEnvVar{

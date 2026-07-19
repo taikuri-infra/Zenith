@@ -579,6 +579,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	composeHandler := handlers.NewComposeHandler(projectRepo)
 	composeHandler.SetBaseDomain(cfg.BaseDomain)
+	composeHandler.SetStandalone(cfg.Mode != "saas")
 	msHandler := handlers.NewManagedServiceHandler(projectRepo, msRepo)
 	envVarHandler := handlers.NewEnvVarHandler(appRepo, envVarRepo)
 

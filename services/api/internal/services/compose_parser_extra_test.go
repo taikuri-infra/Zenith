@@ -237,7 +237,7 @@ services:
     ports:
       - "3000:3000"
 `
-	result, err := ParseCompose(content, "myproj", "zenith-apps", "apps.stage.freezenith.com")
+	result, err := ParseCompose(content, "myproj", "zenith-apps", "apps.stage.freezenith.com", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -268,7 +268,7 @@ services:
     environment:
       DB_URL: "postgresql://user:password=s3cret@db:5432/mydb"
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -294,7 +294,7 @@ services:
     volumes:
       - ./data:/app/data
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -320,7 +320,7 @@ services:
     ports:
       - "8080:8080"
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -340,7 +340,7 @@ services:
     ports:
       - "8080:8080"
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -358,7 +358,7 @@ services:
       - "8080:8080"
     command: npm start
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -376,7 +376,7 @@ services:
       - "8080:8080"
     command: ["npm", "run", "start"]
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -397,7 +397,7 @@ services:
   postgres:
     image: postgres:16
 `
-	result, err := ParseCompose(content, "myproj", "zenith-apps", "")
+	result, err := ParseCompose(content, "myproj", "zenith-apps", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -427,7 +427,7 @@ services:
     environment:
       PORT: "3000"
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -475,7 +475,7 @@ services:
   zookeeper:
     image: zookeeper:3.9
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -493,7 +493,7 @@ services:
   pg:
     image: docker.io/library/postgres:16
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
