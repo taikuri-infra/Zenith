@@ -16,6 +16,41 @@ services:
       timeout: 3s
       retries: 5
 
+  storage:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    user: "10001:10001"
+    command: ["/data"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-zenith}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-changeme123}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - storagedata:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  # One-shot job: creates the platform bucket on first boot.
+  # RustFS (like MinIO) doesn't auto-create buckets, so `mc` does it here.
+  storage-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      - storage
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-zenith}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme123}
+      S3_PLATFORM_BUCKET: ${S3_PLATFORM_BUCKET:-zenith-platform-storage}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://storage:9000 \"$$S3_ACCESS_KEY\" \"$$S3_SECRET_KEY\"; do sleep 2; done;
+      mc mb -p local/$$S3_PLATFORM_BUCKET;
+      exit 0
+      "
+
   api:
     build:
       context: .
@@ -24,6 +59,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     environment:
@@ -34,6 +71,11 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
       CORS_ORIGINS: http://localhost:3000
       ENVIRONMENT: production
+      S3_ENDPOINT: http://storage:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-zenith}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme123}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_PLATFORM_BUCKET: ${S3_PLATFORM_BUCKET:-zenith-platform-storage}
 
   web:
     build:
@@ -68,4 +110,5 @@ services:
 
 volumes:
   pgdata:
+  storagedata:
   # letsencrypt:
