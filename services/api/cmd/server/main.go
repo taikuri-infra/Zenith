@@ -125,6 +125,9 @@ func main() {
 	}
 
 	slog.Info("zenith mode", "mode", cfg.Mode)
+	// Self-host: no billing/tiers — the customer owns the hardware, so plan
+	// limits (max apps/databases/etc.) don't apply.
+	handlers.UnlimitedMode = cfg.Mode != "saas"
 	if cfg.Mode == "standalone" {
 		slog.Info("running in standalone mode, multi-tenant and billing features disabled")
 	}

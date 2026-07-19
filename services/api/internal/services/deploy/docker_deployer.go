@@ -11,6 +11,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	registrytypes "github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 
@@ -108,6 +109,9 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 		"caddy.reverse_proxy": fmt.Sprintf("{{upstreams %d}}", app.Port),
 	}
 
+	// Network aliases let other services reach this one by its original compose
+	// service name (e.g. a backend connecting to "db:5432") and by subdomain.
+	aliases := []string{sanitizeName(app.Name), sanitizeName(app.Subdomain)}
 	resp, err := d.cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:  imageTag,
@@ -116,9 +120,13 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 		},
 		&container.HostConfig{
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
-			NetworkMode:   container.NetworkMode(d.network),
 		},
-		nil, nil, name)
+		&network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				d.network: {Aliases: aliases},
+			},
+		},
+		nil, name)
 	if err != nil {
 		return fmt.Errorf("docker-deploy: create container %s: %w", name, err)
 	}
