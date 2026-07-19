@@ -51,7 +51,10 @@ func NewPipeline(deployer Backend, appRepo ports.AppRepository, logHub *LogHub, 
 		eventHub:      eventHub,
 		running:       make(map[string]*runningBuild),
 		maxConcurrent: maxConcurrent,
-		maxPerUser:    2,
+		// Per-user cap = global cap: on self-host there is one user deploying a
+		// whole multi-service app at once, so a low per-user fairness cap (which
+		// only matters for multi-tenant SaaS) would wrongly reject services.
+		maxPerUser: maxConcurrent,
 	}
 }
 
