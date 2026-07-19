@@ -87,6 +87,16 @@ No Caddy API calls, no reloads.
 Build-from-git (`docker build` on the host), replicas/scaling, per-app managed
 databases, health-gated rollout. v1 = "run my image, give me a URL."
 
+## Decision: NO per-project network isolation (intentional)
+Self-host CE is single-company, single-machine — one trust domain. All projects
+belong to the same owner, so network isolation between projects (which protects
+adversarial multi-tenants from each other) does not apply and would be
+over-engineering. Multi-tenant isolation is the Kubernetes backend's job (cloud/
+SaaS edition). A shared docker network with service-name aliases is correct here.
+Caveat (naming, not security): if two different projects use the *same* service
+name (e.g. both `db`), the bare alias is ambiguous — the company controls naming;
+within any one project it is always unique.
+
 ## Notes
 - Docker SDK is already an (indirect) dependency — no new heavy dep.
 - The k8s path is untouched; this is purely additive + the interface extraction.
