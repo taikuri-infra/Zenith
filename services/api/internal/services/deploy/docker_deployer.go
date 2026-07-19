@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -32,9 +33,20 @@ type DockerDeployer struct {
 	envCrypto  *pkgCrypto.EnvCrypto
 	baseDomain string
 	network    string // docker network shared with caddy-docker-proxy
+	// Per-app locks serialize deploy/delete for a given app. Deploys are
+	// triggered from several places (app creation, project deploy, env-var
+	// apply) that can fire concurrently; without this they race on the
+	// remove→create→start of the same container.
+	locks sync.Map // app.ID -> *sync.Mutex
 }
 
 var _ Backend = (*DockerDeployer)(nil)
+
+// appLock returns the per-app mutex, creating it on first use.
+func (d *DockerDeployer) appLock(appID string) *sync.Mutex {
+	v, _ := d.locks.LoadOrStore(appID, &sync.Mutex{})
+	return v.(*sync.Mutex)
+}
 
 // NewDockerDeployer creates a Docker-backed deployer. network is the docker
 // network app containers join (must be the one caddy-docker-proxy watches).
@@ -62,6 +74,10 @@ func (d *DockerDeployer) containerName(app *entities.App) string {
 
 // DeployApp pulls the image and (re)starts the app container with env + routing.
 func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, imageTag string) error {
+	lk := d.appLock(app.ID)
+	lk.Lock()
+	defer lk.Unlock()
+
 	slog.Info("docker-deploy: deploying app", "app", app.Name, "image", imageTag)
 
 	envVars, err := d.resolveEnvVars(ctx, app)
@@ -139,6 +155,10 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 
 // DeleteApp stops and removes the app's container.
 func (d *DockerDeployer) DeleteApp(ctx context.Context, app *entities.App) error {
+	lk := d.appLock(app.ID)
+	lk.Lock()
+	defer lk.Unlock()
+
 	name := d.containerName(app)
 	if err := d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}); err != nil {
 		if client.IsErrNotFound(err) {
