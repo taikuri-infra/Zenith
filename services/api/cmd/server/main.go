@@ -109,9 +109,16 @@ func main() {
 
 	// Seed admin user
 	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
-		if _, err := userRepo.Create(ctx, cfg.AdminEmail, cfg.AdminPassword, "Admin", entities.RoleOwner); err != nil {
+		if adminUser, err := userRepo.Create(ctx, cfg.AdminEmail, cfg.AdminPassword, "Admin", entities.RoleOwner); err != nil {
 			slog.Info("admin seed skipped", "error", err)
 		} else {
+			// The seeded admin comes from trusted config (ADMIN_EMAIL/PASSWORD),
+			// so pre-verify its email. Otherwise it could never log in: login
+			// requires a verified email, and standalone mode sends no
+			// verification email (no RESEND_API_KEY).
+			if verr := userRepo.SetEmailVerified(ctx, adminUser.ID); verr != nil {
+				slog.Warn("failed to mark seeded admin email verified", "error", verr)
+			}
 			slog.Info("admin user seeded", "email", cfg.AdminEmail)
 		}
 	}

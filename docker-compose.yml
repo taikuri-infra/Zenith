@@ -8,8 +8,8 @@ services:
       POSTGRES_DB: zenith
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Not published to the host — only the API reaches it over the compose
+    # network. Exposing 5432 publicly would put the database on the internet.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U zenith"]
       interval: 5s
@@ -29,9 +29,10 @@ services:
       RUSTFS_CONSOLE_ADDRESS: ":9001"
     volumes:
       - storagedata:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    # S3 API (9000) and console (9001) are reached only by the API over the
+    # compose network — not published to the host (would expose object storage
+    # publicly). Uncomment to reach the console locally:
+    #   ports: ["127.0.0.1:9001:9001"]
 
   # One-shot job: creates the platform bucket on first boot.
   # RustFS (like MinIO) doesn't auto-create buckets, so `mc` does it here.
