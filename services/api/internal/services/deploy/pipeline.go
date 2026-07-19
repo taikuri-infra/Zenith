@@ -26,7 +26,7 @@ type runningBuild struct {
 
 // Pipeline manages async image deploy operations.
 type Pipeline struct {
-	deployer      *Deployer
+	deployer      Backend
 	appRepo       ports.AppRepository
 	logHub        *LogHub
 	eventHub      *EventHub
@@ -40,7 +40,7 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new Pipeline.
-func NewPipeline(deployer *Deployer, appRepo ports.AppRepository, logHub *LogHub, eventHub *EventHub, maxConcurrent int) *Pipeline {
+func NewPipeline(deployer Backend, appRepo ports.AppRepository, logHub *LogHub, eventHub *EventHub, maxConcurrent int) *Pipeline {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 5
 	}
