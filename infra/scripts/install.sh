@@ -19,7 +19,10 @@ err()  { printf '\033[31mError:\033[0m %s\n' "$1" >&2; }
 # Generate a URL-safe secret. Avoid shell-hostile characters (no quotes/$/etc).
 gen_secret() {
   local len="${1:-32}"
-  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$len"
+  # `head -c` closes the pipe early, sending SIGPIPE to tr; under `set -o
+  # pipefail` that would abort the whole script. The trailing `|| true` absorbs
+  # it — the secret is already fully captured by the time the pipe breaks.
+  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c "$len" || true
 }
 
 # ---- Docker ----------------------------------------------------------------
