@@ -1,0 +1,25 @@
+# Caddy reverse proxy for FreeZenith — automatic HTTPS.
+#
+# Caddy fetches and renews a Let's Encrypt certificate for $ZENITH_DOMAIN with
+# zero configuration, as long as the domain's DNS points at this server and
+# ports 80/443 are open. Everything is served from one domain:
+#   https://<domain>/           -> dashboard (web)
+#   https://<domain>/api/*      -> API
+#
+# Set ZENITH_DOMAIN and ACME_EMAIL in .env, then:  docker compose --profile tls up -d
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$ZENITH_DOMAIN} {
+	# API routes (the app serves everything under /api/v1) — keep the path intact.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	# Everything else is the dashboard.
+	handle {
+		reverse_proxy web:3000
+	}
+}
