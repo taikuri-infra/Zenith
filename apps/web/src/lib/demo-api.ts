@@ -479,7 +479,9 @@ export const demoAppsDeploy = {
     await delay();
     const mockValues: Record<string, string> = {
       DATABASE_URL: "postgres://admin:s3cret@db.internal:5432/myapp",
-      API_KEY: "sk_live_abc123def456ghi789",
+      // Masked on purpose: a realistic-looking demo value that does not match
+      // secret scanners' Stripe key pattern (bullets are non-alphanumeric).
+      API_KEY: "sk_live_••••••••••••••••7a3f",
       JWT_SECRET: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
     };
     return { key, value: mockValues[key] || "mock-value" };
