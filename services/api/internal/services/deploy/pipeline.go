@@ -51,10 +51,19 @@ func NewPipeline(deployer Backend, appRepo ports.AppRepository, logHub *LogHub, 
 		eventHub:      eventHub,
 		running:       make(map[string]*runningBuild),
 		maxConcurrent: maxConcurrent,
-		// Per-user cap = global cap: on self-host there is one user deploying a
-		// whole multi-service app at once, so a low per-user fairness cap (which
-		// only matters for multi-tenant SaaS) would wrongly reject services.
-		maxPerUser: maxConcurrent,
+		// SaaS-safe default: cap concurrent deploys per user so one tenant can't
+		// starve others. Standalone self-host raises this via SetMaxPerUser
+		// (single user deploying their whole multi-service stack at once).
+		maxPerUser: 2,
+	}
+}
+
+// SetMaxPerUser overrides the per-user concurrent-deploy cap. Used by standalone
+// self-host to allow a whole multi-service app to deploy at once. Not used in
+// SaaS mode, which keeps the fairness cap.
+func (p *Pipeline) SetMaxPerUser(n int) {
+	if n > 0 {
+		p.maxPerUser = n
 	}
 }
 

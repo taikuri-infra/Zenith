@@ -530,6 +530,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 	pipeline := deploy.NewPipeline(backend, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
 	pipeline.SetEventBus(eventBus)
+	// Self-host: one user deploys their whole multi-service stack at once, so
+	// lift the per-user fairness cap (kept for multi-tenant SaaS).
+	if cfg.Mode != "saas" {
+		pipeline.SetMaxPerUser(cfg.MaxConcurrentDeploys)
+	}
 
 	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, backend, pipeline)
 	appHandlerV2.SetProjectRepo(projectRepo)
