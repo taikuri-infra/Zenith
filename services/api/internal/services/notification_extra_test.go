@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestNotificationService_CheckoutCompleted_WithEmail(t *testing.T) {
 	}
 
 	// Verify email was sent
-	if emailSender.verifyCount == 0 {
+	if emailSender.verifyCount.Load() == 0 {
 		t.Error("Expected email to be sent for checkout completed event")
 	}
 }
@@ -80,7 +81,7 @@ func TestNotificationService_CheckoutCompleted_UserNotFound(t *testing.T) {
 	}
 
 	// But email should NOT be sent (user not found)
-	if emailSender.verifyCount != 0 {
+	if emailSender.verifyCount.Load() != 0 {
 		t.Error("Expected no email when user not found")
 	}
 }
@@ -149,11 +150,11 @@ func TestNewNotificationService_AllNil(t *testing.T) {
 
 // mockEmailSenderNotif implements ports.EmailSender for notification tests.
 type mockEmailSenderNotif struct {
-	verifyCount int
+	verifyCount atomic.Int32
 }
 
 func (m *mockEmailSenderNotif) SendVerificationEmail(_ context.Context, to, name, url string) error {
-	m.verifyCount++
+	m.verifyCount.Add(1)
 	return nil
 }
 

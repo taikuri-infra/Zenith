@@ -4,12 +4,34 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 )
+
+// safeString is a goroutine-safe string holder used to capture values written
+// by an httptest handler goroutine and read from the test goroutine, without a
+// data race (the -race detector flags an unsynchronized shared string here).
+type safeString struct {
+	mu sync.Mutex
+	v  string
+}
+
+func (s *safeString) set(v string) {
+	s.mu.Lock()
+	s.v = v
+	s.mu.Unlock()
+}
+
+func (s *safeString) get() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.v
+}
 
 func newTestWebhookService() (*WebhookDeliveryService, *memory.MemoryUserWebhookRepository) {
 	webhookRepo := memory.NewMemoryUserWebhookRepository()
@@ -68,9 +90,9 @@ func TestWebhookDispatch_SuccessfulDelivery(t *testing.T) {
 	ctx := context.Background()
 
 	// Set up a test HTTP server
-	var receivedEvent string
+	var receivedEvent safeString
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedEvent = r.Header.Get("X-Zenith-Event")
+		receivedEvent.set(r.Header.Get("X-Zenith-Event"))
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -82,8 +104,8 @@ func TestWebhookDispatch_SuccessfulDelivery(t *testing.T) {
 	svc.DispatchEvent(ctx, userID, entities.WebhookEventDeploySuccess, map[string]interface{}{"app": "my-app"})
 	time.Sleep(200 * time.Millisecond)
 
-	if receivedEvent != string(entities.WebhookEventDeploySuccess) {
-		t.Errorf("Expected event header %s, got %s", entities.WebhookEventDeploySuccess, receivedEvent)
+	if got := receivedEvent.get(); got != string(entities.WebhookEventDeploySuccess) {
+		t.Errorf("Expected event header %s, got %s", entities.WebhookEventDeploySuccess, got)
 	}
 
 	deliveries, _ := webhookRepo.ListDeliveries(ctx, wh.ID, 10)
@@ -147,9 +169,9 @@ func TestWebhookDispatch_HMAC_Signature(t *testing.T) {
 	webhookRepo := memory.NewMemoryUserWebhookRepository()
 	ctx := context.Background()
 
-	var signatureHeader string
+	var signatureHeader safeString
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		signatureHeader = r.Header.Get("X-Zenith-Signature")
+		signatureHeader.set(r.Header.Get("X-Zenith-Signature"))
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -165,11 +187,12 @@ func TestWebhookDispatch_HMAC_Signature(t *testing.T) {
 	svc.DispatchEvent(ctx, userID, entities.WebhookEventDeploySuccess, map[string]interface{}{"app": "test"})
 	time.Sleep(200 * time.Millisecond)
 
-	if signatureHeader == "" {
+	sig := signatureHeader.get()
+	if sig == "" {
 		t.Error("Expected X-Zenith-Signature header to be set when webhook has a secret")
 	}
-	if len(signatureHeader) < 10 || signatureHeader[:7] != "sha256=" {
-		t.Errorf("Expected signature to start with 'sha256=', got: %s", signatureHeader)
+	if len(sig) < 10 || sig[:7] != "sha256=" {
+		t.Errorf("Expected signature to start with 'sha256=', got: %s", sig)
 	}
 }
 
@@ -177,9 +200,9 @@ func TestWebhookDispatch_TimestampHeader(t *testing.T) {
 	webhookRepo := memory.NewMemoryUserWebhookRepository()
 	ctx := context.Background()
 
-	var timestampHeader string
+	var timestampHeader safeString
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		timestampHeader = r.Header.Get("X-Zenith-Delivery-Timestamp")
+		timestampHeader.set(r.Header.Get("X-Zenith-Delivery-Timestamp"))
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -191,7 +214,7 @@ func TestWebhookDispatch_TimestampHeader(t *testing.T) {
 	svc.DispatchEvent(ctx, userID, entities.WebhookEventDeploySuccess, map[string]interface{}{"app": "test"})
 	time.Sleep(200 * time.Millisecond)
 
-	if timestampHeader == "" {
+	if timestampHeader.get() == "" {
 		t.Error("Expected X-Zenith-Delivery-Timestamp header")
 	}
 }
@@ -200,9 +223,9 @@ func TestWebhookDispatch_MultipleWebhooks(t *testing.T) {
 	webhookRepo := memory.NewMemoryUserWebhookRepository()
 	ctx := context.Background()
 
-	var callCount int
+	var callCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
+		callCount.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -215,7 +238,7 @@ func TestWebhookDispatch_MultipleWebhooks(t *testing.T) {
 	svc.DispatchEvent(ctx, userID, entities.WebhookEventDeploySuccess, map[string]interface{}{"app": "test"})
 	time.Sleep(300 * time.Millisecond)
 
-	if callCount != 2 {
-		t.Errorf("Expected 2 webhook calls, got %d", callCount)
+	if callCount.Load() != 2 {
+		t.Errorf("Expected 2 webhook calls, got %d", callCount.Load())
 	}
 }
