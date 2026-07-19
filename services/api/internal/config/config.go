@@ -41,6 +41,7 @@ type Config struct {
 
 	// Deploy
 	BaseDomain    string
+	AppNetwork    string // docker network app containers join (standalone/DockerDeployer)
 	GatewayDomain string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
 	Registry         string // container registry host (e.g. "registry.stage.freezenith.com")
 	RegistryProject  string // Harbor project for user images (e.g. "zenith-stage") — robot account must have push access here
@@ -155,6 +156,7 @@ func Load() *Config {
 		EmailFrom:      getEnv("EMAIL_FROM", "Zenith <noreply@freezenith.com>"),
 		InternalSecret: getEnv("INTERNAL_SECRET", ""),
 		BaseDomain:    getEnv("BASE_DOMAIN", "freezenith.com"),
+		AppNetwork:    getEnv("ZENITH_APP_NETWORK", "zenith_default"),
 		GatewayDomain: getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
 		Registry:         getEnv("REGISTRY", "registry.freezenith.com"),
 		RegistryProject:  getEnv("REGISTRY_PROJECT", ""),

@@ -41,6 +41,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/telemetry"
 	zenithTemporal "github.com/dotechhq/zenith/services/api/internal/services/temporal"
 	"github.com/jackc/pgx/v5/pgxpool"
+	dockerclient "github.com/docker/docker/client"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
@@ -510,10 +511,24 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	logHub := deploy.NewLogHub(500)
 	eventHub := deploy.NewEventHub(50)
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
-	pipeline := deploy.NewPipeline(deployer, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
+	// Select the compute backend: Docker containers on the host for standalone
+	// self-host, Kubernetes for saas/cloud. The DockerDeployer's env repos are
+	// wired later, alongside the k8s deployer's setters.
+	var backend deploy.Backend = deployer
+	var dockerDeployer *deploy.DockerDeployer
+	if cfg.Mode != "saas" {
+		if dockerCli, derr := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation()); derr != nil {
+			slog.Warn("docker client unavailable — app deploys will be simulated", "error", derr)
+		} else {
+			dockerDeployer = deploy.NewDockerDeployer(dockerCli, appRepo, nil, planRepo, cfg.BaseDomain, cfg.AppNetwork)
+			backend = dockerDeployer
+			slog.Info("using Docker deployer (standalone self-host)", "network", cfg.AppNetwork)
+		}
+	}
+	pipeline := deploy.NewPipeline(backend, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
 	pipeline.SetEventBus(eventBus)
 
-	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, deployer, pipeline)
+	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, backend, pipeline)
 	appHandlerV2.SetProjectRepo(projectRepo)
 	appHandlerV2.SetPlanRepo(planRepo)
 	appHandlerV2.SetEventRepo(eventRepo)
@@ -1245,6 +1260,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	deployer.SetEnvVarRepo(envVarRepo)
 	deployer.SetEnvCrypto(envCrypto)
 	deployer.SetEnvRepo(envRepo)
+	if dockerDeployer != nil {
+		dockerDeployer.SetEnvVarRepo(envVarRepo)
+		dockerDeployer.SetEnvCrypto(envCrypto)
+	}
 	envVarHandler.SetRestarter(deployer)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(deployer)

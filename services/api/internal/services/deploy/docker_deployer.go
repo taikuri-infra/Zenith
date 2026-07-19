@@ -51,6 +51,9 @@ func NewDockerDeployer(cli *client.Client, appRepo ports.AppRepository, envVarRe
 // SetEnvCrypto wires the secret-decryption helper (parity with the k8s deployer).
 func (d *DockerDeployer) SetEnvCrypto(c *pkgCrypto.EnvCrypto) { d.envCrypto = c }
 
+// SetEnvVarRepo wires the per-environment env-var repo (parity with the k8s deployer).
+func (d *DockerDeployer) SetEnvVarRepo(repo ports.EnvVarRepository) { d.envVarRepo = repo }
+
 // containerName is the deterministic name for an app's container.
 func (d *DockerDeployer) containerName(app *entities.App) string {
 	return "zenith-app-" + sanitizeName(app.Subdomain)
