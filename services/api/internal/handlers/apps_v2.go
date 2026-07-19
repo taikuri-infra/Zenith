@@ -312,8 +312,8 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		return NewBadRequest("app_type must be 'web', 'worker', or 'cron'")
 	}
 
-	// Check plan app limit before creating
-	if h.planRepo != nil {
+	// Check plan app limit before creating (skipped on self-host — no billing/tiers).
+	if h.planRepo != nil && !UnlimitedMode {
 		plan, planErr := h.planRepo.GetUserPlan(c.Context(), userID.(string))
 		if planErr == nil {
 			currentApps, _ := h.appRepo.ListAppsByUser(c.Context(), userID.(string))

@@ -10,6 +10,7 @@ import (
 
 // ComposeHandler handles docker-compose import endpoints.
 type ComposeHandler struct {
+	standalone bool // self-host: keep databases as app containers, don't rewrite hosts
 	projectRepo ports.ProjectRepository
 	aiValidator *services.AIComposeValidator
 	baseDomain  string // platform base domain for preview URL generation
@@ -24,6 +25,12 @@ func NewComposeHandler(projectRepo ports.ProjectRepository) *ComposeHandler {
 // for public services (e.g. "apps.stage.freezenith.com").
 func (h *ComposeHandler) SetBaseDomain(baseDomain string) {
 	h.baseDomain = baseDomain
+}
+
+// SetStandalone toggles self-host parsing (databases as app containers, no host
+// rewriting) so the customer's compose runs unchanged.
+func (h *ComposeHandler) SetStandalone(v bool) {
+	h.standalone = v
 }
 
 // SetAIValidator sets the AI compose validator for smart suggestions.
@@ -93,7 +100,7 @@ func (h *ComposeHandler) ImportCompose(c *fiber.Ctx) error {
 	}
 
 	// Parse compose (Layer 1)
-	parsed, err := services.ParseCompose(req.ComposeContent, project.Slug, "zenith-apps", h.baseDomain)
+	parsed, err := services.ParseCompose(req.ComposeContent, project.Slug, "zenith-apps", h.baseDomain, h.standalone)
 	if err != nil {
 		slog.Error("failed to parse compose", "error", err)
 		return NewInternal("failed to parse compose file")

@@ -70,7 +70,10 @@ vi.mock("@/components/architecture-diagram", () => ({
 }));
 
 vi.mock("@/lib/urls", () => ({
-  registerUrl: "https://app.freezenith.com/login?mode=register",
+  loginUrl: "https://app.freezenith.com/login",
+  registerUrl: "https://app.freezenith.com/login",
+  registerUrlWithParams: () => "https://app.freezenith.com/login?mode=register",
+  dashboardUrl: "https://app.freezenith.com",
 }));
 
 import LandingPage from "../page";
@@ -78,8 +81,9 @@ import LandingPage from "../page";
 describe("LandingPage", () => {
   it("renders the landing page", () => {
     render(<LandingPage />);
-    // Hero section should contain the main tagline
-    expect(screen.getByText(/ship faster/i) || screen.getByText(/scale/i)).toBeTruthy();
+    // Hero renders its tagline word-by-word in separate spans
+    // ("Ship" / "Faster." / "Scale" / "Freely."), so match a single word.
+    expect(screen.getByText("Faster.")).toBeInTheDocument();
   });
 
   it("renders the pricing section", () => {

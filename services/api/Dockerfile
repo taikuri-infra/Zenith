@@ -1,5 +1,7 @@
 # ---- Builder ----
-FROM golang:1.25-alpine AS builder
+# Run the builder natively on the host arch and cross-compile to the target
+# arch (fast — no QEMU emulation for the Go build).
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates tzdata
 
@@ -15,8 +17,10 @@ COPY services/api/ .
 # Build arguments for version injection
 ARG VERSION=dev
 ARG BUILD_TIME=unknown
+# TARGETARCH is provided automatically by buildx (amd64 / arm64) — cross-compile to it.
+ARG TARGETARCH
 # Build a statically-linked binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
     -o /zenith-api ./cmd/server
 

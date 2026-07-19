@@ -51,8 +51,16 @@ func (h *PlanHandler) UpgradePlan(c *fiber.Ctx) error {
 }
 
 // CheckLimit is a middleware factory that checks plan limits before resource creation.
+// UnlimitedMode disables plan-limit enforcement. It is set true in standalone
+// self-host mode, where the customer owns the hardware and there is no billing
+// or "upgrade" — SaaS plan tiers don't apply.
+var UnlimitedMode bool
+
 func CheckLimit(planRepo ports.UserPlanRepository, resource string, countFn func(c *fiber.Ctx, userID string) (int, error)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		if UnlimitedMode {
+			return c.Next()
+		}
 		userID, _ := c.Locals("user_id").(string)
 		if userID == "" {
 			return fiber.NewError(fiber.StatusUnauthorized, "authentication required")

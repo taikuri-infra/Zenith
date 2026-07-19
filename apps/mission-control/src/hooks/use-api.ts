@@ -8,7 +8,6 @@ import { useState, useEffect, useCallback } from "react";
  */
 export function useApi<T>(
   fetcher: () => Promise<T>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   deps: any[] = []
 ) {
   const [data, setData] = useState<T | null>(null);
@@ -46,7 +45,6 @@ export function useApiWithFallback<T>(
   fetcher: () => Promise<T>,
   fallback: () => Promise<T>,
   isEmpty?: (data: T) => boolean,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   deps: any[] = []
 ) {
   const [data, setData] = useState<T | null>(null);

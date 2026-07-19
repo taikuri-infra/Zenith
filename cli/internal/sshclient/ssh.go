@@ -5,10 +5,33 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 )
+
+// syncBuffer is an io.Writer wrapping a bytes.Buffer with a mutex. x/crypto/ssh
+// copies a session's stdout and stderr from two separate goroutines; when both
+// are directed at the same destination (as Run does, to capture combined
+// output) those writes are concurrent, and bytes.Buffer is not safe for
+// concurrent use. syncBuffer serializes them.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
 
 // Client wraps an SSH connection.
 type Client struct {
@@ -102,7 +125,7 @@ func (c *Client) Run(cmd string) (string, error) {
 	}
 	defer sess.Close()
 
-	var out bytes.Buffer
+	var out syncBuffer
 	sess.Stdout = &out
 	sess.Stderr = &out
 

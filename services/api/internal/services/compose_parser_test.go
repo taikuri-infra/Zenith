@@ -26,7 +26,7 @@ services:
   cache:
     image: redis:7-alpine
 `
-	result, err := ParseCompose(content, "my-saas", "zenith-apps", "")
+	result, err := ParseCompose(content, "my-saas", "zenith-apps", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,7 +97,7 @@ services:
   db:
     image: postgres:16
 `
-	result, err := ParseCompose(content, "myproject", "zenith-apps", "")
+	result, err := ParseCompose(content, "myproject", "zenith-apps", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -123,7 +123,7 @@ services:
 
 func TestParseCompose_InvalidYAML(t *testing.T) {
 	content := `this is not valid yaml: [[[`
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestParseCompose_InvalidYAML(t *testing.T) {
 
 func TestParseCompose_NoServices(t *testing.T) {
 	content := `version: "3.8"`
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,7 +154,7 @@ services:
   cache:
     image: redis:7
 `
-	result, err := ParseCompose(content, "test", "ns", "")
+	result, err := ParseCompose(content, "test", "ns", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

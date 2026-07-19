@@ -51,6 +51,12 @@ LABEL org.opencontainers.image.description="Zenith Landing Page - freezenith.com
 LABEL org.opencontainers.image.source="https://github.com/dotechhq/zenith"
 LABEL org.opencontainers.image.vendor="DoTech"
 
+# Patch OS packages and drop npm/npx — unused at runtime (the app runs
+# `node server.js`). npm's bundled deps (tar, glob, minimatch, cross-spawn,
+# sigstore) and Alpine's OpenSSL otherwise trip image vulnerability scanners.
+RUN apk upgrade --no-cache && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs

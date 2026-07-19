@@ -41,6 +41,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/telemetry"
 	zenithTemporal "github.com/dotechhq/zenith/services/api/internal/services/temporal"
 	"github.com/jackc/pgx/v5/pgxpool"
+	dockerclient "github.com/docker/docker/client"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
@@ -109,14 +110,24 @@ func main() {
 
 	// Seed admin user
 	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
-		if _, err := userRepo.Create(ctx, cfg.AdminEmail, cfg.AdminPassword, "Admin", entities.RoleOwner); err != nil {
+		if adminUser, err := userRepo.Create(ctx, cfg.AdminEmail, cfg.AdminPassword, "Admin", entities.RoleOwner); err != nil {
 			slog.Info("admin seed skipped", "error", err)
 		} else {
+			// The seeded admin comes from trusted config (ADMIN_EMAIL/PASSWORD),
+			// so pre-verify its email. Otherwise it could never log in: login
+			// requires a verified email, and standalone mode sends no
+			// verification email (no RESEND_API_KEY).
+			if verr := userRepo.SetEmailVerified(ctx, adminUser.ID); verr != nil {
+				slog.Warn("failed to mark seeded admin email verified", "error", verr)
+			}
 			slog.Info("admin user seeded", "email", cfg.AdminEmail)
 		}
 	}
 
 	slog.Info("zenith mode", "mode", cfg.Mode)
+	// Self-host: no billing/tiers — the customer owns the hardware, so plan
+	// limits (max apps/databases/etc.) don't apply.
+	handlers.UnlimitedMode = cfg.Mode != "saas"
 	if cfg.Mode == "standalone" {
 		slog.Info("running in standalone mode, multi-tenant and billing features disabled")
 	}
@@ -503,10 +514,29 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	logHub := deploy.NewLogHub(500)
 	eventHub := deploy.NewEventHub(50)
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
-	pipeline := deploy.NewPipeline(deployer, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
+	// Select the compute backend: Docker containers on the host for standalone
+	// self-host, Kubernetes for saas/cloud. The DockerDeployer's env repos are
+	// wired later, alongside the k8s deployer's setters.
+	var backend deploy.Backend = deployer
+	var dockerDeployer *deploy.DockerDeployer
+	if cfg.Mode != "saas" {
+		if dockerCli, derr := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation()); derr != nil {
+			slog.Warn("docker client unavailable — app deploys will be simulated", "error", derr)
+		} else {
+			dockerDeployer = deploy.NewDockerDeployer(dockerCli, appRepo, nil, planRepo, cfg.BaseDomain, cfg.AppNetwork)
+			backend = dockerDeployer
+			slog.Info("using Docker deployer (standalone self-host)", "network", cfg.AppNetwork)
+		}
+	}
+	pipeline := deploy.NewPipeline(backend, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
 	pipeline.SetEventBus(eventBus)
+	// Self-host: one user deploys their whole multi-service stack at once, so
+	// lift the per-user fairness cap (kept for multi-tenant SaaS).
+	if cfg.Mode != "saas" {
+		pipeline.SetMaxPerUser(cfg.MaxConcurrentDeploys)
+	}
 
-	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, deployer, pipeline)
+	appHandlerV2 := handlers.NewAppHandlerV2(appRepo, cfg.BaseDomain, backend, pipeline)
 	appHandlerV2.SetProjectRepo(projectRepo)
 	appHandlerV2.SetPlanRepo(planRepo)
 	appHandlerV2.SetEventRepo(eventRepo)
@@ -549,6 +579,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	composeHandler := handlers.NewComposeHandler(projectRepo)
 	composeHandler.SetBaseDomain(cfg.BaseDomain)
+	composeHandler.SetStandalone(cfg.Mode != "saas")
 	msHandler := handlers.NewManagedServiceHandler(projectRepo, msRepo)
 	envVarHandler := handlers.NewEnvVarHandler(appRepo, envVarRepo)
 
@@ -1238,6 +1269,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	deployer.SetEnvVarRepo(envVarRepo)
 	deployer.SetEnvCrypto(envCrypto)
 	deployer.SetEnvRepo(envRepo)
+	if dockerDeployer != nil {
+		dockerDeployer.SetEnvVarRepo(envVarRepo)
+		dockerDeployer.SetEnvCrypto(envCrypto)
+	}
 	envVarHandler.SetRestarter(deployer)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(deployer)

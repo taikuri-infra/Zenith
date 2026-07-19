@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface text-white antialiased;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  ::selection {
+    background-color: rgba(16, 185, 129, 0.3);
+    color: #ffffff;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-surface-400 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-neutral-500;
+}
+
+/* Gradient text utilities */
+.gradient-text {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(135deg, #ffffff 0%, #10b981 50%, #34d399 100%);
+}
+
+.gradient-text-hero {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(135deg, #10b981 0%, #34d399 40%, #6ee7b7 100%);
+}
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: 0 0 80px rgba(16, 185, 129, 0.12), 0 0 160px rgba(16, 185, 129, 0.04);
+}
+
+/* Card hover border glow */
+.glow-border {
+  position: relative;
+}
+
+.glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.35), transparent 55%, rgba(16, 185, 129, 0.1));
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.glow-border:hover::before {
+  opacity: 1;
+}
+
+/* Grid pattern background */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(39, 45, 54, 0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(39, 45, 54, 0.35) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 75%);
+}
+
+/* Radial gradient overlay for hero */
+.hero-gradient {
+  background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16, 185, 129, 0.12) 0%, transparent 60%);
+}
+
+/* Noise texture */
+.noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* ===== Hero aurora orb ===== */
+@keyframes auroraShift {
+  0%, 100% {
+    transform: translate(-50%, -40%) scale(1) rotate(0deg);
+    border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%;
+  }
+  50% {
+    transform: translate(-50%, -45%) scale(0.95) rotate(180deg);
+    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+  }
+}
+
+.aurora-orb {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 820px;
+  height: 600px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(16, 185, 129, 0.16) 0%,
+    rgba(16, 185, 129, 0.08) 35%,
+    rgba(52, 211, 153, 0.04) 60%,
+    transparent 80%
+  );
+  filter: blur(90px);
+  animation: auroraShift 16s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform, border-radius;
+}
+
+/* Terminal cursor blink */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cursor-blink {
+  animation: cursorBlink 1s step-end infinite;
+}
+
+/* Animated gradient border (terminal) */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes spinBorder {
+  from { --border-angle: 0deg; }
+  to { --border-angle: 360deg; }
+}
+
+.glow-frame {
+  position: relative;
+  isolation: isolate;
+}
+
+.glow-frame::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 1rem;
+  background: conic-gradient(
+    from var(--border-angle),
+    transparent 30%,
+    rgba(16, 185, 129, 0.5) 48%,
+    rgba(52, 211, 153, 0.85) 50%,
+    rgba(16, 185, 129, 0.5) 52%,
+    transparent 70%
+  );
+  z-index: -1;
+  animation: spinBorder 6s linear infinite;
+}
+
+/* Marquee for stack strip */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-orb,
+  .glow-frame::before,
+  .animate-marquee,
+  .cursor-blink {
+    animation: none !important;
+  }
+  html { scroll-behavior: auto; }
+}

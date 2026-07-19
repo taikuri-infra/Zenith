@@ -8,22 +8,61 @@ services:
       POSTGRES_DB: zenith
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Not published to the host — only the API reaches it over the compose
+    # network. Exposing 5432 publicly would put the database on the internet.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U zenith"]
       interval: 5s
       timeout: 3s
       retries: 5
 
+  storage:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    user: "10001:10001"
+    command: ["/data"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-zenith}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-changeme123}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - storagedata:/data
+    # S3 API (9000) and console (9001) are reached only by the API over the
+    # compose network — not published to the host (would expose object storage
+    # publicly). Uncomment to reach the console locally:
+    #   ports: ["127.0.0.1:9001:9001"]
+
+  # One-shot job: creates the platform bucket on first boot.
+  # RustFS (like MinIO) doesn't auto-create buckets, so `mc` does it here.
+  storage-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      - storage
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-zenith}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme123}
+      S3_PLATFORM_BUCKET: ${S3_PLATFORM_BUCKET:-zenith-platform-storage}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://storage:9000 \"$$S3_ACCESS_KEY\" \"$$S3_SECRET_KEY\"; do sleep 2; done;
+      mc mb -p local/$$S3_PLATFORM_BUCKET;
+      exit 0
+      "
+
+  # Prebuilt public image (no build needed). To build from source instead,
+  # replace the `image:` line with:
+  #   build: { context: ., dockerfile: services/api/Dockerfile }
   api:
-    build:
-      context: .
-      dockerfile: services/api/Dockerfile
+    image: ghcr.io/taikuri-infra/zenith-api:${ZENITH_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     environment:
@@ -32,40 +71,79 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@localhost}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
-      CORS_ORIGINS: http://localhost:3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Apps are subdomains of this (whoami.<BASE_DOMAIN>). Defaults to the
+      # dashboard domain; use "localhost" locally so apps get *.localhost with
+      # a Caddy self-signed cert (no DNS / Let's Encrypt needed).
+      BASE_DOMAIN: ${ZENITH_DOMAIN:-localhost}
+      # Self-host deploys a whole multi-service app at once; allow enough
+      # concurrent deploys for that.
+      MAX_CONCURRENT_DEPLOYS: ${MAX_CONCURRENT_DEPLOYS:-10}
       ENVIRONMENT: production
+      S3_ENDPOINT: http://storage:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-zenith}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme123}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_PLATFORM_BUCKET: ${S3_PLATFORM_BUCKET:-zenith-platform-storage}
+      ZENITH_APP_NETWORK: zenith_default
+    # The API deploys user apps as Docker containers on the host (standalone
+    # mode), so it needs the Docker socket. It runs as a non-root user, so add
+    # the host's docker group GID (install.sh detects it; default 999).
+    group_add:
+      - "${DOCKER_GID:-999}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
+  # Prebuilt public image. The dashboard reads NEXT_PUBLIC_* at runtime (see
+  # apps/web/entrypoint.sh), so these are set as env, not build args. To build
+  # from source instead, replace `image:` with:
+  #   build: { context: ., dockerfile: apps/web/Dockerfile }
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8080
-        NEXT_PUBLIC_ZENITH_MODE: standalone
+    image: ghcr.io/taikuri-infra/zenith-web:${ZENITH_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       - api
     ports:
       - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      NEXT_PUBLIC_ZENITH_MODE: standalone
 
-  # Uncomment for production with TLS:
-  # traefik:
-  #   image: traefik:v3.1
-  #   restart: unless-stopped
-  #   command:
-  #     - "--providers.docker=true"
-  #     - "--entrypoints.web.address=:80"
-  #     - "--entrypoints.websecure.address=:443"
-  #     - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
-  #     - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-  #     - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #     - letsencrypt:/letsencrypt
+  # Production reverse proxy with automatic HTTPS (Let's Encrypt).
+  # Only starts with the `tls` profile:  docker compose --profile tls up -d
+  # Requires ZENITH_DOMAIN (and ideally ACME_EMAIL) set in .env, DNS pointing
+  # at this server, and ports 80/443 open. See the Caddyfile in this repo.
+  # caddy-docker-proxy: reverse proxy with automatic HTTPS that also watches the
+  # Docker socket and auto-routes any container carrying `caddy` labels — which
+  # is how deployed user apps get their <subdomain>.<domain> route + cert with no
+  # config changes. The base Caddyfile routes the dashboard + API on the main domain.
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:2.10-alpine
+    restart: unless-stopped
+    profiles: ["tls"]
+    depends_on:
+      - web
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ZENITH_DOMAIN: ${ZENITH_DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      CADDY_INGRESS_NETWORKS: zenith_default
+      CADDY_DOCKER_CADDYFILE_PATH: /etc/caddy/Caddyfile
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+networks:
+  default:
+    name: zenith_default
 
 volumes:
   pgdata:
-  # letsencrypt:
+  storagedata:
+  caddy_data:
+  caddy_config:

@@ -26,7 +26,7 @@ type runningBuild struct {
 
 // Pipeline manages async image deploy operations.
 type Pipeline struct {
-	deployer      *Deployer
+	deployer      Backend
 	appRepo       ports.AppRepository
 	logHub        *LogHub
 	eventHub      *EventHub
@@ -40,7 +40,7 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new Pipeline.
-func NewPipeline(deployer *Deployer, appRepo ports.AppRepository, logHub *LogHub, eventHub *EventHub, maxConcurrent int) *Pipeline {
+func NewPipeline(deployer Backend, appRepo ports.AppRepository, logHub *LogHub, eventHub *EventHub, maxConcurrent int) *Pipeline {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 5
 	}
@@ -51,7 +51,19 @@ func NewPipeline(deployer *Deployer, appRepo ports.AppRepository, logHub *LogHub
 		eventHub:      eventHub,
 		running:       make(map[string]*runningBuild),
 		maxConcurrent: maxConcurrent,
-		maxPerUser:    2,
+		// SaaS-safe default: cap concurrent deploys per user so one tenant can't
+		// starve others. Standalone self-host raises this via SetMaxPerUser
+		// (single user deploying their whole multi-service stack at once).
+		maxPerUser: 2,
+	}
+}
+
+// SetMaxPerUser overrides the per-user concurrent-deploy cap. Used by standalone
+// self-host to allow a whole multi-service app to deploy at once. Not used in
+// SaaS mode, which keeps the fairness cap.
+func (p *Pipeline) SetMaxPerUser(n int) {
+	if n > 0 {
+		p.maxPerUser = n
 	}
 }
 

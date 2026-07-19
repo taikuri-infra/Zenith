@@ -10,6 +10,12 @@ variable "server_ip" {
   default     = "161.35.82.211"
 }
 
+variable "landing_server_ip" {
+  description = "IP serving the FreeZenith marketing site (freezenith.com / www) — the zen-stage cluster"
+  type        = string
+  default     = "77.42.88.149"
+}
+
 variable "freezenith_zone_id" {
   description = "Cloudflare zone ID for freezenith.com"
   type        = string

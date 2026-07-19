@@ -1,7 +1,9 @@
 # Staging values for zenith-landing
+# NOTE: now serves the new source-available FreeZenith site (apps/freezenith-site).
+# Rollback: set image back to zenith-landing:sha-3882928 (the old commercial landing).
 namespace: zenith-staging
 replicas: 1
-image: zenith-landing:sha-3882928
+image: freezenith-site:sha-c824a5b
 imageRegistry: ""  # set via Terraform
 imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via Terraform
@@ -11,6 +13,16 @@ ingress:
   hosts:
     - stage.freezenith.com
   tlsSecret: staging-tls
+
+# Production marketing domains served by the same deployment on this cluster.
+# Uses its own cert (freezenith-tls) so it never touches the shared staging-tls cert.
+prodIngress:
+  enabled: true
+  hosts:
+    - freezenith.com
+    - www.freezenith.com
+  tlsSecret: freezenith-tls
+  issuer: letsencrypt-prod
 
 resources:
   requests:

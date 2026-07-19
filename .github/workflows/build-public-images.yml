@@ -70,6 +70,10 @@ jobs:
         id: owner
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
+      - name: Set up QEMU
+        # Enables building the linux/arm64 variant on amd64 runners (emulated).
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -86,7 +90,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           build-args: ${{ matrix.build_args }}
           tags: |
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/${{ matrix.image }}:${{ steps.tag.outputs.tag }}

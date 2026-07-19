@@ -47,13 +47,15 @@ describe("LoginPage", () => {
 
   it("renders login form by default", () => {
     render(<LoginPage />);
-    expect(screen.getByText(/sign in/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/sign in to your account/i)
+    ).toBeInTheDocument();
   });
 
   it("renders email and password inputs", () => {
     render(<LoginPage />);
-    expect(screen.getByPlaceholderText(/email/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/password/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("••••••••")).toBeInTheDocument();
   });
 
   it("has a toggle to switch to register mode", () => {

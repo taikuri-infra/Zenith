@@ -333,7 +333,7 @@ export const mockAuthRealms: AuthRealm[] = [
 export const mockAuthUsers: AuthUser[] = [
   {
     id: "u-a1b2c3",
-    email: "sarah.chen@example.com",
+    email: "sarah.chen@startup.com",
     name: "Sarah Chen",
     realm: "production",
     status: "active",
@@ -342,7 +342,7 @@ export const mockAuthUsers: AuthUser[] = [
   },
   {
     id: "u-d4e5f6",
-    email: "marcus.johnson@example.com",
+    email: "marcus.johnson@startup.com",
     name: "Marcus Johnson",
     realm: "production",
     status: "active",
@@ -351,7 +351,7 @@ export const mockAuthUsers: AuthUser[] = [
   },
   {
     id: "u-g7h8i9",
-    email: "elena.rodriguez@example.com",
+    email: "elena.rodriguez@startup.com",
     name: "Elena Rodriguez",
     realm: "production",
     status: "active",
@@ -360,7 +360,7 @@ export const mockAuthUsers: AuthUser[] = [
   },
   {
     id: "u-j0k1l2",
-    email: "james.wilson@example.com",
+    email: "james.wilson@startup.com",
     name: "James Wilson",
     realm: "production",
     status: "suspended",
@@ -369,7 +369,7 @@ export const mockAuthUsers: AuthUser[] = [
   },
   {
     id: "u-m3n4o5",
-    email: "priya.patel@example.com",
+    email: "priya.patel@startup.com",
     name: "Priya Patel",
     realm: "production",
     status: "active",
@@ -378,7 +378,7 @@ export const mockAuthUsers: AuthUser[] = [
   },
   {
     id: "u-p6q7r8",
-    email: "tom.nguyen@example.com",
+    email: "tom.nguyen@startup.com",
     name: "Tom Nguyen",
     realm: "production",
     status: "pending",
