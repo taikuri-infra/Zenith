@@ -8,10 +8,6 @@
 #
 # Set ZENITH_DOMAIN and ACME_EMAIL in .env, then:  docker compose --profile tls up -d
 
-{
-	email {$ACME_EMAIL}
-}
-
 {$ZENITH_DOMAIN} {
 	# API routes (the app serves everything under /api/v1) — keep the path intact.
 	handle /api/* {

@@ -86,6 +86,12 @@ if [ ! -f .env ]; then
   set_var ADMIN_PASSWORD "$ADMIN_PASSWORD"
   set_var DB_PASSWORD "$DB_PASSWORD"
   set_var S3_SECRET_KEY "$S3_SECRET_KEY"
+
+  # The API deploys user apps via the Docker socket and runs as a non-root user,
+  # so it needs the host's docker group GID.
+  DOCKER_GID="$(getent group docker 2>/dev/null | cut -d: -f3)"
+  [ -z "$DOCKER_GID" ] && DOCKER_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 999)"
+  set_var DOCKER_GID "$DOCKER_GID"
   rm -f .env.bak
 
   # Persist credentials to a root-only file so they're not lost.

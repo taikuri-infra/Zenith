@@ -80,7 +80,10 @@ services:
       S3_PLATFORM_BUCKET: ${S3_PLATFORM_BUCKET:-zenith-platform-storage}
       ZENITH_APP_NETWORK: zenith_default
     # The API deploys user apps as Docker containers on the host (standalone
-    # mode), so it needs the Docker socket.
+    # mode), so it needs the Docker socket. It runs as a non-root user, so add
+    # the host's docker group GID (install.sh detects it; default 999).
+    group_add:
+      - "${DOCKER_GID:-999}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
