@@ -4,7 +4,17 @@
 
 Zenith is a self-hosted platform-as-a-service that gives you Heroku-like simplicity on your own infrastructure. Push code, get a running app — with databases, storage, auth, and domains built in.
 
+## Try it
+
+**Live read-only demo:** [demo.freezenith.com](https://demo.freezenith.com)
+
 ## Quick Start
+
+**Prerequisites:** Docker and Docker Compose (the installer checks for them but does
+not install them — set them up first via [get.docker.com](https://get.docker.com)).
+Around 20 GB of RAM is recommended, because the container images currently build on
+the server during install. Object storage runs locally via RustFS — no external S3
+account needed.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dotechhq/zenith/main/infra/scripts/install.sh | bash
@@ -45,16 +55,20 @@ Open [http://localhost:3000](http://localhost:3000) and log in with your admin c
 ## Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌──────────────┐
-│  Dashboard   │────▶│   API       │────▶│  PostgreSQL  │
-│  (Next.js)   │     │   (Go)      │     │              │
-│  :3000       │     │   :8080     │     │   :5432      │
-└─────────────┘     └─────────────┘     └──────────────┘
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Dashboard   │────▶│   API (Go)   │────▶│  PostgreSQL  │
+│  (Next.js)   │     │   :8080      │     │   :5432      │
+│  :3000       │     │              │──┐  └──────────────┘
+└──────────────┘     └──────────────┘  │  ┌──────────────┐
+                                        └─▶│ RustFS (S3)  │
+                                           │  :9000       │
+                                           └──────────────┘
 ```
 
 - **API** — Go server (Fiber framework). Handles auth, app management, deployments, databases, and all platform operations.
 - **Dashboard** — Next.js web UI. Full management interface for apps, databases, domains, settings, and monitoring.
 - **PostgreSQL** — Persistent storage for users, apps, deployments, and platform state. Falls back to in-memory stores when no database is configured.
+- **RustFS** — Self-hosted, S3-compatible object storage for app buckets and backups. Runs locally in the same Compose stack, so no external cloud storage account is required.
 
 ## Configuration
 
@@ -69,21 +83,6 @@ Open [http://localhost:3000](http://localhost:3000) and log in with your admin c
 | `BASE_DOMAIN` | `freezenith.com` | Base domain for app routing |
 | `SECRETS_ENCRYPTION_KEY` | *(optional)* | 64-char hex key for secrets encryption |
 | `ENVIRONMENT` | `development` | `development` or `production` |
-
-## Self-Hosted vs Cloud
-
-| Feature | Self-Hosted (OSS) | Zenith Cloud |
-|---------|-------------------|--------------|
-| App deployment | Yes | Yes |
-| Databases & storage | Yes | Yes |
-| Custom domains | Yes | Yes |
-| Auth, SSO, MFA | Yes | Yes |
-| RBAC & audit log | Yes | Yes |
-| Multi-tenant management | — | Yes |
-| Managed infrastructure | — | Yes |
-| Autoscaling | — | Yes |
-| Billing & subscriptions | — | Yes |
-| SLA & priority support | — | Yes |
 
 ## Development
 
@@ -105,4 +104,7 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the full development guide.
 
 ## License
 
-Zenith is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+Zenith is source-available under the [Business Source License 1.1](LICENSE)
+(it converts to Apache-2.0 in 2030). You are free to self-host and run it; you
+may not offer it as a competing managed service. Plain-English summary:
+[LICENSE-SUMMARY.md](LICENSE-SUMMARY.md).
