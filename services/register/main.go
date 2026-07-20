@@ -3,16 +3,24 @@
 // It is the ONLY place the Cloudflare token lives. A customer installer POSTs
 // its public IP; this service creates <slug>.apps.freezenith.com -> <ip> and
 // returns just the hostname. The customer's box never sees the token.
+//
+// Security posture (see README): callers must present INSTALL_TOKEN; the target
+// IP must be public; X-Forwarded-For is ignored unless the peer is a configured
+// trusted proxy (CF-Connecting-IP is honored there). Proof-of-possession of the
+// IP (an HTTP-01-style challenge) is still TODO and REQUIRED before this mints
+// certs-worthy subdomains for fully untrusted callers at scale.
 package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -32,6 +40,11 @@ func main() {
 	base := envOr("BASE_DOMAIN", defaultBase)
 	zoneName := envOr("ZONE_NAME", defaultZone)
 	port := envOr("PORT", "8080")
+	installToken := os.Getenv("INSTALL_TOKEN")
+	if installToken == "" {
+		log.Println("WARNING: INSTALL_TOKEN is unset — /register and /release are DISABLED (fail closed). Set it before serving customers.")
+	}
+	trusted := parseCIDRs(os.Getenv("TRUSTED_PROXIES"))
 
 	cf := &cfClient{token: token, http: &http.Client{Timeout: 15 * time.Second}}
 	zoneID, err := cf.findZoneID(zoneName)
@@ -39,13 +52,13 @@ func main() {
 		log.Fatalf("resolve zone %q: %v", zoneName, err)
 	}
 
-	s := &server{cf: cf, zoneID: zoneID, base: base, lim: newLimiter(10, time.Hour)}
+	s := &server{cf: cf, zoneID: zoneID, base: base, installToken: installToken, trusted: trusted, lim: newLimiter(10, time.Hour)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.health)
 	mux.HandleFunc("/register", s.register)
 	mux.HandleFunc("/release", s.release)
 
-	log.Printf("subdomain-registration service listening on :%s (base=%s, zone=%s)", port, base, zoneName)
+	log.Printf("subdomain-registration service listening on :%s (base=%s, zone=%s, auth=%v)", port, base, zoneName, installToken != "")
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
@@ -59,14 +72,25 @@ func envOr(k, def string) string {
 // ---- HTTP server ----------------------------------------------------------
 
 type server struct {
-	cf     *cfClient
-	zoneID string
-	base   string
-	lim    *limiter
+	cf           *cfClient
+	zoneID       string
+	base         string
+	installToken string
+	trusted      []*net.IPNet
+	lim          *limiter
 }
 
 func (s *server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+}
+
+// authorized fails closed: no configured token means registration is disabled.
+func (s *server) authorized(r *http.Request) bool {
+	if s.installToken == "" {
+		return false
+	}
+	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return subtle.ConstantTimeCompare([]byte(got), []byte(s.installToken)) == 1
 }
 
 func (s *server) register(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +98,11 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusMethodNotAllowed, "POST only")
 		return
 	}
-	src := sourceIP(r)
+	if !s.authorized(r) {
+		writeErr(w, http.StatusUnauthorized, "missing or invalid install token")
+		return
+	}
+	src := s.sourceIP(r)
 	if !s.lim.allow(src) {
 		writeErr(w, http.StatusTooManyRequests, "rate limit exceeded, try again later")
 		return
@@ -86,14 +114,14 @@ func (s *server) register(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	ip := strings.TrimSpace(req.IP)
 	if ip == "" {
-		ip = src // fall back to the caller's source IP
+		ip = src
 	}
-	if net.ParseIP(ip) == nil {
-		writeErr(w, http.StatusBadRequest, "a valid public IP is required")
+	parsed := net.ParseIP(ip)
+	if parsed == nil || !isPublicIP(parsed) {
+		writeErr(w, http.StatusBadRequest, "a valid, public IP is required")
 		return
 	}
 
-	// Pick an unused slug (collisions are astronomically unlikely, but check).
 	for i := 0; i < 8; i++ {
 		host := generateSlug() + "." + s.base
 		exists, err := s.cf.recordExists(s.zoneID, host)
@@ -120,13 +148,21 @@ func (s *server) release(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusMethodNotAllowed, "POST only")
 		return
 	}
+	if !s.authorized(r) {
+		writeErr(w, http.StatusUnauthorized, "missing or invalid install token")
+		return
+	}
+	if !s.lim.allow(s.sourceIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "rate limit exceeded, try again later")
+		return
+	}
 	var req struct {
 		Hostname string `json:"hostname"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	host := strings.TrimSpace(strings.ToLower(req.Hostname))
-	// Only ever delete records inside the base we operate.
-	if host == "" || !strings.HasSuffix(host, "."+s.base) {
+	// Only ever delete a well-formed subdomain inside the base we operate.
+	if host == "" || !strings.HasSuffix(host, "."+s.base) || !validHostname(host) {
 		writeErr(w, http.StatusBadRequest, "hostname must be a "+s.base+" subdomain")
 		return
 	}
@@ -138,13 +174,19 @@ func (s *server) release(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "released"})
 }
 
-func sourceIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.Split(xff, ",")[0])
-	}
+// sourceIP returns the caller IP. X-Forwarded-For is inherently spoofable, so it
+// is ignored; CF-Connecting-IP is honored ONLY when the immediate peer is a
+// configured trusted proxy. Otherwise the TCP peer address is used.
+func (s *server) sourceIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	peer := net.ParseIP(host)
+	if peer != nil && ipInAny(peer, s.trusted) {
+		if cf := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); cf != "" && net.ParseIP(cf) != nil {
+			return cf
+		}
 	}
 	return host
 }
@@ -157,6 +199,51 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
+}
+
+// ---- validation helpers ---------------------------------------------------
+
+// isPublicIP rejects loopback, private, link-local, multicast, and unspecified
+// addresses — a subdomain must never point at an internal target (SSRF/phishing).
+func isPublicIP(ip net.IP) bool {
+	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() ||
+		ip.IsMulticast() || ip.IsUnspecified())
+}
+
+// validHostname allows only DNS-safe characters, so a hostname can never inject
+// into the Cloudflare API query string.
+func validHostname(h string) bool {
+	for _, r := range h {
+		ok := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '.'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func parseCIDRs(s string) []*net.IPNet {
+	var out []*net.IPNet
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if _, n, err := net.ParseCIDR(part); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func ipInAny(ip net.IP, nets []*net.IPNet) bool {
+	for _, n := range nets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---- slug -----------------------------------------------------------------
@@ -270,7 +357,7 @@ func (c *cfClient) findZoneID(name string) (string, error) {
 	var zones []struct {
 		ID string `json:"id"`
 	}
-	if err := c.do("GET", "/zones?name="+name, nil, &zones); err != nil {
+	if err := c.do("GET", "/zones?name="+url.QueryEscape(name), nil, &zones); err != nil {
 		return "", err
 	}
 	if len(zones) == 0 {
@@ -285,7 +372,8 @@ type dnsRecord struct {
 
 func (c *cfClient) findRecord(zoneID, name string) (*dnsRecord, error) {
 	var recs []dnsRecord
-	if err := c.do("GET", fmt.Sprintf("/zones/%s/dns_records?type=A&name=%s", zoneID, name), nil, &recs); err != nil {
+	q := fmt.Sprintf("/zones/%s/dns_records?type=A&name=%s", url.PathEscape(zoneID), url.QueryEscape(name))
+	if err := c.do("GET", q, nil, &recs); err != nil {
 		return nil, err
 	}
 	if len(recs) == 0 {
@@ -300,7 +388,7 @@ func (c *cfClient) recordExists(zoneID, name string) (bool, error) {
 }
 
 func (c *cfClient) createA(zoneID, name, ip string) error {
-	return c.do("POST", fmt.Sprintf("/zones/%s/dns_records", zoneID), map[string]any{
+	return c.do("POST", "/zones/"+url.PathEscape(zoneID)+"/dns_records", map[string]any{
 		"type": "A", "name": name, "content": ip, "ttl": 120, "proxied": false,
 	}, nil)
 }
@@ -313,5 +401,5 @@ func (c *cfClient) deleteA(zoneID, name string) error {
 	if rec == nil {
 		return nil
 	}
-	return c.do("DELETE", fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, rec.ID), nil, nil)
+	return c.do("DELETE", "/zones/"+url.PathEscape(zoneID)+"/dns_records/"+url.PathEscape(rec.ID), nil, nil)
 }

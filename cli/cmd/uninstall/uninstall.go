@@ -12,12 +12,13 @@ import (
 )
 
 var (
-	flagLocal   bool
-	flagSSHHost string
-	flagSSHUser string
-	flagDir         string
-	flagDryRun      bool
-	flagRegisterURL string
+	flagLocal         bool
+	flagSSHHost       string
+	flagSSHUser       string
+	flagDir           string
+	flagDryRun        bool
+	flagRegisterURL   string
+	flagRegisterToken string
 )
 
 // Cmd is the `zen uninstall` command — tears down a compose-edition install.
@@ -39,6 +40,14 @@ func init() {
 	f.StringVar(&flagDir, "dir", "zenith", "Install directory on the target")
 	f.BoolVar(&flagDryRun, "dry-run", false, "Show what would happen without doing it")
 	f.StringVar(&flagRegisterURL, "register-url", "", "Override the subdomain-registration service URL")
+	f.StringVar(&flagRegisterToken, "register-token", "", "Install token for the registration service (defaults to $FREEZENITH_REGISTER_TOKEN)")
+}
+
+func registerToken() string {
+	if flagRegisterToken != "" {
+		return flagRegisterToken
+	}
+	return os.Getenv("FREEZENITH_REGISTER_TOKEN")
 }
 
 func runUninstall(cmd *cobra.Command, args []string) error {
@@ -46,13 +55,14 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("uninstall needs either --local or --ssh-host")
 	}
 	cfg := &install.Config{
-		Edition:      "compose",
-		ComposeLocal: flagLocal,
-		SSHHost:      flagSSHHost,
-		SSHUser:      flagSSHUser,
-		InstallDir:   flagDir,
-		RegisterURL:  flagRegisterURL,
-		DryRun:       flagDryRun,
+		Edition:       "compose",
+		ComposeLocal:  flagLocal,
+		SSHHost:       flagSSHHost,
+		SSHUser:       flagSSHUser,
+		InstallDir:    flagDir,
+		RegisterURL:   flagRegisterURL,
+		RegisterToken: registerToken(),
+		DryRun:        flagDryRun,
 	}
 	// Recover the registered domain from saved state so a free subdomain (if any)
 	// gets released via the registration service.

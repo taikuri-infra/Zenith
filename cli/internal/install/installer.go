@@ -107,6 +107,7 @@ type Config struct {
 	InstallDir    string // target checkout dir for the compose stack (default "zenith")
 	FreeSubdomain bool   // register a free <slug>.apps.freezenith.com + auto-HTTPS
 	RegisterURL   string // override the subdomain-registration service URL (tests/self-host)
+	RegisterToken string // install token presented to the registration service
 
 	// DryRun skips all real API calls for testing the installer flow.
 	DryRun bool

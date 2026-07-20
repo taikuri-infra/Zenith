@@ -113,20 +113,23 @@ func registerURL(cfg *Config) string {
 	return defaultRegisterURL
 }
 
-func postJSON(url string, body []byte) (*http.Response, error) {
+func postJSON(url, token string, body []byte) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	return (&http.Client{Timeout: 20 * time.Second}).Do(req)
 }
 
 // registerSubdomain asks the registration service for a free subdomain pointing at
 // ip and returns the assigned hostname. The Cloudflare token stays on the service.
-func registerSubdomain(serviceURL, ip string) (string, error) {
+func registerSubdomain(serviceURL, token, ip string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"ip": ip})
-	resp, err := postJSON(strings.TrimRight(serviceURL, "/")+"/register", body)
+	resp, err := postJSON(strings.TrimRight(serviceURL, "/")+"/register", token, body)
 	if err != nil {
 		return "", fmt.Errorf("contact registration service: %w", err)
 	}
@@ -147,9 +150,9 @@ func registerSubdomain(serviceURL, ip string) (string, error) {
 }
 
 // releaseSubdomain asks the registration service to remove a subdomain (uninstall).
-func releaseSubdomain(serviceURL, hostname string) error {
+func releaseSubdomain(serviceURL, token, hostname string) error {
 	body, _ := json.Marshal(map[string]string{"hostname": hostname})
-	resp, err := postJSON(strings.TrimRight(serviceURL, "/")+"/release", body)
+	resp, err := postJSON(strings.TrimRight(serviceURL, "/")+"/release", token, body)
 	if err != nil {
 		return err
 	}
@@ -176,7 +179,7 @@ func composeRegisterSubdomain(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	host, err := registerSubdomain(registerURL(cfg), ip)
+	host, err := registerSubdomain(registerURL(cfg), cfg.RegisterToken, ip)
 	if err != nil {
 		return err
 	}
@@ -437,7 +440,7 @@ func ComposeUninstall(cfg *Config) error {
 
 	// Release the free subdomain via the registration service if one was used.
 	if strings.HasSuffix(cfg.Domain, "."+freeSubdomainBase) {
-		_ = releaseSubdomain(registerURL(cfg), cfg.Domain)
+		_ = releaseSubdomain(registerURL(cfg), cfg.RegisterToken, cfg.Domain)
 	}
 	return nil
 }

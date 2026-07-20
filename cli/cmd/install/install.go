@@ -2,6 +2,7 @@ package install
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ var (
 	flagLocal         bool
 	flagFreeDomain    bool
 	flagRegisterURL   string
+	flagRegisterToken string
 )
 
 var Cmd = &cobra.Command{
@@ -69,6 +71,7 @@ func init() {
 	f.BoolVar(&flagLocal, "local", false, "Compose edition: install on this machine instead of over SSH")
 	f.BoolVar(&flagFreeDomain, "free-domain", false, "Compose edition: reserve a free <slug>.apps.freezenith.com with automatic HTTPS")
 	f.StringVar(&flagRegisterURL, "register-url", "", "Override the subdomain-registration service URL (default: https://register.freezenith.com)")
+	f.StringVar(&flagRegisterToken, "register-token", "", "Install token for the registration service (defaults to $FREEZENITH_REGISTER_TOKEN)")
 
 	// Accept legacy --token flag as alias for --hetzner-token
 	f.String("token", "", "Alias for --hetzner-token (deprecated)")
@@ -167,6 +170,14 @@ func isNonInteractive(cmd *cobra.Command) bool {
 	return flagDomain != "" || flagEdition != ""
 }
 
+// registerTokenOrEnv returns the --register-token flag, or $FREEZENITH_REGISTER_TOKEN.
+func registerTokenOrEnv() string {
+	if flagRegisterToken != "" {
+		return flagRegisterToken
+	}
+	return os.Getenv("FREEZENITH_REGISTER_TOKEN")
+}
+
 // buildComposeConfigFromFlags builds a compose-edition Config from flags.
 func buildComposeConfigFromFlags() (*install.Config, error) {
 	cfg := &install.Config{
@@ -176,6 +187,7 @@ func buildComposeConfigFromFlags() (*install.Config, error) {
 		SSHUser:       flagSSHUser,
 		FreeSubdomain: flagFreeDomain,
 		RegisterURL:   flagRegisterURL,
+		RegisterToken: registerTokenOrEnv(),
 		DryRun:        flagDryRun,
 	}
 	if !flagLocal {
@@ -333,9 +345,9 @@ func runSteps(cfg *install.Config, resumeState *installstate.State) error {
 	state := resumeState
 	if state == nil {
 		state = &installstate.State{
-			Domain:    cfg.Domain,
-			Provider:  string(cfg.MCProvider),
-			Region:    cfg.Region,
+			Domain:     cfg.Domain,
+			Provider:   string(cfg.MCProvider),
+			Region:     cfg.Region,
 			SSHKeyPath: cfg.SSHKeyPath,
 		}
 	}

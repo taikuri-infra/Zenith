@@ -12,6 +12,11 @@ func TestRegisterAndReleaseSubdomain_Client(t *testing.T) {
 	var sawRegister, sawRelease bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			return
+		}
 		switch r.URL.Path {
 		case "/register":
 			sawRegister = true
@@ -30,7 +35,7 @@ func TestRegisterAndReleaseSubdomain_Client(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	host, err := registerSubdomain(srv.URL, "203.0.113.5")
+	host, err := registerSubdomain(srv.URL, "test-token", "203.0.113.5")
 	if err != nil {
 		t.Fatalf("registerSubdomain: %v", err)
 	}
@@ -40,7 +45,7 @@ func TestRegisterAndReleaseSubdomain_Client(t *testing.T) {
 	if !sawRegister {
 		t.Error("service /register was not called")
 	}
-	if err := releaseSubdomain(srv.URL, host); err != nil {
+	if err := releaseSubdomain(srv.URL, "test-token", host); err != nil {
 		t.Fatalf("releaseSubdomain: %v", err)
 	}
 	if !sawRelease {
