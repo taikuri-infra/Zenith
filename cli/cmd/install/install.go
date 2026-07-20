@@ -190,6 +190,11 @@ func buildComposeConfigFromFlags() (*install.Config, error) {
 		RegisterToken: registerTokenOrEnv(),
 		DryRun:        flagDryRun,
 	}
+	// Optional: auto-create the A record for a custom domain on Cloudflare.
+	if flagDNSProvider != "" {
+		cfg.DNSProvider = install.DNSProvider(strings.ToLower(flagDNSProvider))
+		cfg.CloudflareToken = flagDNSToken
+	}
 	if !flagLocal {
 		if flagSSHHost == "" {
 			return nil, fmt.Errorf("compose edition needs either --local or --ssh-host")

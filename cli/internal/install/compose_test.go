@@ -86,6 +86,26 @@ func TestGetComposeInstallSteps_FreeSubdomainAddsStep(t *testing.T) {
 	}
 }
 
+func TestGetComposeInstallSteps_CustomDomainAddsDNSStep(t *testing.T) {
+	has := func(cfg *Config, name string) bool {
+		for _, s := range GetComposeInstallSteps(cfg) {
+			if s.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(&Config{Edition: "compose", ComposeLocal: true, Domain: "app.example.com"}, "Configure DNS") {
+		t.Error("a custom domain should add the 'Configure DNS' step")
+	}
+	if has(&Config{Edition: "compose", ComposeLocal: true, Domain: "localhost"}, "Configure DNS") {
+		t.Error("localhost must not add Configure DNS")
+	}
+	if has(&Config{Edition: "compose", ComposeLocal: true, FreeSubdomain: true}, "Configure DNS") {
+		t.Error("a free subdomain must not add Configure DNS")
+	}
+}
+
 func TestComposeSteps_FreeSubdomainDryRun(t *testing.T) {
 	cfg := &Config{Edition: "compose", ComposeLocal: true, FreeSubdomain: true, DryRun: true}
 	for _, step := range GetComposeInstallSteps(cfg) {

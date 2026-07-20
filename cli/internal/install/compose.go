@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotechhq/zenith/cli/internal/cloudflare"
 	"github.com/dotechhq/zenith/cli/internal/installstate"
 )
 
@@ -192,12 +193,7 @@ func composeRegisterSubdomain(cfg *Config) error {
 // GetInstallSteps; runSteps executes it identically (resume + dry-run reuse).
 func GetComposeInstallSteps(cfg *Config) []Step {
 	steps := []Step{
-		{
-			Name:        "Connect",
-			Description: describeComposeTarget(cfg),
-			Duration:    5 * time.Second,
-			Action:      composeConnect,
-		},
+		{Name: "Connect", Description: describeComposeTarget(cfg), Duration: 5 * time.Second, Action: composeConnect},
 	}
 	if cfg.FreeSubdomain {
 		steps = append(steps, Step{
@@ -207,39 +203,95 @@ func GetComposeInstallSteps(cfg *Config) []Step {
 			Action:      composeRegisterSubdomain,
 		})
 	}
-	steps = append(steps, []Step{
-		{
-			Name:        "Ensure Docker",
-			Description: "Checking for Docker and Docker Compose...",
+	steps = append(steps,
+		Step{Name: "Ensure Docker", Description: "Checking for Docker and Docker Compose...", Duration: 30 * time.Second, Action: composeEnsureDocker},
+		Step{Name: "Fetch stack", Description: "Fetching FreeZenith and generating secrets...", Duration: 20 * time.Second, Action: composeFetchStack},
+	)
+	if needsCustomDNS(cfg) {
+		steps = append(steps, Step{
+			Name:        "Configure DNS",
+			Description: fmt.Sprintf("Pointing %s at this server...", cfg.Domain),
 			Duration:    30 * time.Second,
-			Action:      composeEnsureDocker,
-		},
-		{
-			Name:        "Fetch stack",
-			Description: "Fetching FreeZenith and generating secrets...",
-			Duration:    20 * time.Second,
-			Action:      composeFetchStack,
-		},
-		{
-			Name:        "Start services",
-			Description: "Pulling prebuilt images and starting the stack...",
-			Duration:    90 * time.Second,
-			Action:      composeUp,
-		},
-		{
-			Name:        "Wait for health",
-			Description: "Waiting for the API to become healthy...",
-			Duration:    60 * time.Second,
-			Action:      composeWaitHealth,
-		},
-		{
-			Name:        "Save credentials",
-			Description: "Saving login credentials...",
-			Duration:    2 * time.Second,
-			Action:      composeSaveCredentials,
-		},
-	}...)
+			Action:      composeConfigureDNS,
+		})
+	}
+	steps = append(steps,
+		Step{Name: "Start services", Description: "Pulling prebuilt images and starting the stack...", Duration: 90 * time.Second, Action: composeUp},
+		Step{Name: "Wait for health", Description: "Waiting for the API to become healthy...", Duration: 60 * time.Second, Action: composeWaitHealth},
+		Step{Name: "Save credentials", Description: "Saving login credentials...", Duration: 2 * time.Second, Action: composeSaveCredentials},
+	)
 	return steps
+}
+
+// needsCustomDNS is true for a bring-your-own public domain (not localhost, not a
+// free FreeZenith subdomain) — the customer's own domain must be pointed at the box.
+func needsCustomDNS(cfg *Config) bool {
+	return !cfg.FreeSubdomain && cfg.Domain != "" && cfg.Domain != "localhost"
+}
+
+// composeConfigureDNS makes sure the customer's domain points at the box before
+// Traefik requests a Let's Encrypt cert. FreeZenith never holds the customer's DNS
+// credentials, so by default it guides them to add the A record and waits for it;
+// if they supplied a Cloudflare token for their own zone, it creates the record.
+func composeConfigureDNS(cfg *Config) error {
+	if cfg.DryRun {
+		return nil
+	}
+	r, err := newRunner(cfg)
+	if err != nil {
+		return err
+	}
+	ip, err := detectPublicIP(r)
+	r.Close()
+	if err != nil {
+		return err
+	}
+
+	// Automated path: create the A record in the customer's own Cloudflare zone.
+	if cfg.DNSProvider == DNSCloudflare && cfg.CloudflareToken != "" {
+		cf := cloudflare.NewClient(cfg.CloudflareToken)
+		zone, zerr := cf.FindZone(cfg.Domain)
+		if zerr != nil {
+			return fmt.Errorf("find your Cloudflare zone for %s: %w", cfg.Domain, zerr)
+		}
+		if uerr := cf.UpsertRecord(zone.ID, cfg.Domain, ip); uerr != nil {
+			return fmt.Errorf("create A record %s -> %s: %w", cfg.Domain, ip, uerr)
+		}
+	} else if !domainResolvesTo(cfg.Domain, ip) {
+		// Manual path: the record must already point at this box.
+		return fmt.Errorf(
+			"%s is not pointed at this server yet.\n"+
+				"    Add this DNS record at your provider, then re-run with --resume:\n\n"+
+				"        A   %s   ->   %s\n",
+			cfg.Domain, cfg.Domain, ip)
+	}
+
+	// Wait for the record to resolve before HTTPS issuance (bounded).
+	deadline := time.Now().Add(5 * time.Minute)
+	delay := 5 * time.Second
+	for {
+		if domainResolvesTo(cfg.Domain, ip) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s did not resolve to %s in time (DNS may still be propagating — re-run with --resume)", cfg.Domain, ip)
+		}
+		time.Sleep(delay)
+	}
+}
+
+// domainResolvesTo reports whether domain currently resolves to ip.
+func domainResolvesTo(domain, ip string) bool {
+	addrs, err := net.LookupHost(domain)
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if a == ip {
+			return true
+		}
+	}
+	return false
 }
 
 func describeComposeTarget(cfg *Config) string {
