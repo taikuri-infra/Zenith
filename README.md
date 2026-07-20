@@ -1,30 +1,28 @@
 # Zenith
 
-**Open-source PaaS. Deploy apps with git push.**
+**Open-source PaaS. Deploy any Docker image or Compose stack on your own server.**
 
-Zenith is a self-hosted platform-as-a-service that gives you Heroku-like simplicity on your own infrastructure. Push code, get a running app — with databases, storage, auth, and domains built in.
-
-## Try it
-
-**Live read-only demo:** [demo.freezenith.com](https://demo.freezenith.com)
+Zenith is a self-hosted platform-as-a-service that gives you Heroku-like simplicity on your own infrastructure. Point it at a container image — or drop in your existing `docker-compose.yml` unchanged — and get a running app, with databases, object storage, auth, and automatic HTTPS built in.
 
 ## Quick Start
 
-**Prerequisites:** Docker and Docker Compose (the installer checks for them but does
-not install them — set them up first via [get.docker.com](https://get.docker.com)).
-Around 20 GB of RAM is recommended, because the container images currently build on
-the server during install. Object storage runs locally via RustFS — no external S3
-account needed.
+**Prerequisites:** a Linux server (or any Docker host). The installer sets up Docker
+and Docker Compose automatically if they're missing. The stack pulls prebuilt images —
+there is no build step — so it runs comfortably in about 2 GB of RAM. Object storage
+runs locally via RustFS, so no external S3 account is required.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dotechhq/zenith/main/infra/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/taikuri-infra/Zenith/main/infra/scripts/install.sh | bash
 ```
+
+The installer fetches the stack, generates strong secrets, starts everything, and
+prints your dashboard URL and admin password.
 
 Or manually:
 
 ```bash
-git clone https://github.com/dotechhq/zenith.git
-cd zenith
+git clone https://github.com/taikuri-infra/Zenith.git
+cd Zenith
 cp .env.example .env
 # Edit .env — set JWT_SECRET (min 32 chars) and admin credentials
 docker compose up -d
@@ -34,7 +32,7 @@ Open [http://localhost:3000](http://localhost:3000) and log in with your admin c
 
 ## Features
 
-- **App Deployment** — Git push to deploy. Supports Dockerfiles and buildpacks.
+- **App Deployment** — Deploy any Docker image, or import an existing Docker Compose stack unchanged.
 - **Databases** — Managed PostgreSQL, MySQL, and Redis per app.
 - **Object Storage** — S3-compatible storage buckets.
 - **Built-in Auth** — Per-app user authentication out of the box.
