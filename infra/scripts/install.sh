@@ -53,6 +53,20 @@ else
 fi
 log "Docker and Docker Compose ready."
 
+# A freshly-added docker group membership (the usermod above) does NOT apply to
+# this already-running shell — only to future logins. So `docker` can be
+# unreachable right now even though the daemon is up and running. Detect that and
+# fall back to sudo for the container operations. On a box where the user already
+# has docker access (or is root), no sudo is used.
+DOCKER_PREFIX=""
+if ! docker info >/dev/null 2>&1; then
+  if [ -n "$SUDO" ] && $SUDO docker info >/dev/null 2>&1; then
+    DOCKER_PREFIX="$SUDO"
+    warn "Docker group access isn't active in this shell yet — using sudo for now."
+    warn "Log out and back in to use 'docker' without sudo."
+  fi
+fi
+
 # ---- Fetch the stack -------------------------------------------------------
 if [ -d "$INSTALL_DIR/.git" ]; then
   log "Updating existing checkout in '$INSTALL_DIR'..."
@@ -116,7 +130,7 @@ fi
 
 # ---- Start -----------------------------------------------------------------
 log "Pulling images and starting FreeZenith..."
-$COMPOSE up -d
+$DOCKER_PREFIX $COMPOSE up -d
 
 printf '\n\033[32m============================================\033[0m\n'
 printf '  FreeZenith is running!\n\n'
