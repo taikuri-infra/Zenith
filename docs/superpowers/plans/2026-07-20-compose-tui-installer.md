@@ -51,17 +51,19 @@ with a user-provided domain (or localhost). This is the MVP the TUI wraps.
    **local Docker** target (pattern: `installer_integration_test.go`); a `--resume`
    test (kill mid-install, re-run, assert completed steps skipped).
 
-## Phase B — Free `*.apps.freezenith.com` subdomain + auto-HTTPS
-The spec's headline "zero DNS knowledge" feature. Riskiest (hosted infra), so separate.
-- **OPEN/BLOCKER:** the subdomain-registration service needs API control of the
-  `freezenith.com` DNS zone. The `CLOUDFLARE_DOTECH` token available today does **not**
-  see that zone — need the correct Cloudflare account/token (or pick a base domain we
-  do control). Resolve before building.
-- Registration endpoint: detect public IP → create `<slug>.apps.freezenith.com` A record
-  → return hostname. Rate-limit per source IP; slug-collision handling; cleanup job for
-  abandoned/unhealthy installs.
-- Wire Traefik ACME (HTTP-01) to the registered hostname — mechanism already verified
-  today; only needs the public hostname handed in.
+## Phase B — Free `*.apps.freezenith.com` subdomain + auto-HTTPS — BUILT (2026-07-21)
+The spec's "zero DNS knowledge" feature, built as a **hosted registration service**
+so the Cloudflare token never touches a customer box.
+- **`services/register/`** (new module) holds the token. `POST /register {ip}` →
+  creates `<slug>.apps.freezenith.com` → returns just the hostname; `POST /release
+  {hostname}` deletes it. Rate-limited per source IP; slug-collision retry. Verified
+  end-to-end against real Cloudflare (register → record exists → release → deleted).
+- **Installer client** (`composeRegisterSubdomain`): detects the target's public IP,
+  calls the service, sets `cfg.Domain`. `--free-domain` adds the "Register subdomain"
+  step; `zen uninstall` releases it. The box holds **no token** — only its hostname.
+- Traefik ACME (HTTP-01) issues the cert for the registered hostname on a public box.
+- **Remaining:** deploy the service at `register.freezenith.com` (behind TLS); add a
+  cleanup job for abandoned installs; full real-LE cert e2e needs a public box (Hetzner).
 
 ## Phase C — "Show off" polish
 - Real Bubble Tea progress model (replace the ANSI `runSteps` overwrite) + a designed

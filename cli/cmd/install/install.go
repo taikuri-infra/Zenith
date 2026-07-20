@@ -29,6 +29,8 @@ var (
 	flagChartVersion  string
 	flagEdition       string
 	flagLocal         bool
+	flagFreeDomain    bool
+	flagRegisterURL   string
 )
 
 var Cmd = &cobra.Command{
@@ -65,6 +67,8 @@ func init() {
 	f.StringVar(&flagChartVersion, "chart-version", "", "Helm chart version to install (default: latest)")
 	f.StringVar(&flagEdition, "edition", "", "Edition: 'compose' (self-host on any Linux box, no Kubernetes) or 'cloud' (Hetzner/k8s)")
 	f.BoolVar(&flagLocal, "local", false, "Compose edition: install on this machine instead of over SSH")
+	f.BoolVar(&flagFreeDomain, "free-domain", false, "Compose edition: reserve a free <slug>.apps.freezenith.com with automatic HTTPS")
+	f.StringVar(&flagRegisterURL, "register-url", "", "Override the subdomain-registration service URL (default: https://register.freezenith.com)")
 
 	// Accept legacy --token flag as alias for --hetzner-token
 	f.String("token", "", "Alias for --hetzner-token (deprecated)")
@@ -166,11 +170,13 @@ func isNonInteractive(cmd *cobra.Command) bool {
 // buildComposeConfigFromFlags builds a compose-edition Config from flags.
 func buildComposeConfigFromFlags() (*install.Config, error) {
 	cfg := &install.Config{
-		Edition:      "compose",
-		ComposeLocal: flagLocal,
-		Domain:       flagDomain, // optional; empty/localhost => local HTTP
-		SSHUser:      flagSSHUser,
-		DryRun:       flagDryRun,
+		Edition:       "compose",
+		ComposeLocal:  flagLocal,
+		Domain:        flagDomain, // optional; empty/localhost => local HTTP
+		SSHUser:       flagSSHUser,
+		FreeSubdomain: flagFreeDomain,
+		RegisterURL:   flagRegisterURL,
+		DryRun:        flagDryRun,
 	}
 	if !flagLocal {
 		if flagSSHHost == "" {

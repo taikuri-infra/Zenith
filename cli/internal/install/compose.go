@@ -1,10 +1,14 @@
 package install
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math/big"
+	"net"
+	"net/http"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -12,6 +16,10 @@ import (
 
 	"github.com/dotechhq/zenith/cli/internal/installstate"
 )
+
+// freeSubdomainBase is the domain FreeZenith operates for zero-DNS installs:
+// every free install gets <slug>.apps.freezenith.com with an auto Let's Encrypt cert.
+const freeSubdomainBase = "apps.freezenith.com"
 
 // generateSecret returns an alphanumeric secret. Unlike GeneratePassword (which
 // includes !@#$%), this is safe to write into a docker-compose .env file, where
@@ -82,17 +90,121 @@ func validateInstallDir(dir string) error {
 	return nil
 }
 
+// detectPublicIP asks the target for its own public IP (tries several providers).
+func detectPublicIP(r runner) (string, error) {
+	for _, u := range []string{"https://api.ipify.org", "https://ifconfig.me", "https://icanhazip.com"} {
+		out, err := r.Run("curl -fsS --max-time 8 " + u)
+		ip := strings.TrimSpace(out)
+		if err == nil && net.ParseIP(ip) != nil {
+			return ip, nil
+		}
+	}
+	return "", fmt.Errorf("could not detect the target's public IP")
+}
+
+// defaultRegisterURL is the FreeZenith-operated subdomain registration service.
+// IT holds the Cloudflare token; the customer's box only ever receives a hostname.
+const defaultRegisterURL = "https://register.freezenith.com"
+
+func registerURL(cfg *Config) string {
+	if cfg.RegisterURL != "" {
+		return cfg.RegisterURL
+	}
+	return defaultRegisterURL
+}
+
+func postJSON(url string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return (&http.Client{Timeout: 20 * time.Second}).Do(req)
+}
+
+// registerSubdomain asks the registration service for a free subdomain pointing at
+// ip and returns the assigned hostname. The Cloudflare token stays on the service.
+func registerSubdomain(serviceURL, ip string) (string, error) {
+	body, _ := json.Marshal(map[string]string{"ip": ip})
+	resp, err := postJSON(strings.TrimRight(serviceURL, "/")+"/register", body)
+	if err != nil {
+		return "", fmt.Errorf("contact registration service: %w", err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Hostname string `json:"hostname"`
+		Error    string `json:"error"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != http.StatusOK || out.Hostname == "" {
+		msg := out.Error
+		if msg == "" {
+			msg = resp.Status
+		}
+		return "", fmt.Errorf("registration failed: %s", msg)
+	}
+	return out.Hostname, nil
+}
+
+// releaseSubdomain asks the registration service to remove a subdomain (uninstall).
+func releaseSubdomain(serviceURL, hostname string) error {
+	body, _ := json.Marshal(map[string]string{"hostname": hostname})
+	resp, err := postJSON(strings.TrimRight(serviceURL, "/")+"/release", body)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// composeRegisterSubdomain reserves a free <slug>.apps.freezenith.com via the
+// registration service and sets cfg.Domain so the rest of the flow serves HTTPS
+// there (Traefik + Let's Encrypt) — no DNS knowledge, and no token on this box.
+func composeRegisterSubdomain(cfg *Config) error {
+	if cfg.DryRun {
+		if cfg.Domain == "" {
+			cfg.Domain = "swift-otter-demo." + freeSubdomainBase
+		}
+		return nil
+	}
+	r, err := newRunner(cfg)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	ip, err := detectPublicIP(r)
+	if err != nil {
+		return err
+	}
+	host, err := registerSubdomain(registerURL(cfg), ip)
+	if err != nil {
+		return err
+	}
+	cfg.Domain = host
+	return nil
+}
+
 // GetComposeInstallSteps returns the ordered steps for the Compose (self-host)
 // edition — the docker-compose stack on any Linux box, no Kubernetes. Mirrors
 // GetInstallSteps; runSteps executes it identically (resume + dry-run reuse).
 func GetComposeInstallSteps(cfg *Config) []Step {
-	return []Step{
+	steps := []Step{
 		{
 			Name:        "Connect",
 			Description: describeComposeTarget(cfg),
 			Duration:    5 * time.Second,
 			Action:      composeConnect,
 		},
+	}
+	if cfg.FreeSubdomain {
+		steps = append(steps, Step{
+			Name:        "Register subdomain",
+			Description: "Reserving a free <slug>.apps.freezenith.com with HTTPS...",
+			Duration:    10 * time.Second,
+			Action:      composeRegisterSubdomain,
+		})
+	}
+	steps = append(steps, []Step{
 		{
 			Name:        "Ensure Docker",
 			Description: "Checking for Docker and Docker Compose...",
@@ -123,7 +235,8 @@ func GetComposeInstallSteps(cfg *Config) []Step {
 			Duration:    2 * time.Second,
 			Action:      composeSaveCredentials,
 		},
-	}
+	}...)
+	return steps
 }
 
 func describeComposeTarget(cfg *Config) string {
@@ -320,6 +433,11 @@ func ComposeUninstall(cfg *Config) error {
 	cmd := fmt.Sprintf("cd %s && %sdocker compose --profile tls down -v", dir, prefix)
 	if out, err := r.Run(cmd); err != nil {
 		return fmt.Errorf("uninstall: %w\n%s", err, out)
+	}
+
+	// Release the free subdomain via the registration service if one was used.
+	if strings.HasSuffix(cfg.Domain, "."+freeSubdomainBase) {
+		_ = releaseSubdomain(registerURL(cfg), cfg.Domain)
 	}
 	return nil
 }
