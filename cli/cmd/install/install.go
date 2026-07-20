@@ -133,8 +133,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		// Resume mode without explicit flags: rebuild config from saved state
 		cfg = configFromState(resumeState)
 	} else {
-		// Interactive wizard
-		result, err := install.RunWizard()
+		// Interactive wizard — asks edition first, then compose or cloud.
+		result, err := install.RunInteractive()
 		if err != nil {
 			return err
 		}
@@ -146,6 +146,11 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		cfg = result.Config
+		if cfg.Edition == "compose" {
+			// Operator-side defaults not asked in the wizard.
+			cfg.RegisterURL = flagRegisterURL
+			cfg.RegisterToken = registerTokenOrEnv()
+		}
 	}
 
 	// Run installation steps with progress display
