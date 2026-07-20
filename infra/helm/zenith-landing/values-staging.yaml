@@ -3,7 +3,7 @@
 # Rollback: set image back to zenith-landing:sha-3882928 (the old commercial landing).
 namespace: zenith-staging
 replicas: 1
-image: freezenith-site:sha-c824a5b
+image: freezenith-site:sha-3c4479c
 imageRegistry: ""  # set via Terraform
 imagePullPolicy: IfNotPresent
 imagePullSecret: ""  # set via Terraform
