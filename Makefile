@@ -14,6 +14,7 @@ IMAGES := zenith-api zenith-landing freezenith-site zenith-mc zenith-web zenith-
 # Manual deploy helper (bypasses act when it's broken due to dead containers)
 # Usage: make manual-deploy-web
 MANUAL_TAG ?= sha-$(shell git rev-parse --short HEAD)
+CLI_VERSION ?= dev
 
 .PHONY: help version \
 	test test-api test-web lint lint-api lint-web \
@@ -63,6 +64,18 @@ security: ## Run Semgrep security scan
 # =============================================================================
 # Docker Build (local, cross-compiled to linux/amd64)
 # =============================================================================
+
+build-cli-release: ## Cross-compile the zen CLI (linux/darwin, amd64/arm64) into dist/ with checksums
+	@rm -rf dist && mkdir -p dist
+	@for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do \
+	  os=$${pair%/*}; arch=$${pair#*/}; \
+	  echo "  building zen_$${os}_$${arch}"; \
+	  GO111MODULE=on GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go -C cli build -trimpath \
+	    -ldflags "-s -w -X github.com/dotechhq/zenith/cli/cmd/version.Version=$(CLI_VERSION) -X github.com/dotechhq/zenith/cli/cmd/version.GitCommit=$$(git rev-parse --short HEAD)" \
+	    -o ../dist/zen_$${os}_$${arch} . ; \
+	done
+	@cd dist && (command -v sha256sum >/dev/null 2>&1 && sha256sum zen_linux_* zen_darwin_* || shasum -a 256 zen_linux_* zen_darwin_*) > zen_checksums.txt
+	@echo "built:" && ls -1 dist
 
 build: build-api build-landing build-freezenith-site build-mc build-web build-operator ## Build all images
 

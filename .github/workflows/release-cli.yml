@@ -1,0 +1,37 @@
+name: Release zen CLI
+
+# Builds the zen CLI for linux/darwin (amd64/arm64) and attaches the binaries +
+# checksums to the release, so `curl … | sh` (cli/install.sh) and `zen
+# self-update` can fetch them.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach binaries to"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Cross-compile and attach to release
+        # Pass the (maintainer-controlled) tag via env and quote it in the shell,
+        # never interpolate ${{ ... }} directly into run commands.
+        env:
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          make build-cli-release CLI_VERSION="$TAG"
+          gh release upload "$TAG" \
+            dist/zen_linux_amd64 dist/zen_linux_arm64 \
+            dist/zen_darwin_amd64 dist/zen_darwin_arm64 \
+            dist/zen_checksums.txt --clobber

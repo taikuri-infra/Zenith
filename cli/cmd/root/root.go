@@ -11,6 +11,7 @@ import (
 	"github.com/dotechhq/zenith/cli/cmd/install"
 	"github.com/dotechhq/zenith/cli/cmd/login"
 	"github.com/dotechhq/zenith/cli/cmd/logs"
+	"github.com/dotechhq/zenith/cli/cmd/selfupdate"
 	"github.com/dotechhq/zenith/cli/cmd/status"
 	"github.com/dotechhq/zenith/cli/cmd/top"
 	"github.com/dotechhq/zenith/cli/cmd/uninstall"
@@ -48,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(upgrade.Cmd)
 	rootCmd.AddCommand(backup.Cmd)
 	rootCmd.AddCommand(uninstall.Cmd)
+	rootCmd.AddCommand(selfupdate.Cmd)
 }
 
 func Execute() error {
