@@ -101,6 +101,11 @@ type Config struct {
 	// ChartVersion is set after installZenithChart succeeds (from helm list).
 	ChartVersion string
 
+	// Compose edition (self-host, docker-compose, no Kubernetes).
+	Edition      string // "compose" or "cloud" (empty = cloud/Hetzner path)
+	ComposeLocal bool   // true: install on this machine; false: SSH to SSHHost
+	InstallDir   string // target checkout dir for the compose stack (default "zenith")
+
 	// DryRun skips all real API calls for testing the installer flow.
 	DryRun bool
 }
