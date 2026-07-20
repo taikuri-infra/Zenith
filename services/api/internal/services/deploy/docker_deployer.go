@@ -23,8 +23,8 @@ import (
 
 // DockerDeployer runs user apps as plain Docker containers on the host — the
 // compute backend for the standalone self-host edition (no Kubernetes). Routing
-// and HTTPS are handled by caddy-docker-proxy, which reads the container labels
-// this deployer sets.
+// and HTTPS are handled by Traefik, which reads the traefik.* container labels
+// this deployer sets — the same proxy the cloud/k8s edition uses (IngressRoute).
 type DockerDeployer struct {
 	cli        *client.Client
 	appRepo    ports.AppRepository
@@ -32,7 +32,7 @@ type DockerDeployer struct {
 	planRepo   ports.UserPlanRepository
 	envCrypto  *pkgCrypto.EnvCrypto
 	baseDomain string
-	network    string // docker network shared with caddy-docker-proxy
+	network    string // docker network shared with Traefik
 	// Per-app locks serialize deploy/delete for a given app. Deploys are
 	// triggered from several places (app creation, project deploy, env-var
 	// apply) that can fire concurrently; without this they race on the
@@ -49,7 +49,7 @@ func (d *DockerDeployer) appLock(appID string) *sync.Mutex {
 }
 
 // NewDockerDeployer creates a Docker-backed deployer. network is the docker
-// network app containers join (must be the one caddy-docker-proxy watches).
+// network app containers join (must be the one Traefik watches).
 func NewDockerDeployer(cli *client.Client, appRepo ports.AppRepository, envVarRepo ports.EnvVarRepository, planRepo ports.UserPlanRepository, baseDomain, network string) *DockerDeployer {
 	return &DockerDeployer{
 		cli:        cli,
@@ -116,14 +116,10 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 	// Remove any previous container so we deploy fresh.
 	_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
 
-	// caddy-docker-proxy labels: route <subdomain>.<baseDomain> (+ custom domains)
-	// to this container's port. Caddy handles the Let's Encrypt cert.
-	hosts := []string{fmt.Sprintf("%s.%s", app.Subdomain, d.baseDomain)}
-	labels := map[string]string{
-		"zenith.app.id": app.ID,
-		"caddy":         strings.Join(hosts, ", "),
-		"caddy.reverse_proxy": fmt.Sprintf("{{upstreams %d}}", app.Port),
-	}
+	// Traefik labels: route <subdomain>.<baseDomain> to this container's port.
+	// Traefik obtains the Let's Encrypt cert (certresolver "le"). Same proxy
+	// model as the cloud/k8s edition, which routes via Traefik IngressRoute.
+	labels := proxyLabels(app, d.baseDomain, d.network)
 
 	// Network aliases let other services reach this one by its original compose
 	// service name (e.g. a backend connecting to "db:5432") and by subdomain.
@@ -149,7 +145,8 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 	if err := d.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("docker-deploy: start container %s: %w", name, err)
 	}
-	slog.Info("docker-deploy: app running", "app", app.Name, "container", name, "host", hosts[0])
+	slog.Info("docker-deploy: app running", "app", app.Name, "container", name,
+		"host", fmt.Sprintf("%s.%s", app.Subdomain, d.baseDomain))
 	return nil
 }
 
@@ -210,6 +207,34 @@ func (d *DockerDeployer) resolveEnvVars(ctx context.Context, app *entities.App) 
 }
 
 // sanitizeName makes a subdomain safe for a docker container name.
+// proxyLabels builds the Traefik router/service labels that expose an app
+// container at <subdomain>.<baseDomain> over HTTPS. Router and service names are
+// derived from the subdomain so they're unique and human-readable. This mirrors
+// the Traefik IngressRoute the cloud/k8s edition creates for the same app.
+func proxyLabels(app *entities.App, baseDomain, network string) map[string]string {
+	hosts := []string{fmt.Sprintf("%s.%s", app.Subdomain, baseDomain)}
+	rn := sanitizeName(app.Subdomain)
+	return map[string]string{
+		"zenith.app.id":          app.ID,
+		"traefik.enable":         "true",
+		"traefik.docker.network": network,
+		fmt.Sprintf("traefik.http.routers.%s.rule", rn):                      hostRule(hosts),
+		fmt.Sprintf("traefik.http.routers.%s.entrypoints", rn):               "websecure",
+		fmt.Sprintf("traefik.http.routers.%s.tls.certresolver", rn):          "le",
+		fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", rn): fmt.Sprintf("%d", app.Port),
+	}
+}
+
+// hostRule turns hostnames into a Traefik rule: Host(`a`) || Host(`b`).
+func hostRule(hosts []string) string {
+	const bq = "`"
+	parts := make([]string, len(hosts))
+	for i, h := range hosts {
+		parts[i] = "Host(" + bq + h + bq + ")"
+	}
+	return strings.Join(parts, " || ")
+}
+
 func sanitizeName(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	var b strings.Builder
