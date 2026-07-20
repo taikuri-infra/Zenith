@@ -1,17 +1,17 @@
 "use client";
 
 import { Section, SectionHeader, Reveal } from "./section";
-import { Cloud, Building2, Check } from "lucide-react";
+import { Server, Building2, Check } from "lucide-react";
 
 const options = [
   {
-    icon: Cloud,
-    tag: "Cloud",
-    title: "Hetzner",
+    icon: Server,
+    tag: "Self-host",
+    title: "Any Linux server",
     status: "This version",
     available: true,
-    body: "Bring your own Hetzner account, spin up affordable cloud or dedicated servers, and let FreeZenith provision k3s and the full platform on top. Ideal for lean teams and startups.",
-    bullets: ["Use your own Hetzner account", "Cheap, powerful EU hardware", "Full platform installed for you"],
+    body: "One command installs FreeZenith on any server you control — a cheap VPS, bare metal, or your own cloud account. No Kubernetes, no lock-in. Docker and a domain, and you're live with automatic HTTPS.",
+    bullets: ["Runs on any provider or your own hardware", "One-command install, prebuilt images — no build step", "Automatic HTTPS; your data never leaves your box"],
   },
   {
     icon: Building2,
@@ -30,7 +30,7 @@ export function Infra() {
       <SectionHeader
         label="Bring your own infra"
         title="Your infrastructure. Your rules."
-        description="FreeZenith does not host anything for you — it runs on infrastructure you provide and control. This version targets Hetzner; on-premises support is on the roadmap."
+        description="FreeZenith does not host anything for you — it runs on infrastructure you provide and control. This version installs on any Linux server; managed and on-premises options are on the roadmap."
       />
 
       <div className="grid gap-5 md:grid-cols-2">
