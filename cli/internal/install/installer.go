@@ -101,6 +101,14 @@ type Config struct {
 	// ChartVersion is set after installZenithChart succeeds (from helm list).
 	ChartVersion string
 
+	// Compose edition (self-host, docker-compose, no Kubernetes).
+	Edition       string // "compose" or "cloud" (empty = cloud/Hetzner path)
+	ComposeLocal  bool   // true: install on this machine; false: SSH to SSHHost
+	InstallDir    string // target checkout dir for the compose stack (default "zenith")
+	FreeSubdomain bool   // register a free <slug>.apps.freezenith.com + auto-HTTPS
+	RegisterURL   string // override the subdomain-registration service URL (tests/self-host)
+	RegisterToken string // install token presented to the registration service
+
 	// DryRun skips all real API calls for testing the installer flow.
 	DryRun bool
 }

@@ -2,6 +2,7 @@ package install
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -27,6 +28,11 @@ var (
 	flagResume        bool
 	flagDryRun        bool
 	flagChartVersion  string
+	flagEdition       string
+	flagLocal         bool
+	flagFreeDomain    bool
+	flagRegisterURL   string
+	flagRegisterToken string
 )
 
 var Cmd = &cobra.Command{
@@ -61,6 +67,11 @@ func init() {
 	f.BoolVar(&flagDryRun, "dry-run", false, "Simulate installation without making real API calls")
 	f.BoolVar(&flagResume, "resume", false, "Resume a previously interrupted installation, skipping completed steps")
 	f.StringVar(&flagChartVersion, "chart-version", "", "Helm chart version to install (default: latest)")
+	f.StringVar(&flagEdition, "edition", "", "Edition: 'compose' (self-host on any Linux box, no Kubernetes) or 'cloud' (Hetzner/k8s)")
+	f.BoolVar(&flagLocal, "local", false, "Compose edition: install on this machine instead of over SSH")
+	f.BoolVar(&flagFreeDomain, "free-domain", false, "Compose edition: reserve a free <slug>.apps.freezenith.com with automatic HTTPS")
+	f.StringVar(&flagRegisterURL, "register-url", "", "Override the subdomain-registration service URL (default: https://register.freezenith.com)")
+	f.StringVar(&flagRegisterToken, "register-token", "", "Install token for the registration service (defaults to $FREEZENITH_REGISTER_TOKEN)")
 
 	// Accept legacy --token flag as alias for --hetzner-token
 	f.String("token", "", "Alias for --hetzner-token (deprecated)")
@@ -143,6 +154,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build and display results
+	if cfg.Edition == "compose" {
+		showComposeResult(cfg)
+		return nil
+	}
 	result := install.BuildResult(cfg)
 	showResult(cfg, result)
 
@@ -151,12 +166,49 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 // isNonInteractive checks if enough flags are set to skip the wizard.
 func isNonInteractive(cmd *cobra.Command) bool {
-	// If --domain is set, assume non-interactive mode
-	return flagDomain != ""
+	// --domain (cloud) or --edition (compose) means non-interactive mode.
+	return flagDomain != "" || flagEdition != ""
+}
+
+// registerTokenOrEnv returns the --register-token flag, or $FREEZENITH_REGISTER_TOKEN.
+func registerTokenOrEnv() string {
+	if flagRegisterToken != "" {
+		return flagRegisterToken
+	}
+	return os.Getenv("FREEZENITH_REGISTER_TOKEN")
+}
+
+// buildComposeConfigFromFlags builds a compose-edition Config from flags.
+func buildComposeConfigFromFlags() (*install.Config, error) {
+	cfg := &install.Config{
+		Edition:       "compose",
+		ComposeLocal:  flagLocal,
+		Domain:        flagDomain, // optional; empty/localhost => local HTTP
+		SSHUser:       flagSSHUser,
+		FreeSubdomain: flagFreeDomain,
+		RegisterURL:   flagRegisterURL,
+		RegisterToken: registerTokenOrEnv(),
+		DryRun:        flagDryRun,
+	}
+	if !flagLocal {
+		if flagSSHHost == "" {
+			return nil, fmt.Errorf("compose edition needs either --local or --ssh-host")
+		}
+		cfg.SSHHost = flagSSHHost
+	}
+	if cfg.Domain != "" && cfg.Domain != "localhost" {
+		if err := install.ValidateDomain(cfg.Domain); err != nil {
+			return nil, fmt.Errorf("invalid domain: %w", err)
+		}
+	}
+	return cfg, nil
 }
 
 // buildConfigFromFlags creates a Config from CLI flags.
 func buildConfigFromFlags(cmd *cobra.Command) (*install.Config, error) {
+	if strings.ToLower(flagEdition) == "compose" {
+		return buildComposeConfigFromFlags()
+	}
 	cfg := &install.Config{
 		Domain:     flagDomain,
 		ServerType: flagServerType,
@@ -277,19 +329,25 @@ func resolveRegion(input string) string {
 // After each successful step the step name is persisted to resumeState (or a fresh state).
 func runSteps(cfg *install.Config, resumeState *installstate.State) error {
 	// Generate admin password before steps run so installZenithChart can pass it to Helm.
-	if cfg.AdminPassword == "" {
+	// Cloud/Helm receives the password via a base64 values file (symbols OK).
+	// Compose writes it into a .env, where '$' is interpolated — so the compose
+	// path generates its own alphanumeric-safe secret in composeFetchStack.
+	if cfg.AdminPassword == "" && cfg.Edition != "compose" {
 		cfg.AdminPassword = install.GeneratePassword(16)
 	}
 
 	steps := install.GetInstallSteps(cfg)
+	if cfg.Edition == "compose" {
+		steps = install.GetComposeInstallSteps(cfg)
+	}
 
 	// Ensure we always have a state object for tracking progress.
 	state := resumeState
 	if state == nil {
 		state = &installstate.State{
-			Domain:    cfg.Domain,
-			Provider:  string(cfg.MCProvider),
-			Region:    cfg.Region,
+			Domain:     cfg.Domain,
+			Provider:   string(cfg.MCProvider),
+			Region:     cfg.Region,
 			SSHKeyPath: cfg.SSHKeyPath,
 		}
 	}
@@ -384,6 +442,48 @@ func configFromState(s *installstate.State) *install.Config {
 }
 
 // showResult displays the final success box with credentials and URLs.
+// showComposeResult prints the "you're live" screen for the compose edition.
+func showComposeResult(cfg *install.Config) {
+	fmt.Println()
+	title := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorSuccess).
+		Render("FreeZenith is live!")
+
+	dashURL := "http://localhost:3000"
+	if cfg.Domain != "" && cfg.Domain != "localhost" {
+		dashURL = "https://" + cfg.Domain
+	}
+	adminEmail := cfg.AdminEmail
+	if adminEmail == "" {
+		adminEmail = "admin@localhost"
+	}
+
+	labelStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted).Width(12)
+	valueStyle := lipgloss.NewStyle().Foreground(tui.ColorText).Bold(true)
+	urlStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary).Bold(true).Underline(true)
+	warnStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning).Bold(true)
+	mutedStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
+
+	var content strings.Builder
+	content.WriteString(title)
+	content.WriteString("\n\n")
+	content.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Dashboard:"), urlStyle.Render(dashURL)))
+	content.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Email:"), valueStyle.Render(adminEmail)))
+	content.WriteString(fmt.Sprintf("  %s %s\n", labelStyle.Render("Password:"), warnStyle.Render(cfg.AdminPassword)))
+	content.WriteString("\n")
+	target := "this machine"
+	if !cfg.ComposeLocal {
+		target = cfg.SSHHost
+	}
+	content.WriteString(mutedStyle.Render(fmt.Sprintf("  Running on %s — manage with: zen status, zen logs, zen uninstall", target)))
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.ColorPrimary).
+		Padding(1, 2).
+		Render(content.String())
+	fmt.Println(box)
+}
+
 func showResult(cfg *install.Config, result *install.InstallResult) {
 	fmt.Println()
 
