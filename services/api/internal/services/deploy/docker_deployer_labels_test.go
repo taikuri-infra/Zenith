@@ -17,13 +17,18 @@ func TestProxyLabels_Traefik(t *testing.T) {
 		"traefik.docker.network": "zenith_default",
 		"traefik.http.routers.my-app.rule":                      "Host(`my-app.apps.example.com`)",
 		"traefik.http.routers.my-app.entrypoints":               "websecure",
-		"traefik.http.routers.my-app.tls.certresolver":          "le",
+		"traefik.http.routers.my-app.tls":                       "true",
 		"traefik.http.services.my-app.loadbalancer.server.port": "8000",
 	}
 	for k, v := range want {
 		if labels[k] != v {
 			t.Errorf("label %q = %q, want %q", k, labels[k], v)
 		}
+	}
+	// The resolver moved to the entrypoint (installer-generated traefik.yml), so
+	// no router should name one — that is what lets self-signed mode work.
+	if _, ok := labels["traefik.http.routers.my-app.tls.certresolver"]; ok {
+		t.Error("deployed apps must not set a per-router certresolver")
 	}
 	// The Traefik migration must leave no caddy labels behind.
 	for k := range labels {

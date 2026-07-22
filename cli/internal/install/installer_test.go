@@ -583,15 +583,15 @@ func TestConfig_StructFields(t *testing.T) {
 
 func TestConfig_NewFields(t *testing.T) {
 	cfg := Config{
-		MCProvider:          ProviderHetzner,
-		HetznerToken:        "hc_token123",
-		Domain:              "example.com",
-		DNSProvider:         DNSCloudflare,
-		CloudflareToken:     "cf_token456",
-		WithCluster:         true,
-		ClusterProvider:     ProviderExisting,
-		ClusterSSHHost:      "10.0.0.1",
-		ClusterSSHUser:      "admin",
+		MCProvider:      ProviderHetzner,
+		HetznerToken:    "hc_token123",
+		Domain:          "example.com",
+		DNSProvider:     DNSCloudflare,
+		CloudflareToken: "cf_token456",
+		WithCluster:     true,
+		ClusterProvider: ProviderExisting,
+		ClusterSSHHost:  "10.0.0.1",
+		ClusterSSHUser:  "admin",
 	}
 
 	if cfg.MCProvider != ProviderHetzner {

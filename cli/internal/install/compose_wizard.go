@@ -109,46 +109,8 @@ func RunComposeWizard() (*WizardResult, error) {
 	case "local":
 		cfg.Domain = "localhost"
 	case "own":
-		useCF := false
-		ownForm := huh.NewForm(
-			huh.NewGroup(
-				huh.NewInput().
-					Title("Your domain").
-					Placeholder("app.example.com").
-					Value(&cfg.Domain).
-					Validate(ValidateDomain),
-				huh.NewInput().
-					Title("Email for the HTTPS certificate").
-					Placeholder("you@example.com").
-					Value(&cfg.AdminEmail),
-				huh.NewConfirm().
-					Title("Is your domain's DNS on Cloudflare?").
-					Description("If yes, I can create the DNS record for you; otherwise I'll show you the record to add.").
-					Value(&useCF),
-			),
-		).WithTheme(zenithTheme())
-		if err := ownForm.Run(); err != nil {
-			return nil, fmt.Errorf("wizard cancelled")
-		}
-		if useCF {
-			cfg.DNSProvider = DNSCloudflare
-			tokenForm := huh.NewForm(
-				huh.NewGroup(
-					huh.NewInput().
-						Title("Cloudflare API token").
-						Description("DNS:Edit on your own zone. Create at dash.cloudflare.com -> My Profile -> API Tokens").
-						Value(&cfg.CloudflareToken).
-						Validate(func(s string) error {
-							if len(strings.TrimSpace(s)) < 10 {
-								return fmt.Errorf("token is too short")
-							}
-							return nil
-						}),
-				),
-			).WithTheme(zenithTheme())
-			if err := tokenForm.Run(); err != nil {
-				return nil, fmt.Errorf("wizard cancelled")
-			}
+		if err := runOwnDomainForms(cfg); err != nil {
+			return nil, err
 		}
 	}
 
@@ -167,6 +129,127 @@ func RunComposeWizard() (*WizardResult, error) {
 	return &WizardResult{Config: cfg, Confirmed: confirmed}, nil
 }
 
+// runOwnDomainForms handles the "my own domain" branch: it first asks how the
+// server is reached (which decides the certificate strategy), then collects the
+// domain and whatever that strategy needs. The option copy is written so someone
+// who has never heard of NAT or a certificate authority can still choose right.
+func runOwnDomainForms(cfg *Config) error {
+	tlsChoice := TLSHTTP01
+	tlsForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("How do browsers reach this server?").
+				Description("This decides how we get an HTTPS certificate. Pick the line that matches your server."),
+			huh.NewSelect[string]().
+				Title("HTTPS").
+				Options(
+					huh.NewOption("It's on the public internet (a cloud VPS with a public IP) — free real certificate", TLSHTTP01),
+					huh.NewOption("It's behind my home/office network, but its domain's DNS is on Cloudflare — free real certificate", TLSDNS01),
+					huh.NewOption("It's an internal or offline server, e.g. zenith.lan — self-signed certificate", TLSSelfSigned),
+				).
+				Value(&tlsChoice),
+		),
+	).WithTheme(zenithTheme())
+	if err := tlsForm.Run(); err != nil {
+		return fmt.Errorf("wizard cancelled")
+	}
+	cfg.TLSMode = tlsChoice
+
+	switch tlsChoice {
+	case TLSSelfSigned:
+		// Internal name: no public CA, no email, no DNS token — just the name.
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("Internal domain").
+					Description("Use the name this server answers to on your network (e.g. zenith.lan).\nAfter install we'll give you one file to trust, once, on each machine."),
+				huh.NewInput().
+					Title("Internal domain").
+					Placeholder("zenith.lan").
+					Value(&cfg.Domain).
+					Validate(ValidateDomain),
+			),
+		).WithTheme(zenithTheme())
+		if err := form.Run(); err != nil {
+			return fmt.Errorf("wizard cancelled")
+		}
+		return nil
+
+	case TLSDNS01:
+		// Behind NAT with a real domain: a Cloudflare token proves DNS control so
+		// Let's Encrypt can still issue a real certificate.
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Your domain").
+					Placeholder("app.example.com").
+					Value(&cfg.Domain).
+					Validate(ValidateDomain),
+				huh.NewInput().
+					Title("Email for the HTTPS certificate").
+					Placeholder("you@example.com").
+					Value(&cfg.AdminEmail),
+				huh.NewInput().
+					Title("Cloudflare API token").
+					Description("DNS:Edit on your own zone. We use it to answer the certificate challenge — the server never needs to be reachable from the internet.").
+					Value(&cfg.CloudflareToken).
+					Validate(minTokenLen),
+			),
+		).WithTheme(zenithTheme())
+		if err := form.Run(); err != nil {
+			return fmt.Errorf("wizard cancelled")
+		}
+		cfg.DNSProvider = DNSCloudflare
+		return nil
+
+	default: // TLSHTTP01
+		useCF := false
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Your domain").
+					Placeholder("app.example.com").
+					Value(&cfg.Domain).
+					Validate(ValidateDomain),
+				huh.NewInput().
+					Title("Email for the HTTPS certificate").
+					Placeholder("you@example.com").
+					Value(&cfg.AdminEmail),
+				huh.NewConfirm().
+					Title("Is your domain's DNS on Cloudflare?").
+					Description("If yes, I can create the DNS record for you; otherwise I'll show you the record to add.").
+					Value(&useCF),
+			),
+		).WithTheme(zenithTheme())
+		if err := form.Run(); err != nil {
+			return fmt.Errorf("wizard cancelled")
+		}
+		if useCF {
+			cfg.DNSProvider = DNSCloudflare
+			tokenForm := huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().
+						Title("Cloudflare API token").
+						Description("DNS:Edit on your own zone. Create at dash.cloudflare.com -> My Profile -> API Tokens").
+						Value(&cfg.CloudflareToken).
+						Validate(minTokenLen),
+				),
+			).WithTheme(zenithTheme())
+			if err := tokenForm.Run(); err != nil {
+				return fmt.Errorf("wizard cancelled")
+			}
+		}
+		return nil
+	}
+}
+
+func minTokenLen(s string) error {
+	if len(strings.TrimSpace(s)) < 10 {
+		return fmt.Errorf("token is too short")
+	}
+	return nil
+}
+
 func buildComposeSummary(cfg *Config) string {
 	var b strings.Builder
 	if cfg.ComposeLocal {
@@ -180,11 +263,18 @@ func buildComposeSummary(cfg *Config) string {
 	case cfg.Domain == "" || cfg.Domain == "localhost":
 		b.WriteString("Domain:  localhost (http, no certificate)")
 	default:
-		fmt.Fprintf(&b, "Domain:  %s", cfg.Domain)
-		if cfg.DNSProvider == DNSCloudflare {
-			b.WriteString(" (DNS record created via Cloudflare)")
-		} else {
-			b.WriteString(" (you'll add one DNS record)")
+		fmt.Fprintf(&b, "Domain:  %s\n", cfg.Domain)
+		switch tlsMode(cfg) {
+		case TLSSelfSigned:
+			b.WriteString("HTTPS:   self-signed certificate (you'll trust one file per machine)")
+		case TLSDNS01:
+			b.WriteString("HTTPS:   Let's Encrypt via Cloudflare DNS (works behind NAT)")
+		default:
+			if cfg.DNSProvider == DNSCloudflare {
+				b.WriteString("HTTPS:   Let's Encrypt (DNS record created via Cloudflare)")
+			} else {
+				b.WriteString("HTTPS:   Let's Encrypt (you'll add one DNS record)")
+			}
 		}
 	}
 	return b.String()
