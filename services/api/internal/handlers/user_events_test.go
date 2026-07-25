@@ -33,7 +33,7 @@ func TestUserEventListByType(t *testing.T) {
 	app.Get("/api/v1/admin/events", handler.ListEvents)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/events?type=signup", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -64,7 +64,7 @@ func TestUserEventListOverview(t *testing.T) {
 
 	// No type filter returns counts overview
 	req := httptest.NewRequest("GET", "/api/v1/admin/events", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -84,7 +84,7 @@ func TestUserEventListByTypeEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/events", handler.ListEvents)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/events?type=signup", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -109,7 +109,7 @@ func TestUserEventGetFunnel(t *testing.T) {
 	app.Get("/api/v1/admin/events/funnel", handler.GetFunnel)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/events/funnel?steps=signup,app.create", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -137,7 +137,7 @@ func TestUserEventGetUserActivity(t *testing.T) {
 	app.Get("/api/v1/admin/events/user/:id", handler.GetUserActivity)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/events/user/user-1", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -160,7 +160,7 @@ func TestUserEventGetUserActivityEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/events/user/:id", handler.GetUserActivity)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/events/user/user-1", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -189,7 +189,7 @@ func TestUserEventSurveyInsights(t *testing.T) {
 	app.Get("/api/v1/admin/surveys", handler.SurveyInsights)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/surveys", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -208,7 +208,7 @@ func TestUserEventSurveyInsightsEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/surveys", handler.SurveyInsights)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/surveys", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

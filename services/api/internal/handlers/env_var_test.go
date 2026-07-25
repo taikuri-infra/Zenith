@@ -43,7 +43,7 @@ func TestEnvVarSet(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -67,7 +67,7 @@ func TestEnvVarSetEmptyVars(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for empty vars, got %d", resp.StatusCode)
 	}
@@ -83,7 +83,7 @@ func TestEnvVarSetEmptyKey(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for empty key, got %d", resp.StatusCode)
 	}
@@ -99,7 +99,7 @@ func TestEnvVarSetDuplicateKey(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for duplicate key, got %d", resp.StatusCode)
 	}
@@ -115,7 +115,7 @@ func TestEnvVarSetNoAuth(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -131,7 +131,7 @@ func TestEnvVarSetForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -146,7 +146,7 @@ func TestEnvVarSetAppNotFound(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/nonexistent/env-v2", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -161,7 +161,7 @@ func TestEnvVarSetInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -178,11 +178,11 @@ func TestEnvVarList(t *testing.T) {
 	body := `{"vars":[{"key":"FOO","value":"bar"},{"key":"BAZ","value":"qux"}]}`
 	setReq := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	setReq.Header.Set("Content-Type", "application/json")
-	fiberApp.Test(setReq)
+	fiberApp.Test(setReq, -1)
 
 	// List vars
 	listReq := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/env-v2", nil)
-	listResp, _ := fiberApp.Test(listReq)
+	listResp, _ := fiberApp.Test(listReq, -1)
 
 	if listResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", listResp.StatusCode)
@@ -204,7 +204,7 @@ func TestEnvVarListEmpty(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/:appId/env-v2", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/env-v2", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -230,7 +230,7 @@ func TestEnvVarDelete(t *testing.T) {
 	body := `{"vars":[{"key":"FOO","value":"bar"}]}`
 	setReq := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	setReq.Header.Set("Content-Type", "application/json")
-	fiberApp.Test(setReq)
+	fiberApp.Test(setReq, -1)
 
 	// Get the var ID
 	vars, _ := envVarRepo.GetEnvVars(nil, appID)
@@ -241,7 +241,7 @@ func TestEnvVarDelete(t *testing.T) {
 
 	// Delete the var
 	delReq := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/env-v2/"+varID, nil)
-	delResp, _ := fiberApp.Test(delReq)
+	delResp, _ := fiberApp.Test(delReq, -1)
 
 	if delResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", delResp.StatusCode)
@@ -262,7 +262,7 @@ func TestEnvVarDeleteNotFound(t *testing.T) {
 	fiberApp.Delete("/api/v1/apps/:appId/env-v2/:varId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/env-v2/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -279,7 +279,7 @@ func TestEnvVarImportDotEnv(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2/import", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -303,7 +303,7 @@ func TestEnvVarImportDotEnvEmptyContent(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2/import", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for empty content, got %d", resp.StatusCode)
 	}
@@ -319,7 +319,7 @@ func TestEnvVarImportDotEnvOnlyComments(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2/import", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for no valid pairs, got %d", resp.StatusCode)
 	}
@@ -336,11 +336,11 @@ func TestEnvVarSecretMasked(t *testing.T) {
 	body := `{"vars":[{"key":"DB_PASSWORD","value":"supersecret","is_secret":true}]}`
 	setReq := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2", bytes.NewBufferString(body))
 	setReq.Header.Set("Content-Type", "application/json")
-	fiberApp.Test(setReq)
+	fiberApp.Test(setReq, -1)
 
 	// List and check secret is masked
 	listReq := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/env-v2", nil)
-	listResp, _ := fiberApp.Test(listReq)
+	listResp, _ := fiberApp.Test(listReq, -1)
 
 	var result struct {
 		Items []struct {
@@ -369,7 +369,7 @@ func TestEnvVarApplyNoRestarter(t *testing.T) {
 	fiberApp.Post("/api/v1/apps/:appId/env/apply", injectUserID("user-1"), handler.Apply)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env/apply", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	// Should fail because no restarter is configured
 	if resp.StatusCode != 500 {

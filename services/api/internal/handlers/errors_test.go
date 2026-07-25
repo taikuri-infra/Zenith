@@ -16,7 +16,7 @@ func TestErrorHandlerFiberError(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Fatalf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -38,7 +38,7 @@ func TestErrorHandlerGenericError(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 500 {
 		t.Fatalf("Expected 500, got %d", resp.StatusCode)
 	}

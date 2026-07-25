@@ -35,7 +35,7 @@ func TestRecordUsage(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/internal/metering", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestRecordUsageInvalidCustomer(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/internal/metering", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid customer, got %d", resp.StatusCode)
 	}
@@ -82,7 +82,7 @@ func TestRecordUsageMissingCustomerID(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/internal/metering", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for missing customerId, got %d", resp.StatusCode)
 	}
@@ -96,7 +96,7 @@ func TestGetCustomerUsage(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id/usage", handler.GetCustomerUsage)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/cust-001/usage", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestGetCustomerUsageNoData(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id/usage", handler.GetCustomerUsage)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/cust-001/usage", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestGetCustomerUsageNotFound(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id/usage", handler.GetCustomerUsage)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/nonexistent/usage", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -180,7 +180,7 @@ func TestGetCustomerUsageHistory(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id/usage/history", handler.GetCustomerUsageHistory)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/cust-001/usage/history?days=30", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestGetCustomerUsageHistoryNotFound(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id/usage/history", handler.GetCustomerUsageHistory)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/nonexistent/usage/history", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -230,7 +230,7 @@ func TestGetPlatformUsageSummary(t *testing.T) {
 	app.Get("/api/v1/admin/dashboard/usage", handler.GetPlatformUsageSummary)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/dashboard/usage", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestInternalSecretAuthMissing(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/internal/metering", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401 for missing secret, got %d", resp.StatusCode)
 	}
@@ -290,7 +290,7 @@ func TestInternalSecretAuthInvalid(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Secret", "wrong-secret")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for invalid secret, got %d", resp.StatusCode)
 	}
@@ -310,7 +310,7 @@ func TestInternalSecretAuthValid(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Secret", "test-secret")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Errorf("Expected 201 for valid secret, got %d: %s", resp.StatusCode, string(b))

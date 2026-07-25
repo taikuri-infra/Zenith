@@ -35,7 +35,7 @@ func TestListPlans(t *testing.T) {
 	app.Get("/api/v1/admin/plans", handler.ListPlans)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/plans", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestCreatePlan(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/plans", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestCreatePlanMissingName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/plans", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -115,7 +115,7 @@ func TestCreatePlanDuplicateName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/plans", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 409 {
 		t.Errorf("Expected 409 for duplicate name, got %d", resp.StatusCode)
 	}
@@ -130,7 +130,7 @@ func TestUpdatePlan(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/plans/plan-starter", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestUpdatePlanNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/plans/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -175,7 +175,7 @@ func TestListCustomers(t *testing.T) {
 	app.Get("/api/v1/admin/customers", handler.ListCustomers)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestCreateCustomer(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestCreateCustomerMissingName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -261,7 +261,7 @@ func TestCreateCustomerMissingDomain(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -277,7 +277,7 @@ func TestCreateCustomerDuplicateDomain(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 409 {
 		t.Errorf("Expected 409 for duplicate domain, got %d", resp.StatusCode)
 	}
@@ -292,7 +292,7 @@ func TestCreateCustomerInvalidPlan(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid plan, got %d", resp.StatusCode)
 	}
@@ -304,7 +304,7 @@ func TestGetCustomer(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id", handler.GetCustomer)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/cust-001", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestGetCustomerNotFound(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id", handler.GetCustomer)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -350,7 +350,7 @@ func TestUpdateCustomer(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/customers/cust-001", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +385,7 @@ func TestUpdateCustomerNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/customers/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -398,7 +398,7 @@ func TestDeleteCustomer(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id", handler.GetCustomer)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/admin/customers/cust-003", nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	if deleteResp.StatusCode != 200 {
 		b, _ := io.ReadAll(deleteResp.Body)
@@ -407,7 +407,7 @@ func TestDeleteCustomer(t *testing.T) {
 
 	// Verify deleted
 	getReq := httptest.NewRequest("GET", "/api/v1/admin/customers/cust-003", nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 404 {
 		t.Errorf("Expected 404 after deletion, got %d", getResp.StatusCode)
@@ -420,7 +420,7 @@ func TestDeleteCustomerNotFound(t *testing.T) {
 	app.Delete("/api/v1/admin/customers/:id", handler.DeleteCustomer)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/customers/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -435,7 +435,7 @@ func TestSuspendCustomer(t *testing.T) {
 	app.Post("/api/v1/admin/customers/:id/suspend", handler.SuspendCustomer)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers/cust-001/suspend", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +460,7 @@ func TestSuspendCustomerNotFound(t *testing.T) {
 	app.Post("/api/v1/admin/customers/:id/suspend", handler.SuspendCustomer)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers/nonexistent/suspend", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -475,11 +475,11 @@ func TestActivateCustomer(t *testing.T) {
 
 	// Suspend first
 	suspendReq := httptest.NewRequest("POST", "/api/v1/admin/customers/cust-001/suspend", nil)
-	app.Test(suspendReq)
+	app.Test(suspendReq, -1)
 
 	// Activate
 	activateReq := httptest.NewRequest("POST", "/api/v1/admin/customers/cust-001/activate", nil)
-	activateResp, _ := app.Test(activateReq)
+	activateResp, _ := app.Test(activateReq, -1)
 	defer activateResp.Body.Close()
 
 	if activateResp.StatusCode != 200 {
@@ -501,7 +501,7 @@ func TestActivateCustomerNotFound(t *testing.T) {
 	app.Post("/api/v1/admin/customers/:id/activate", handler.ActivateCustomer)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers/nonexistent/activate", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -516,7 +516,7 @@ func TestGetCustomerStats(t *testing.T) {
 	app.Get("/api/v1/admin/customers/stats", handler.GetCustomerStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,10 +548,10 @@ func TestGetCustomerStatsAfterSuspend(t *testing.T) {
 
 	// Suspend one customer
 	suspendReq := httptest.NewRequest("POST", "/api/v1/admin/customers/cust-001/suspend", nil)
-	app.Test(suspendReq)
+	app.Test(suspendReq, -1)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/stats", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	var stats entities.CustomerStats
@@ -581,7 +581,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 	createBody := `{"name":"FlowCo","domain":"flow.co","planId":"plan-pro","contactEmail":"admin@flow.co","contactName":"Flow Admin"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	if createResp.StatusCode != 201 {
 		b, _ := io.ReadAll(createResp.Body)
@@ -594,7 +594,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 
 	// Get
 	getReq := httptest.NewRequest("GET", "/api/v1/admin/customers/"+id, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 200 {
 		t.Fatalf("Get: Expected 200, got %d", getResp.StatusCode)
@@ -611,7 +611,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 	updateBody := `{"name":"FlowCo Inc."}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/admin/customers/"+id, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 200 {
 		t.Fatalf("Update: Expected 200, got %d", updateResp.StatusCode)
@@ -626,7 +626,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 
 	// Suspend
 	suspendReq := httptest.NewRequest("POST", "/api/v1/admin/customers/"+id+"/suspend", nil)
-	suspendResp, _ := app.Test(suspendReq)
+	suspendResp, _ := app.Test(suspendReq, -1)
 
 	if suspendResp.StatusCode != 200 {
 		t.Fatalf("Suspend: Expected 200, got %d", suspendResp.StatusCode)
@@ -641,7 +641,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 
 	// Activate
 	activateReq := httptest.NewRequest("POST", "/api/v1/admin/customers/"+id+"/activate", nil)
-	activateResp, _ := app.Test(activateReq)
+	activateResp, _ := app.Test(activateReq, -1)
 
 	if activateResp.StatusCode != 200 {
 		t.Fatalf("Activate: Expected 200, got %d", activateResp.StatusCode)
@@ -656,7 +656,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 
 	// Delete
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/admin/customers/"+id, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Delete: Expected 200, got %d", deleteResp.StatusCode)
@@ -664,7 +664,7 @@ func TestCustomerCRUDFlow(t *testing.T) {
 
 	// Verify deleted
 	verifyReq := httptest.NewRequest("GET", "/api/v1/admin/customers/"+id, nil)
-	verifyResp, _ := app.Test(verifyReq)
+	verifyResp, _ := app.Test(verifyReq, -1)
 
 	if verifyResp.StatusCode != 404 {
 		t.Errorf("Verify: Expected 404, got %d", verifyResp.StatusCode)
@@ -692,7 +692,7 @@ func TestGetCustomerCluster(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id/cluster", handler.GetCustomerCluster)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/cust-001/cluster", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -710,7 +710,7 @@ func TestGetCustomerClusterNotFound(t *testing.T) {
 	app.Get("/api/v1/admin/customers/:id/cluster", handler.GetCustomerCluster)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/customers/nonexistent/cluster", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -727,7 +727,7 @@ func TestScaleClusterEndpoint(t *testing.T) {
 	createBody := `{"name":"ScaleTest","domain":"scaletest.dev","planId":"plan-starter","contactEmail":"a@s.dev","contactName":"Admin"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created entities.Customer
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -742,7 +742,7 @@ func TestScaleClusterEndpoint(t *testing.T) {
 	scaleBody := `{"nodes":5}`
 	scaleReq := httptest.NewRequest("POST", "/api/v1/admin/customers/"+created.ID+"/cluster/scale", bytes.NewBufferString(scaleBody))
 	scaleReq.Header.Set("Content-Type", "application/json")
-	scaleResp, err := app.Test(scaleReq)
+	scaleResp, err := app.Test(scaleReq, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -763,7 +763,7 @@ func TestScaleClusterBadNodes(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers/cust-001/cluster/scale", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for 0 nodes, got %d", resp.StatusCode)
 	}
@@ -779,7 +779,7 @@ func TestUpgradeClusterEndpoint(t *testing.T) {
 	createBody := `{"name":"UpgradeTest","domain":"upgradetest.dev","planId":"plan-starter","contactEmail":"a@u.dev","contactName":"Admin"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created entities.Customer
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -791,7 +791,7 @@ func TestUpgradeClusterEndpoint(t *testing.T) {
 	upgradeBody := `{"version":"v1.32.0"}`
 	upgradeReq := httptest.NewRequest("POST", "/api/v1/admin/customers/"+created.ID+"/cluster/upgrade", bytes.NewBufferString(upgradeBody))
 	upgradeReq.Header.Set("Content-Type", "application/json")
-	upgradeResp, err := app.Test(upgradeReq)
+	upgradeResp, err := app.Test(upgradeReq, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -812,7 +812,7 @@ func TestCustomerUpgradeClusterMissingVersion(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers/cust-001/cluster/upgrade", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for empty version, got %d", resp.StatusCode)
 	}
@@ -827,7 +827,7 @@ func TestCreateCustomerSetsClusterFields(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Expected 201, got %d: %s", resp.StatusCode, string(b))
@@ -860,7 +860,7 @@ func TestCreateCustomerInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/customers", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -874,7 +874,7 @@ func TestCreatePlanInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/plans", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -888,7 +888,7 @@ func TestUpdateCustomerInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/customers/cust-001", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -902,7 +902,7 @@ func TestUpdatePlanInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/plans/plan-starter", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}

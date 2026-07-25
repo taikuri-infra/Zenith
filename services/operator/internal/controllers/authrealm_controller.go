@@ -130,7 +130,7 @@ func (r *AuthRealmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		// Always ensure at least an empty data map
 		if len(secretData) == 0 {
-			secretData["placeholder"] = []byte("no-provider-secrets")
+			secretData["placeholder"] = []byte("no-provider-secrets") // nosemgrep: go-hardcoded-password -- explicit empty-state marker, not a credential
 		}
 		secret.Data = secretData
 

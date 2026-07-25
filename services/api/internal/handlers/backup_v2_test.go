@@ -42,7 +42,7 @@ func TestBackupV2Create(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/app-1/databases/"+dbID+"/backups", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -63,7 +63,7 @@ func TestBackupV2CreateDatabaseNotFound(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/databases/:dbId/backups", injectUserID("user-1"), handler.Create)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/app-1/databases/nonexistent/backups", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -76,7 +76,7 @@ func TestBackupV2CreateForbidden(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/databases/:dbId/backups", injectUserID("user-2"), handler.Create)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/app-1/databases/"+dbID+"/backups", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	// user-2 on free plan gets 403 for plan, or 403 for ownership
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
@@ -94,7 +94,7 @@ func TestBackupV2List(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/databases/:dbId/backups", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/app-1/databases/"+dbID+"/backups", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -111,7 +111,7 @@ func TestBackupV2ListDatabaseNotFound(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/databases/:dbId/backups", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/app-1/databases/nonexistent/backups", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -126,7 +126,7 @@ func TestBackupV2Get(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/databases/:dbId/backups/:backupId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/app-1/databases/"+dbID+"/backups/"+backup.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -143,7 +143,7 @@ func TestBackupV2GetNotFound(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/databases/:dbId/backups/:backupId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/app-1/databases/db-1/backups/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -158,7 +158,7 @@ func TestBackupV2Delete(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/databases/:dbId/backups/:backupId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/app-1/databases/"+dbID+"/backups/"+backup.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -169,7 +169,7 @@ func TestBackupV2DeleteNotFound(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/databases/:dbId/backups/:backupId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/app-1/databases/db-1/backups/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -184,7 +184,7 @@ func TestBackupV2DeleteForbidden(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/databases/:dbId/backups/:backupId", injectUserID("user-2"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/app-1/databases/"+dbID+"/backups/"+backup.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -201,7 +201,7 @@ func TestBackupV2Restore(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/databases/:dbId/backups/:backupId/restore", injectUserID("user-1"), handler.Restore)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/app-1/databases/"+dbID+"/backups/"+backup.ID+"/restore", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -223,7 +223,7 @@ func TestBackupV2RestoreNotCompleted(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/databases/:dbId/backups/:backupId/restore", injectUserID("user-1"), handler.Restore)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/app-1/databases/"+dbID+"/backups/"+backup.ID+"/restore", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -238,7 +238,7 @@ func TestBackupV2ListByUser(t *testing.T) {
 	app.Get("/api/v1/backups", injectUserID("user-1"), handler.ListByUser)
 
 	req := httptest.NewRequest("GET", "/api/v1/backups", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -260,7 +260,7 @@ func TestBackupV2Download(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/databases/:dbId/backups/:backupId/download", injectUserID("user-1"), handler.Download)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/app-1/databases/"+dbID+"/backups/"+backup.ID+"/download", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	// No backup service configured in test -> 503
 	if resp.StatusCode != 503 {
 		t.Errorf("Expected 503 (dev mode), got %d", resp.StatusCode)
@@ -276,7 +276,7 @@ func TestBackupV2DownloadNotCompleted(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/databases/:dbId/backups/:backupId/download", injectUserID("user-1"), handler.Download)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/app-1/databases/"+dbID+"/backups/"+backup.ID+"/download", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}

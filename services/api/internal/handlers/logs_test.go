@@ -34,7 +34,7 @@ func TestGetLogsHistoryEmpty(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/:appId/deployments/:did/logs/history", logHandler.GetLogs)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+userApp.ID+"/deployments/"+dep.ID+"/logs/history", nil)
-	resp, err := fiberApp.Test(req)
+	resp, err := fiberApp.Test(req, -1)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestGetLogsHistoryWithEntries(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/:appId/deployments/:did/logs/history", logHandler.GetLogs)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+userApp.ID+"/deployments/"+dep.ID+"/logs/history", nil)
-	resp, err := fiberApp.Test(req)
+	resp, err := fiberApp.Test(req, -1)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestGetLogsHistoryAppNotFound(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/:appId/deployments/:did/logs/history", logHandler.GetLogs)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/nonexistent/deployments/deploy-1/logs/history", nil)
-	resp, err := fiberApp.Test(req)
+	resp, err := fiberApp.Test(req, -1)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}

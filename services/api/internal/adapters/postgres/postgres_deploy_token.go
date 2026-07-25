@@ -35,6 +35,7 @@ func NewPostgresDeployTokenRepository(pool *pgxpool.Pool) *PostgresDeployTokenRe
 	return &PostgresDeployTokenRepository{pool: pool}
 }
 
+// nosemgrep: go-hardcoded-password -- SQL column names, not a credential.
 const deployTokenSelectCols = `id, user_id, project_id, name, token_id, token_prefix, token_hash,
 	scopes, last_used_at, expires_at, COALESCE(previous_hash, ''), previous_expires_at,
 	rotated_at, created_at, revoked_at`

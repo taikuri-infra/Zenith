@@ -25,7 +25,7 @@ func TestComplianceGetStatus(t *testing.T) {
 	app.Get("/api/v1/compliance", injectUserID("user-1"), handler.GetStatus)
 
 	req := httptest.NewRequest("GET", "/api/v1/compliance", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -52,7 +52,7 @@ func TestComplianceGetStatusMFADisabled(t *testing.T) {
 	app.Get("/api/v1/compliance", injectUserID("user-1"), handler.GetStatus)
 
 	req := httptest.NewRequest("GET", "/api/v1/compliance", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -89,7 +89,7 @@ func TestComplianceGetStatusWithMFAEnabled(t *testing.T) {
 	app.Get("/api/v1/compliance", injectUserID("user-1"), handler.GetStatus)
 
 	req := httptest.NewRequest("GET", "/api/v1/compliance", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -115,7 +115,7 @@ func TestComplianceEncryptionAlwaysPass(t *testing.T) {
 	app.Get("/api/v1/compliance", injectUserID("user-1"), handler.GetStatus)
 
 	req := httptest.NewRequest("GET", "/api/v1/compliance", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

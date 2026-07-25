@@ -30,7 +30,7 @@ func TestPlanGetMyPlan(t *testing.T) {
 	fiberApp.Get("/api/v1/plan", injectUserID("user-1"), handler.GetMyPlan)
 
 	req := httptest.NewRequest("GET", "/api/v1/plan", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -54,7 +54,7 @@ func TestPlanGetMyPlanProUser(t *testing.T) {
 	fiberApp.Get("/api/v1/plan", injectUserID("user-1"), handler.GetMyPlan)
 
 	req := httptest.NewRequest("GET", "/api/v1/plan", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -76,7 +76,7 @@ func TestPlanUpgrade(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/plan/upgrade", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	// Plan service may require Stripe for pro upgrade — check it doesn't panic
 	// The response depends on whether stripe is enabled
 	if resp.StatusCode == 0 {
@@ -91,7 +91,7 @@ func TestPlanUpgradeInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/plan/upgrade", bytes.NewBufferString("{bad"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -113,7 +113,7 @@ func TestCheckLimitAllowed(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -135,7 +135,7 @@ func TestCheckLimitReached(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for plan limit reached, got %d", resp.StatusCode)
@@ -156,7 +156,7 @@ func TestCheckLimitNoAuth(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
@@ -177,7 +177,7 @@ func TestCheckLimitUnknownResource(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Errorf("Expected 200 for unknown resource (pass through), got %d", resp.StatusCode)
@@ -197,7 +197,7 @@ func TestCheckLimitDatabases(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for database limit, got %d", resp.StatusCode)
@@ -217,7 +217,7 @@ func TestCheckLimitBuckets(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for bucket limit, got %d", resp.StatusCode)
@@ -237,7 +237,7 @@ func TestCheckLimitGateways(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for gateway limit, got %d", resp.StatusCode)
@@ -257,7 +257,7 @@ func TestCheckLimitGatewayRoutes(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for gateway routes limit, got %d", resp.StatusCode)
@@ -277,7 +277,7 @@ func TestCheckLimitAuthPools(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("POST", "/test", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for auth pools limit, got %d", resp.StatusCode)

@@ -41,7 +41,7 @@ func TestNotificationList(t *testing.T) {
 	app.Get("/api/v1/notifications", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/notifications", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -64,7 +64,7 @@ func TestNotificationListEmpty(t *testing.T) {
 	app.Get("/api/v1/notifications", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/notifications", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -100,7 +100,7 @@ func TestNotificationMarkRead(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/notifications/read", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -136,7 +136,7 @@ func TestNotificationMarkAllRead(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/notifications/read", bytes.NewBufferString("{}"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -152,7 +152,7 @@ func TestNotificationListWithLimit(t *testing.T) {
 	app.Get("/api/v1/notifications", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/notifications?limit=10", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -170,7 +170,7 @@ func TestNotificationListActivity(t *testing.T) {
 	app.Get("/api/v1/activity", injectUserID("user-1"), handler.ListActivity)
 
 	req := httptest.NewRequest("GET", "/api/v1/activity", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -187,7 +187,7 @@ func TestNotificationListActivityEmpty(t *testing.T) {
 	app.Get("/api/v1/activity", injectUserID("user-1"), handler.ListActivity)
 
 	req := httptest.NewRequest("GET", "/api/v1/activity", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

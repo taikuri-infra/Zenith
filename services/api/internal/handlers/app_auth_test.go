@@ -39,7 +39,7 @@ func TestAppAuthEnable(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/auth/enable", injectUserID("user-1"), handler.Enable)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/enable", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -58,7 +58,7 @@ func TestAppAuthEnableNotYourApp(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/auth/enable", injectUserID("user-2"), handler.Enable)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/enable", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -69,7 +69,7 @@ func TestAppAuthEnableAppNotFound(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/auth/enable", injectUserID("user-1"), handler.Enable)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/nonexistent/auth/enable", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -84,7 +84,7 @@ func TestAppAuthDisable(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/auth/disable", injectUserID("user-1"), handler.Disable)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/disable", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -103,7 +103,7 @@ func TestAppAuthDisableNotYourApp(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/auth/disable", injectUserID("user-2"), handler.Disable)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/disable", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -118,7 +118,7 @@ func TestAppAuthStatus(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/auth", handler.Status)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/auth", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -135,7 +135,7 @@ func TestAppAuthStatusNotConfigured(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/auth", handler.Status)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/not-configured/auth", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -159,7 +159,7 @@ func TestAppAuthSignup(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/signup", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -184,7 +184,7 @@ func TestAppAuthSignupAuthNotEnabled(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/signup", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -202,7 +202,7 @@ func TestAppAuthSignupMissingFields(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/signup", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -220,7 +220,7 @@ func TestAppAuthSignupShortPassword(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/signup", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -239,7 +239,7 @@ func TestAppAuthLogin(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -264,7 +264,7 @@ func TestAppAuthLoginWrongPassword(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -282,7 +282,7 @@ func TestAppAuthLoginUserNotFound(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/auth/login", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -299,7 +299,7 @@ func TestAppAuthListUsers(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/auth/users", injectUserID("user-1"), handler.ListUsers)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/auth/users", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -320,7 +320,7 @@ func TestAppAuthListUsersNotOwner(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/auth/users", injectUserID("user-2"), handler.ListUsers)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/auth/users", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -336,7 +336,7 @@ func TestAppAuthDeleteUser(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/auth/users/:userId", injectUserID("user-1"), handler.DeleteUser)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+testApp.ID+"/auth/users/"+appUser.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -358,7 +358,7 @@ func TestAppAuthDeleteUserNotOwner(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/auth/users/:userId", injectUserID("user-2"), handler.DeleteUser)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+testApp.ID+"/auth/users/"+appUser.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}

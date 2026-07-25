@@ -120,7 +120,7 @@ type TeamMember struct {
 type APIKeyType string
 
 const (
-	APIKeyPersonal APIKeyType = "personal"
+	APIKeyPersonal APIKeyType = "personal" // nosemgrep: go-hardcoded-password -- API key type enum, not a credential
 	APIKeyService  APIKeyType = "service"
 )
 

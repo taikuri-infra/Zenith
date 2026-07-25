@@ -23,7 +23,7 @@ func TestBackstageGetCatalogEmpty(t *testing.T) {
 	app.Get("/api/v1/backstage/catalog", handler.GetCatalog)
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -63,7 +63,7 @@ func TestBackstageGetCatalogWithProject(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -152,7 +152,7 @@ func TestBackstageGetCatalogWithAppsAndDatabases(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -212,7 +212,7 @@ func TestBackstageGetCatalogByKind(t *testing.T) {
 
 	// Get only Component entities
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog/Component", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -233,7 +233,7 @@ func TestBackstageGetCatalogByInvalidKind(t *testing.T) {
 	app.Get("/api/v1/backstage/catalog/:kind", handler.GetCatalogByKind)
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog/InvalidKind", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
@@ -280,7 +280,7 @@ func TestBackstageEntityAnnotations(t *testing.T) {
 	_ = bytes.NewBuffer(nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	var result handlers.BackstageCatalogResponse
 	json.NewDecoder(resp.Body).Decode(&result)
@@ -344,7 +344,7 @@ func TestBackstageGetCatalogWithStorageBuckets(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -427,7 +427,7 @@ func TestBackstageGetCatalogWithDomains(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	var result handlers.BackstageCatalogResponse
 	json.NewDecoder(resp.Body).Decode(&result)
@@ -493,7 +493,7 @@ func TestBackstageGetCatalogByKindSystem(t *testing.T) {
 
 	// Get only System entities (should exclude Component)
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog/System", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -537,7 +537,7 @@ func TestBackstageGetCatalogByKindResource(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog/Resource", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	var result handlers.BackstageCatalogResponse
 	json.NewDecoder(resp.Body).Decode(&result)
@@ -576,7 +576,7 @@ func TestBackstageGetCatalogByKindAPI(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog/API", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	var result handlers.BackstageCatalogResponse
 	json.NewDecoder(resp.Body).Decode(&result)
@@ -597,7 +597,7 @@ func TestBackstageGetCatalogByKindEmptyResult(t *testing.T) {
 
 	// No data - Component filter should return empty
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog/Component", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -649,7 +649,7 @@ func TestBackstageComponentWithDomain(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	var result handlers.BackstageCatalogResponse
 	json.NewDecoder(resp.Body).Decode(&result)
@@ -683,7 +683,7 @@ func TestBackstageProjectOwnerFallback(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	var result handlers.BackstageCatalogResponse
 	json.NewDecoder(resp.Body).Decode(&result)
@@ -725,7 +725,7 @@ func TestBackstageDatabaseResourceTags(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/backstage/catalog", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	var result handlers.BackstageCatalogResponse
 	json.NewDecoder(resp.Body).Decode(&result)

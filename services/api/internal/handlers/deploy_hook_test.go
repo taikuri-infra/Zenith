@@ -27,7 +27,7 @@ func TestDeployHookCreateHTTP(t *testing.T) {
 	req := httptest.NewRequest("POST", "/apps/app-1/hooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -47,7 +47,7 @@ func TestDeployHookCreateCommand(t *testing.T) {
 	req := httptest.NewRequest("POST", "/apps/app-1/hooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -61,7 +61,7 @@ func TestDeployHookCreateNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/apps/app-1/hooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -75,7 +75,7 @@ func TestDeployHookCreateInvalidType(t *testing.T) {
 	req := httptest.NewRequest("POST", "/apps/app-1/hooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -89,7 +89,7 @@ func TestDeployHookCreateHTTPNoURL(t *testing.T) {
 	req := httptest.NewRequest("POST", "/apps/app-1/hooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -103,7 +103,7 @@ func TestDeployHookCreateHTTPInvalidURL(t *testing.T) {
 	req := httptest.NewRequest("POST", "/apps/app-1/hooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -117,7 +117,7 @@ func TestDeployHookCreateCommandNoCommand(t *testing.T) {
 	req := httptest.NewRequest("POST", "/apps/app-1/hooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -132,7 +132,7 @@ func TestDeployHookList(t *testing.T) {
 	app.Get("/apps/:appId/hooks", handler.List)
 
 	req := httptest.NewRequest("GET", "/apps/app-1/hooks", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -152,7 +152,7 @@ func TestDeployHookListEmpty(t *testing.T) {
 	app.Get("/apps/:appId/hooks", handler.List)
 
 	req := httptest.NewRequest("GET", "/apps/app-1/hooks", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -177,7 +177,7 @@ func TestDeployHookUpdate(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/apps/app-1/hooks/"+hook.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -197,7 +197,7 @@ func TestDeployHookUpdateNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/apps/app-1/hooks/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -214,7 +214,7 @@ func TestDeployHookUpdateWrongApp(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/apps/app-2/hooks/"+hook.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -228,7 +228,7 @@ func TestDeployHookDelete(t *testing.T) {
 	app.Delete("/apps/:appId/hooks/:hookId", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/apps/app-1/hooks/"+hook.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -245,7 +245,7 @@ func TestDeployHookDeleteNotFound(t *testing.T) {
 	app.Delete("/apps/:appId/hooks/:hookId", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/apps/app-1/hooks/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -259,7 +259,7 @@ func TestDeployHookDeleteWrongApp(t *testing.T) {
 	app.Delete("/apps/:appId/hooks/:hookId", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/apps/app-2/hooks/"+hook.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}

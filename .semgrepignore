@@ -1,0 +1,43 @@
+# Dependency and build output
+node_modules/
+vendor/
+dist/
+.next/
+build/
+coverage/
+
+# CI definitions are reviewed by dedicated workflow tooling.
+.github/workflows/
+.github-actions/
+
+# Generated artifacts
+**/generated/
+**/*.generated.*
+**/*_generated.*
+
+# Demo, mock, fixture, and security-test data
+apps/web/src/lib/demo-api.ts
+services/api/internal/adapters/memory/
+services/api/internal/middleware/auth_test.go
+services/api/internal/middleware/tokenblacklist_test.go
+services/api/internal/services/auth_test.go
+services/api/internal/services/auth_verify_test.go
+services/api/internal/services/pii_scrubber_test.go
+services/api/internal/services/team_extra_test.go
+services/cli/internal/config/config_test.go
+services/operator/api/v1alpha1/types_test.go
+cli/internal/api/client_test.go
+cli/internal/sshkeys/sshkeys_test.go
+infra/scripts/e2e_lib.py
+infra/scripts/security-pentest.sh
+infra/smoke/
+
+# Documentation examples and policy definitions that intentionally contain
+# scanner signatures or incomplete manifest fragments.
+docs/superpowers/plans/
+infra/k8s/security/
+
+# Postgres runs as root then drops privileges internally (postgres:16-alpine has
+# no USER directive), so runAsNonRoot breaks pod startup. Proper non-root Postgres
+# (runAsUser: 70 + fsGroup + volume perms) is a tested change tracked separately.
+infra/k8s/postgres.yaml

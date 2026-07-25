@@ -41,7 +41,7 @@ func TestTeamInviteMember(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/team/invite", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)
@@ -65,7 +65,7 @@ func TestTeamInviteMemberNotOwner(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/team/invite", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for non-owner, got %d", resp.StatusCode)
 	}
@@ -80,7 +80,7 @@ func TestTeamInviteMemberNoRole(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/team/invite", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 when no role, got %d", resp.StatusCode)
 	}
@@ -94,7 +94,7 @@ func TestTeamInviteMemberNoEmail(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/team/invite", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for missing email, got %d", resp.StatusCode)
 	}
@@ -108,7 +108,7 @@ func TestTeamInviteMemberInvalidEmail(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/team/invite", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid email, got %d", resp.StatusCode)
 	}
@@ -124,7 +124,7 @@ func TestTeamInviteMemberDefaultRole(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/team/invite", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)
@@ -146,7 +146,7 @@ func TestTeamInviteMemberInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/team/invite", bytes.NewBufferString("{bad"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -162,11 +162,11 @@ func TestTeamListMembers(t *testing.T) {
 	body := `{"email":"dev@example.com","role":"developer"}`
 	inviteReq := httptest.NewRequest("POST", "/api/v1/team/invite", bytes.NewBufferString(body))
 	inviteReq.Header.Set("Content-Type", "application/json")
-	fiberApp.Test(inviteReq)
+	fiberApp.Test(inviteReq, -1)
 
 	// List members
 	listReq := httptest.NewRequest("GET", "/api/v1/team/members", nil)
-	listResp, _ := fiberApp.Test(listReq)
+	listResp, _ := fiberApp.Test(listReq, -1)
 
 	if listResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", listResp.StatusCode)
@@ -188,7 +188,7 @@ func TestTeamListMembersEmpty(t *testing.T) {
 	fiberApp.Get("/api/v1/team/members", injectUserID("user-1"), handler.ListMembers)
 
 	req := httptest.NewRequest("GET", "/api/v1/team/members", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -213,7 +213,7 @@ func TestTeamUpdateRoleNotOwner(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/team/members/some-id/role", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for non-owner, got %d", resp.StatusCode)
 	}
@@ -227,7 +227,7 @@ func TestTeamUpdateRoleMissingRole(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/team/members/some-id/role", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for missing role, got %d", resp.StatusCode)
 	}
@@ -238,7 +238,7 @@ func TestTeamRemoveMemberNotOwner(t *testing.T) {
 	fiberApp.Delete("/api/v1/team/members/:id", injectUserID("user-1"), injectRole(entities.RoleViewer), handler.RemoveMember)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/team/members/some-id", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for non-owner, got %d", resp.StatusCode)
@@ -262,7 +262,7 @@ func TestTeamAcceptInviteMissingFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest("POST", "/api/v1/team/accept-invite", bytes.NewBufferString(tc.body))
 			req.Header.Set("Content-Type", "application/json")
-			resp, _ := fiberApp.Test(req)
+			resp, _ := fiberApp.Test(req, -1)
 
 			if resp.StatusCode != 400 {
 				t.Errorf("Expected 400, got %d", resp.StatusCode)
@@ -277,7 +277,7 @@ func TestTeamAcceptInviteInvalidBody(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/v1/team/accept-invite", bytes.NewBufferString("{bad"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)

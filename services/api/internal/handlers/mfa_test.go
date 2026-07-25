@@ -25,7 +25,7 @@ func TestMFAGetStatusNoEnrollment(t *testing.T) {
 	app.Get("/api/v1/mfa/status", injectUserID("user-1"), handler.GetStatus)
 
 	req := httptest.NewRequest("GET", "/api/v1/mfa/status", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -43,7 +43,7 @@ func TestMFAEnableFreePlanForbidden(t *testing.T) {
 	app.Post("/api/v1/mfa/enable", injectUserID("user-1"), handler.Enable)
 
 	req := httptest.NewRequest("POST", "/api/v1/mfa/enable", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -60,7 +60,7 @@ func TestMFAEnableProPlan(t *testing.T) {
 	}, handler.Enable)
 
 	req := httptest.NewRequest("POST", "/api/v1/mfa/enable", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -86,7 +86,7 @@ func TestMFAVerifyNoCode(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/mfa/verify", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -100,7 +100,7 @@ func TestMFAVerifyInvalidCodeLength(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/mfa/verify", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -116,7 +116,7 @@ func TestMFAVerifyNoPendingEnrollment(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/mfa/verify", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -130,7 +130,7 @@ func TestMFADisableNoCode(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/mfa/disable", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -144,7 +144,7 @@ func TestMFADisableNotEnabled(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/mfa/disable", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -155,7 +155,7 @@ func TestMFARegenerateBackupCodesNotEnabled(t *testing.T) {
 	app.Post("/api/v1/mfa/regenerate", injectUserID("user-1"), handler.RegenerateBackupCodes)
 
 	req := httptest.NewRequest("POST", "/api/v1/mfa/regenerate", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -171,7 +171,7 @@ func TestMFAGetStatusWithEnrollment(t *testing.T) {
 	app.Get("/api/v1/mfa/status", injectUserID("user-1"), handler.GetStatus)
 
 	req := httptest.NewRequest("GET", "/api/v1/mfa/status", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -192,7 +192,7 @@ func TestMFARegenerateBackupCodesEnabled(t *testing.T) {
 	app.Post("/api/v1/mfa/regenerate", injectUserID("user-1"), handler.RegenerateBackupCodes)
 
 	req := httptest.NewRequest("POST", "/api/v1/mfa/regenerate", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
