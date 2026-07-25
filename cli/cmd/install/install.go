@@ -33,6 +33,7 @@ var (
 	flagFreeDomain    bool
 	flagRegisterURL   string
 	flagRegisterToken string
+	flagTLSMode       string
 )
 
 var Cmd = &cobra.Command{
@@ -72,6 +73,7 @@ func init() {
 	f.BoolVar(&flagFreeDomain, "free-domain", false, "Compose edition: reserve a free <slug>.apps.freezenith.com with automatic HTTPS")
 	f.StringVar(&flagRegisterURL, "register-url", "", "Override the subdomain-registration service URL (default: https://register.freezenith.com)")
 	f.StringVar(&flagRegisterToken, "register-token", "", "Install token for the registration service (defaults to $FREEZENITH_REGISTER_TOKEN)")
+	f.StringVar(&flagTLSMode, "tls-mode", "", "Compose custom domain HTTPS: 'http01' (public, reachable — default), 'dns01' (behind NAT, Cloudflare DNS), or 'selfsigned' (internal/offline domain)")
 
 	// Accept legacy --token flag as alias for --hetzner-token
 	f.String("token", "", "Alias for --hetzner-token (deprecated)")
@@ -200,6 +202,10 @@ func buildComposeConfigFromFlags() (*install.Config, error) {
 		cfg.DNSProvider = install.DNSProvider(strings.ToLower(flagDNSProvider))
 		cfg.CloudflareToken = flagDNSToken
 	}
+	// HTTPS strategy for a custom domain.
+	if err := applyTLSMode(cfg); err != nil {
+		return nil, err
+	}
 	if !flagLocal {
 		if flagSSHHost == "" {
 			return nil, fmt.Errorf("compose edition needs either --local or --ssh-host")
@@ -212,6 +218,27 @@ func buildComposeConfigFromFlags() (*install.Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// applyTLSMode validates --tls-mode, sets it on the compose config, and enforces
+// its prerequisites (DNS-01 needs a Cloudflare token). Empty means the default,
+// HTTP-01.
+func applyTLSMode(cfg *install.Config) error {
+	mode := strings.ToLower(strings.TrimSpace(flagTLSMode))
+	switch mode {
+	case "", install.TLSHTTP01:
+		cfg.TLSMode = install.TLSHTTP01
+	case install.TLSDNS01:
+		cfg.TLSMode = install.TLSDNS01
+		if cfg.CloudflareToken == "" {
+			return fmt.Errorf("--tls-mode dns01 needs a Cloudflare token: pass --dns-provider cloudflare --dns-token <token>")
+		}
+	case install.TLSSelfSigned:
+		cfg.TLSMode = install.TLSSelfSigned
+	default:
+		return fmt.Errorf("unknown --tls-mode %q (use http01, dns01, or selfsigned)", flagTLSMode)
+	}
+	return nil
 }
 
 // buildConfigFromFlags creates a Config from CLI flags.
@@ -491,6 +518,64 @@ func showComposeResult(cfg *install.Config) {
 		BorderForeground(tui.ColorPrimary).
 		Padding(1, 2).
 		Render(content.String())
+	fmt.Println(box)
+
+	// Self-signed install: guide the operator through trusting the local CA.
+	if cfg.CACertPEM != "" {
+		showSelfSignedCAInstructions(cfg)
+	}
+}
+
+// showSelfSignedCAInstructions writes the local CA to ./zenith-ca.crt on the
+// operator's machine and prints plain-language, per-OS import steps. Written for
+// any seniority: a browser trusts the site with zero warnings once the CA is
+// imported, and the one file covers every app subdomain too (wildcard cert).
+func showSelfSignedCAInstructions(cfg *install.Config) {
+	const caFile = "zenith-ca.crt"
+	writeNote := ""
+	if err := os.WriteFile(caFile, []byte(cfg.CACertPEM), 0o644); err != nil {
+		writeNote = fmt.Sprintf("(could not save %s here: %v — copy it off the server manually)", caFile, err)
+	} else {
+		writeNote = fmt.Sprintf("Saved the certificate authority to ./%s in this folder.", caFile)
+	}
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorWarning)
+	mutedStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
+	textStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
+	cmdStyle := lipgloss.NewStyle().Foreground(tui.ColorPrimary)
+
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("One more step: trust the certificate"))
+	b.WriteString("\n\n")
+	b.WriteString(textStyle.Render(fmt.Sprintf(
+		"This is an internal domain (%s), so there is no public certificate\n"+
+			"authority to vouch for it. We generated our own. Import it ONCE on each\n"+
+			"machine that will open the dashboard, and every browser there trusts\n"+
+			"%s and all its apps with no warnings — forever.", cfg.Domain, cfg.Domain)))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("  " + writeNote))
+	b.WriteString("\n\n")
+	b.WriteString(textStyle.Render("  Install it on your machine:"))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render("  macOS:   "))
+	b.WriteString(cmdStyle.Render("sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain " + caFile))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render("  Linux:   "))
+	b.WriteString(cmdStyle.Render("sudo cp " + caFile + " /usr/local/share/ca-certificates/ && sudo update-ca-certificates"))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render("  Windows: "))
+	b.WriteString(cmdStyle.Render("certutil -addstore -f Root " + caFile))
+	b.WriteString("\n")
+	b.WriteString(mutedStyle.Render("  Firefox / iOS / Android: import " + caFile + " under Settings → Certificates."))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render("  Skip this and the site still works — the browser just shows a warning first."))
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.ColorWarning).
+		Padding(1, 2).
+		Render(b.String())
+	fmt.Println()
 	fmt.Println(box)
 }
 

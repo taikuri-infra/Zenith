@@ -215,6 +215,14 @@ func GetComposeInstallSteps(cfg *Config) []Step {
 			Action:      composeConfigureDNS,
 		})
 	}
+	if needsTLS(cfg) {
+		steps = append(steps, Step{
+			Name:        "Configure TLS",
+			Description: describeTLS(cfg),
+			Duration:    10 * time.Second,
+			Action:      composeConfigureTLS,
+		})
+	}
 	steps = append(steps,
 		Step{Name: "Start services", Description: "Pulling prebuilt images and starting the stack...", Duration: 90 * time.Second, Action: composeUp},
 		Step{Name: "Wait for health", Description: "Waiting for the API to become healthy...", Duration: 60 * time.Second, Action: composeWaitHealth},
@@ -223,10 +231,30 @@ func GetComposeInstallSteps(cfg *Config) []Step {
 	return steps
 }
 
-// needsCustomDNS is true for a bring-your-own public domain (not localhost, not a
-// free FreeZenith subdomain) — the customer's own domain must be pointed at the box.
+// needsCustomDNS is true only for an HTTP-01 bring-your-own public domain: the A
+// record must point at the box before Let's Encrypt can answer the challenge.
+// DNS-01 needs no public A record (Traefik proves control via a TXT record), and
+// self-signed uses no public DNS at all — so neither runs this step.
 func needsCustomDNS(cfg *Config) bool {
-	return !cfg.FreeSubdomain && cfg.Domain != "" && cfg.Domain != "localhost"
+	return !cfg.FreeSubdomain && cfg.Domain != "" && cfg.Domain != "localhost" && tlsMode(cfg) == TLSHTTP01
+}
+
+// needsTLS is true for every install that serves HTTPS through Traefik — any
+// non-localhost domain, including the free subdomain (whose domain is set at
+// runtime by the register step, so gate on the FreeSubdomain flag here).
+func needsTLS(cfg *Config) bool {
+	return cfg.FreeSubdomain || (cfg.Domain != "" && cfg.Domain != "localhost")
+}
+
+func describeTLS(cfg *Config) string {
+	switch tlsMode(cfg) {
+	case TLSSelfSigned:
+		return "Generating a self-signed certificate (internal domain)..."
+	case TLSDNS01:
+		return "Configuring Let's Encrypt via the Cloudflare DNS-01 challenge..."
+	default:
+		return "Configuring Let's Encrypt (automatic HTTPS)..."
+	}
 }
 
 // composeConfigureDNS makes sure the customer's domain points at the box before
@@ -415,9 +443,12 @@ func buildComposeEnv(cfg *Config, adminEmail, dockerGID string) string {
 	fmt.Fprintf(&b, "DOCKER_GID=%s\n", dockerGID)
 	if d := cfg.Domain; d != "" && d != "localhost" {
 		fmt.Fprintf(&b, "ZENITH_DOMAIN=%s\n", d)
-		fmt.Fprintf(&b, "ACME_EMAIL=%s\n", adminEmail)
 		fmt.Fprintf(&b, "NEXT_PUBLIC_API_URL=https://%s\n", d)
 		fmt.Fprintf(&b, "CORS_ORIGINS=https://%s\n", d)
+		// DNS-01: Traefik's Cloudflare provider reads this from the container env.
+		if tlsMode(cfg) == TLSDNS01 {
+			fmt.Fprintf(&b, "CF_DNS_API_TOKEN=%s\n", cfg.CloudflareToken)
+		}
 	}
 	return b.String()
 }

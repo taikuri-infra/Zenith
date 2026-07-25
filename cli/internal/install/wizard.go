@@ -19,12 +19,12 @@ type WizardResult struct {
 // It walks the user through 5 steps and returns a fully populated Config.
 func RunWizard() (*WizardResult, error) {
 	cfg := &Config{
-		MCProvider:  ProviderHetzner,
-		ServerType:  "cx22",
-		Region:      "nbg1",
-		SSHUser:     "root",
-		DNSProvider: DNSCloudflare,
-		WithCluster: false,
+		MCProvider:        ProviderHetzner,
+		ServerType:        "cx22",
+		Region:            "nbg1",
+		SSHUser:           "root",
+		DNSProvider:       DNSCloudflare,
+		WithCluster:       false,
 		ClusterProvider:   ProviderHetzner,
 		ClusterServerType: "cx22",
 		ClusterRegion:     "nbg1",

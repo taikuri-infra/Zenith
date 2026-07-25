@@ -58,6 +58,18 @@ const (
 	DNSManual     DNSProvider = "manual"
 )
 
+// TLSMode selects how a compose install obtains its HTTPS certificate. It maps
+// to the box's real situation, best-to-worst:
+//
+//	http01     — public domain, reachable on :80 → Let's Encrypt HTTP-01 (default)
+//	dns01      — public domain, behind NAT/firewall → Let's Encrypt DNS-01 (Cloudflare)
+//	selfsigned — internal/offline name (zenith.lan) → local CA + leaf, operator imports the CA
+const (
+	TLSHTTP01     = "http01"
+	TLSDNS01      = "dns01"
+	TLSSelfSigned = "selfsigned"
+)
+
 // Config holds the installation configuration gathered from the wizard.
 type Config struct {
 	// Mission Control Server
@@ -108,6 +120,8 @@ type Config struct {
 	FreeSubdomain bool   // register a free <slug>.apps.freezenith.com + auto-HTTPS
 	RegisterURL   string // override the subdomain-registration service URL (tests/self-host)
 	RegisterToken string // install token presented to the registration service
+	TLSMode       string // http01 (default) | dns01 | selfsigned — see TLS* constants
+	CACertPEM     string // set during a self-signed install: the local CA to hand the operator
 
 	// DryRun skips all real API calls for testing the installer flow.
 	DryRun bool
