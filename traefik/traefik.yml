@@ -1,0 +1,32 @@
+# Default Traefik static config for a manual `docker compose --profile tls up`.
+#
+# `zen install --edition compose` OVERWRITES this file for the TLS mode you pick
+# (HTTP-01, DNS-01, or self-signed). If you run the stack by hand, set your
+# email below and make sure DNS points at this box on ports 80/443.
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: le
+providers:
+  docker:
+    exposedByDefault: false
+    network: zenith_default
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+certificatesResolvers:
+  le:
+    acme:
+      email: ""
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web

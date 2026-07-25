@@ -218,9 +218,13 @@ func proxyLabels(app *entities.App, baseDomain, network string) map[string]strin
 		"zenith.app.id":          app.ID,
 		"traefik.enable":         "true",
 		"traefik.docker.network": network,
-		fmt.Sprintf("traefik.http.routers.%s.rule", rn):                      hostRule(hosts),
-		fmt.Sprintf("traefik.http.routers.%s.entrypoints", rn):               "websecure",
-		fmt.Sprintf("traefik.http.routers.%s.tls.certresolver", rn):          "le",
+		fmt.Sprintf("traefik.http.routers.%s.rule", rn):        hostRule(hosts),
+		fmt.Sprintf("traefik.http.routers.%s.entrypoints", rn): "websecure",
+		// Enable TLS but name no resolver: the websecure entrypoint carries the
+		// default resolver (HTTP-01/DNS-01) or a self-signed default certificate,
+		// set by the installer-generated traefik.yml. This keeps deployed apps
+		// working across all three TLS modes with one label set.
+		fmt.Sprintf("traefik.http.routers.%s.tls", rn):                       "true",
 		fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", rn): fmt.Sprintf("%d", app.Port),
 	}
 }

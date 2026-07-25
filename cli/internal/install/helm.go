@@ -7,12 +7,12 @@ import (
 
 // HelmConfig contains configuration for Helm-based platform installation.
 type HelmConfig struct {
-	ReleaseName string
-	Namespace   string
-	ChartPath   string
-	Domain      string
+	ReleaseName  string
+	Namespace    string
+	ChartPath    string
+	Domain       string
 	HetznerToken string
-	ValuesFile  string
+	ValuesFile   string
 }
 
 // DefaultHelmConfig returns sensible defaults for Helm installation.

@@ -78,8 +78,9 @@ func TestGetComposeInstallSteps_Order(t *testing.T) {
 func TestGetComposeInstallSteps_FreeSubdomainAddsStep(t *testing.T) {
 	cfg := &Config{Edition: "compose", ComposeLocal: true, FreeSubdomain: true}
 	steps := GetComposeInstallSteps(cfg)
-	if len(steps) != 7 {
-		t.Fatalf("got %d steps, want 7 with --free-domain", len(steps))
+	// Base 6 + "Register subdomain" + "Configure TLS" (free subdomain is HTTP-01).
+	if len(steps) != 8 {
+		t.Fatalf("got %d steps, want 8 with --free-domain", len(steps))
 	}
 	if steps[1].Name != "Register subdomain" {
 		t.Errorf("step 1 = %q, want %q", steps[1].Name, "Register subdomain")
@@ -151,10 +152,15 @@ func TestBuildComposeEnv(t *testing.T) {
 
 	cfg.Domain = "app.example.com"
 	env = buildComposeEnv(cfg, "admin@example.com", "991")
-	for _, s := range []string{"ZENITH_DOMAIN=app.example.com", "ACME_EMAIL=admin@example.com", "https://app.example.com"} {
+	// ACME_EMAIL is no longer an env var — Traefik reads it from the generated
+	// traefik.yml. The domain-derived URL vars remain.
+	for _, s := range []string{"ZENITH_DOMAIN=app.example.com", "https://app.example.com"} {
 		if !strings.Contains(env, s) {
 			t.Errorf("env with domain missing %q\n%s", s, env)
 		}
+	}
+	if strings.Contains(env, "ACME_EMAIL=") {
+		t.Error("ACME_EMAIL should no longer be written to .env (it lives in traefik.yml)")
 	}
 }
 

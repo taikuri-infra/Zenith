@@ -99,7 +99,10 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.zenith-api.rule=Host(`${ZENITH_DOMAIN:-localhost}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.zenith-api.entrypoints=websecure"
-      - "traefik.http.routers.zenith-api.tls.certresolver=le"
+      # No certresolver here: the websecure entrypoint carries the default
+      # resolver (or a self-signed default cert) via the generated traefik.yml,
+      # so one label set serves HTTP-01, DNS-01, and self-signed alike.
+      - "traefik.http.routers.zenith-api.tls=true"
       - "traefik.http.routers.zenith-api.priority=100"
       - "traefik.http.services.zenith-api.loadbalancer.server.port=8080"
 
@@ -123,20 +126,27 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.zenith-web.rule=Host(`${ZENITH_DOMAIN:-localhost}`)"
       - "traefik.http.routers.zenith-web.entrypoints=websecure"
-      - "traefik.http.routers.zenith-web.tls.certresolver=le"
+      - "traefik.http.routers.zenith-web.tls=true"
       - "traefik.http.routers.zenith-web.priority=1"
       - "traefik.http.services.zenith-web.loadbalancer.server.port=3000"
 
-  # Production reverse proxy with automatic HTTPS (Let's Encrypt).
+  # Production reverse proxy with automatic HTTPS.
   # Only starts with the `tls` profile:  docker compose --profile tls up -d
-  # Requires ZENITH_DOMAIN (and ideally ACME_EMAIL) set in .env, DNS pointing
-  # at this server, and ports 80/443 open.
+  # Requires ZENITH_DOMAIN set in .env and ports 80/443 open.
+  #
+  # The static config lives in ./traefik/traefik.yml, which the installer
+  # generates for the chosen TLS mode (HTTP-01, DNS-01, or self-signed). The
+  # repo ships a default HTTP-01 traefik.yml so a manual `docker compose
+  # --profile tls up` still works — edit the email in it, or run `zen install`.
+  # DNS-01 reads CF_DNS_API_TOKEN (set in .env by the installer) for the
+  # Cloudflare challenge.
+  #
   # Traefik watches the Docker socket and auto-routes any container carrying
   # traefik.* labels — this is how deployed user apps get their
-  # <subdomain>.<domain> route + Let's Encrypt cert with no config changes. It's
-  # the same proxy the cloud/k8s edition uses (Traefik IngressRoute), so both
-  # editions share one routing model. The dashboard + API are routed by the
-  # traefik.* labels on the web/api services above.
+  # <subdomain>.<domain> route + cert with no config changes. It's the same
+  # proxy the cloud/k8s edition uses (Traefik IngressRoute), so both editions
+  # share one routing model. The dashboard + API are routed by the traefik.*
+  # labels on the web/api services above.
   traefik:
     # v3.7+ negotiates the Docker API version via an unversioned ping; older
     # tags default to API 1.24, which Docker 25+ daemons reject outright.
@@ -146,25 +156,17 @@ services:
     depends_on:
       - web
       - api
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=zenith_default"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      # Redirect all plain HTTP to HTTPS.
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      # Let's Encrypt via HTTP-01 challenge. Set ACME_EMAIL in .env.
-      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL:-}"
-      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
-      - "--certificatesresolvers.le.acme.httpchallenge=true"
-      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+    environment:
+      # Consumed by the Cloudflare DNS-01 challenge (DNS-01 mode only; empty otherwise).
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:-}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Static config (traefik.yml), file-provider dynamic config, and any
+      # self-signed certs. Read-only: Traefik writes acme.json to /letsencrypt.
+      - ./traefik:/etc/traefik:ro
       - traefik_letsencrypt:/letsencrypt
 
 networks:
