@@ -23,7 +23,7 @@ func TestAutoscaleGetStatus(t *testing.T) {
 	app.Get("/api/v1/admin/autoscaler/status", handler.GetStatus)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/autoscaler/status", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -46,7 +46,7 @@ func TestAutoscaleListNodes(t *testing.T) {
 	app.Get("/api/v1/admin/autoscaler/nodes", handler.ListNodes)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/autoscaler/nodes", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -66,7 +66,7 @@ func TestAutoscaleListNodesEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/autoscaler/nodes", handler.ListNodes)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/autoscaler/nodes", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -91,7 +91,7 @@ func TestAutoscaleListEvents(t *testing.T) {
 	app.Get("/api/v1/admin/autoscaler/events", handler.ListEvents)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/autoscaler/events", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -111,7 +111,7 @@ func TestAutoscaleListEventsEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/autoscaler/events", handler.ListEvents)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/autoscaler/events", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -122,7 +122,7 @@ func TestAutoscaleListEventsWithLimit(t *testing.T) {
 	app.Get("/api/v1/admin/autoscaler/events", handler.ListEvents)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/autoscaler/events?limit=10", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

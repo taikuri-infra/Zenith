@@ -40,7 +40,7 @@ func TestWAFListRulesBusinessPlan(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/waf/rules", injectUserID("user-1"), handler.ListRules)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/waf/rules", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -63,7 +63,7 @@ func TestWAFListRulesFreePlanForbidden(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/waf/rules", injectUserID("user-1"), handler.ListRules)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/waf/rules", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -77,7 +77,7 @@ func TestWAFListRulesProPlanForbidden(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/waf/rules", injectUserID("user-1"), handler.ListRules)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/waf/rules", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -94,7 +94,7 @@ func TestWAFCreateRule(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/waf/rules", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -120,7 +120,7 @@ func TestWAFCreateRuleNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/waf/rules", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -137,7 +137,7 @@ func TestWAFCreateRuleInvalidType(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/waf/rules", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -154,7 +154,7 @@ func TestWAFCreateRuleNotYourApp(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/waf/rules", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -172,7 +172,7 @@ func TestWAFUpdateRule(t *testing.T) {
 	createBody := `{"name":"Original","type":"rate_limit","priority":1}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/waf/rules", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created map[string]interface{}
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -183,7 +183,7 @@ func TestWAFUpdateRule(t *testing.T) {
 	updateReq := httptest.NewRequest("PUT", "/api/v1/apps/"+testApp.ID+"/waf/rules/"+ruleID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(updateReq)
+	resp, _ := app.Test(updateReq, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -206,7 +206,7 @@ func TestWAFUpdateRuleNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/apps/"+testApp.ID+"/waf/rules/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -224,7 +224,7 @@ func TestWAFDeleteRule(t *testing.T) {
 	createBody := `{"name":"ToDelete","type":"ip_allow","priority":1}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/waf/rules", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created map[string]interface{}
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -232,7 +232,7 @@ func TestWAFDeleteRule(t *testing.T) {
 
 	// Delete the rule
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+testApp.ID+"/waf/rules/"+ruleID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -252,7 +252,7 @@ func TestWAFDeleteRuleNotFound(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/waf/rules/:ruleId", injectUserID("user-1"), handler.DeleteRule)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+testApp.ID+"/waf/rules/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -271,7 +271,7 @@ func TestWAFCreateRuleAllTypes(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/waf/rules", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, -1)
 		if resp.StatusCode != 201 {
 			t.Errorf("Expected 201 for type %s, got %d", ruleType, resp.StatusCode)
 		}

@@ -30,7 +30,7 @@ func TestSSOConfigureSAMLTeamPlan(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sso/saml", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -51,7 +51,7 @@ func TestSSOConfigureSAMLFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sso/saml", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -67,7 +67,7 @@ func TestSSOConfigureSAMLProPlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sso/saml", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -83,7 +83,7 @@ func TestSSOConfigureSAMLNoEntityID(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sso/saml", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -99,7 +99,7 @@ func TestSSOConfigureOIDCTeamPlan(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sso/oidc", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -119,7 +119,7 @@ func TestSSOConfigureOIDCFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sso/oidc", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -135,7 +135,7 @@ func TestSSOConfigureOIDCNoClientID(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/sso/oidc", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -152,7 +152,7 @@ func TestSSOListConfigs(t *testing.T) {
 	app.Get("/api/v1/sso", injectUserID("user-1"), handler.ListConfigs)
 
 	req := httptest.NewRequest("GET", "/api/v1/sso", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -171,7 +171,7 @@ func TestSSOListConfigsEmpty(t *testing.T) {
 	app.Get("/api/v1/sso", injectUserID("user-1"), handler.ListConfigs)
 
 	req := httptest.NewRequest("GET", "/api/v1/sso", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -196,7 +196,7 @@ func TestSSODeleteConfig(t *testing.T) {
 	app.Delete("/api/v1/sso/:configId", injectUserID("user-1"), handler.DeleteConfig)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/sso/"+config.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 204 {
 		t.Fatalf("Expected 204, got %d", resp.StatusCode)
 	}
@@ -207,7 +207,7 @@ func TestSSODeleteConfigNotFound(t *testing.T) {
 	app.Delete("/api/v1/sso/:configId", injectUserID("user-1"), handler.DeleteConfig)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/sso/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -224,7 +224,7 @@ func TestSSODeleteConfigForbidden(t *testing.T) {
 	app.Delete("/api/v1/sso/:configId", injectUserID("user-2"), handler.DeleteConfig)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/sso/"+config.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		// Handler intentionally returns 404 for ownership mismatch
 		t.Errorf("Expected 404, got %d", resp.StatusCode)

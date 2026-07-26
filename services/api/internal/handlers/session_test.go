@@ -27,7 +27,7 @@ func TestSessionList(t *testing.T) {
 	app.Get("/api/v1/auth/sessions", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/auth/sessions", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -47,7 +47,7 @@ func TestSessionListEmpty(t *testing.T) {
 	app.Get("/api/v1/auth/sessions", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/auth/sessions", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -61,7 +61,7 @@ func TestSessionRevoke(t *testing.T) {
 	app.Delete("/api/v1/auth/sessions/:sessionId", injectUserID("user-1"), handler.Revoke)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/auth/sessions/"+session.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -78,7 +78,7 @@ func TestSessionRevokeNotFound(t *testing.T) {
 	app.Delete("/api/v1/auth/sessions/:sessionId", injectUserID("user-1"), handler.Revoke)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/auth/sessions/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -92,7 +92,7 @@ func TestSessionRevokeForbidden(t *testing.T) {
 	app.Delete("/api/v1/auth/sessions/:sessionId", injectUserID("user-2"), handler.Revoke)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/auth/sessions/"+session.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -107,7 +107,7 @@ func TestSessionRevokeAll(t *testing.T) {
 	app.Delete("/api/v1/auth/sessions", injectUserID("user-1"), handler.RevokeAll)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/auth/sessions", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

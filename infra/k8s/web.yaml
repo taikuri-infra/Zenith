@@ -25,6 +25,9 @@ spec:
         - name: web
           image: zenith-web:latest
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
           ports:
             - containerPort: 3000
               name: http

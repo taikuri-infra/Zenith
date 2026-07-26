@@ -30,7 +30,7 @@ func TestIPWhitelistAddBusinessPlan(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/ip-whitelist", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -51,7 +51,7 @@ func TestIPWhitelistAddFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/ip-whitelist", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -67,7 +67,7 @@ func TestIPWhitelistAddProPlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/ip-whitelist", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -83,7 +83,7 @@ func TestIPWhitelistAddNoCIDR(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/ip-whitelist", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -98,7 +98,7 @@ func TestIPWhitelistList(t *testing.T) {
 	app.Get("/api/v1/ip-whitelist", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/ip-whitelist", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -117,7 +117,7 @@ func TestIPWhitelistListEmpty(t *testing.T) {
 	app.Get("/api/v1/ip-whitelist", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/ip-whitelist", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -139,7 +139,7 @@ func TestIPWhitelistDelete(t *testing.T) {
 	app.Delete("/api/v1/ip-whitelist/:entryId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/ip-whitelist/"+entry.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 204 {
 		t.Fatalf("Expected 204, got %d", resp.StatusCode)
 	}
@@ -150,7 +150,7 @@ func TestIPWhitelistDeleteNotFound(t *testing.T) {
 	app.Delete("/api/v1/ip-whitelist/:entryId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/ip-whitelist/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -164,7 +164,7 @@ func TestIPWhitelistDeleteForbidden(t *testing.T) {
 	app.Delete("/api/v1/ip-whitelist/:entryId", injectUserID("user-2"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/ip-whitelist/"+entry.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		// The handler returns 404 for ownership mismatch (intentionally hides existence)
 		t.Errorf("Expected 404, got %d", resp.StatusCode)

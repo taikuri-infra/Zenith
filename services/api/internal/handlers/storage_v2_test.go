@@ -65,7 +65,7 @@ func TestStorageV2Create(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -92,7 +92,7 @@ func TestStorageV2CreateNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -106,7 +106,7 @@ func TestStorageV2CreateAppNotFound(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/nonexistent/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -120,7 +120,7 @@ func TestStorageV2CreateForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -135,7 +135,7 @@ func TestStorageV2List(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/:appId/storage", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/storage", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -152,7 +152,7 @@ func TestStorageV2ListEmpty(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/:appId/storage", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/storage", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -172,7 +172,7 @@ func TestStorageV2Get(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/:appId/storage/:bucketId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/storage/"+bucket.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -189,7 +189,7 @@ func TestStorageV2GetNotFound(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/:appId/storage/:bucketId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/storage/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -203,7 +203,7 @@ func TestStorageV2Delete(t *testing.T) {
 	fiberApp.Delete("/api/v1/apps/:appId/storage/:bucketId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/storage/"+bucket.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -217,7 +217,7 @@ func TestStorageV2DeleteForbidden(t *testing.T) {
 	fiberApp.Delete("/api/v1/apps/:appId/storage/:bucketId", injectUserID("user-2"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/storage/"+bucket.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -228,7 +228,7 @@ func TestStorageV2DeleteNotFound(t *testing.T) {
 	fiberApp.Delete("/api/v1/apps/:appId/storage/:bucketId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/storage/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -242,7 +242,7 @@ func TestStorageV2CreateStandalone(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/storage-buckets", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -262,7 +262,7 @@ func TestStorageV2CreateStandaloneNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/storage-buckets", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -277,7 +277,7 @@ func TestStorageV2ListByUser(t *testing.T) {
 	fiberApp.Get("/api/v1/storage-buckets", injectUserID("user-1"), handler.ListByUser)
 
 	req := httptest.NewRequest("GET", "/api/v1/storage-buckets", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -297,7 +297,7 @@ func TestStorageV2GetStandalone(t *testing.T) {
 	fiberApp.Get("/api/v1/storage-buckets/:bucketId", injectUserID("user-1"), handler.GetStandalone)
 
 	req := httptest.NewRequest("GET", "/api/v1/storage-buckets/"+bucket.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -311,7 +311,7 @@ func TestStorageV2GetStandaloneForbidden(t *testing.T) {
 	fiberApp.Get("/api/v1/storage-buckets/:bucketId", injectUserID("user-2"), handler.GetStandalone)
 
 	req := httptest.NewRequest("GET", "/api/v1/storage-buckets/"+bucket.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -325,7 +325,7 @@ func TestStorageV2DeleteStandalone(t *testing.T) {
 	fiberApp.Delete("/api/v1/storage-buckets/:bucketId", injectUserID("user-1"), handler.DeleteStandalone)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/storage-buckets/"+bucket.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -342,7 +342,7 @@ func TestStorageV2UpdateBucket(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/storage-buckets/"+bucket.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -365,7 +365,7 @@ func TestStorageV2UpdateBucketForbidden(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/storage-buckets/"+bucket.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -378,12 +378,12 @@ func TestStorageV2CreateDuplicate(t *testing.T) {
 	body := `{"name":"mybucket"}`
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	fiberApp.Test(req)
+	fiberApp.Test(req, -1)
 
 	// Duplicate
 	req2 := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/storage", bytes.NewBufferString(body))
 	req2.Header.Set("Content-Type", "application/json")
-	resp, _ := fiberApp.Test(req2)
+	resp, _ := fiberApp.Test(req2, -1)
 	if resp.StatusCode != 409 {
 		t.Errorf("Expected 409, got %d", resp.StatusCode)
 	}

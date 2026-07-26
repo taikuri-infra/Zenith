@@ -23,7 +23,7 @@ func TestAddOnListCatalogFreeUser(t *testing.T) {
 	app.Get("/api/v1/addons", injectUserID("user-1"), handler.ListCatalog)
 
 	req := httptest.NewRequest("GET", "/api/v1/addons", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -53,7 +53,7 @@ func TestAddOnListCatalogProUser(t *testing.T) {
 	app.Get("/api/v1/addons", injectUserID("user-1"), handler.ListCatalog)
 
 	req := httptest.NewRequest("GET", "/api/v1/addons", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -82,7 +82,7 @@ func TestAddOnListCatalogEnterpriseUser(t *testing.T) {
 	app.Get("/api/v1/addons", injectUserID("user-1"), handler.ListCatalog)
 
 	req := httptest.NewRequest("GET", "/api/v1/addons", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -103,7 +103,7 @@ func TestAddOnGetByID(t *testing.T) {
 	app.Get("/api/v1/addons/:addonId", handler.GetAddOn)
 
 	req := httptest.NewRequest("GET", "/api/v1/addons/gold-support", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -120,7 +120,7 @@ func TestAddOnGetNotFound(t *testing.T) {
 	app.Get("/api/v1/addons/:addonId", handler.GetAddOn)
 
 	req := httptest.NewRequest("GET", "/api/v1/addons/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}

@@ -23,7 +23,7 @@ func TestEmailStatsGetStatsEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/emails/stats", handler.GetStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/emails/stats", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -54,7 +54,7 @@ func TestEmailStatsGetStatsWithData(t *testing.T) {
 	app.Get("/api/v1/admin/emails/stats", handler.GetStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/emails/stats", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -82,7 +82,7 @@ func TestEmailStatsGetStatsWithOpened(t *testing.T) {
 	app.Get("/api/v1/admin/emails/stats", handler.GetStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/emails/stats", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

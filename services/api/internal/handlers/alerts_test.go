@@ -36,7 +36,7 @@ func TestAlertsListRulesEmpty(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/alerts", injectUserID("user-1"), handler.ListAlertRules)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/alerts", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -59,7 +59,7 @@ func TestAlertsCreateRule(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/alerts", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -89,7 +89,7 @@ func TestAlertsCreateRuleMissingFields(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/alerts", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -114,7 +114,7 @@ func TestAlertsCreateRuleFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/alerts", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -129,7 +129,7 @@ func TestAlertsUpdateRule(t *testing.T) {
 	body := `{"name":"High CPU","metric":"cpu_usage","condition":">80"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/alerts", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created entities.AlertRule
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -138,7 +138,7 @@ func TestAlertsUpdateRule(t *testing.T) {
 	updateBody := `{"name":"Updated Alert","enabled":false}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/apps/"+appID+"/alerts/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", updateResp.StatusCode)
@@ -162,7 +162,7 @@ func TestAlertsUpdateRuleNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/apps/"+appID+"/alerts/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -177,14 +177,14 @@ func TestAlertsDeleteRule(t *testing.T) {
 	body := `{"name":"To Delete","metric":"cpu_usage","condition":">80"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/alerts", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created entities.AlertRule
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	// Delete it
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/alerts/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", deleteResp.StatusCode)
 	}
@@ -195,7 +195,7 @@ func TestAlertsDeleteRuleNotFound(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/alerts/:ruleId", injectUserID("user-1"), handler.DeleteAlertRule)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/alerts/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -208,7 +208,7 @@ func TestAlertsListMetricsEmpty(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/custom-metrics", injectUserID("user-1"), handler.ListMetrics)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/custom-metrics", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -222,7 +222,7 @@ func TestAlertsCreateMetric(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/custom-metrics", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -242,7 +242,7 @@ func TestAlertsCreateMetricMissingFields(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/custom-metrics", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -256,13 +256,13 @@ func TestAlertsDeleteMetric(t *testing.T) {
 	body := `{"name":"to_delete","expression":"sum(rate(http_requests_total[5m]))"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/custom-metrics", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created entities.CustomMetric
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/custom-metrics/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", deleteResp.StatusCode)
 	}
@@ -273,7 +273,7 @@ func TestAlertsDeleteMetricNotFound(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/custom-metrics/:metricId", injectUserID("user-1"), handler.DeleteMetric)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+appID+"/custom-metrics/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}

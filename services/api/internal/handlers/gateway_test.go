@@ -35,7 +35,7 @@ func TestGatewayCreate(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -56,7 +56,7 @@ func TestGatewayCreateNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -69,7 +69,7 @@ func TestGatewayCreateInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -85,11 +85,11 @@ func TestGatewayList(t *testing.T) {
 		body := `{"name":"` + name + `"}`
 		req := httptest.NewRequest("POST", "/api/v1/gateways", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		fiberApp.Test(req)
+		fiberApp.Test(req, -1)
 	}
 
 	listReq := httptest.NewRequest("GET", "/api/v1/gateways", nil)
-	listResp, _ := fiberApp.Test(listReq)
+	listResp, _ := fiberApp.Test(listReq, -1)
 
 	if listResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", listResp.StatusCode)
@@ -108,7 +108,7 @@ func TestGatewayListEmpty(t *testing.T) {
 	fiberApp.Get("/api/v1/gateways", injectUserID("user-1"), handler.ListGateways)
 
 	req := httptest.NewRequest("GET", "/api/v1/gateways", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -131,7 +131,7 @@ func TestGatewayGet(t *testing.T) {
 	body := `{"name":"my-gw"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/gateways", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	var created map[string]interface{}
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -139,7 +139,7 @@ func TestGatewayGet(t *testing.T) {
 
 	// Get the gateway
 	getReq := httptest.NewRequest("GET", "/api/v1/gateways/"+gwID, nil)
-	getResp, _ := fiberApp.Test(getReq)
+	getResp, _ := fiberApp.Test(getReq, -1)
 
 	if getResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", getResp.StatusCode)
@@ -165,7 +165,7 @@ func TestGatewayGetNotFound(t *testing.T) {
 	fiberApp.Get("/api/v1/gateways/:gwId", injectUserID("user-1"), handler.GetGateway)
 
 	req := httptest.NewRequest("GET", "/api/v1/gateways/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -181,7 +181,7 @@ func TestGatewayGetForbidden(t *testing.T) {
 	fiberApp.Get("/api/v1/gateways/:gwId", injectUserID("user-2"), handler.GetGateway)
 
 	req := httptest.NewRequest("GET", "/api/v1/gateways/"+gw.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
@@ -199,7 +199,7 @@ func TestGatewayUpdate(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/gateways/"+gw.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -223,7 +223,7 @@ func TestGatewayUpdateNoName(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/gateways/"+gw.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -237,7 +237,7 @@ func TestGatewayUpdateNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/gateways/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -254,7 +254,7 @@ func TestGatewayUpdateForbidden(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/gateways/"+gw.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -268,7 +268,7 @@ func TestGatewayDelete(t *testing.T) {
 	fiberApp.Delete("/api/v1/gateways/:gwId", injectUserID("user-1"), handler.DeleteGateway)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/gateways/"+gw.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -287,7 +287,7 @@ func TestGatewayDeleteNotFound(t *testing.T) {
 	fiberApp.Delete("/api/v1/gateways/:gwId", injectUserID("user-1"), handler.DeleteGateway)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/gateways/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -302,7 +302,7 @@ func TestGatewayDeleteForbidden(t *testing.T) {
 	fiberApp.Delete("/api/v1/gateways/:gwId", injectUserID("user-2"), handler.DeleteGateway)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/gateways/"+gw.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
@@ -323,7 +323,7 @@ func TestGatewayCreateRoute(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/routes", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)
@@ -353,7 +353,7 @@ func TestGatewayCreateRouteNoNameOrPath(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/routes", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -370,7 +370,7 @@ func TestGatewayCreateRouteNoAppID(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/routes", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for missing app_id, got %d", resp.StatusCode)
 	}
@@ -388,7 +388,7 @@ func TestGatewayCreateRouteInvalidPath(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/routes", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid path, got %d", resp.StatusCode)
 	}
@@ -403,7 +403,7 @@ func TestGatewayCreateRouteGatewayNotFound(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways/nonexistent/routes", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -422,11 +422,11 @@ func TestGatewayListRoutes(t *testing.T) {
 	body := `{"name":"users","path":"/api/users","app_id":"` + testApp.ID + `"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/routes", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	fiberApp.Test(createReq)
+	fiberApp.Test(createReq, -1)
 
 	// List routes
 	listReq := httptest.NewRequest("GET", "/api/v1/gateways/"+gw.ID+"/routes", nil)
-	listResp, _ := fiberApp.Test(listReq)
+	listResp, _ := fiberApp.Test(listReq, -1)
 
 	if listResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", listResp.StatusCode)
@@ -453,7 +453,7 @@ func TestGatewayDeleteRoute(t *testing.T) {
 	body := `{"name":"test","path":"/test","app_id":"` + testApp.ID + `"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/routes", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	if createResp.StatusCode != 201 {
 		var errBody map[string]interface{}
@@ -467,7 +467,7 @@ func TestGatewayDeleteRoute(t *testing.T) {
 
 	// Delete route
 	delReq := httptest.NewRequest("DELETE", "/api/v1/gateways/"+gw.ID+"/routes/"+routeID, nil)
-	delResp, _ := fiberApp.Test(delReq)
+	delResp, _ := fiberApp.Test(delReq, -1)
 
 	if delResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", delResp.StatusCode)
@@ -495,7 +495,7 @@ func TestGatewayCreateGroup(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/groups", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)
@@ -521,7 +521,7 @@ func TestGatewayCreateGroupNoNameOrAppID(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/groups", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -540,11 +540,11 @@ func TestGatewayListGroups(t *testing.T) {
 	body := `{"name":"grp1","app_id":"` + testApp.ID + `"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/groups", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	fiberApp.Test(createReq)
+	fiberApp.Test(createReq, -1)
 
 	// List groups
 	listReq := httptest.NewRequest("GET", "/api/v1/gateways/"+gw.ID+"/groups", nil)
-	listResp, _ := fiberApp.Test(listReq)
+	listResp, _ := fiberApp.Test(listReq, -1)
 
 	if listResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", listResp.StatusCode)
@@ -571,7 +571,7 @@ func TestGatewayDeleteGroup(t *testing.T) {
 	body := `{"name":"grp1","app_id":"` + testApp.ID + `"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/groups", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	if createResp.StatusCode != 201 {
 		var errBody map[string]interface{}
@@ -585,7 +585,7 @@ func TestGatewayDeleteGroup(t *testing.T) {
 
 	// Delete
 	delReq := httptest.NewRequest("DELETE", "/api/v1/gateways/"+gw.ID+"/groups/"+groupID, nil)
-	delResp, _ := fiberApp.Test(delReq)
+	delResp, _ := fiberApp.Test(delReq, -1)
 
 	if delResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", delResp.StatusCode)
@@ -597,7 +597,7 @@ func TestGatewaySyncNotFound(t *testing.T) {
 	fiberApp.Post("/api/v1/gateways/:gwId/sync", injectUserID("user-1"), handler.SyncGateway)
 
 	req := httptest.NewRequest("POST", "/api/v1/gateways/nonexistent/sync", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -617,7 +617,7 @@ func TestGatewayRouteDefaultMethods(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/gateways/"+gw.ID+"/routes", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)

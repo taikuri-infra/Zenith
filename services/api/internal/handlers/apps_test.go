@@ -26,7 +26,7 @@ func TestCreateApp(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/myproj/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -56,7 +56,7 @@ func TestCreateAppDefaults(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -80,7 +80,7 @@ func TestCreateAppNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -94,7 +94,7 @@ func TestCreateAppNoImage(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -110,11 +110,11 @@ func TestListApps(t *testing.T) {
 		body := `{"name":"` + name + `","image":"img:v1"}`
 		req := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		app.Test(req)
+		app.Test(req, -1)
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/apps", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -139,13 +139,13 @@ func TestGetApp(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/apps/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", getResp.StatusCode)
@@ -157,7 +157,7 @@ func TestGetAppNotFound(t *testing.T) {
 	app.Get("/api/v1/projects/:id/apps/:name", handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/apps/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -172,13 +172,13 @@ func TestDeleteApp(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/apps/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", deleteResp.StatusCode)
@@ -193,13 +193,13 @@ func TestRedeployApp(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	redeployReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps/"+created.ID+"/redeploy", nil)
-	redeployResp, _ := app.Test(redeployReq)
+	redeployResp, _ := app.Test(redeployReq, -1)
 
 	if redeployResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", redeployResp.StatusCode)
@@ -215,7 +215,7 @@ func TestUpdateApp(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest","port":3000}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -224,7 +224,7 @@ func TestUpdateApp(t *testing.T) {
 	updateBody := `{"image":"nginx:1.25","domain":"web.example.com"}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/proj1/apps/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", updateResp.StatusCode)
@@ -249,7 +249,7 @@ func TestUpdateAppReplicas(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -258,7 +258,7 @@ func TestUpdateAppReplicas(t *testing.T) {
 	updateBody := `{"replicas":5}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/proj1/apps/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", updateResp.StatusCode)
@@ -280,7 +280,7 @@ func TestUpdateAppEnv(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest","env":{"PORT":"3000"}}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -288,7 +288,7 @@ func TestUpdateAppEnv(t *testing.T) {
 	updateBody := `{"env":{"PORT":"4000","NODE_ENV":"production"}}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/proj1/apps/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", updateResp.StatusCode)
@@ -302,7 +302,7 @@ func TestUpdateAppNotFound(t *testing.T) {
 	updateBody := `{"image":"nginx:1.25"}`
 	req := httptest.NewRequest("PUT", "/api/v1/projects/proj1/apps/nonexistent", bytes.NewBufferString(updateBody))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -317,7 +317,7 @@ func TestUpdateAppInvalidBody(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -325,7 +325,7 @@ func TestUpdateAppInvalidBody(t *testing.T) {
 	// Send invalid JSON
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/proj1/apps/"+created.ID, bytes.NewBufferString("{invalid"))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", updateResp.StatusCode)
@@ -337,7 +337,7 @@ func TestDeleteAppNotFound(t *testing.T) {
 	app.Delete("/api/v1/projects/:id/apps/:name", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/apps/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -353,18 +353,18 @@ func TestDeleteAppThenGetReturns404(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	// Delete
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/apps/"+created.ID, nil)
-	app.Test(deleteReq)
+	app.Test(deleteReq, -1)
 
 	// Get should return 404
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/apps/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 404 {
 		t.Errorf("Expected 404 after deletion, got %d", getResp.StatusCode)
@@ -376,7 +376,7 @@ func TestRedeployAppNotFound(t *testing.T) {
 	app.Post("/api/v1/projects/:id/apps/:name/redeploy", handler.Redeploy)
 
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps/nonexistent/redeploy", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -388,7 +388,7 @@ func TestListAppsEmpty(t *testing.T) {
 	app.Get("/api/v1/projects/:id/apps", handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/apps", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -417,17 +417,17 @@ func TestListAppsIsolatedByProject(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	app.Test(req)
+	app.Test(req, -1)
 
 	// Create app in proj2
 	body2 := `{"name":"api","image":"node:latest"}`
 	req2 := httptest.NewRequest("POST", "/api/v1/projects/proj2/apps", bytes.NewBufferString(body2))
 	req2.Header.Set("Content-Type", "application/json")
-	app.Test(req2)
+	app.Test(req2, -1)
 
 	// List proj1 apps
 	listReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/apps", nil)
-	listResp, _ := app.Test(listReq)
+	listResp, _ := app.Test(listReq, -1)
 
 	var result struct {
 		Items []handlers.AppResponse `json:"items"`
@@ -448,13 +448,13 @@ func TestGetAppResponseFields(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest","port":3000,"domain":"web.test.com"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/apps/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	var result handlers.AppResponse
 	json.NewDecoder(getResp.Body).Decode(&result)
@@ -485,7 +485,7 @@ func TestCreateAppWithCustomReplicas(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -505,7 +505,7 @@ func TestCreateAppInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -519,13 +519,13 @@ func TestRedeployAppSetsAnnotation(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	redeployReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps/"+created.ID+"/redeploy", nil)
-	redeployResp, _ := app.Test(redeployReq)
+	redeployResp, _ := app.Test(redeployReq, -1)
 
 	if redeployResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", redeployResp.StatusCode)
@@ -547,13 +547,13 @@ func TestDeleteAppResponseMessage(t *testing.T) {
 	body := `{"name":"web","image":"nginx:latest"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.AppResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/apps/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	var result map[string]interface{}
 	json.NewDecoder(deleteResp.Body).Decode(&result)

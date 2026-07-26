@@ -27,7 +27,7 @@ func TestProjectV2Create(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -57,7 +57,7 @@ func TestProjectV2CreateNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -71,7 +71,7 @@ func TestProjectV2CreateNoAuth(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -84,12 +84,12 @@ func TestProjectV2CreateDuplicate(t *testing.T) {
 	body := `{"name":"My Project"}`
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	app.Test(req)
+	app.Test(req, -1)
 
 	// Create duplicate
 	req2 := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req2.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req2)
+	resp, _ := app.Test(req2, -1)
 	if resp.StatusCode != 409 {
 		t.Errorf("Expected 409 for duplicate, got %d", resp.StatusCode)
 	}
@@ -105,11 +105,11 @@ func TestProjectV2List(t *testing.T) {
 		body := `{"name":"` + name + `"}`
 		req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		app.Test(req)
+		app.Test(req, -1)
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/projects", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -129,7 +129,7 @@ func TestProjectV2ListEmpty(t *testing.T) {
 	app.Get("/api/v1/projects", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -149,7 +149,7 @@ func TestProjectV2ListNoAuth(t *testing.T) {
 	app.Get("/api/v1/projects", handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -163,13 +163,13 @@ func TestProjectV2Get(t *testing.T) {
 	body := `{"name":"My Project"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.ProjectV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 	if getResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", getResp.StatusCode)
 	}
@@ -186,7 +186,7 @@ func TestProjectV2GetNotFound(t *testing.T) {
 	app.Get("/api/v1/projects/:projectId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -200,13 +200,13 @@ func TestProjectV2GetForbidden(t *testing.T) {
 	body := `{"name":"My Project"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.ProjectV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 	if getResp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", getResp.StatusCode)
 	}
@@ -220,7 +220,7 @@ func TestProjectV2Update(t *testing.T) {
 	body := `{"name":"My Project"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.ProjectV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -228,7 +228,7 @@ func TestProjectV2Update(t *testing.T) {
 	updateBody := `{"name":"Updated Project","description":"New desc"}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 	if updateResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", updateResp.StatusCode)
 	}
@@ -251,7 +251,7 @@ func TestProjectV2UpdateForbidden(t *testing.T) {
 	body := `{"name":"My Project"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.ProjectV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -259,7 +259,7 @@ func TestProjectV2UpdateForbidden(t *testing.T) {
 	updateBody := `{"name":"Hacked"}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 	if updateResp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", updateResp.StatusCode)
 	}
@@ -272,7 +272,7 @@ func TestProjectV2UpdateNotFound(t *testing.T) {
 	updateBody := `{"name":"Updated"}`
 	req := httptest.NewRequest("PUT", "/api/v1/projects/nonexistent", bytes.NewBufferString(updateBody))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -288,13 +288,13 @@ func TestProjectV2Delete(t *testing.T) {
 		body := `{"name":"` + name + `"}`
 		req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		app.Test(req)
+		app.Test(req, -1)
 	}
 
 	// List to get IDs (we need to pick one to delete)
 	app.Get("/api/v1/projects", injectUserID("user-1"), handler.List)
 	listReq := httptest.NewRequest("GET", "/api/v1/projects", nil)
-	listResp, _ := app.Test(listReq)
+	listResp, _ := app.Test(listReq, -1)
 
 	var listResult struct {
 		Items []handlers.ProjectV2Response `json:"items"`
@@ -306,7 +306,7 @@ func TestProjectV2Delete(t *testing.T) {
 	}
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/"+listResult.Items[0].ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", deleteResp.StatusCode)
 	}
@@ -317,7 +317,7 @@ func TestProjectV2DeleteNotFound(t *testing.T) {
 	app.Delete("/api/v1/projects/:projectId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -331,13 +331,13 @@ func TestProjectV2DeleteForbidden(t *testing.T) {
 	body := `{"name":"My Project"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.ProjectV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 	if deleteResp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", deleteResp.StatusCode)
 	}
@@ -349,7 +349,7 @@ func TestProjectV2CreateInvalidBody(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -363,7 +363,7 @@ func TestProjectV2ListIsolatedByUser(t *testing.T) {
 	body1 := `{"name":"User1 Project"}`
 	req1 := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body1))
 	req1.Header.Set("Content-Type", "application/json")
-	app.Test(req1)
+	app.Test(req1, -1)
 
 	// Create project for user-2 (need separate route registration)
 	app2 := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
@@ -371,12 +371,12 @@ func TestProjectV2ListIsolatedByUser(t *testing.T) {
 	body2 := `{"name":"User2 Project"}`
 	req2 := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body2))
 	req2.Header.Set("Content-Type", "application/json")
-	app2.Test(req2)
+	app2.Test(req2, -1)
 
 	// List for user-1
 	app.Get("/api/v1/projects", injectUserID("user-1"), handler.List)
 	listReq := httptest.NewRequest("GET", "/api/v1/projects", nil)
-	listResp, _ := app.Test(listReq)
+	listResp, _ := app.Test(listReq, -1)
 
 	var result struct {
 		Total int `json:"total"`

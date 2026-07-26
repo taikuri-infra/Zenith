@@ -54,14 +54,14 @@ func TestSecretSetAndList(t *testing.T) {
 	body := `{"key":"DB_PASSWORD","value":"mysecretvalue"}`
 	setReq := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/secrets", bytes.NewBufferString(body))
 	setReq.Header.Set("Content-Type", "application/json")
-	setResp, _ := app.Test(setReq)
+	setResp, _ := app.Test(setReq, -1)
 	if setResp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", setResp.StatusCode)
 	}
 
 	// List secrets
 	listReq := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/secrets", nil)
-	listResp, _ := app.Test(listReq)
+	listResp, _ := app.Test(listReq, -1)
 	if listResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", listResp.StatusCode)
 	}
@@ -76,7 +76,7 @@ func TestSecretSetMissingKey(t *testing.T) {
 	body := `{"value":"mysecretvalue"}`
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/secrets", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -91,7 +91,7 @@ func TestSecretSetNotOwner(t *testing.T) {
 	body := `{"key":"DB_PASSWORD","value":"mysecretvalue"}`
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/secrets", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		// Handler returns 404 for ownership mismatch (intentional)
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -106,7 +106,7 @@ func TestSecretSetAppNotFound(t *testing.T) {
 	body := `{"key":"DB_PASSWORD","value":"mysecretvalue"}`
 	req := httptest.NewRequest("POST", "/api/v1/apps/nonexistent/secrets", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -124,11 +124,11 @@ func TestSecretGetValueAndDelete(t *testing.T) {
 	body := `{"key":"API_KEY","value":"secret-api-key-123"}`
 	setReq := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/secrets", bytes.NewBufferString(body))
 	setReq.Header.Set("Content-Type", "application/json")
-	app.Test(setReq)
+	app.Test(setReq, -1)
 
 	// Get secret value
 	getReq := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/secrets/API_KEY/value", nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 	if getResp.StatusCode != 200 {
 		t.Fatalf("Expected 200 for get secret value, got %d", getResp.StatusCode)
 	}
@@ -141,7 +141,7 @@ func TestSecretGetValueAndDelete(t *testing.T) {
 
 	// Delete secret
 	delReq := httptest.NewRequest("DELETE", "/api/v1/apps/"+testApp.ID+"/secrets/API_KEY", nil)
-	delResp, _ := app.Test(delReq)
+	delResp, _ := app.Test(delReq, -1)
 	if delResp.StatusCode != 200 {
 		t.Fatalf("Expected 200 for delete, got %d", delResp.StatusCode)
 	}
@@ -160,7 +160,7 @@ func TestSecretGetValueNotFound(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/secrets/:key/value", injectUserID("user-1"), handler.GetSecretValue)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/secrets/NONEXISTENT/value", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -173,7 +173,7 @@ func TestSecretDeleteNotFound(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/secrets/:key", injectUserID("user-1"), handler.DeleteSecret)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+testApp.ID+"/secrets/NONEXISTENT", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -187,7 +187,7 @@ func TestSecretListNoAuth(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/secrets", handler.ListSecrets)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/secrets", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}

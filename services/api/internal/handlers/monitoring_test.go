@@ -57,7 +57,7 @@ func TestGetMetricsOverview(t *testing.T) {
 	app, appID := setupMonitoringTest(t)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/metrics/overview", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test metrics overview: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestGetMetricsOverviewNotFound(t *testing.T) {
 	app, _ := setupMonitoringTest(t)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/nonexistent-id/metrics/overview", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestGetTimeSeries(t *testing.T) {
 	app, appID := setupMonitoringTest(t)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/metrics/timeseries?metric=cpu&range=1h", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test timeseries: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestGetLogs(t *testing.T) {
 	app, appID := setupMonitoringTest(t)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/logs?limit=10&since=1h", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test logs: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestGetPods(t *testing.T) {
 	app, appID := setupMonitoringTest(t)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+appID+"/pods", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test pods: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestGetPodsNotFound(t *testing.T) {
 	app, _ := setupMonitoringTest(t)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/nonexistent-id/pods", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test: %v", err)
 	}

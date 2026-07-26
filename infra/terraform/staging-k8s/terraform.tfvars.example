@@ -8,4 +8,4 @@ admin_password = ""
 
 # Cloudflare Zero Trust Tunnel (optional)
 # enable_cloudflare_tunnel = true
-# cloudflare_access_emails = ["babak.dorani@gmail.com"]
+# cloudflare_access_emails = ["admin@freezenith.com"]

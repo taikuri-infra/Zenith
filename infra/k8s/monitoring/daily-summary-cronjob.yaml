@@ -23,6 +23,9 @@ spec:
           containers:
             - name: daily-summary
               image: registry.stage.freezenith.com/zenith/zenith-api:latest
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
               command: ["/app/daily-summary"]
               env:
                 - name: PROMETHEUS_URL

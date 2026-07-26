@@ -219,7 +219,7 @@ variable "enable_cloudflare_tunnel" {
 variable "cloudflare_access_emails" {
   description = "Email addresses allowed through Cloudflare Access"
   type        = list(string)
-  default     = ["babak.dorani@gmail.com", "admin@freezenith.com"]
+  default     = ["admin@freezenith.com"]
 }
 
 variable "environment" {

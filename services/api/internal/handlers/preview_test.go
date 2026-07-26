@@ -40,7 +40,7 @@ func TestPreviewCreateTeamPlan(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/previews", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -73,7 +73,7 @@ func TestPreviewCreateFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/previews", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -97,7 +97,7 @@ func TestPreviewCreateMissingFields(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/previews", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -112,7 +112,7 @@ func TestPreviewList(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/previews", handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/app-1/previews", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -131,7 +131,7 @@ func TestPreviewListEmpty(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/previews", handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/app-1/previews", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -153,7 +153,7 @@ func TestPreviewDelete(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/previews/:previewId", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/app-1/previews/"+preview.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 204 {
 		t.Fatalf("Expected 204, got %d", resp.StatusCode)
 	}
@@ -164,7 +164,7 @@ func TestPreviewDeleteNotFound(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/previews/:previewId", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/app-1/previews/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}

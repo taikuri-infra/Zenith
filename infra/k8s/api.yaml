@@ -23,6 +23,9 @@ spec:
         - name: api
           image: zenith-api:latest
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
           ports:
             - containerPort: 8080
               name: http

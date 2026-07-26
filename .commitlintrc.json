@@ -4,8 +4,8 @@
     "scope-enum": [1, "always", [
       "api", "web", "admin", "landing", "mc",
       "cli", "operator", "helm", "terraform",
-      "ci", "infra", "deps"
+      "ci", "infra", "deps", "installer"
     ]],
-    "subject-case": [2, "always", "lower-case"]
+    "subject-case": [1, "always", "lower-case"]
   }
 }

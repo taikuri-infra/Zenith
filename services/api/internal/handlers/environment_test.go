@@ -45,7 +45,7 @@ func TestEnvironmentList(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/environments", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/environments", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -67,7 +67,7 @@ func TestEnvironmentListNoAuth(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/environments", handler.List)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/environments", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -78,7 +78,7 @@ func TestEnvironmentListProjectNotFound(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/environments", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/projects/nonexistent/environments", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -92,7 +92,7 @@ func TestEnvironmentListForbidden(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/environments", injectUserID("user-2"), handler.List)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/environments", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -115,7 +115,7 @@ func TestEnvironmentGet(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/environments/:envId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/environments/"+envID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -135,7 +135,7 @@ func TestEnvironmentGetNotFound(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/environments/:envId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/environments/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -158,7 +158,7 @@ func TestEnvironmentGetForbidden(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/environments/:envId", injectUserID("user-2"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/environments/"+envID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -172,7 +172,7 @@ func TestEnvironmentListEmpty(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/environments", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/environments", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

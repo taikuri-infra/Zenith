@@ -59,7 +59,8 @@ func main() {
 	mux.HandleFunc("/release", s.release)
 
 	log.Printf("subdomain-registration service listening on :%s (base=%s, zone=%s, auth=%v)", port, base, zoneName, installToken != "")
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	// TLS terminates at the cluster ingress; this listener is private to the pod network.
+	log.Fatal(http.ListenAndServe(":"+port, mux)) // nosemgrep: go.lang.security.audit.net.use-tls.use-tls
 }
 
 func envOr(k, def string) string {

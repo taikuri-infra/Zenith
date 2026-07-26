@@ -43,7 +43,7 @@ func TestJWTAuthMissingHeader(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestJWTAuthInvalidFormat(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "InvalidFormat")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestJWTAuthInvalidToken(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer invalid-token")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestJWTAuthValidToken(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestJWTAuthExpiredToken(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestRequireRole(t *testing.T) {
 			})
 
 			req := httptest.NewRequest("GET", "/test", nil)
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, -1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -197,7 +197,7 @@ func TestRequireRoleNoRole(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestJWTAuthWrongSecret(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,7 @@ func TestJWTAuthMalformedBearer(t *testing.T) {
 
 			req := httptest.NewRequest("GET", "/test", nil)
 			req.Header.Set("Authorization", tt.header)
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, -1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -304,7 +304,7 @@ func TestJWTAuthSetsLocals(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestAPIKeyAuthValid(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-API-Key", "valid-api-key-123")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func TestAPIKeyAuthInvalid(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-API-Key", "bad-key")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +414,7 @@ func TestAPIKeyAuthMissingHeaderPassesThrough(t *testing.T) {
 
 	// No X-API-Key header - should pass through to next handler
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +437,7 @@ func TestRequireAuthWithAPIKey(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +464,7 @@ func TestRequireAuthWithJWT(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +482,7 @@ func TestRequireAuthNoAuth(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,7 +534,7 @@ func TestRequireRoleAllCombinations(t *testing.T) {
 			})
 
 			req := httptest.NewRequest("GET", "/test", nil)
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, -1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -574,7 +574,7 @@ func TestRequireScopeWithAPIKey(t *testing.T) {
 			})
 
 			req := httptest.NewRequest("GET", "/test", nil)
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, -1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -595,7 +595,7 @@ func TestRequireScopeWithoutAPIKey(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -623,7 +623,7 @@ func TestMiddlewareChain(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -651,7 +651,7 @@ func TestMiddlewareChainInsufficientRole(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -746,7 +746,7 @@ func TestRequestContext(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -774,7 +774,7 @@ func TestJWTAuthCaseInsensitiveBearer(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -29,6 +29,9 @@ spec:
         - name: mission-control
           image: zenith-mc-demo:latest
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
           ports:
             - containerPort: 3100
               name: http
@@ -99,6 +102,9 @@ spec:
         - name: web
           image: zenith-web-demo:latest
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
           ports:
             - containerPort: 3000
               name: http

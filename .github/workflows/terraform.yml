@@ -4,10 +4,6 @@ on:
   pull_request:
     paths:
       - 'infra/terraform/**'
-  push:
-    branches: [main]
-    paths:
-      - 'infra/terraform/**'
   workflow_dispatch:
     inputs:
       action:
@@ -19,22 +15,18 @@ on:
           - plan
           - apply
 
-env:
-  TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-  TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
-  TF_VAR_registry_host: ${{ secrets.HARBOR_HOST }}
-  TF_VAR_registry_username: ${{ secrets.HARBOR_ROBOT_USER }}
-  TF_VAR_registry_password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
-  TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
-  TF_VAR_admin_email: ${{ secrets.ADMIN_EMAIL }}
-  TF_VAR_admin_password: ${{ secrets.ADMIN_PASSWORD }}
-  TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+# Least privilege by default.
+permissions:
+  contents: read
 
 jobs:
-  # Plan runs on PRs and manual plan triggers — always blocking
-  terraform-plan:
-    name: "Plan"
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'plan')
+  # On PRs: fast, secret-free checks only — no plan, no cluster access, no vars.
+  # `terraform validate` needs providers but not a backend or variable values,
+  # so `init -backend=false` is enough. This keeps infra secrets out of
+  # PR-triggered jobs entirely.
+  terraform-validate:
+    name: "Validate"
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -42,6 +34,43 @@ jobs:
     defaults:
       run:
         working-directory: infra/terraform/${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Init (providers only, no backend)
+        run: terraform init -backend=false
+
+      - name: Validate
+        run: terraform validate -no-color
+
+  # Plan: manual dispatch only — needs infra secrets + tfvars.
+  terraform-plan:
+    name: "Plan"
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'plan'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [staging, staging-k8s]
+    defaults:
+      run:
+        working-directory: infra/terraform/${{ matrix.dir }}
+    env:
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+      TF_VAR_registry_host: ${{ secrets.HARBOR_HOST }}
+      TF_VAR_registry_username: ${{ secrets.HARBOR_ROBOT_USER }}
+      TF_VAR_registry_password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+      TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+      TF_VAR_admin_email: ${{ secrets.ADMIN_EMAIL }}
+      TF_VAR_admin_password: ${{ secrets.ADMIN_PASSWORD }}
+      TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,42 +87,25 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Terraform Validate
-        run: terraform validate
-
       - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color -detailed-exitcode
-        # exit code 2 = changes detected (not an error)
-        continue-on-error: true
+        run: terraform plan -no-color
 
-      - name: Post plan to PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const output = `### Terraform Plan — \`${{ matrix.dir }}\`
-            \`\`\`
-            ${{ steps.plan.outputs.stdout || 'No output' }}
-            \`\`\`
-            *Exit code: ${{ steps.plan.outcome }}*`;
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output.substring(0, 65536)
-            });
-
-      - name: Fail on plan error
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
-
-  # Apply requires manual approval via environment protection rules
+  # Apply: manual dispatch only, gated by environment protection rules.
   terraform-apply:
     name: "Apply"
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
     runs-on: ubuntu-latest
     environment: staging-terraform
+    env:
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+      TF_VAR_registry_host: ${{ secrets.HARBOR_HOST }}
+      TF_VAR_registry_username: ${{ secrets.HARBOR_ROBOT_USER }}
+      TF_VAR_registry_password: ${{ secrets.HARBOR_ROBOT_TOKEN }}
+      TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+      TF_VAR_admin_email: ${{ secrets.ADMIN_EMAIL }}
+      TF_VAR_admin_password: ${{ secrets.ADMIN_PASSWORD }}
+      TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 

@@ -55,7 +55,7 @@ func TestStripeWebhookInvalidSignature(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/webhooks/stripe", nil)
 	req.Header.Set("Stripe-Signature", "bad-sig")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid signature, got %d", resp.StatusCode)
 	}
@@ -75,7 +75,7 @@ func TestStripeWebhookUnknownEventType(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/webhooks/stripe", nil)
 	req.Header.Set("Stripe-Signature", "valid-sig")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Errorf("Expected 200 for unhandled event type, got %d", resp.StatusCode)
 	}

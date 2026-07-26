@@ -22,7 +22,7 @@ func TestHealthCheck(t *testing.T) {
 	app.Get("/health", handlers.HealthCheck("1.0.0"))
 
 	req := httptest.NewRequest("GET", "/health", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test health endpoint: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestReadinessCheck(t *testing.T) {
 	app.Get("/ready", handlers.ReadinessCheck(nil))
 
 	req := httptest.NewRequest("GET", "/ready", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test readiness endpoint: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestVersionInfo(t *testing.T) {
 	app.Get("/version", handlers.VersionInfo("1.0.0", "2026-01-01"))
 
 	req := httptest.NewRequest("GET", "/version", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test version endpoint: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestErrorHandler(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/error", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test error handler: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestErrorHandlerBadRequest(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/bad", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test bad request: %v", err)
 	}

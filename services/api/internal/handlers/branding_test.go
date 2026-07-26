@@ -25,7 +25,7 @@ func TestBrandingGetDPA(t *testing.T) {
 	app.Get("/api/v1/compliance/dpa", injectUserID("user-1"), handler.GetDPA)
 
 	req := httptest.NewRequest("GET", "/api/v1/compliance/dpa", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -47,7 +47,7 @@ func TestBrandingSignDPATeamPlan(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/compliance/dpa/sign", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -68,7 +68,7 @@ func TestBrandingSignDPAFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/compliance/dpa/sign", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -84,7 +84,7 @@ func TestBrandingSignDPAProPlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/compliance/dpa/sign", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -100,7 +100,7 @@ func TestBrandingSignDPANoSignedBy(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/compliance/dpa/sign", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -111,7 +111,7 @@ func TestBrandingGetBranding(t *testing.T) {
 	app.Get("/api/v1/branding", injectUserID("user-1"), handler.GetBranding)
 
 	req := httptest.NewRequest("GET", "/api/v1/branding", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -127,7 +127,7 @@ func TestBrandingUpdateBusinessPlan(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/branding", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -147,7 +147,7 @@ func TestBrandingUpdateFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/branding", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -163,7 +163,7 @@ func TestBrandingSetDashboardDomainEnterprise(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/branding/domain", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -185,7 +185,7 @@ func TestBrandingSetDashboardDomainBusinessForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/branding/domain", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -201,7 +201,7 @@ func TestBrandingSetDashboardDomainNoDomain(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/branding/domain", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}

@@ -34,35 +34,35 @@ func TestV2SoftDeleteAndRestore(t *testing.T) {
 	body := `{"name":"web","repo_url":"https://github.com/user/repo"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	var created handlers.AppV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	// Soft delete
 	delReq := httptest.NewRequest("DELETE", "/api/v1/apps/"+created.ID, nil)
-	delResp, _ := fiberApp.Test(delReq)
+	delResp, _ := fiberApp.Test(delReq, -1)
 	if delResp.StatusCode != 200 {
 		t.Fatalf("Expected 200 for soft delete, got %d", delResp.StatusCode)
 	}
 
 	// After soft delete, Get should return 404
 	getReq := httptest.NewRequest("GET", "/api/v1/apps/"+created.ID, nil)
-	getResp, _ := fiberApp.Test(getReq)
+	getResp, _ := fiberApp.Test(getReq, -1)
 	if getResp.StatusCode != 404 {
 		t.Errorf("Expected 404 after soft delete, got %d", getResp.StatusCode)
 	}
 
 	// Restore
 	restoreReq := httptest.NewRequest("POST", "/api/v1/apps/"+created.ID+"/restore", nil)
-	restoreResp, _ := fiberApp.Test(restoreReq)
+	restoreResp, _ := fiberApp.Test(restoreReq, -1)
 	if restoreResp.StatusCode != 200 {
 		t.Fatalf("Expected 200 for restore, got %d", restoreResp.StatusCode)
 	}
 
 	// After restore, Get should return 200
 	getReq2 := httptest.NewRequest("GET", "/api/v1/apps/"+created.ID, nil)
-	getResp2, _ := fiberApp.Test(getReq2)
+	getResp2, _ := fiberApp.Test(getReq2, -1)
 	if getResp2.StatusCode != 200 {
 		t.Errorf("Expected 200 after restore, got %d", getResp2.StatusCode)
 	}
@@ -78,17 +78,17 @@ func TestV2ListDeleted(t *testing.T) {
 	body := `{"name":"web","repo_url":"https://github.com/user/repo"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	var created handlers.AppV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	delReq := httptest.NewRequest("DELETE", "/api/v1/apps/"+created.ID, nil)
-	fiberApp.Test(delReq)
+	fiberApp.Test(delReq, -1)
 
 	// List deleted
 	listReq := httptest.NewRequest("GET", "/api/v1/apps/trash", nil)
-	listResp, _ := fiberApp.Test(listReq)
+	listResp, _ := fiberApp.Test(listReq, -1)
 
 	if listResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", listResp.StatusCode)
@@ -110,7 +110,7 @@ func TestV2ListDeletedEmpty(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/trash", injectUserID("user-1"), handler.ListDeleted)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/trash", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -131,7 +131,7 @@ func TestV2ListDeletedNoAuth(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/trash", handler.ListDeleted)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/trash", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
@@ -143,7 +143,7 @@ func TestV2RestoreNoAuth(t *testing.T) {
 	fiberApp.Post("/api/v1/apps/:appId/restore", handler.Restore)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/some-id/restore", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
@@ -155,7 +155,7 @@ func TestV2RestoreNotFound(t *testing.T) {
 	fiberApp.Post("/api/v1/apps/:appId/restore", injectUserID("user-1"), handler.Restore)
 
 	req := httptest.NewRequest("POST", "/api/v1/apps/nonexistent/restore", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -169,7 +169,7 @@ func TestV2CheckName(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/check-name", injectUserID("user-1"), handler.CheckName)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/check-name?name=my-cool-app", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -194,7 +194,7 @@ func TestV2CheckNameEmpty(t *testing.T) {
 	fiberApp.Get("/api/v1/apps/check-name", injectUserID("user-1"), handler.CheckName)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/check-name", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for empty name, got %d", resp.StatusCode)
@@ -213,21 +213,21 @@ func TestV2HardDelete(t *testing.T) {
 	body := `{"name":"web","repo_url":"https://github.com/user/repo"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	var created handlers.AppV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	// Hard delete
 	delReq := httptest.NewRequest("DELETE", "/api/v1/apps/"+created.ID+"?hard=true", nil)
-	delResp, _ := fiberApp.Test(delReq)
+	delResp, _ := fiberApp.Test(delReq, -1)
 	if delResp.StatusCode != 200 {
 		t.Fatalf("Expected 200 for hard delete, got %d", delResp.StatusCode)
 	}
 
 	// After hard delete, Restore should return 404
 	restoreReq := httptest.NewRequest("POST", "/api/v1/apps/"+created.ID+"/restore", nil)
-	restoreResp, _ := fiberApp.Test(restoreReq)
+	restoreResp, _ := fiberApp.Test(restoreReq, -1)
 	if restoreResp.StatusCode != 404 {
 		t.Errorf("Expected 404 after hard delete, got %d", restoreResp.StatusCode)
 	}
@@ -258,7 +258,7 @@ func TestV2ListByProject(t *testing.T) {
 	fiberApp.Get("/api/v1/apps", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps?project_id="+project.ID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -285,7 +285,7 @@ func TestV2CreateWorkerApp(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)
@@ -308,7 +308,7 @@ func TestV2CreateCronApp(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)
@@ -331,7 +331,7 @@ func TestV2CreateInvalidAppType(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid app_type, got %d", resp.StatusCode)
 	}
@@ -347,7 +347,7 @@ func TestV2CreateProtectedApp(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -368,7 +368,7 @@ func TestV2CreateInvalidExposure(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid exposure, got %d", resp.StatusCode)
 	}
@@ -384,7 +384,7 @@ func TestV2CreateInvalidHealthCheckPath(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for health_check_path without leading /, got %d", resp.StatusCode)
 	}
@@ -398,7 +398,7 @@ func TestV2CreateCustomHealthCheckPath(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -422,7 +422,7 @@ func TestV2CreateImageNormalization(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)
@@ -449,7 +449,7 @@ func TestV2CreateWithEnvVars(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		var errBody map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&errBody)
@@ -467,13 +467,13 @@ func TestV2DeleteForbidden(t *testing.T) {
 	body := `{"name":"web","repo_url":"https://github.com/user/repo"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	var created handlers.AppV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	delReq := httptest.NewRequest("DELETE", "/api/v1/apps/"+created.ID, nil)
-	delResp, _ := fiberApp.Test(delReq)
+	delResp, _ := fiberApp.Test(delReq, -1)
 
 	if delResp.StatusCode != 404 {
 		t.Errorf("Expected 404 (not your app), got %d", delResp.StatusCode)
@@ -490,13 +490,13 @@ func TestV2GetForbidden(t *testing.T) {
 	body := `{"name":"web","repo_url":"https://github.com/user/repo"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	var created handlers.AppV2Response
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/apps/"+created.ID, nil)
-	getResp, _ := fiberApp.Test(getReq)
+	getResp, _ := fiberApp.Test(getReq, -1)
 
 	// Should return 404 (not your app — no information leakage)
 	if getResp.StatusCode != 404 {
@@ -524,7 +524,7 @@ func TestV2CreateAppPlanLimit(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for plan limit, got %d", resp.StatusCode)
 	}

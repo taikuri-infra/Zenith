@@ -24,7 +24,7 @@ func TestReferralGetSummary(t *testing.T) {
 	app.Get("/api/v1/referral", injectUserID("user-1"), handler.GetSummary)
 
 	req := httptest.NewRequest("GET", "/api/v1/referral", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -53,7 +53,7 @@ func TestReferralGetSummaryWithRewards(t *testing.T) {
 	app.Get("/api/v1/referral", injectUserID("user-1"), handler.GetSummary)
 
 	req := httptest.NewRequest("GET", "/api/v1/referral", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -77,7 +77,7 @@ func TestReferralListRewards(t *testing.T) {
 	app.Get("/api/v1/referral/rewards", injectUserID("user-1"), handler.ListRewards)
 
 	req := httptest.NewRequest("GET", "/api/v1/referral/rewards", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -97,7 +97,7 @@ func TestReferralListRewardsEmpty(t *testing.T) {
 	app.Get("/api/v1/referral/rewards", injectUserID("user-1"), handler.ListRewards)
 
 	req := httptest.NewRequest("GET", "/api/v1/referral/rewards", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -117,7 +117,7 @@ func TestReferralTrackShare(t *testing.T) {
 	app.Post("/api/v1/referral/share", injectUserID("user-1"), handler.TrackShare)
 
 	req := httptest.NewRequest("POST", "/api/v1/referral/share", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -141,7 +141,7 @@ func TestReferralAdminList(t *testing.T) {
 	app.Get("/api/v1/admin/referrals", handler.AdminList)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/referrals", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -161,7 +161,7 @@ func TestReferralAdminListEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/referrals", handler.AdminList)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/referrals", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

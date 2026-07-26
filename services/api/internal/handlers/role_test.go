@@ -30,7 +30,7 @@ func TestRoleCreate(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/roles", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -53,7 +53,7 @@ func TestRoleCreateNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/roles", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -67,7 +67,7 @@ func TestRoleCreateNoPermissions(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/roles", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -85,7 +85,7 @@ func TestRoleCreateFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/roles", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -100,7 +100,7 @@ func TestRoleList(t *testing.T) {
 	app.Get("/api/v1/roles", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/roles", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -119,7 +119,7 @@ func TestRoleListEmpty(t *testing.T) {
 	app.Get("/api/v1/roles", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/roles", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -136,7 +136,7 @@ func TestRoleUpdate(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/roles/"+role.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -156,7 +156,7 @@ func TestRoleUpdateNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/roles/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -173,7 +173,7 @@ func TestRoleUpdateForbidden(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/roles/"+role.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -187,7 +187,7 @@ func TestRoleDelete(t *testing.T) {
 	app.Delete("/api/v1/roles/:roleId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/roles/"+role.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 204 {
 		t.Fatalf("Expected 204, got %d", resp.StatusCode)
 	}
@@ -198,7 +198,7 @@ func TestRoleDeleteNotFound(t *testing.T) {
 	app.Delete("/api/v1/roles/:roleId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/roles/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -215,7 +215,7 @@ func TestRoleAssign(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/roles/"+role.ID+"/assign", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -238,7 +238,7 @@ func TestRoleAssignNoMemberID(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/roles/"+role.ID+"/assign", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -254,7 +254,7 @@ func TestRoleListAssignments(t *testing.T) {
 	app.Get("/api/v1/roles/:roleId/assignments", injectUserID("user-1"), handler.ListAssignments)
 
 	req := httptest.NewRequest("GET", "/api/v1/roles/"+role.ID+"/assignments", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -277,7 +277,7 @@ func TestRoleRemoveAssignment(t *testing.T) {
 	app.Delete("/api/v1/roles/:roleId/assignments/:assignmentId", injectUserID("user-1"), handler.RemoveAssignment)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/roles/"+role.ID+"/assignments/"+assignment.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 204 {
 		t.Fatalf("Expected 204, got %d", resp.StatusCode)
 	}
@@ -288,7 +288,7 @@ func TestRoleListPermissions(t *testing.T) {
 	app.Get("/api/v1/permissions", handler.ListPermissions)
 
 	req := httptest.NewRequest("GET", "/api/v1/permissions", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

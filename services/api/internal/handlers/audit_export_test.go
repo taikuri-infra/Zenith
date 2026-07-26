@@ -23,7 +23,7 @@ func TestAuditExportCSV(t *testing.T) {
 	app.Get("/api/v1/admin/audit/export/csv", handler.ExportCSV)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit/export/csv", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -44,7 +44,7 @@ func TestAuditExportCSVWithActionFilter(t *testing.T) {
 	app.Get("/api/v1/admin/audit/export/csv", handler.ExportCSV)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit/export/csv?action=deploy", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -55,7 +55,7 @@ func TestAuditExportJSON(t *testing.T) {
 	app.Get("/api/v1/admin/audit/export/json", handler.ExportJSON)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit/export/json", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -77,7 +77,7 @@ func TestAuditExportJSONWithActionFilter(t *testing.T) {
 
 	// Use a filter that won't match any pre-seeded entries
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit/export/json?action=nonexistent_action", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -96,7 +96,7 @@ func TestAuditExportCSVWithLimit(t *testing.T) {
 	app.Get("/api/v1/admin/audit/export/csv", handler.ExportCSV)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit/export/csv?limit=5", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
