@@ -25,7 +25,7 @@ variable "kubeconfig_path" {
 variable "cloudflare_access_emails" {
   description = "Email addresses allowed through Cloudflare Access"
   type        = list(string)
-  default     = ["babak.dorani@gmail.com", "admin@freezenith.com"]
+  default     = ["admin@freezenith.com"]
 }
 
 variable "google_oauth_client_id" {
