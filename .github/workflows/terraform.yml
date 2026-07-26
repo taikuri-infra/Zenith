@@ -48,6 +48,10 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9"
+          # Disable the stdout-capturing wrapper: a large plan captured into a
+          # step output overflows the process arg/env limit when interpolated
+          # into a later step. We capture the plan to a file instead.
+          terraform_wrapper: false
 
       - name: Setup kubeconfig
         if: matrix.dir == 'staging-k8s'
@@ -63,29 +67,42 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -detailed-exitcode
-        # exit code 2 = changes detected (not an error)
-        continue-on-error: true
+        # Wrapper disabled: capture output to a file and record the detailed
+        # exit code (0 = no changes, 2 = changes, 1 = error). Never let the
+        # (potentially huge) plan text reach a later step's arg/env list.
+        run: |
+          set +e
+          terraform plan -no-color -detailed-exitcode > plan.txt 2>&1
+          echo "exitcode=$?" >> "$GITHUB_OUTPUT"
+          # Keep the PR comment under GitHub's ~65 KB limit; the github-script
+          # step reads this file directly rather than via interpolation.
+          head -c 60000 plan.txt > plan.trunc.txt
+          exit 0
 
       - name: Post plan to PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          DIR: ${{ matrix.dir }}
+          CODE: ${{ steps.plan.outputs.exitcode }}
         with:
           script: |
-            const output = `### Terraform Plan — \`${{ matrix.dir }}\`
-            \`\`\`
-            ${{ steps.plan.outputs.stdout || 'No output' }}
-            \`\`\`
-            *Exit code: ${{ steps.plan.outcome }}*`;
-            github.rest.issues.createComment({
+            const fs = require('fs');
+            let plan = 'No output';
+            try {
+              plan = fs.readFileSync(`infra/terraform/${process.env.DIR}/plan.trunc.txt`, 'utf8');
+            } catch (e) {}
+            const body = `### Terraform Plan — \`${process.env.DIR}\`\n\`\`\`\n${plan}\n\`\`\`\n*Exit code: ${process.env.CODE}*`;
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: output.substring(0, 65536)
+              body: body.substring(0, 65536)
             });
 
       - name: Fail on plan error
-        if: steps.plan.outcome == 'failure'
+        # Only a real error (exit 1) fails the job; exit 2 just means changes.
+        if: steps.plan.outputs.exitcode == '1'
         run: exit 1
 
   # Apply requires manual approval via environment protection rules
