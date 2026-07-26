@@ -26,7 +26,7 @@ func TestImageVerifyGetRegistryCredentials(t *testing.T) {
 	app.Get("/projects/:projectId/registry-credentials", injectUserID("user-1"), handler.GetRegistryCredentials)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/registry-credentials", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -54,7 +54,7 @@ func TestImageVerifyGetRegistryCredentialsNoAuth(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/registry-credentials", injectUserID("user-1"), handler.GetRegistryCredentials)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/registry-credentials", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -74,7 +74,7 @@ func TestImageVerifyGetRegistryCredentialsNotYourProject(t *testing.T) {
 	app.Get("/projects/:projectId/registry-credentials", injectUserID("user-2"), handler.GetRegistryCredentials)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/registry-credentials", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -86,7 +86,7 @@ func TestImageVerifyGetRegistryCredentialsProjectNotFound(t *testing.T) {
 	app.Get("/projects/:projectId/registry-credentials", injectUserID("user-1"), handler.GetRegistryCredentials)
 
 	req := httptest.NewRequest("GET", "/projects/nonexistent/registry-credentials", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -99,7 +99,7 @@ func TestImageVerifyGetRegistryCredentialsNoUserID(t *testing.T) {
 	app.Get("/projects/:projectId/registry-credentials", handler.GetRegistryCredentials)
 
 	req := httptest.NewRequest("GET", "/projects/some-id/registry-credentials", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -114,7 +114,7 @@ func TestImageVerifyVerifyImagesNoAuth(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/some-id/verify-images", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -131,7 +131,7 @@ func TestImageVerifyVerifyImagesEmptyList(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/verify-images", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -152,7 +152,7 @@ func TestImageVerifyVerifyImagesProjectNotFound(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/nonexistent/verify-images", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -169,7 +169,7 @@ func TestImageVerifyVerifyImagesNotYourProject(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/verify-images", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}

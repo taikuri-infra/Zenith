@@ -1,5 +1,23 @@
 {{- if .Values.ingress.apisixEnabled }}
 ---
+# Admin key for the APISIX admin API, consumed by the upstream-sync CronJob
+# below. Created here (sync-wave 4, before the CronJob's wave 5) so the
+# secretKeyRef always resolves. Defaults to APISIX's built-in admin key, which
+# is only reachable in-cluster; override ingress.apisixAdminKey per environment.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: apisix-admin
+  namespace: apisix
+  labels:
+    app.kubernetes.io/name: apisix-upstream-sync
+    app.kubernetes.io/part-of: zenith-api
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+type: Opaque
+stringData:
+  key: {{ .Values.ingress.apisixAdminKey | default "edd1c9f034335f136f87ad84b625c8f1" | quote }}
+---
 # CronJob to fix APISIX upstreams with empty nodes after pod restarts.
 # When APISIX restarts, the ingress controller may create upstreams with
 # empty nodes: [], causing 503 errors. This job detects and fixes them.
@@ -31,6 +49,12 @@ spec:
           containers:
             - name: sync
               image: curlimages/curl:8.7.1
+              env:
+                - name: APISIX_ADMIN_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: apisix-admin
+                      key: key
               command:
                 - /bin/sh
                 - -c
@@ -38,7 +62,6 @@ spec:
                   set -e
 
                   APISIX_ADMIN="http://apisix-admin.apisix.svc.cluster.local:9180"
-                  API_KEY="edd1c9f034335f136f87ad84b625c8f1"
                   SERVICE_HOST="zenith-api.{{ .Values.namespace }}.svc.cluster.local"
                   SERVICE_PORT={{ .Values.port }}
                   MATCH_PATTERN="zenith-staging_zenith-api"
@@ -47,7 +70,7 @@ spec:
 
                   # Fetch all upstreams
                   RESPONSE=$(curl -s -S -f \
-                    -H "X-API-KEY: ${API_KEY}" \
+                    -H "X-API-KEY: ${APISIX_ADMIN_KEY}" \
                     "${APISIX_ADMIN}/apisix/admin/upstreams" 2>&1) || {
                     echo "ERROR: Failed to query APISIX admin API"
                     echo "${RESPONSE}"
@@ -108,7 +131,7 @@ spec:
 
                     # Fetch the individual upstream to get accurate node data
                     UPSTREAM_DATA=$(curl -s -S -f \
-                      -H "X-API-KEY: ${API_KEY}" \
+                      -H "X-API-KEY: ${APISIX_ADMIN_KEY}" \
                       "${APISIX_ADMIN}/apisix/admin/upstreams/${UPSTREAM_ID}" 2>&1) || {
                       echo "  WARNING: Failed to fetch upstream ${UPSTREAM_ID}, skipping"
                       continue
@@ -126,7 +149,7 @@ spec:
                       echo "  Upstream ${UPSTREAM_ID} has empty nodes. Patching with ${IP}:${SERVICE_PORT}..."
 
                       PATCH_RESULT=$(curl -s -S -f -X PATCH \
-                        -H "X-API-KEY: ${API_KEY}" \
+                        -H "X-API-KEY: ${APISIX_ADMIN_KEY}" \
                         -H "Content-Type: application/json" \
                         -d "{\"nodes\":{\"${IP}:${SERVICE_PORT}\":1}}" \
                         "${APISIX_ADMIN}/apisix/admin/upstreams/${UPSTREAM_ID}" 2>&1) || {

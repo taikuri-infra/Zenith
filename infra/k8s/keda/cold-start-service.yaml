@@ -77,9 +77,12 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:1-alpine
+          image: nginxinc/nginx-unprivileged:1-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
           ports:
-            - containerPort: 80
+            - containerPort: 8080
           volumeMounts:
             - name: html
               mountPath: /usr/share/nginx/html
@@ -109,5 +112,5 @@ spec:
     app: cold-start-page
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 8080
       protocol: TCP

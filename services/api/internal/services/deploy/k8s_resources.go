@@ -354,7 +354,7 @@ func generateIngressRoute(app *entities.App, namespace string, labels map[string
 		tls["secretName"] = app.Subdomain + "-custom-tls"
 	} else if isStaging {
 		// Staging apps use a separate wildcard cert for *.dev.apps.{baseDomain}
-		tls["secretName"] = "dev-apps-wildcard-tls"
+		tls["secretName"] = "dev-apps-wildcard-tls" // nosemgrep: go-hardcoded-password -- Kubernetes Secret resource name, not secret data
 	}
 
 	route := map[string]interface{}{

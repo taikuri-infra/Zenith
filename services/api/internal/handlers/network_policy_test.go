@@ -40,7 +40,7 @@ func TestNetworkPolicyListRulesBusinessPlan(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/network-policies", injectUserID("user-1"), handler.ListRules)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/network-policies", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -62,7 +62,7 @@ func TestNetworkPolicyListRulesFreePlanForbidden(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/network-policies", injectUserID("user-1"), handler.ListRules)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/network-policies", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -79,7 +79,7 @@ func TestNetworkPolicyCreateRule(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -105,7 +105,7 @@ func TestNetworkPolicyCreateRuleNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -122,7 +122,7 @@ func TestNetworkPolicyCreateRuleInvalidDirection(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -139,7 +139,7 @@ func TestNetworkPolicyCreateRuleInvalidAction(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -156,7 +156,7 @@ func TestNetworkPolicyUpdateRule(t *testing.T) {
 	createBody := `{"name":"Original","direction":"ingress","action":"deny","priority":1}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created map[string]interface{}
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -166,7 +166,7 @@ func TestNetworkPolicyUpdateRule(t *testing.T) {
 	updateReq := httptest.NewRequest("PUT", "/api/v1/apps/"+testApp.ID+"/network-policies/"+ruleID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(updateReq)
+	resp, _ := app.Test(updateReq, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -189,7 +189,7 @@ func TestNetworkPolicyUpdateRuleNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/apps/"+testApp.ID+"/network-policies/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -206,14 +206,14 @@ func TestNetworkPolicyDeleteRule(t *testing.T) {
 	createBody := `{"name":"ToDelete","direction":"ingress","action":"allow"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created map[string]interface{}
 	json.NewDecoder(createResp.Body).Decode(&created)
 	ruleID := created["id"].(string)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+testApp.ID+"/network-policies/"+ruleID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -233,7 +233,7 @@ func TestNetworkPolicyDeleteRuleNotFound(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/network-policies/:ruleId", injectUserID("user-1"), handler.DeleteRule)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/apps/"+testApp.ID+"/network-policies/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}

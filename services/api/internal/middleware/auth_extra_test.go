@@ -22,7 +22,7 @@ func TestRequireInternalSecretValid(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/internal", nil)
 	req.Header.Set("X-Internal-Secret", "my-secret")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestRequireInternalSecretInvalid(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/internal", nil)
 	req.Header.Set("X-Internal-Secret", "wrong-secret")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestRequireInternalSecretMissing(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/internal", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestDeployTokenAuthFuncValid(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/deploy", nil)
 	req.Header.Set("Authorization", "DeployToken znt_id_abc:znt_sk_xyz")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestDeployTokenAuthFuncInvalidCredentials(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/deploy", nil)
 	req.Header.Set("Authorization", "DeployToken bad_id:bad_secret")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestDeployTokenAuthFuncInvalidFormat(t *testing.T) {
 	// Missing colon separator
 	req := httptest.NewRequest("GET", "/deploy", nil)
 	req.Header.Set("Authorization", "DeployToken no-colon-here")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestDeployTokenAuthFuncSkipsNonDeployTokenAuth(t *testing.T) {
 	// Bearer token should pass through (not DeployToken)
 	req := httptest.NewRequest("GET", "/deploy", nil)
 	req.Header.Set("Authorization", "Bearer some-jwt")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestDeployTokenAuthFuncSkipsNoAuthHeader(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/deploy", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestDeployTokenAuthFuncSkipsAlreadyAuthenticated(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/deploy", nil)
 	req.Header.Set("Authorization", "DeployToken id:secret")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestRequireDeployScopeHasScope(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func TestRequireDeployScopeMissingScope(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestRequireDeployScopeWildcard(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +326,7 @@ func TestRequireDeployScopeNotDeployToken(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +350,7 @@ func TestRequireDeployScopeEmptyScopes(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +383,7 @@ func TestJWTAuthWithBlacklistedToken(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +415,7 @@ func TestJWTAuthWithNonBlacklistedToken(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +459,7 @@ func TestJWTAuthTeamMemberToken(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,7 +500,7 @@ func TestRequireAuthWithBlacklist(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,7 +529,7 @@ func TestRequestContextWithRequestID(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -555,7 +555,7 @@ func TestRequestContextWithoutRequestID(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -646,7 +646,7 @@ func TestRequireRoleCustomerLowest(t *testing.T) {
 			})
 
 			req := httptest.NewRequest("GET", "/test", nil)
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, -1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -673,7 +673,7 @@ func TestRequireRoleWithStringInsteadOfRole(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,7 +27,7 @@ func TestUserAuditListBusinessPlan(t *testing.T) {
 	app.Get("/api/v1/audit", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -48,7 +48,7 @@ func TestUserAuditListFreePlanForbidden(t *testing.T) {
 	app.Get("/api/v1/audit", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -61,7 +61,7 @@ func TestUserAuditListProPlanForbidden(t *testing.T) {
 	app.Get("/api/v1/audit", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -74,7 +74,7 @@ func TestUserAuditListEnterprisePlan(t *testing.T) {
 	app.Get("/api/v1/audit", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit?limit=10&offset=0", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -87,7 +87,7 @@ func TestUserAuditListWithActionFilter(t *testing.T) {
 	app.Get("/api/v1/audit", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit?action=deploy", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -100,7 +100,7 @@ func TestUserAuditExportCSV(t *testing.T) {
 	app.Get("/api/v1/audit/export/csv", injectUserID("user-1"), handler.ExportCSV)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit/export/csv", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -117,7 +117,7 @@ func TestUserAuditExportCSVForbidden(t *testing.T) {
 	app.Get("/api/v1/audit/export/csv", injectUserID("user-1"), handler.ExportCSV)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit/export/csv", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -130,7 +130,7 @@ func TestUserAuditExportJSON(t *testing.T) {
 	app.Get("/api/v1/audit/export/json", injectUserID("user-1"), handler.ExportJSON)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit/export/json", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -148,7 +148,7 @@ func TestUserAuditExportJSONForbidden(t *testing.T) {
 	app.Get("/api/v1/audit/export/json", injectUserID("user-1"), handler.ExportJSON)
 
 	req := httptest.NewRequest("GET", "/api/v1/audit/export/json", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}

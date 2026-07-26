@@ -42,7 +42,7 @@ func TestGetDashboardStats(t *testing.T) {
 	app.Get("/api/v1/admin/dashboard/stats", handler.GetDashboardStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/dashboard/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestCreateCluster(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestCreateClusterMissingName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -131,7 +131,7 @@ func TestCreateClusterMissingRegion(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -146,7 +146,7 @@ func TestCreateClusterInvalidType(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -162,12 +162,12 @@ func TestCreateClusterDuplicate(t *testing.T) {
 	// Create first
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	app.Test(req)
+	app.Test(req, -1)
 
 	// Create duplicate
 	req2 := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req2.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req2)
+	resp, _ := app.Test(req2, -1)
 
 	if resp.StatusCode != 409 {
 		t.Errorf("Expected 409 for duplicate, got %d", resp.StatusCode)
@@ -185,11 +185,11 @@ func TestListClusters(t *testing.T) {
 		body := `{"name":"` + name + `","region":"fsn1","type":"shared","nodes":2,"k8sVersion":"v1.30.2"}`
 		req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		app.Test(req)
+		app.Test(req, -1)
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/clusters", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -213,10 +213,10 @@ func TestGetCluster(t *testing.T) {
 	body := `{"name":"get-me","region":"fsn1","type":"shared","nodes":4,"k8sVersion":"v1.30.2"}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	app.Test(req)
+	app.Test(req, -1)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/admin/clusters/get-me", nil)
-	resp, _ := app.Test(getReq)
+	resp, _ := app.Test(getReq, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -240,7 +240,7 @@ func TestGetClusterNotFound(t *testing.T) {
 	app.Get("/api/v1/admin/clusters/:name", handler.GetCluster)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/clusters/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -257,10 +257,10 @@ func TestDeleteCluster(t *testing.T) {
 	body := `{"name":"to-delete","region":"fsn1","type":"shared","nodes":1,"k8sVersion":"v1.30.2"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	app.Test(createReq)
+	app.Test(createReq, -1)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/admin/clusters/to-delete", nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", deleteResp.StatusCode)
@@ -268,7 +268,7 @@ func TestDeleteCluster(t *testing.T) {
 
 	// Verify deleted
 	getReq := httptest.NewRequest("GET", "/api/v1/admin/clusters/to-delete", nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 404 {
 		t.Errorf("Expected 404 after deletion, got %d", getResp.StatusCode)
@@ -281,7 +281,7 @@ func TestDeleteClusterNotFound(t *testing.T) {
 	app.Delete("/api/v1/admin/clusters/:name", handler.DeleteCluster)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/clusters/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -299,13 +299,13 @@ func TestUpgradeCluster(t *testing.T) {
 	createBody := `{"name":"upgrade-me","region":"fsn1","type":"shared","nodes":2,"k8sVersion":"v1.28.0"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	app.Test(createReq)
+	app.Test(createReq, -1)
 
 	// Upgrade
 	upgradeBody := `{"version":"v1.30.2"}`
 	upgradeReq := httptest.NewRequest("POST", "/api/v1/admin/clusters/upgrade-me/upgrade", bytes.NewBufferString(upgradeBody))
 	upgradeReq.Header.Set("Content-Type", "application/json")
-	upgradeResp, _ := app.Test(upgradeReq)
+	upgradeResp, _ := app.Test(upgradeReq, -1)
 
 	if upgradeResp.StatusCode != 200 {
 		b, _ := io.ReadAll(upgradeResp.Body)
@@ -314,7 +314,7 @@ func TestUpgradeCluster(t *testing.T) {
 
 	// Verify version updated
 	getReq := httptest.NewRequest("GET", "/api/v1/admin/clusters/upgrade-me", nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 	defer getResp.Body.Close()
 
 	var cluster entities.Cluster
@@ -333,7 +333,7 @@ func TestUpgradeClusterNotFound(t *testing.T) {
 	body := `{"version":"v1.30.2"}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters/nonexistent/upgrade", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -348,7 +348,7 @@ func TestUpgradeClusterMissingVersion(t *testing.T) {
 	body := `{}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters/some-cluster/upgrade", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
@@ -363,7 +363,7 @@ func TestListTenantsEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/tenants", handler.ListTenants)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/tenants", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -384,7 +384,7 @@ func TestSuspendTenantNotFound(t *testing.T) {
 	app.Post("/api/v1/admin/tenants/:id/suspend", handler.SuspendTenant)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/tenants/nonexistent/suspend", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -399,7 +399,7 @@ func TestListModules(t *testing.T) {
 	app.Get("/api/v1/admin/modules", handler.ListModules)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/modules", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -435,7 +435,7 @@ func TestUpdateModule(t *testing.T) {
 	app.Post("/api/v1/admin/modules/:name/update", handler.UpdateModule)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/modules/CloudNativePG/update", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -460,7 +460,7 @@ func TestUpdateModuleNotFound(t *testing.T) {
 	app.Post("/api/v1/admin/modules/:name/update", handler.UpdateModule)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/modules/NonexistentModule/update", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -475,7 +475,7 @@ func TestUpdateAllModules(t *testing.T) {
 
 	// Update all
 	updateReq := httptest.NewRequest("POST", "/api/v1/admin/modules/update-all", nil)
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", updateResp.StatusCode)
@@ -491,7 +491,7 @@ func TestUpdateAllModules(t *testing.T) {
 
 	// Verify all are up to date now
 	listReq := httptest.NewRequest("GET", "/api/v1/admin/modules", nil)
-	listResp, _ := app.Test(listReq)
+	listResp, _ := app.Test(listReq, -1)
 	defer listResp.Body.Close()
 
 	var modules []entities.Module
@@ -510,7 +510,7 @@ func TestInstallModule(t *testing.T) {
 	app.Post("/api/v1/admin/modules/:name/install", handler.InstallModule)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/modules/NewModule/install", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Errorf("Expected 200, got %d", resp.StatusCode)
@@ -523,7 +523,7 @@ func TestUninstallModule(t *testing.T) {
 	app.Post("/api/v1/admin/modules/:name/uninstall", handler.UninstallModule)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/modules/SomeModule/uninstall", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Errorf("Expected 200, got %d", resp.StatusCode)
@@ -538,7 +538,7 @@ func TestListAuditLog(t *testing.T) {
 	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -559,7 +559,7 @@ func TestListAuditLogWithLimit(t *testing.T) {
 	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit?limit=2", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -582,7 +582,7 @@ func TestCheckUpdates(t *testing.T) {
 	app.Get("/api/v1/admin/updates/check", handler.CheckUpdates)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/updates/check", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -611,7 +611,7 @@ func TestApplyUpdate(t *testing.T) {
 	body := `{"version":"v1.3.0"}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/updates/apply", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -626,7 +626,7 @@ func TestApplyUpdateMissingVersion(t *testing.T) {
 	body := `{}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/updates/apply", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
@@ -639,7 +639,7 @@ func TestListUpdateHistory(t *testing.T) {
 	app.Get("/api/v1/admin/updates/history", handler.ListUpdateHistory)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/updates/history", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -666,10 +666,10 @@ func TestGetInfraOverview(t *testing.T) {
 	body := `{"name":"infra-test","region":"fsn1","type":"shared","nodes":3,"k8sVersion":"v1.30.2"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	app.Test(createReq)
+	app.Test(createReq, -1)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/infrastructure", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -694,7 +694,7 @@ func TestGetInfraOverviewEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/infrastructure", handler.GetInfraOverview)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/infrastructure", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -718,7 +718,7 @@ func TestGetPlatformState(t *testing.T) {
 	app.Get("/api/v1/admin/state", handler.GetPlatformState)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/state", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -745,7 +745,7 @@ func TestExportState(t *testing.T) {
 	app.Get("/api/v1/admin/state/export", handler.ExportState)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/state/export", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -781,7 +781,7 @@ func TestGetSettings(t *testing.T) {
 	app.Get("/api/v1/admin/settings", handler.GetSettings)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/settings", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -813,7 +813,7 @@ func TestUpdateSettingsPATCH(t *testing.T) {
 	body := `{"platformName":"My Zenith","baseDomain":"example.com"}`
 	req := httptest.NewRequest("PATCH", "/api/v1/admin/settings", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -844,7 +844,7 @@ func TestUpdateSettingsPUT(t *testing.T) {
 	body := `{"platformName":"Updated Zenith"}`
 	req := httptest.NewRequest("PUT", "/api/v1/admin/settings", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -870,7 +870,7 @@ func TestAuditLogPopulatedByActions(t *testing.T) {
 
 	// Get initial audit count
 	initReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
-	initResp, _ := app.Test(initReq)
+	initResp, _ := app.Test(initReq, -1)
 	var initEntries []entities.AuditEntry
 	json.NewDecoder(initResp.Body).Decode(&initEntries)
 	initialCount := len(initEntries)
@@ -879,15 +879,15 @@ func TestAuditLogPopulatedByActions(t *testing.T) {
 	body := `{"name":"audit-test","region":"fsn1","type":"shared","nodes":1,"k8sVersion":"v1.30.2"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	app.Test(createReq)
+	app.Test(createReq, -1)
 
 	// Delete the cluster (should add another audit entry)
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/admin/clusters/audit-test", nil)
-	app.Test(deleteReq)
+	app.Test(deleteReq, -1)
 
 	// Check audit log grew
 	auditReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
-	auditResp, _ := app.Test(auditReq)
+	auditResp, _ := app.Test(auditReq, -1)
 	defer auditResp.Body.Close()
 
 	var entries []entities.AuditEntry
@@ -913,7 +913,7 @@ func TestListAuditLogEmptyStore(t *testing.T) {
 
 	// Request with large offset to get empty results
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit?offset=1000", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -935,7 +935,7 @@ func TestListAuditLogWithOffset(t *testing.T) {
 
 	// offset=2 should skip first 2 seeded entries
 	req := httptest.NewRequest("GET", "/api/v1/admin/audit?offset=2&limit=1", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -960,7 +960,7 @@ func TestUpdateSettingsPartialUpdate(t *testing.T) {
 	body := `{"baseDomain":"newdomain.dev"}`
 	req := httptest.NewRequest("PATCH", "/api/v1/admin/settings", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -990,7 +990,7 @@ func TestUpdateSettingsInvalidBody(t *testing.T) {
 
 	req := httptest.NewRequest("PATCH", "/api/v1/admin/settings", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
@@ -1005,7 +1005,7 @@ func TestCreateClusterMissingK8sVersion(t *testing.T) {
 	body := `{"name":"test","region":"fsn1"}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for missing k8sVersion, got %d", resp.StatusCode)
@@ -1019,7 +1019,7 @@ func TestCreateClusterInvalidBody(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
@@ -1036,7 +1036,7 @@ func TestCreateClusterDefaultNodes(t *testing.T) {
 	body := `{"name":"default-nodes","region":"fsn1","k8sVersion":"v1.30.2"}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
@@ -1059,7 +1059,7 @@ func TestCreateClusterDefaultType(t *testing.T) {
 	body := `{"name":"default-type","region":"fsn1","k8sVersion":"v1.30.2","nodes":2}`
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
@@ -1080,7 +1080,7 @@ func TestUpgradeClusterInvalidBody(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/clusters/some-cluster/upgrade", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
@@ -1093,7 +1093,7 @@ func TestGetTenantNotFound(t *testing.T) {
 	app.Get("/api/v1/admin/tenants/:id", handler.GetTenant)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/tenants/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -1126,7 +1126,7 @@ func TestSuspendTenantSuccess(t *testing.T) {
 
 	// Suspend
 	suspendReq := httptest.NewRequest("POST", "/api/v1/admin/tenants/test-tenant/suspend", nil)
-	suspendResp, _ := fiberApp.Test(suspendReq)
+	suspendResp, _ := fiberApp.Test(suspendReq, -1)
 
 	if suspendResp.StatusCode != 200 {
 		b, _ := io.ReadAll(suspendResp.Body)
@@ -1142,7 +1142,7 @@ func TestSuspendTenantSuccess(t *testing.T) {
 
 	// Verify tenant is now suspended
 	getReq := httptest.NewRequest("GET", "/api/v1/admin/tenants/test-tenant", nil)
-	getResp, _ := fiberApp.Test(getReq)
+	getResp, _ := fiberApp.Test(getReq, -1)
 
 	var tenant entities.Tenant
 	json.NewDecoder(getResp.Body).Decode(&tenant)
@@ -1177,7 +1177,7 @@ func TestListTenantsWithProjects(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/tenants", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -1199,7 +1199,7 @@ func TestApplyUpdateInvalidBody(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/updates/apply", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
@@ -1236,7 +1236,7 @@ func TestDashboardStatsWithClusters(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/dashboard/stats", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	defer resp.Body.Close()
 
 	var stats entities.DashboardStats
@@ -1281,7 +1281,7 @@ func TestDashboardStatsWithSuspendedTenant(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/dashboard/stats", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	var stats entities.DashboardStats
 	json.NewDecoder(resp.Body).Decode(&stats)
@@ -1300,7 +1300,7 @@ func TestGetPlatformStateUpdateAvailable(t *testing.T) {
 	app.Get("/api/v1/admin/state", handler.GetPlatformState)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/state", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	var state entities.PlatformState
@@ -1324,7 +1324,7 @@ func TestExportStateContentDisposition(t *testing.T) {
 	app.Get("/api/v1/admin/state/export", handler.ExportState)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/state/export", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	cd := resp.Header.Get("Content-Disposition")
@@ -1349,10 +1349,10 @@ func TestActorFromContextFallback(t *testing.T) {
 	app.Get("/api/v1/admin/audit", handler.ListAuditLog)
 
 	installReq := httptest.NewRequest("POST", "/api/v1/admin/modules/TestModule/install", nil)
-	app.Test(installReq)
+	app.Test(installReq, -1)
 
 	auditReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
-	auditResp, _ := app.Test(auditReq)
+	auditResp, _ := app.Test(auditReq, -1)
 	defer auditResp.Body.Close()
 
 	var entries []entities.AuditEntry
@@ -1372,14 +1372,14 @@ func TestUninstallModuleAuditEntry(t *testing.T) {
 
 	// Get initial count
 	initReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
-	initResp, _ := app.Test(initReq)
+	initResp, _ := app.Test(initReq, -1)
 	var initEntries []entities.AuditEntry
 	json.NewDecoder(initResp.Body).Decode(&initEntries)
 	initialCount := len(initEntries)
 
 	// Uninstall a module
 	uninstallReq := httptest.NewRequest("POST", "/api/v1/admin/modules/SomeModule/uninstall", nil)
-	uninstallResp, _ := app.Test(uninstallReq)
+	uninstallResp, _ := app.Test(uninstallReq, -1)
 
 	if uninstallResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", uninstallResp.StatusCode)
@@ -1394,7 +1394,7 @@ func TestUninstallModuleAuditEntry(t *testing.T) {
 
 	// Check audit log grew by 1
 	auditReq := httptest.NewRequest("GET", "/api/v1/admin/audit", nil)
-	auditResp, _ := app.Test(auditReq)
+	auditResp, _ := app.Test(auditReq, -1)
 	var entries []entities.AuditEntry
 	json.NewDecoder(auditResp.Body).Decode(&entries)
 
@@ -1412,7 +1412,7 @@ func TestApplyUpdateAuditEntry(t *testing.T) {
 	body := `{"version":"v2.0.0"}`
 	applyReq := httptest.NewRequest("POST", "/api/v1/admin/updates/apply", bytes.NewBufferString(body))
 	applyReq.Header.Set("Content-Type", "application/json")
-	applyResp, _ := app.Test(applyReq)
+	applyResp, _ := app.Test(applyReq, -1)
 
 	if applyResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", applyResp.StatusCode)

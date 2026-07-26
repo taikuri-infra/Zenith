@@ -168,7 +168,7 @@ func TestMiddlewareSkipPaths(t *testing.T) {
 
 	// /health should be skipped (no tracing) but still work
 	req := httptest.NewRequest("GET", "/health", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestMiddlewareSkipPaths(t *testing.T) {
 
 	// /api/v1/test should be traced and still work
 	req2 := httptest.NewRequest("GET", "/api/v1/test", nil)
-	resp2, err := app.Test(req2)
+	resp2, err := app.Test(req2, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestMiddlewareRecordsStatusCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
 			req := httptest.NewRequest("GET", tt.path, nil)
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, -1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -231,7 +231,7 @@ func TestMiddlewareHandlesError(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/fail", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestRequestHeadersCarrier(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-Custom-Header", "test-value")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestResponseHeadersCarrier(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestRequestHeadersGetMissing(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +356,7 @@ func TestResponseHeadersGetMissing(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +384,7 @@ func TestMiddlewareEmptySkipPaths(t *testing.T) {
 
 	// With empty skip paths, /health should still be traced but work
 	req := httptest.NewRequest("GET", "/health", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestMiddlewareWithMultipleSkipPaths(t *testing.T) {
 	for _, path := range []string{"/health", "/ready", "/metrics", "/livez"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest("GET", path, nil)
-			resp, err := app.Test(req)
+			resp, err := app.Test(req, -1)
 			if err != nil {
 				t.Fatal(err)
 			}

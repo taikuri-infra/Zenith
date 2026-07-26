@@ -32,7 +32,7 @@ func TestManagedServiceProvision(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/managed-services", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -58,7 +58,7 @@ func TestManagedServiceProvisionNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/managed-services", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -75,7 +75,7 @@ func TestManagedServiceProvisionNoServiceType(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/managed-services", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -92,7 +92,7 @@ func TestManagedServiceProvisionInvalidType(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/managed-services", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -107,7 +107,7 @@ func TestManagedServiceProvisionProjectNotFound(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/nonexistent/managed-services", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -124,7 +124,7 @@ func TestManagedServiceProvisionForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/managed-services", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -141,7 +141,7 @@ func TestManagedServiceProvisionNoAuth(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/managed-services", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -179,7 +179,7 @@ func TestManagedServiceList(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/managed-services", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/managed-services", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -202,7 +202,7 @@ func TestManagedServiceListEmpty(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/managed-services", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/managed-services", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -237,7 +237,7 @@ func TestManagedServiceGet(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/managed-services/:msId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/projects/"+project.ID+"/managed-services/"+msID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -255,7 +255,7 @@ func TestManagedServiceGetNotFound(t *testing.T) {
 	fiberApp.Get("/projects/:projectId/managed-services/:msId", injectUserID("user-1"), handler.Get)
 
 	req := httptest.NewRequest("GET", "/projects/proj-1/managed-services/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -282,7 +282,7 @@ func TestManagedServiceDelete(t *testing.T) {
 	fiberApp.Delete("/projects/:projectId/managed-services/:msId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/projects/"+project.ID+"/managed-services/"+msID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -294,7 +294,7 @@ func TestManagedServiceDeleteNotFound(t *testing.T) {
 	fiberApp.Delete("/projects/:projectId/managed-services/:msId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/projects/proj-1/managed-services/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -321,7 +321,7 @@ func TestManagedServiceDeleteForbidden(t *testing.T) {
 	fiberApp.Delete("/projects/:projectId/managed-services/:msId", injectUserID("user-2"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/projects/"+project.ID+"/managed-services/"+msID, nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -338,7 +338,7 @@ func TestManagedServiceProvisionRedis(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/managed-services", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}

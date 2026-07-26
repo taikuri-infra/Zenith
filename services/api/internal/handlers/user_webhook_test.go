@@ -30,7 +30,7 @@ func TestWebhookCreate(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/webhooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -57,7 +57,7 @@ func TestWebhookCreateNoURL(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/webhooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -71,7 +71,7 @@ func TestWebhookCreateNoEvents(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/webhooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -89,7 +89,7 @@ func TestWebhookCreateFreePlanForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/webhooks", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for free plan, got %d", resp.StatusCode)
 	}
@@ -104,7 +104,7 @@ func TestWebhookList(t *testing.T) {
 	app.Get("/api/v1/webhooks", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/webhooks", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -123,7 +123,7 @@ func TestWebhookListEmpty(t *testing.T) {
 	app.Get("/api/v1/webhooks", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/webhooks", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -148,7 +148,7 @@ func TestWebhookUpdate(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/webhooks/"+webhook.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -171,7 +171,7 @@ func TestWebhookUpdateNotFound(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/webhooks/nonexistent", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -188,7 +188,7 @@ func TestWebhookUpdateForbidden(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/webhooks/"+webhook.ID, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -202,7 +202,7 @@ func TestWebhookDelete(t *testing.T) {
 	app.Delete("/api/v1/webhooks/:webhookId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/webhooks/"+webhook.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 204 {
 		t.Fatalf("Expected 204, got %d", resp.StatusCode)
 	}
@@ -213,7 +213,7 @@ func TestWebhookDeleteNotFound(t *testing.T) {
 	app.Delete("/api/v1/webhooks/:webhookId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/webhooks/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -227,7 +227,7 @@ func TestWebhookDeleteForbidden(t *testing.T) {
 	app.Delete("/api/v1/webhooks/:webhookId", injectUserID("user-2"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/webhooks/"+webhook.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -242,7 +242,7 @@ func TestWebhookListDeliveries(t *testing.T) {
 	app.Get("/api/v1/webhooks/:webhookId/deliveries", injectUserID("user-1"), handler.ListDeliveries)
 
 	req := httptest.NewRequest("GET", "/api/v1/webhooks/"+webhook.ID+"/deliveries", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -264,7 +264,7 @@ func TestWebhookListDeliveriesForbidden(t *testing.T) {
 	app.Get("/api/v1/webhooks/:webhookId/deliveries", injectUserID("user-2"), handler.ListDeliveries)
 
 	req := httptest.NewRequest("GET", "/api/v1/webhooks/"+webhook.ID+"/deliveries", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}

@@ -39,7 +39,7 @@ func TestCreateProject(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestCreateProjectDefaults(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 201 {
@@ -103,7 +103,7 @@ func TestCreateProjectNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -118,7 +118,7 @@ func TestCreateProjectInvalidPlan(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -135,11 +135,11 @@ func TestListProjects(t *testing.T) {
 		body := `{"name": "` + name + `"}`
 		req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		app.Test(req)
+		app.Test(req, -1)
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/projects", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -164,7 +164,7 @@ func TestGetProject(t *testing.T) {
 	body := `{"name": "Get Me"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 	defer createResp.Body.Close()
 
 	var created handlers.ProjectResponse
@@ -172,7 +172,7 @@ func TestGetProject(t *testing.T) {
 
 	// Get project
 	req := httptest.NewRequest("GET", "/api/v1/projects/"+created.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -193,7 +193,7 @@ func TestGetProjectNotFound(t *testing.T) {
 	app.Get("/api/v1/projects/:id", handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -210,7 +210,7 @@ func TestUpdateProject(t *testing.T) {
 	createBody := `{"name": "Original"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 	defer createResp.Body.Close()
 
 	var created handlers.ProjectResponse
@@ -220,7 +220,7 @@ func TestUpdateProject(t *testing.T) {
 	updateBody := `{"name": "Updated", "plan": "enterprise"}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 	defer updateResp.Body.Close()
 
 	if updateResp.StatusCode != 200 {
@@ -249,7 +249,7 @@ func TestDeleteProject(t *testing.T) {
 	body := `{"name": "To Delete"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 	defer createResp.Body.Close()
 
 	var created handlers.ProjectResponse
@@ -257,7 +257,7 @@ func TestDeleteProject(t *testing.T) {
 
 	// Delete
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", deleteResp.StatusCode)
@@ -265,7 +265,7 @@ func TestDeleteProject(t *testing.T) {
 
 	// Verify deleted
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 404 {
 		t.Errorf("Expected 404 after deletion, got %d", getResp.StatusCode)
@@ -278,7 +278,7 @@ func TestDeleteProjectNotFound(t *testing.T) {
 	app.Delete("/api/v1/projects/:id", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -293,7 +293,7 @@ func TestUpdateProjectNotFound(t *testing.T) {
 	updateBody := `{"name":"Updated"}`
 	req := httptest.NewRequest("PUT", "/api/v1/projects/nonexistent", bytes.NewBufferString(updateBody))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -310,7 +310,7 @@ func TestUpdateProjectInvalidBody(t *testing.T) {
 	createBody := `{"name":"Original"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 	defer createResp.Body.Close()
 
 	var created handlers.ProjectResponse
@@ -319,7 +319,7 @@ func TestUpdateProjectInvalidBody(t *testing.T) {
 	// Update with invalid body
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString("{invalid"))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", updateResp.StatusCode)
@@ -336,7 +336,7 @@ func TestUpdateProjectInvalidPlan(t *testing.T) {
 	createBody := `{"name":"Original"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 	defer createResp.Body.Close()
 
 	var created handlers.ProjectResponse
@@ -346,7 +346,7 @@ func TestUpdateProjectInvalidPlan(t *testing.T) {
 	updateBody := `{"plan":"ultimate"}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 
 	if updateResp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", updateResp.StatusCode)
@@ -363,7 +363,7 @@ func TestUpdateProjectNameOnly(t *testing.T) {
 	createBody := `{"name":"Original","plan":"pro"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 	defer createResp.Body.Close()
 
 	var created handlers.ProjectResponse
@@ -373,7 +373,7 @@ func TestUpdateProjectNameOnly(t *testing.T) {
 	updateBody := `{"name":"Renamed"}`
 	updateReq := httptest.NewRequest("PUT", "/api/v1/projects/"+created.ID, bytes.NewBufferString(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
-	updateResp, _ := app.Test(updateReq)
+	updateResp, _ := app.Test(updateReq, -1)
 	defer updateResp.Body.Close()
 
 	if updateResp.StatusCode != 200 {
@@ -400,14 +400,14 @@ func TestDeleteProjectResponseMessage(t *testing.T) {
 	createBody := `{"name":"ToDelete"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 	defer createResp.Body.Close()
 
 	var created handlers.ProjectResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 	defer deleteResp.Body.Close()
 
 	var result map[string]interface{}
@@ -427,7 +427,7 @@ func TestCreateProjectInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -442,7 +442,7 @@ func TestCreateProjectSlugGeneration(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	var result handlers.ProjectResponse
@@ -462,7 +462,7 @@ func TestCreateProjectNamespacePrefix(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	var result handlers.ProjectResponse
@@ -480,7 +480,7 @@ func TestListProjectsEmpty(t *testing.T) {
 	app.Get("/api/v1/projects", handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {

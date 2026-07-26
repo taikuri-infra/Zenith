@@ -42,7 +42,7 @@ func TestReleaseCreate(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/releases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -64,7 +64,7 @@ func TestReleaseCreateNoImage(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/releases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -81,7 +81,7 @@ func TestReleaseCreateDefaultBranch(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/releases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -98,7 +98,7 @@ func TestReleaseList(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/releases", handler.ListReleases)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/releases", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -119,7 +119,7 @@ func TestReleaseListEmpty(t *testing.T) {
 	app.Get("/api/v1/apps/:appId/releases", handler.ListReleases)
 
 	req := httptest.NewRequest("GET", "/api/v1/apps/"+testApp.ID+"/releases", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

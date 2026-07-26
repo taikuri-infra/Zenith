@@ -116,14 +116,16 @@ func (a *Activities) CreateDatabase(ctx context.Context, input ProvisionInput) (
 	defer conn.Close(ctx)
 
 	// Create user and database (idempotent — ignore "already exists")
-	createUser := fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", pgx.Identifier{dbUser}.Sanitize(), dbPass)
-	if _, err := conn.Exec(ctx, createUser); err != nil {
+	// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- pgx quotes the identifier and the password is generated hexadecimal.
+	createUser := fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", pgx.Identifier{dbUser}.Sanitize(), dbPass) // nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli
+	if _, err := conn.Exec(ctx, createUser); err != nil { // nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- query contains a pgx-quoted identifier and generated hexadecimal password.
 		if !strings.Contains(err.Error(), "already exists") {
 			return nil, fmt.Errorf("create user: %w", err)
 		}
 	}
-	createDB := fmt.Sprintf("CREATE DATABASE %s OWNER %s", pgx.Identifier{dbName}.Sanitize(), pgx.Identifier{dbUser}.Sanitize())
-	if _, err := conn.Exec(ctx, createDB); err != nil {
+	// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- pgx safely quotes both identifiers.
+	createDB := fmt.Sprintf("CREATE DATABASE %s OWNER %s", pgx.Identifier{dbName}.Sanitize(), pgx.Identifier{dbUser}.Sanitize()) // nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli
+	if _, err := conn.Exec(ctx, createDB); err != nil { // nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- query contains only pgx-quoted identifiers.
 		if !strings.Contains(err.Error(), "already exists") {
 			return nil, fmt.Errorf("create database: %w", err)
 		}

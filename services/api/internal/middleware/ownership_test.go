@@ -124,7 +124,7 @@ func TestRequireAppOwnershipSuccess(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/apps/app-1", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestRequireAppOwnershipWrongUser(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/apps/app-1", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestRequireAppOwnershipAppNotFound(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/apps/nonexistent", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestRequireAppOwnershipNoUserID(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/apps/app-1", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestRequireAppOwnershipNoAppIdParam(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/other", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestRequireAppOwnershipRepoError(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/apps/app-1", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}

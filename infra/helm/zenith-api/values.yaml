@@ -14,6 +14,9 @@ ingress:
   host: api.freezenith.com
   tlsSecret: freezenith-tls
   apisixEnabled: false
+  # Admin key for the in-cluster APISIX admin API (upstream-sync CronJob).
+  # Empty = fall back to APISIX's built-in default key. Override per environment.
+  apisixAdminKey: ""
 
 resources:
   requests:

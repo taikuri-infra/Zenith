@@ -807,7 +807,10 @@ func (s *GatewayService) syncApisixRoute(ctx context.Context, gw *entities.Gatew
 				"enable": p.Enable,
 			}
 			if len(p.Config) > 0 {
+				// nosemgrep: go.lang.security.deserialization.unsafe-deserialization-interface.go-unsafe-deserialization-interface -- schema-free APISIX JSON is forwarded, not natively deserialized.
 				var cfg interface{}
+				// Plugin configuration is intentionally schema-free JSON and is only
+				// forwarded to the APISIX CRD, never used for native deserialization.
 				json.Unmarshal(p.Config, &cfg)
 				plugin["config"] = cfg
 			}

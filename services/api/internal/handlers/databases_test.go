@@ -26,7 +26,7 @@ func TestCreateDatabase(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -59,7 +59,7 @@ func TestCreateDatabaseRedis(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -80,7 +80,7 @@ func TestCreateDatabaseInvalidEngine(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -94,7 +94,7 @@ func TestCreateDatabaseInvalidVersion(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -118,7 +118,7 @@ func TestCreateDatabaseMissingFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
-			resp, _ := app.Test(req)
+			resp, _ := app.Test(req, -1)
 			if resp.StatusCode != 400 {
 				t.Errorf("Expected 400, got %d", resp.StatusCode)
 			}
@@ -138,11 +138,11 @@ func TestListDatabases(t *testing.T) {
 	} {
 		req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		app.Test(req)
+		app.Test(req, -1)
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/databases", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -167,13 +167,13 @@ func TestGetDatabase(t *testing.T) {
 	body := `{"name":"maindb","engine":"postgresql","version":"16","storage":"20Gi"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.DatabaseResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/databases/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", getResp.StatusCode)
@@ -188,13 +188,13 @@ func TestDeleteDatabase(t *testing.T) {
 	body := `{"name":"maindb","engine":"postgresql","version":"16","storage":"20Gi"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.DatabaseResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/databases/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", deleteResp.StatusCode)
@@ -209,13 +209,13 @@ func TestCreateBackup(t *testing.T) {
 	body := `{"name":"maindb","engine":"postgresql","version":"16","storage":"20Gi"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.DatabaseResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	backupReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases/"+created.ID+"/backups", nil)
-	backupResp, _ := app.Test(backupReq)
+	backupResp, _ := app.Test(backupReq, -1)
 
 	if backupResp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", backupResp.StatusCode)
@@ -234,7 +234,7 @@ func TestGetDatabaseNotFound(t *testing.T) {
 	app.Get("/api/v1/projects/:id/databases/:name", handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/databases/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -246,7 +246,7 @@ func TestDeleteDatabaseNotFound(t *testing.T) {
 	app.Delete("/api/v1/projects/:id/databases/:name", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/databases/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -261,13 +261,13 @@ func TestDeleteDatabaseResponseMessage(t *testing.T) {
 	body := `{"name":"todelete","engine":"redis","version":"7.2","storage":"5Gi"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.DatabaseResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/databases/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	var result map[string]interface{}
 	json.NewDecoder(deleteResp.Body).Decode(&result)
@@ -286,18 +286,18 @@ func TestDeleteDatabaseThenGetReturns404(t *testing.T) {
 	body := `{"name":"maindb","engine":"postgresql","version":"16","storage":"20Gi"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.DatabaseResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	// Delete
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/databases/"+created.ID, nil)
-	app.Test(deleteReq)
+	app.Test(deleteReq, -1)
 
 	// Verify 404
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/databases/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 404 {
 		t.Errorf("Expected 404 after deletion, got %d", getResp.StatusCode)
@@ -309,7 +309,7 @@ func TestListDatabasesEmpty(t *testing.T) {
 	app.Get("/api/v1/projects/:id/databases", handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/databases", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -334,7 +334,7 @@ func TestListBackupsEmpty(t *testing.T) {
 	app.Get("/api/v1/projects/:id/databases/:name/backups", handler.ListBackups)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/databases/some-db/backups", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -359,7 +359,7 @@ func TestCreateBackupNotFound(t *testing.T) {
 	app.Post("/api/v1/projects/:id/databases/:name/backups", handler.CreateBackup)
 
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases/nonexistent/backups", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -373,7 +373,7 @@ func TestCreateDatabaseInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -387,7 +387,7 @@ func TestCreateDatabaseMySQLPort(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -411,7 +411,7 @@ func TestCreateDatabaseMongoDBPort(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -432,7 +432,7 @@ func TestCreateDatabaseWithReplicas(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -453,13 +453,13 @@ func TestGetDatabaseResponseFields(t *testing.T) {
 	body := `{"name":"maindb","engine":"postgresql","version":"16","storage":"20Gi"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.DatabaseResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/databases/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	var result handlers.DatabaseResponse
 	json.NewDecoder(getResp.Body).Decode(&result)
@@ -496,13 +496,13 @@ func TestCreateBackupResponseFields(t *testing.T) {
 	body := `{"name":"maindb","engine":"postgresql","version":"16","storage":"20Gi"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.DatabaseResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	backupReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases/"+created.ID+"/backups", nil)
-	backupResp, _ := app.Test(backupReq)
+	backupResp, _ := app.Test(backupReq, -1)
 
 	var backup handlers.BackupResponse
 	json.NewDecoder(backupResp.Body).Decode(&backup)
@@ -527,17 +527,17 @@ func TestListDatabasesIsolatedByProject(t *testing.T) {
 	body := `{"name":"db1","engine":"postgresql","version":"16","storage":"20Gi"}`
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/databases", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	app.Test(req)
+	app.Test(req, -1)
 
 	// Create db in proj2
 	body2 := `{"name":"db2","engine":"redis","version":"7.2","storage":"5Gi"}`
 	req2 := httptest.NewRequest("POST", "/api/v1/projects/proj2/databases", bytes.NewBufferString(body2))
 	req2.Header.Set("Content-Type", "application/json")
-	app.Test(req2)
+	app.Test(req2, -1)
 
 	// List proj1 only
 	listReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/databases", nil)
-	listResp, _ := app.Test(listReq)
+	listResp, _ := app.Test(listReq, -1)
 
 	var result struct {
 		Items []handlers.DatabaseResponse `json:"items"`

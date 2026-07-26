@@ -29,7 +29,7 @@ func TestExitSurveySubmitAndCancel(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/billing/exit-survey", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -52,7 +52,7 @@ func TestExitSurveySubmitNoReason(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/billing/exit-survey", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -65,7 +65,7 @@ func TestExitSurveySubmitInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/billing/exit-survey", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -90,7 +90,7 @@ func TestExitSurveyAdminList(t *testing.T) {
 	app.Get("/api/v1/admin/exit-surveys", handler.AdminList)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/exit-surveys", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -110,7 +110,7 @@ func TestExitSurveyAdminListEmpty(t *testing.T) {
 	app.Get("/api/v1/admin/exit-surveys", handler.AdminList)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/exit-surveys", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -130,7 +130,7 @@ func TestExitSurveyAdminListWithPagination(t *testing.T) {
 	app.Get("/api/v1/admin/exit-surveys", handler.AdminList)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/exit-surveys?limit=10&offset=0", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -146,7 +146,7 @@ func TestExitSurveyAdminStats(t *testing.T) {
 	app.Get("/api/v1/admin/exit-surveys/stats", handler.AdminStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/exit-surveys/stats", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

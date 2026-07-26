@@ -26,7 +26,7 @@ func TestCreateStorageBucket(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -59,7 +59,7 @@ func TestCreateStorageBucketDefaults(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -83,7 +83,7 @@ func TestCreateStorageBucketPublicRead(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -104,7 +104,7 @@ func TestCreateStorageBucketInvalidAccess(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -118,7 +118,7 @@ func TestCreateStorageBucketNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -131,7 +131,7 @@ func TestCreateStorageBucketInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -147,11 +147,11 @@ func TestListStorageBuckets(t *testing.T) {
 		body := `{"name":"` + name + `"}`
 		req := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		app.Test(req)
+		app.Test(req, -1)
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/storage", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -176,7 +176,7 @@ func TestListStorageBucketsEmpty(t *testing.T) {
 	app.Get("/api/v1/projects/:id/storage", handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/storage", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
@@ -204,13 +204,13 @@ func TestGetStorageBucket(t *testing.T) {
 	body := `{"name":"assets","access":"public-read","region":"nbg1"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.StorageResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/storage/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", getResp.StatusCode)
@@ -239,7 +239,7 @@ func TestGetStorageBucketNotFound(t *testing.T) {
 	app.Get("/api/v1/projects/:id/storage/:name", handler.Get)
 
 	req := httptest.NewRequest("GET", "/api/v1/projects/proj1/storage/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -255,14 +255,14 @@ func TestDeleteStorageBucket(t *testing.T) {
 	body := `{"name":"to-delete"}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := app.Test(createReq)
+	createResp, _ := app.Test(createReq, -1)
 
 	var created handlers.StorageResponse
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	// Delete
 	deleteReq := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/storage/"+created.ID, nil)
-	deleteResp, _ := app.Test(deleteReq)
+	deleteResp, _ := app.Test(deleteReq, -1)
 
 	if deleteResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", deleteResp.StatusCode)
@@ -277,7 +277,7 @@ func TestDeleteStorageBucket(t *testing.T) {
 
 	// Verify deleted
 	getReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/storage/"+created.ID, nil)
-	getResp, _ := app.Test(getReq)
+	getResp, _ := app.Test(getReq, -1)
 
 	if getResp.StatusCode != 404 {
 		t.Errorf("Expected 404 after deletion, got %d", getResp.StatusCode)
@@ -289,7 +289,7 @@ func TestDeleteStorageBucketNotFound(t *testing.T) {
 	app.Delete("/api/v1/projects/:id/storage/:name", handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/proj1/storage/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -305,17 +305,17 @@ func TestListStorageBucketsIsolatedByProject(t *testing.T) {
 	body := `{"name":"assets"}`
 	req := httptest.NewRequest("POST", "/api/v1/projects/proj1/storage", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	app.Test(req)
+	app.Test(req, -1)
 
 	// Create bucket in proj2
 	body2 := `{"name":"other"}`
 	req2 := httptest.NewRequest("POST", "/api/v1/projects/proj2/storage", bytes.NewBufferString(body2))
 	req2.Header.Set("Content-Type", "application/json")
-	app.Test(req2)
+	app.Test(req2, -1)
 
 	// List proj1 only
 	listReq := httptest.NewRequest("GET", "/api/v1/projects/proj1/storage", nil)
-	listResp, _ := app.Test(listReq)
+	listResp, _ := app.Test(listReq, -1)
 
 	var result struct {
 		Items []handlers.StorageResponse `json:"items"`

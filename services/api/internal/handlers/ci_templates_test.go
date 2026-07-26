@@ -22,7 +22,7 @@ func TestCITemplateListTemplates(t *testing.T) {
 	app.Get("/ci-templates", handler.ListTemplates)
 
 	req := httptest.NewRequest("GET", "/ci-templates", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -41,7 +41,7 @@ func TestCITemplateGetTemplateGo(t *testing.T) {
 	app.Get("/ci-templates/:framework", handler.GetTemplate)
 
 	req := httptest.NewRequest("GET", "/ci-templates/go", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -57,7 +57,7 @@ func TestCITemplateGetTemplateNextjs(t *testing.T) {
 	app.Get("/ci-templates/:framework", handler.GetTemplate)
 
 	req := httptest.NewRequest("GET", "/ci-templates/nextjs", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -68,7 +68,7 @@ func TestCITemplateGetTemplatePython(t *testing.T) {
 	app.Get("/ci-templates/:framework", handler.GetTemplate)
 
 	req := httptest.NewRequest("GET", "/ci-templates/python", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -79,7 +79,7 @@ func TestCITemplateGetTemplateRust(t *testing.T) {
 	app.Get("/ci-templates/:framework", handler.GetTemplate)
 
 	req := httptest.NewRequest("GET", "/ci-templates/rust", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -90,7 +90,7 @@ func TestCITemplateGetTemplateNodejs(t *testing.T) {
 	app.Get("/ci-templates/:framework", handler.GetTemplate)
 
 	req := httptest.NewRequest("GET", "/ci-templates/nodejs", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -101,7 +101,7 @@ func TestCITemplateGetTemplateUnsupported(t *testing.T) {
 	app.Get("/ci-templates/:framework", handler.GetTemplate)
 
 	req := httptest.NewRequest("GET", "/ci-templates/php", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -112,7 +112,7 @@ func TestCITemplateGetTemplateWithPlaceholders(t *testing.T) {
 	app.Get("/ci-templates/:framework", handler.GetTemplate)
 
 	req := httptest.NewRequest("GET", "/ci-templates/go?project=myproj&service=mysvc", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}

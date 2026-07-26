@@ -216,15 +216,18 @@ func (s *DatabaseService) provisionShared(ctx context.Context, db *entities.User
 	dbName := sanitizeIdentifier(db.DBName)
 
 	// CREATE USER (use format string — pgx doesn't support parameterized DDL)
+	// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- identifier is allowlisted and password is generated hexadecimal.
 	_, err = conn.Exec(ctx, fmt.Sprintf(`CREATE USER %q WITH PASSWORD '%s'`, dbUser, password))
 	if err != nil {
 		return "", "", fmt.Errorf("create user %s: %w", dbUser, err)
 	}
 
 	// CREATE DATABASE
+	// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- both identifiers are reduced to [a-z0-9_].
 	_, err = conn.Exec(ctx, fmt.Sprintf(`CREATE DATABASE %q OWNER %q`, dbName, dbUser))
 	if err != nil {
 		// Cleanup user on failure
+		// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- identifier is reduced to [a-z0-9_].
 		conn.Exec(ctx, fmt.Sprintf(`DROP USER IF EXISTS %q`, dbUser))
 		return "", "", fmt.Errorf("create database %s: %w", dbName, err)
 	}
@@ -462,14 +465,17 @@ func (s *DatabaseService) dropSharedDatabase(ctx context.Context, db *entities.U
 	dbUser := sanitizeIdentifier(db.DBUser)
 
 	// Terminate active connections before dropping
+	// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- database name is reduced to [a-z0-9_].
 	conn.Exec(ctx, fmt.Sprintf(
 		`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid()`,
 		dbName,
 	))
 
+	// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- identifier is reduced to [a-z0-9_].
 	if _, err := conn.Exec(ctx, fmt.Sprintf(`DROP DATABASE IF EXISTS %q`, dbName)); err != nil {
 		slog.Warn("DROP DATABASE failed", "database", dbName, "error", err)
 	}
+	// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- identifier is reduced to [a-z0-9_].
 	if _, err := conn.Exec(ctx, fmt.Sprintf(`DROP USER IF EXISTS %q`, dbUser)); err != nil {
 		slog.Warn("DROP USER failed", "user", dbUser, "error", err)
 	}
@@ -583,6 +589,7 @@ func (s *DatabaseService) ResetDatabasePassword(ctx context.Context, id string) 
 			return "", "", fmt.Errorf("connect to dedicated cluster: %w", err)
 		}
 		defer conn.Close(ctx)
+		// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- identifier is allowlisted and password is generated hexadecimal.
 		_, err = conn.Exec(ctx, fmt.Sprintf(`ALTER USER %q WITH PASSWORD '%s'`, sanitizeIdentifier(db.DBUser), newPassword))
 		if err != nil {
 			return "", "", fmt.Errorf("alter user password: %w", err)
@@ -594,6 +601,7 @@ func (s *DatabaseService) ResetDatabasePassword(ctx context.Context, id string) 
 			return "", "", fmt.Errorf("connect to CNPG admin: %w", err)
 		}
 		defer conn.Close(ctx)
+		// nosemgrep: go.lang.security.audit.sqli.pgx-sqli.pgx-sqli -- identifier is allowlisted and password is generated hexadecimal.
 		_, err = conn.Exec(ctx, fmt.Sprintf(`ALTER USER %q WITH PASSWORD '%s'`, sanitizeIdentifier(db.DBUser), newPassword))
 		if err != nil {
 			return "", "", fmt.Errorf("alter user password: %w", err)

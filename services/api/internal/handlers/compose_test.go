@@ -27,7 +27,7 @@ func TestComposeImportNoAuth(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/some-id/import-compose", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -41,7 +41,7 @@ func TestComposeImportProjectNotFound(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/nonexistent/import-compose", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -57,7 +57,7 @@ func TestComposeImportNotYourProject(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/import-compose", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -73,7 +73,7 @@ func TestComposeImportEmptyContent(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/import-compose", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -100,7 +100,7 @@ func TestComposeImportValidCompose(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/import-compose", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -121,7 +121,7 @@ func TestComposeFormatNoAuth(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/some-id/format-compose", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -138,7 +138,7 @@ func TestComposeFormatNoAIValidator(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/format-compose", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 500 {
 		t.Errorf("Expected 500 (AI validator not configured), got %d", resp.StatusCode)
 	}
@@ -154,7 +154,7 @@ func TestComposeFormatEmptyContent(t *testing.T) {
 	req := httptest.NewRequest("POST", "/projects/"+project.ID+"/format-compose", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}

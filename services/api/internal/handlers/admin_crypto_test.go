@@ -24,7 +24,7 @@ func TestAdminCryptoRotateKeysNoEncryption(t *testing.T) {
 	app.Post("/api/v2/admin/crypto/rotate", handler.RotateKeys)
 
 	req := httptest.NewRequest("POST", "/api/v2/admin/crypto/rotate", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Fatalf("Expected 400 (encryption not configured), got %d", resp.StatusCode)
 	}

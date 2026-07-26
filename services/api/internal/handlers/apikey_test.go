@@ -28,7 +28,7 @@ func TestAPIKeyCreate(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/api-keys", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -54,7 +54,7 @@ func TestAPIKeyCreateNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/api-keys", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -68,7 +68,7 @@ func TestAPIKeyCreateDefaultType(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/api-keys", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -83,7 +83,7 @@ func TestAPIKeyList(t *testing.T) {
 	app.Get("/api/v1/api-keys", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/api-keys", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -103,7 +103,7 @@ func TestAPIKeyListEmpty(t *testing.T) {
 	app.Get("/api/v1/api-keys", injectUserID("user-1"), handler.List)
 
 	req := httptest.NewRequest("GET", "/api/v1/api-keys", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -117,7 +117,7 @@ func TestAPIKeyDelete(t *testing.T) {
 	app.Delete("/api/v1/api-keys/:keyId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/api-keys/"+key.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -134,7 +134,7 @@ func TestAPIKeyDeleteNotFound(t *testing.T) {
 	app.Delete("/api/v1/api-keys/:keyId", injectUserID("user-1"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/api-keys/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -148,7 +148,7 @@ func TestAPIKeyDeleteForbidden(t *testing.T) {
 	app.Delete("/api/v1/api-keys/:keyId", injectUserID("user-2"), handler.Delete)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/api-keys/"+key.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -162,13 +162,13 @@ func TestAPIKeyCreateLimitReached(t *testing.T) {
 	body := `{"name":"Key 1"}`
 	req := httptest.NewRequest("POST", "/api/v1/api-keys", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	app.Test(req)
+	app.Test(req, -1)
 
 	// Second key should be forbidden on free plan
 	body2 := `{"name":"Key 2"}`
 	req2 := httptest.NewRequest("POST", "/api/v1/api-keys", bytes.NewBufferString(body2))
 	req2.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req2)
+	resp, _ := app.Test(req2, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for plan limit, got %d", resp.StatusCode)
 	}

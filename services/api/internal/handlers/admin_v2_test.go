@@ -60,7 +60,7 @@ func TestAnalytics_GetWarRoom(t *testing.T) {
 	app.Get("/api/v1/admin/war-room", h.GetWarRoom)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/war-room", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestAnalytics_GetRevenue(t *testing.T) {
 	app.Get("/api/v1/admin/analytics/revenue", h.GetRevenue)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/analytics/revenue", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestAnalytics_GetGrowth(t *testing.T) {
 	app.Get("/api/v1/admin/analytics/growth", h.GetGrowth)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/analytics/growth", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestAnalytics_GetUsageAnalytics(t *testing.T) {
 	app.Get("/api/v1/admin/analytics/usage", h.GetUsageAnalytics)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/analytics/usage", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestAnalytics_GetCohorts(t *testing.T) {
 	app.Get("/api/v1/admin/analytics/cohorts", h.GetCohorts)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/analytics/cohorts", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestCRM_GetPipeline(t *testing.T) {
 	app.Get("/api/v1/admin/crm/pipeline", h.GetPipeline)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/crm/pipeline", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestCRM_GetHealthScores(t *testing.T) {
 	app.Get("/api/v1/admin/crm/health-scores", h.GetHealthScores)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/crm/health-scores", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestCRM_SaveNote(t *testing.T) {
 	})
 	req := httptest.NewRequest("POST", "/api/v1/admin/crm/customers/user-123/notes", body)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestCRM_SaveNote_InvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/crm/customers/user-123/notes",
 		bytes.NewReader([]byte("not-json")))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestCRM_GetNotes(t *testing.T) {
 	app.Get("/api/v1/admin/crm/customers/:id/notes", h.GetNotes)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/crm/customers/user-123/notes", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestCRM_UpdateTags(t *testing.T) {
 	})
 	req := httptest.NewRequest("PUT", "/api/v1/admin/crm/customers/user-123/tags", body)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestCRM_UpdateTags_InvalidBody(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/crm/customers/user-123/tags",
 		bytes.NewReader([]byte("invalid")))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +346,7 @@ func TestServices_ListServices(t *testing.T) {
 	app.Get("/api/v1/admin/services", h.ListServices)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/services", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +372,7 @@ func TestServices_GetService_KnownService(t *testing.T) {
 	app.Get("/api/v1/admin/services/:name", h.GetService)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/services/traefik", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestServices_GetService_UnknownService(t *testing.T) {
 	app.Get("/api/v1/admin/services/:name", h.GetService)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/services/nonexistent", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +418,7 @@ func TestServices_RestartService_KnownService(t *testing.T) {
 	app.Post("/api/v1/admin/services/:name/restart", h.RestartService)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/services/traefik/restart", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +444,7 @@ func TestServices_RestartService_UnknownService(t *testing.T) {
 	app.Post("/api/v1/admin/services/:name/restart", h.RestartService)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/services/nonexistent/restart", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +467,7 @@ func TestObservability_ListDashboards(t *testing.T) {
 	app.Get("/api/v1/admin/observability/dashboards", h.ListDashboards)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/observability/dashboards", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +493,7 @@ func TestObservability_QueryLogs_ValidBody(t *testing.T) {
 	})
 	req := httptest.NewRequest("POST", "/api/v1/admin/observability/logs/query", body)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,7 +519,7 @@ func TestObservability_QueryLogs_InvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/observability/logs/query",
 		bytes.NewReader([]byte("not-json")))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -542,7 +542,7 @@ func TestObservability_QueryLogs_EmptyQuery(t *testing.T) {
 	})
 	req := httptest.NewRequest("POST", "/api/v1/admin/observability/logs/query", body)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -561,7 +561,7 @@ func TestObservability_GetLogLabels(t *testing.T) {
 	app.Get("/api/v1/admin/observability/logs/labels", h.GetLogLabels)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/observability/logs/labels", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,7 +583,7 @@ func TestObservability_ListAlerts(t *testing.T) {
 	app.Get("/api/v1/admin/observability/alerts", h.ListAlerts)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/observability/alerts", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -605,7 +605,7 @@ func TestObservability_GetAlertStats(t *testing.T) {
 	app.Get("/api/v1/admin/observability/alerts/stats", h.GetAlertStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/observability/alerts/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -627,7 +627,7 @@ func TestObservability_ListAlertRules(t *testing.T) {
 	app.Get("/api/v1/admin/observability/alerts/rules", h.ListAlertRules)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/observability/alerts/rules", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +649,7 @@ func TestObservability_SearchTraces(t *testing.T) {
 	app.Get("/api/v1/admin/observability/traces", h.SearchTraces)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/observability/traces", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -671,7 +671,7 @@ func TestObservability_GetTrace_NoTempo(t *testing.T) {
 	app.Get("/api/v1/admin/observability/traces/:id", h.GetTrace)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/observability/traces/abc123", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -691,7 +691,7 @@ func TestObservability_CreateSilence(t *testing.T) {
 	app.Post("/api/v1/admin/observability/alerts/silence", h.CreateSilence)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/observability/alerts/silence", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -721,7 +721,7 @@ func TestSecurity_GetPosture(t *testing.T) {
 	app.Get("/api/v1/admin/security/posture", h.GetPosture)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/security/posture", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -747,7 +747,7 @@ func TestSecurity_ListPolicies(t *testing.T) {
 	app.Get("/api/v1/admin/security/policies", h.ListPolicies)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/security/policies", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -770,7 +770,7 @@ func TestSecurity_GetPolicyStats(t *testing.T) {
 	app.Get("/api/v1/admin/security/policies/stats", h.GetPolicyStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/security/policies/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -793,7 +793,7 @@ func TestSecurity_ListFalcoAlerts(t *testing.T) {
 	app.Get("/api/v1/admin/security/falco/alerts", h.ListFalcoAlerts)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/security/falco/alerts", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -816,7 +816,7 @@ func TestSecurity_GetRateLimits(t *testing.T) {
 	app.Get("/api/v1/admin/security/rate-limits", h.GetRateLimits)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/security/rate-limits", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -842,7 +842,7 @@ func TestSecurity_ListImages(t *testing.T) {
 	app.Get("/api/v1/admin/security/images", h.ListImages)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/security/images", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -866,7 +866,7 @@ func TestSecurity_GetImageStats(t *testing.T) {
 	app.Get("/api/v1/admin/security/images/stats", h.GetImageStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/security/images/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -890,7 +890,7 @@ func TestSecurity_TriggerImageScan(t *testing.T) {
 	app.Post("/api/v1/admin/security/images/:name/scan", h.TriggerImageScan)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/security/images/zenith-api/scan", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -919,7 +919,7 @@ func TestSecurity_ListSessions(t *testing.T) {
 	app.Get("/api/v1/admin/security/sessions", h.ListSessions)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/security/sessions", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -942,7 +942,7 @@ func TestSecurity_TerminateSession(t *testing.T) {
 	app.Delete("/api/v1/admin/security/sessions/:id", h.TerminateSession)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/security/sessions/session-abc", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -974,7 +974,7 @@ func TestPlatformOps_GetBackups(t *testing.T) {
 	app.Get("/api/v1/admin/backups", h.GetBackups)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/backups", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -997,7 +997,7 @@ func TestPlatformOps_GetBackupStats(t *testing.T) {
 	app.Get("/api/v1/admin/backups/stats", h.GetBackupStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/backups/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1021,7 +1021,7 @@ func TestPlatformOps_ListVeleroSchedules(t *testing.T) {
 	app.Get("/api/v1/admin/backups/velero", h.ListVeleroSchedules)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/backups/velero", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1044,7 +1044,7 @@ func TestPlatformOps_ListCNPGBackups(t *testing.T) {
 	app.Get("/api/v1/admin/backups/cnpg", h.ListCNPGBackups)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/backups/cnpg", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1068,7 +1068,7 @@ func TestPlatformOps_TriggerBackup(t *testing.T) {
 	app.Post("/api/v1/admin/backups/trigger", h.TriggerBackup)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/backups/trigger", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1096,7 +1096,7 @@ func TestPlatformOps_ListArgoApps(t *testing.T) {
 	app.Get("/api/v1/admin/gitops/apps", h.ListArgoApps)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/gitops/apps", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1119,7 +1119,7 @@ func TestPlatformOps_GetGitOpsStats(t *testing.T) {
 	app.Get("/api/v1/admin/gitops/stats", h.GetGitOpsStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/gitops/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1142,7 +1142,7 @@ func TestPlatformOps_SyncArgoApp(t *testing.T) {
 	app.Post("/api/v1/admin/gitops/apps/:name/sync", h.SyncArgoApp)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/gitops/apps/zenith-platform/sync", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1171,7 +1171,7 @@ func TestPlatformOps_GetArgoAppHistory(t *testing.T) {
 	app.Get("/api/v1/admin/gitops/apps/:name/history", h.GetArgoAppHistory)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/gitops/apps/zenith-platform/history", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1196,7 +1196,7 @@ func TestPlatformOps_ListRegistryProjects(t *testing.T) {
 	app.Get("/api/v1/admin/registry/projects", h.ListRegistryProjects)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/registry/projects", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1220,7 +1220,7 @@ func TestPlatformOps_GetRegistryStats(t *testing.T) {
 	app.Get("/api/v1/admin/registry/stats", h.GetRegistryStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/registry/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1244,7 +1244,7 @@ func TestPlatformOps_ListRegistryRepos(t *testing.T) {
 	app.Get("/api/v1/admin/registry/projects/:name/repos", h.ListRegistryRepos)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/registry/projects/zenith/repos", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1269,7 +1269,7 @@ func TestPlatformOps_ListDatabaseClusters(t *testing.T) {
 	app.Get("/api/v1/admin/databases", h.ListDatabaseClusters)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/databases", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1292,7 +1292,7 @@ func TestPlatformOps_GetDatabaseStats(t *testing.T) {
 	app.Get("/api/v1/admin/databases/stats", h.GetDatabaseStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/databases/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1315,7 +1315,7 @@ func TestPlatformOps_GetDatabaseCluster_NotFound(t *testing.T) {
 	app.Get("/api/v1/admin/databases/:name", h.GetDatabaseCluster)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/databases/nonexistent", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1337,7 +1337,7 @@ func TestPlatformOps_ListS3Buckets(t *testing.T) {
 	app.Get("/api/v1/admin/storage/s3", h.ListS3Buckets)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/storage/s3", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1363,7 +1363,7 @@ func TestPlatformOps_ListVolumes(t *testing.T) {
 	app.Get("/api/v1/admin/storage/volumes", h.ListVolumes)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/storage/volumes", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1386,7 +1386,7 @@ func TestPlatformOps_GetStorageStats(t *testing.T) {
 	app.Get("/api/v1/admin/storage/stats", h.GetStorageStats)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/storage/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1414,7 +1414,7 @@ func TestPlatformOps_ListDNSRecords(t *testing.T) {
 	app.Get("/api/v1/admin/networking/dns", h.ListDNSRecords)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/networking/dns", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1437,7 +1437,7 @@ func TestPlatformOps_ListRoutes(t *testing.T) {
 	app.Get("/api/v1/admin/networking/routes", h.ListRoutes)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/networking/routes", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1460,7 +1460,7 @@ func TestPlatformOps_ListCertificates(t *testing.T) {
 	app.Get("/api/v1/admin/networking/certificates", h.ListCertificates)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/networking/certificates", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1485,7 +1485,7 @@ func TestPlatformOps_GetQualityMetrics(t *testing.T) {
 	app.Get("/api/v1/admin/quality/metrics", h.GetQualityMetrics)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/quality/metrics", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1508,7 +1508,7 @@ func TestPlatformOps_GetQualityTickets(t *testing.T) {
 	app.Get("/api/v1/admin/quality/tickets", h.GetQualityTickets)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/quality/tickets", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1534,7 +1534,7 @@ func TestProxy_UnknownService(t *testing.T) {
 	app.All("/api/v1/admin/proxy/:service/*", h.Proxy)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/proxy/grafana/api/dashboards", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1553,7 +1553,7 @@ func TestProxy_UnknownService_POST(t *testing.T) {
 	app.All("/api/v1/admin/proxy/:service/*", h.Proxy)
 
 	req := httptest.NewRequest("POST", "/api/v1/admin/proxy/loki/api/v1/query", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1576,7 +1576,7 @@ func TestRBAC_ListAdminUsers(t *testing.T) {
 	app.Get("/api/v1/admin/admin-users", h.ListAdminUsers)
 
 	req := httptest.NewRequest("GET", "/api/v1/admin/admin-users", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1600,7 +1600,7 @@ func TestRBAC_InviteAdminUser_InvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/admin/admin-users",
 		bytes.NewReader([]byte("not-json")))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1623,7 +1623,7 @@ func TestRBAC_InviteAdminUser_MissingEmail(t *testing.T) {
 	})
 	req := httptest.NewRequest("POST", "/api/v1/admin/admin-users", body)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1647,7 +1647,7 @@ func TestRBAC_InviteAdminUser_InvalidRole(t *testing.T) {
 	})
 	req := httptest.NewRequest("POST", "/api/v1/admin/admin-users", body)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1668,7 +1668,7 @@ func TestRBAC_UpdateAdminRole_InvalidBody(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/v1/admin/admin-users/role-123/role",
 		bytes.NewReader([]byte("not-json")))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1691,7 +1691,7 @@ func TestRBAC_UpdateAdminRole_InvalidRole(t *testing.T) {
 	})
 	req := httptest.NewRequest("PUT", "/api/v1/admin/admin-users/role-123/role", body)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1714,7 +1714,7 @@ func TestRBAC_UpdateAdminRole_ValidRole(t *testing.T) {
 	})
 	req := httptest.NewRequest("PUT", "/api/v1/admin/admin-users/role-123/role", body)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1742,7 +1742,7 @@ func TestRBAC_RemoveAdminUser(t *testing.T) {
 	app.Delete("/api/v1/admin/admin-users/:id", h.RemoveAdminUser)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/admin/admin-users/role-123", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
 	}

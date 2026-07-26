@@ -25,7 +25,7 @@ func TestSCIMListUsers(t *testing.T) {
 	app.Get("/scim/v2/Users", handler.ListUsers)
 
 	req := httptest.NewRequest("GET", "/scim/v2/Users", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -51,7 +51,7 @@ func TestSCIMGetUser(t *testing.T) {
 	app.Get("/scim/v2/Users/:userId", handler.GetUser)
 
 	req := httptest.NewRequest("GET", "/scim/v2/Users/"+user.ID, nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -68,7 +68,7 @@ func TestSCIMGetUserNotFound(t *testing.T) {
 	app.Get("/scim/v2/Users/:userId", handler.GetUser)
 
 	req := httptest.NewRequest("GET", "/scim/v2/Users/nonexistent", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -82,7 +82,7 @@ func TestSCIMCreateUser(t *testing.T) {
 	req := httptest.NewRequest("POST", "/scim/v2/Users", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -102,7 +102,7 @@ func TestSCIMCreateUserNoUserName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/scim/v2/Users", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400, got %d", resp.StatusCode)
 	}
@@ -118,7 +118,7 @@ func TestSCIMCreateUserDuplicate(t *testing.T) {
 	req := httptest.NewRequest("POST", "/scim/v2/Users", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 409 {
 		t.Errorf("Expected 409, got %d", resp.StatusCode)
 	}
@@ -129,7 +129,7 @@ func TestSCIMDeleteUser(t *testing.T) {
 	app.Delete("/scim/v2/Users/:userId", handler.DeleteUser)
 
 	req := httptest.NewRequest("DELETE", "/scim/v2/Users/some-user-id", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, -1)
 	if resp.StatusCode != 204 {
 		t.Errorf("Expected 204, got %d", resp.StatusCode)
 	}

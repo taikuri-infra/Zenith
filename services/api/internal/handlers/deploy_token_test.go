@@ -38,7 +38,7 @@ func TestDeployTokenCreate(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -64,7 +64,7 @@ func TestDeployTokenCreateNoAuth(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 401 {
 		t.Errorf("Expected 401, got %d", resp.StatusCode)
 	}
@@ -80,7 +80,7 @@ func TestDeployTokenCreateForbidden(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403, got %d", resp.StatusCode)
 	}
@@ -95,7 +95,7 @@ func TestDeployTokenCreateProjectNotFound(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/nonexistent/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
 	}
@@ -111,7 +111,7 @@ func TestDeployTokenCreateNoName(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for missing name, got %d", resp.StatusCode)
 	}
@@ -127,7 +127,7 @@ func TestDeployTokenCreateNoScopes(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for missing scopes, got %d", resp.StatusCode)
 	}
@@ -143,7 +143,7 @@ func TestDeployTokenCreateInvalidScope(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid scope, got %d", resp.StatusCode)
 	}
@@ -159,7 +159,7 @@ func TestDeployTokenCreateInvalidExpiry(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid expires_in, got %d", resp.StatusCode)
 	}
@@ -177,12 +177,12 @@ func TestDeployTokenList(t *testing.T) {
 		body := `{"name":"` + name + `","scopes":["deploy:staging"]}`
 		req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
-		fiberApp.Test(req)
+		fiberApp.Test(req, -1)
 	}
 
 	// List tokens
 	listReq := httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/deploy-tokens", nil)
-	listResp, _ := fiberApp.Test(listReq)
+	listResp, _ := fiberApp.Test(listReq, -1)
 
 	if listResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", listResp.StatusCode)
@@ -209,7 +209,7 @@ func TestDeployTokenRevoke(t *testing.T) {
 	body := `{"name":"ci-token","scopes":["deploy:staging"]}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	var created map[string]interface{}
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -217,7 +217,7 @@ func TestDeployTokenRevoke(t *testing.T) {
 
 	// Revoke
 	revokeReq := httptest.NewRequest("DELETE", "/api/v1/projects/"+projectID+"/deploy-tokens/"+tokenID, nil)
-	revokeResp, _ := fiberApp.Test(revokeReq)
+	revokeResp, _ := fiberApp.Test(revokeReq, -1)
 
 	if revokeResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", revokeResp.StatusCode)
@@ -243,7 +243,7 @@ func TestDeployTokenRevokeNotFound(t *testing.T) {
 	fiberApp.Delete("/api/v1/projects/:projectId/deploy-tokens/:tokenId", injectUserID("user-1"), handler.Revoke)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/projects/"+projectID+"/deploy-tokens/nonexistent", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -261,7 +261,7 @@ func TestDeployTokenRotate(t *testing.T) {
 	body := `{"name":"ci-token","scopes":["deploy:staging"]}`
 	createReq := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	createReq.Header.Set("Content-Type", "application/json")
-	createResp, _ := fiberApp.Test(createReq)
+	createResp, _ := fiberApp.Test(createReq, -1)
 
 	var created map[string]interface{}
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -270,7 +270,7 @@ func TestDeployTokenRotate(t *testing.T) {
 
 	// Rotate
 	rotateReq := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens/"+tokenID+"/rotate", nil)
-	rotateResp, _ := fiberApp.Test(rotateReq)
+	rotateResp, _ := fiberApp.Test(rotateReq, -1)
 
 	if rotateResp.StatusCode != 200 {
 		t.Fatalf("Expected 200, got %d", rotateResp.StatusCode)
@@ -292,7 +292,7 @@ func TestDeployTokenRotateNotFound(t *testing.T) {
 	fiberApp.Post("/api/v1/projects/:projectId/deploy-tokens/:tokenId/rotate", injectUserID("user-1"), handler.Rotate)
 
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens/nonexistent/rotate", nil)
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp.StatusCode)
@@ -310,7 +310,7 @@ func TestDeployTokenCreateDefaultExpiry(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 201 {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -332,7 +332,7 @@ func TestDeployTokenInvalidBody(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/deploy-tokens", bytes.NewBufferString("{bad"))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := fiberApp.Test(req)
+	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected 400 for invalid body, got %d", resp.StatusCode)
 	}
