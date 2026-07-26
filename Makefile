@@ -1,13 +1,18 @@
 # Zenith CI/CD
 # Usage: make help
 
-# --- Config (override via env or make VAR=value) ---
-REGISTRY     ?= registry.stage.freezenith.com/zenith-stage
+# Local overrides (gitignored): real registry, SSH host, and IPs live here.
+-include Makefile.local
+
+# --- Config (override via env, Makefile.local, or make VAR=value) ---
+REGISTRY     ?= registry.example.com/zenith
 VERSION      ?= $(shell grep appVersion infra/helm/zenith/Chart.yaml | awk '{print $$2}' | tr -d '"')
 PLATFORM     ?= linux/amd64
 CHART_DIR    := infra/helm/zenith
 CHART_NAME   := zenith
-STAGING_HOST ?= 77.42.88.149
+STAGING_HOST ?=
+# ssh host/alias used by the manual-deploy-* targets; set the real value in Makefile.local
+STAGING_SSH  ?= staging-host
 
 IMAGES := zenith-api zenith-landing freezenith-site zenith-mc zenith-web zenith-operator
 
@@ -208,7 +213,7 @@ manual-deploy-web: ## Manually build, push, and deploy zenith-web (bypasses act;
 	git add infra/helm/zenith-web/values-staging.yaml
 	git commit -m "chore: bump staging web -- zenith-web:$(MANUAL_TAG)"
 	git pull --rebase origin staging && git push origin staging
-	ssh zen-stage "kubectl rollout restart deployment/zenith-web -n zenith-staging && kubectl rollout status deployment/zenith-web -n zenith-staging"
+	ssh $(STAGING_SSH) "kubectl rollout restart deployment/zenith-web -n zenith-staging && kubectl rollout status deployment/zenith-web -n zenith-staging"
 
 manual-deploy-freezenith-site: ## Manually build, push, and deploy the FreeZenith marketing site (freezenith.com + stage.freezenith.com)
 	docker build --platform linux/amd64 -f apps/freezenith-site/Dockerfile \
@@ -219,7 +224,7 @@ manual-deploy-freezenith-site: ## Manually build, push, and deploy the FreeZenit
 	git add infra/helm/zenith-landing/values-staging.yaml
 	git commit -m "chore: bump landing -- freezenith-site:$(MANUAL_TAG)"
 	git pull --rebase origin staging && git push origin staging
-	ssh zen-stage "kubectl rollout restart deployment/zenith-landing -n zenith-staging && kubectl rollout status deployment/zenith-landing -n zenith-staging"
+	ssh $(STAGING_SSH) "kubectl rollout restart deployment/zenith-landing -n zenith-staging && kubectl rollout status deployment/zenith-landing -n zenith-staging"
 
 manual-deploy-api: ## Manually build, push, and deploy zenith-api (bypasses act; tests run inside Docker)
 	docker build --platform linux/amd64 -f services/api/Dockerfile \
@@ -230,7 +235,7 @@ manual-deploy-api: ## Manually build, push, and deploy zenith-api (bypasses act;
 	git add infra/helm/zenith-api/values-staging.yaml
 	git commit -m "chore: bump staging api -- zenith-api:$(MANUAL_TAG)"
 	git pull --rebase origin staging && git push origin staging
-	ssh zen-stage "kubectl rollout restart deployment/zenith-api -n zenith-staging && kubectl rollout status deployment/zenith-api -n zenith-staging"
+	ssh $(STAGING_SSH) "kubectl rollout restart deployment/zenith-api -n zenith-staging && kubectl rollout status deployment/zenith-api -n zenith-staging"
 
 ## Vault sync
 install-vault-hook:
