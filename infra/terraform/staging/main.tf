@@ -62,19 +62,19 @@ module "dns" {
 
   # Platform services (V1 + V2 additions)
   platform_records = {
-    root       = { name = "stage" }
-    api        = { name = "api.stage" }
-    ms         = { name = "ms.stage" }
-    cloud      = { name = "cloud.stage" }
+    root  = { name = "stage" }
+    api   = { name = "api.stage" }
+    ms    = { name = "ms.stage" }
+    cloud = { name = "cloud.stage" }
     # grafana, prometheus, alerts, loki → moved to Cloudflare Zero Trust Tunnel (staging-k8s)
     # --- V2 additions ---
-    argocd       = { name = "argocd.stage" }
-    keycloak     = { name = "auth.stage" }
-    temporal     = { name = "temporal.stage" }
+    argocd   = { name = "argocd.stage" }
+    keycloak = { name = "auth.stage" }
+    temporal = { name = "temporal.stage" }
     # registry.stage → 65.108.210.253 (internal Harbor, managed manually in Cloudflare)
-    harbor_hub   = { name = "hub.stage" }
-    hubble       = { name = "hubble.stage" }
-    tempo        = { name = "tempo.stage" }
+    harbor_hub = { name = "hub.stage" }
+    hubble     = { name = "hubble.stage" }
+    tempo      = { name = "tempo.stage" }
     # Web dashboard
     app = { name = "app.stage" }
     # Wildcard for customer apps (*.apps.stage.freezenith.com)
