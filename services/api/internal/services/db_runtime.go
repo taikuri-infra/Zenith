@@ -29,10 +29,12 @@ type DBRuntimeService struct {
 	backend DBBackend
 	crypto  *pkgCrypto.EnvCrypto
 	wg      sync.Map // id -> *sync.WaitGroup
+
+	provisionTimeout time.Duration
 }
 
 func NewDBRuntimeService(repo ports.DatabaseRepository, backend DBBackend, crypto *pkgCrypto.EnvCrypto) *DBRuntimeService {
-	return &DBRuntimeService{repo: repo, backend: backend, crypto: crypto}
+	return &DBRuntimeService{repo: repo, backend: backend, crypto: crypto, provisionTimeout: 5 * time.Minute}
 }
 
 // SupportedEngine reports whether the Docker runtime can run engine.
@@ -74,11 +76,16 @@ func (s *DBRuntimeService) Create(ctx context.Context, appID, userID string, in 
 	s.wg.Store(db.ID, wg)
 	go func() {
 		defer wg.Done()
-		bg, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		bg, cancel := context.WithTimeout(context.Background(), s.provisionTimeout)
 		defer cancel()
 		if err := s.provision(bg, db, pw); err != nil {
 			slog.Error("database provisioning failed", "db", db.Name, "engine", db.Engine, "error", err)
-			_ = s.repo.UpdateDatabaseStatus(bg, db.ID, entities.DatabaseStatusError)
+			// bg may already be expired; record the failure on a fresh context.
+			upd, ucancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer ucancel()
+			if uerr := s.repo.UpdateDatabaseStatus(upd, db.ID, entities.DatabaseStatusError); uerr != nil {
+				slog.Error("could not mark database as failed", "db", db.Name, "error", uerr)
+			}
 		}
 	}()
 	return db, nil
@@ -105,6 +112,7 @@ func (s *DBRuntimeService) provision(ctx context.Context, db *entities.UserDatab
 func (s *DBRuntimeService) Wait(id string) {
 	if v, ok := s.wg.Load(id); ok {
 		v.(*sync.WaitGroup).Wait()
+		s.wg.Delete(id)
 	}
 }
 

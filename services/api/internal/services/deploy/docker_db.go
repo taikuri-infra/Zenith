@@ -57,11 +57,11 @@ func specFor(db *entities.UserDatabase, pw string) (dbSpec, error) {
 			test: []string{"CMD-SHELL", "pg_isready -U " + db.DBUser + " -d " + db.DBName + " -h 127.0.0.1"}}, nil
 	case entities.DatabaseEngineMySQL:
 		return dbSpec{image: "mysql:8.4", port: 3306, data: "/var/lib/mysql",
-			env:  []string{"MYSQL_DATABASE=" + db.DBName, "MYSQL_USER=" + db.DBUser, "MYSQL_PASSWORD=" + pw, "MYSQL_ROOT_PASSWORD=" + pw},
+			env:  []string{"MYSQL_DATABASE=" + db.DBName, "MYSQL_USER=" + db.DBUser, "MYSQL_PASSWORD=" + pw, "MYSQL_RANDOM_ROOT_PASSWORD=yes"},
 			test: []string{"CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u" + db.DBUser + " -p$MYSQL_PASSWORD --silent"}}, nil
 	case entities.DatabaseEngineRedis:
 		return dbSpec{image: "redis:7-alpine", port: 6379, data: "/data",
-			cmd:  []string{"redis-server", "--requirepass", pw, "--appendonly", "yes"},
+			cmd:  []string{"sh", "-c", `exec redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes`},
 			test: []string{"CMD-SHELL", "redis-cli -a \"$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"},
 			env:  []string{"REDIS_PASSWORD=" + pw}}, nil
 	}
