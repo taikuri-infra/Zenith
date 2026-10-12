@@ -120,6 +120,14 @@ Open registration (F-02): `/register` is reachable and `POST /auth/register` ret
 
 ## 4. Reboot
 
+**Not run.** Managed databases are metadata-only in Compose (F-16), so there was no database data to check after a reboot. The reboot was also on a shared host. Skipping was proposed to and accepted by the project owner on 2026-10-12.
+
+Still untested until it is re-run after F-16 is fixed:
+- all stack containers come back (`restart: unless-stopped`) after a host reboot;
+- deployed app containers come back and their URL still returns 200 over HTTPS;
+- Traefik keeps its issued certificates (`traefik_letsencrypt` volume);
+- a row written to a managed Postgres survives.
+
 ## 5. Findings
 
 | ID | Severity | Area | Summary | Repro | Issue |

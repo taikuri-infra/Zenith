@@ -39,6 +39,10 @@ export const LANDING_URL = getEnv(
   "https://freezenith.com"
 );
 export const IS_STANDALONE = ZENITH_MODE !== "saas";
-export const LABS_ENABLED = parseLabsFlag(
-  getEnv("NEXT_PUBLIC_ZENITH_LABS", process.env.NEXT_PUBLIC_ZENITH_LABS, "false")
-);
+// Read at call time, not module load: the server has no window.__ENV, so the
+// sidebar reads this after mount (see useNavContext) to avoid a hydration mismatch.
+export function readLabsEnabled(): boolean {
+  return parseLabsFlag(
+    getEnv("NEXT_PUBLIC_ZENITH_LABS", process.env.NEXT_PUBLIC_ZENITH_LABS, "false")
+  );
+}

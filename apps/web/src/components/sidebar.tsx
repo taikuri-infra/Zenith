@@ -37,11 +37,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useProjectContext } from "@/hooks/use-project";
-import { IS_STANDALONE, LABS_ENABLED } from "@/lib/runtime-env";
 import { isNavItemVisible } from "@/lib/nav-visibility";
-
-const navCtx = { standalone: IS_STANDALONE, labs: LABS_ENABLED };
-const visible = (i: { saasOnly?: boolean; labs?: boolean }) => isNavItemVisible(i, navCtx);
+import { useNavContext } from "@/hooks/use-nav-context";
 
 interface NavItem {
   name: string;
@@ -123,6 +120,8 @@ const bottomNav: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const navCtx = useNavContext();
+  const visible = (i: { saasOnly?: boolean; labs?: boolean }) => isNavItemVisible(i, navCtx);
   const { currentProject, projects, setCurrentProject, createProject, deleteProject } = useProjectContext();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [creating, setCreating] = useState(false);
