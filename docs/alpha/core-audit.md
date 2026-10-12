@@ -152,3 +152,38 @@ Still untested until it is re-run after F-16 is fixed:
 | F-18 | critical | domains | Custom domain saved `active` but never routed (no traefik label) | add domain, then curl | #26 |
 | F-19 | critical | logs | App logs need Loki (k8s), returning 500; deploy logs empty; `zen logs` stream resets | §3 row 7 | #27 |
 | F-20 | critical | deploy | Rollback returns 200 then fails silently (`deploy failed`, empty error); image unchanged | `POST /rollback {deployment_id}` | #28 |
+| F-21 | high | deploy | Compose services can't reach each other by compose service name. Network aliases use the prefixed app name (`stack1-db`), not `db` | §6 row 3: `pg_isready -h db` returns no response | |
+| F-22 | medium | deploy | Private compose services still get a public Traefik router and an https URL | §6 row 3: `traefik.enable=true` on `stack1-db` | |
+| F-23 | low | web | The Docs page has SaaS content (sign up at freezenith.com, api.freezenith.com examples) | `/docs` | |
+| F-24 | low | web | Plan leftovers: overview "Plan enterprise" tile, deploy wizard "(Pro plan)" resource label; the Databases header count omits MySQL | `/`, the deploy wizard review step, `/databases` | |
+| F-25 | medium | web/auth | The login page shows the SaaS tagline (Hetzner) and Google/GitHub/Sign up, which don't work in self-host (related to F-02) | `/login` | |
+| F-26 | low | api | Custom domain `tls_ready` never becomes true; database env injected on attach is not visible in the Environment tab (legacy table) | `GET /apps/:id/domains`; the app Environment tab | |
+| F-27 | high | cli | `zen db list/create/connect` are stubs and never call the API | `zen db list` prints "No databases found" while 4 exist | |
+| F-28 | medium | cli | `zen status` apps section returns 404 (legacy project endpoint) and shows "Plan: free" and a cost estimate | `zen status` | |
+
+## 6. Re-run after 2a
+
+- **Date / commit / images:** 2026-10-12, `93626e7`. `zenith-api:alpha-2a` and `zenith-web:alpha-2a` were built locally from that commit, and no image was pushed.
+- **Install:** `install.sh` from the branch (`ZENITH_REPO_URL=/opt/Zenith`, `ZENITH_DOMAIN=zenith.freezenith.com`). It finished in **9 s** with exit 0 and no warnings.
+  - Services: postgres (healthy), storage, api, web and traefik. There is no `storage-init`.
+  - API log: `platform bucket ready`, `database runtime: Docker containers`, `app logs: Docker container logs`. There is no `SECRETS_ENCRYPTION_KEY` warning.
+  - Ports: only `0.0.0.0:80` and `0.0.0.0:443` are public. 3000 and 8080 are bound to `127.0.0.1`. Database containers publish no host ports.
+  - `https://zenith.freezenith.com` serves a Let's Encrypt certificate (issuer YR2), and `curl` without `-k` returns 200.
+- **Harness:** headless Chromium against `https://zenith.freezenith.com`, with **no** stage rerouting, plan override or compose override. Plus curl and `zen` (rebuilt from the branch).
+  - The browser logged no request to any host other than `zenith.freezenith.com`.
+  - Two UI requests (domain add, env apply) were aborted with `ERR_NETWORK_CHANGED`. The browser runs on the Docker host, and recreating a container changes the host's interfaces. Both changes were applied on the server side. This is a harness artifact, not a product finding.
+
+| # | Step | UI | API | CLI | Notes / finding IDs |
+|---|------|----|-----|-----|---------------------|
+| 1 | Admin login | works | works | works | Login goes to the same origin. The sidebar shows the core pages only. |
+| 2 | Deploy image `traefik/whoami:latest` | works | works | works | The `Default` project is created automatically. The app reaches `running`, and `https://whoami-4cb8.zenith.freezenith.com` returns 200 with a valid certificate. |
+| 3 | Compose stack | partial | partial | n/a | Both services run, and `db` gets `POSTGRES_PASSWORD`. A service cannot reach another by its compose name (`db` does not resolve; `stack1-db` does) (F-21). The private `db` service still gets a public Traefik router (F-22). |
+| 4 | Postgres / MySQL / Redis + attach | works | works | mock | All three become `ready` as real containers, healthy on 5432/3306/6379, and purge removes their volumes. App attach injects `DATABASE_URL`. `zen db list/create/connect` are stubs that never call the API (F-27). |
+| 5 | Env `AUDIT=1` + secret `TOKEN` | works | works | n/a | "Restart now" puts both values in the container. The secret is masked in the UI and API and stored encrypted (`enc:v1…`). |
+| 6 | Domain `myapp.freezenith.com` + HTTPS | works | works | n/a | Returns 200 with a valid Let's Encrypt certificate whose SAN covers `myapp.freezenith.com` and the generated host. `tls_ready` stays `false` (F-26). |
+| 7 | Deploy logs and status | works | works | works | App logs come from Docker. Deploy-log history survives (3 lines). The SSE stream stays open, and `zen logs` streams. |
+| 8 | Rollback | works | works | n/a | `zen deploy --image traefik/whoami:v1.10`, then the Rollback button. The container is back on `whoami:latest`. Deployments read superseded/active, and the env vars and domain are kept. |
+| 9 | Data persists | works | works | n/a | A row was written and read back through the injected `DATABASE_URL`. |
+| 10 | Hidden-link check | partial | n/a | n/a | No core page links to a labs or SaaS page. The login page still says "Kubernetes-native PaaS on Hetzner Cloud" and shows Google/GitHub/Sign up (F-25). The Docs page has freezenith.com sign-up and API examples (F-23). Plan leftovers remain (F-24). |
+
+**Result:** the 10 findings that were critical in §5 are fixed. Remaining gaps: F-21 and F-27 (high), F-22, F-25 and F-28 (medium), F-23, F-24 and F-26 (low).
