@@ -153,12 +153,12 @@ Still untested until it is re-run after F-16 is fixed:
 | F-19 | critical | logs | App logs need Loki (k8s), returning 500; deploy logs empty; `zen logs` stream resets | §3 row 7 | #27 |
 | F-20 | critical | deploy | Rollback returns 200 then fails silently (`deploy failed`, empty error); image unchanged | `POST /rollback {deployment_id}` | #28 |
 | F-21 | high | deploy | Compose services can't reach each other by compose service name. Network aliases use the prefixed app name (`stack1-db`), not `db` | §6 row 3: `pg_isready -h db` returns no response | |
-| F-22 | medium | deploy | Private compose services still get a public Traefik router and an https URL | §6 row 3: `traefik.enable=true` on `stack1-db` | |
+| F-22 | medium (fixed in a39b88e) | deploy | Private compose services still get a public Traefik router and an https URL | §6 row 3: `traefik.enable=true` on `stack1-db` | |
 | F-23 | low | web | The Docs page has SaaS content (sign up at freezenith.com, api.freezenith.com examples) | `/docs` | |
 | F-24 | low | web | Plan leftovers: overview "Plan enterprise" tile, deploy wizard "(Pro plan)" resource label; the Databases header count omits MySQL | `/`, the deploy wizard review step, `/databases` | |
 | F-25 | medium | web/auth | The login page shows the SaaS tagline (Hetzner) and Google/GitHub/Sign up, which don't work in self-host (related to F-02) | `/login` | |
 | F-26 | low | api | Custom domain `tls_ready` never becomes true; database env injected on attach is not visible in the Environment tab (legacy table) | `GET /apps/:id/domains`; the app Environment tab | |
-| F-27 | high | cli | `zen db list/create/connect` are stubs and never call the API | `zen db list` prints "No databases found" while 4 exist | |
+| F-27 | high (fixed in a39b88e) | cli | `zen db list/create/connect` are stubs and never call the API | `zen db list` prints "No databases found" while 4 exist | |
 | F-28 | medium | cli | `zen status` apps section returns 404 (legacy project endpoint) and shows "Plan: free" and a cost estimate | `zen status` | |
 
 ## 6. Re-run after 2a
@@ -187,3 +187,14 @@ Still untested until it is re-run after F-16 is fixed:
 | 10 | Hidden-link check | partial | n/a | n/a | No core page links to a labs or SaaS page. The login page still says "Kubernetes-native PaaS on Hetzner Cloud" and shows Google/GitHub/Sign up (F-25). The Docs page has freezenith.com sign-up and API examples (F-23). Plan leftovers remain (F-24). |
 
 **Result:** the 10 findings that were critical in §5 are fixed. Remaining gaps: F-21 and F-27 (high), F-22, F-25 and F-28 (medium), F-23, F-24 and F-26 (low).
+
+### 6.1 After the final-review fixes (`a39b88e`)
+
+Images were rebuilt from `a39b88e` and the stack recreated. Live checks:
+
+- Custom domain ``x`) || PathPrefix(`/`` returns 400 "invalid domain". `zenith.freezenith.com` returns 400 "reserved for Zenith".
+- **F-22 fixed:** a new compose import's private `db` service has no Traefik labels. The public `web` service keeps its router.
+- **Attaching a database redeploys the app:** `REDIS_URL` appeared in the running container with no manual restart. `myapp.freezenith.com` stayed at 200.
+- **F-27 fixed:** `zen db list` lists the 5 real databases.
+- **F-21 still open:** a bare compose-service alias on the shared `zenith_default` network would collide with control-plane names (`postgres`, `storage`) and across projects. The fix needs one network per project and is moved to 2b.
+
