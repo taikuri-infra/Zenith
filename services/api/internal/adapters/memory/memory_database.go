@@ -245,3 +245,36 @@ func generatePassword() string {
 	}
 	return string(b)
 }
+
+func (r *MemoryDatabaseRepository) SetDatabaseProvisioned(_ context.Context, id, host string, port int, secret string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	db, ok := r.databases[id]
+	if !ok {
+		return fmt.Errorf("database not found")
+	}
+	db.Host, db.Port, db.Status = host, port, entities.DatabaseStatusReady
+	r.passwords[id] = secret
+	return nil
+}
+
+func (r *MemoryDatabaseRepository) GetDatabaseSecret(_ context.Context, id string) (string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	s, ok := r.passwords[id]
+	if !ok {
+		return "", fmt.Errorf("database not found")
+	}
+	return s, nil
+}
+
+func (r *MemoryDatabaseRepository) SetDatabasePort(_ context.Context, id string, port int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	db, ok := r.databases[id]
+	if !ok {
+		return fmt.Errorf("database not found")
+	}
+	db.Port = port
+	return nil
+}

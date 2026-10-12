@@ -166,6 +166,9 @@ type DatabaseRepository interface {
 	UpdateDatabaseStatus(ctx context.Context, id string, status entities.DatabaseStatus) error
 	CountDatabasesByUser(ctx context.Context, userID string) (int, error)
 	CountDatabases(ctx context.Context) (int, error)
+	SetDatabaseProvisioned(ctx context.Context, id, host string, port int, secret string) error
+	GetDatabaseSecret(ctx context.Context, id string) (string, error)
+	SetDatabasePort(ctx context.Context, id string, port int) error
 }
 
 // StorageRepository defines per-app storage bucket operations.

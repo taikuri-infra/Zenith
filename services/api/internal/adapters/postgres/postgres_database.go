@@ -243,3 +243,32 @@ func (r *PostgresDatabaseRepository) UpdateDatabaseHost(ctx context.Context, id,
 	}
 	return nil
 }
+
+// SetDatabaseProvisioned records where the database runs and its secret, and marks it ready.
+func (r *PostgresDatabaseRepository) SetDatabaseProvisioned(ctx context.Context, id, host string, port int, secret string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE user_databases SET host = $1, port = $2, password_enc = $3, status = $4, updated_at = $5 WHERE id = $6`,
+		host, port, secret, string(entities.DatabaseStatusReady), time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("set database provisioned: %w", err)
+	}
+	return nil
+}
+
+// GetDatabaseSecret returns the stored secret for a database.
+func (r *PostgresDatabaseRepository) GetDatabaseSecret(ctx context.Context, id string) (string, error) {
+	var s string
+	if err := r.pool.QueryRow(ctx, `SELECT password_enc FROM user_databases WHERE id = $1`, id).Scan(&s); err != nil {
+		return "", fmt.Errorf("get database secret: %w", err)
+	}
+	return s, nil
+}
+
+// SetDatabasePort updates the port of a database.
+func (r *PostgresDatabaseRepository) SetDatabasePort(ctx context.Context, id string, port int) error {
+	_, err := r.pool.Exec(ctx, `UPDATE user_databases SET port = $1, updated_at = $2 WHERE id = $3`, port, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("set database port: %w", err)
+	}
+	return nil
+}

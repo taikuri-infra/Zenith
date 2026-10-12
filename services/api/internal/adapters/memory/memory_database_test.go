@@ -291,3 +291,30 @@ func TestConnectionString(t *testing.T) {
 		t.Errorf("Connection string too short: %s", connStr)
 	}
 }
+
+func TestMemoryDatabase_SetProvisioned(t *testing.T) {
+	ctx := context.Background()
+	repo := NewMemoryDatabaseRepository()
+	db, err := repo.CreateDatabase(ctx, "app-1", "user-1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEngineRedis, Name: "cache"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetDatabaseProvisioned(ctx, db.ID, "zenith-db-abc", 6379, "enc:xyz"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := repo.GetDatabase(ctx, db.ID)
+	if got.Host != "zenith-db-abc" || got.Port != 6379 || got.Status != entities.DatabaseStatusReady {
+		t.Errorf("got %+v", got)
+	}
+	s, err := repo.GetDatabaseSecret(ctx, db.ID)
+	if err != nil || s != "enc:xyz" {
+		t.Errorf("secret = %q, %v", s, err)
+	}
+	if err := repo.SetDatabasePort(ctx, db.ID, 6380); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = repo.GetDatabase(ctx, db.ID)
+	if got.Port != 6380 {
+		t.Errorf("port = %d", got.Port)
+	}
+}
