@@ -20,6 +20,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/validate"
 )
 
 // DockerDeployer runs user apps as plain Docker containers on the host — the
@@ -268,9 +269,17 @@ func (d *DockerDeployer) appHosts(ctx context.Context, app *entities.App) []stri
 		return hosts
 	}
 	for _, cd := range domains {
-		if cd.Status == entities.DomainStatusActive || cd.Status == entities.DomainStatusVerified {
-			hosts = append(hosts, cd.Domain)
+		if cd.Status != entities.DomainStatusActive && cd.Status != entities.DomainStatusVerified {
+			continue
 		}
+		// Defense in depth: the domain handler validates on add, but a row
+		// stored before that (or written elsewhere) must never reach the
+		// Traefik Host rule unvalidated.
+		if !validate.Hostname(cd.Domain) {
+			slog.Warn("docker-deploy: skipping invalid custom domain", "app", app.Name, "domain", cd.Domain)
+			continue
+		}
+		hosts = append(hosts, cd.Domain)
 	}
 	return hosts
 }

@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
@@ -41,7 +42,7 @@ func TestAppHosts(t *testing.T) {
 	}
 
 	want := []string{"web.example.com", "a.example.org", "b.example.org"}
-	if got := d.appHosts(ctx, app); !reflect.DeepEqual(got, want) {
+	if got := sortedCustom(d.appHosts(ctx, app)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("hosts = %v, want %v", got, want)
 	}
 
@@ -52,4 +53,32 @@ func TestAppHosts(t *testing.T) {
 	if got := d.appHosts(ctx, app); !reflect.DeepEqual(got, want) {
 		t.Fatalf("after delete hosts = %v, want %v", got, want)
 	}
+}
+
+func TestAppHostsSkipsInvalidStoredDomain(t *testing.T) {
+	ctx := context.Background()
+	app := &entities.App{ID: "app-1", Name: "web", Subdomain: "web"}
+	d := &DockerDeployer{baseDomain: "example.com"}
+	repo := memory.NewMemoryDomainRepository()
+	d.SetDomainRepo(repo)
+	for _, name := range []string{"x`) || PathPrefix(`/", "ok.example.org"} {
+		cd, err := repo.AddDomain(ctx, app.ID, "user-1", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = repo.UpdateDomainStatus(ctx, cd.ID, entities.DomainStatusActive, false)
+	}
+	want := []string{"web.example.com", "ok.example.org"}
+	if got := d.appHosts(ctx, app); !reflect.DeepEqual(got, want) {
+		t.Fatalf("hosts = %v, want %v", got, want)
+	}
+}
+
+// sortedCustom sorts the custom domains after the generated host; the memory
+// domain repo lists in map order.
+func sortedCustom(hosts []string) []string {
+	if len(hosts) > 1 {
+		sort.Strings(hosts[1:])
+	}
+	return hosts
 }
