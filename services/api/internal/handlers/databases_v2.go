@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -20,6 +22,9 @@ type DatabaseHandlerV2 struct {
 	appRepo ports.AppRepository
 	msRepo  ports.ManagedServiceRepository // merged into ListByUser results
 	rt      *services.DBRuntimeService
+	// redeployer restarts an app after a database is attached so the
+	// injected connection string reaches the running container.
+	redeployer AppRedeployer
 }
 
 // NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
@@ -29,6 +34,9 @@ func NewDatabaseHandlerV2(dbSvc *services.DatabaseService, dbRepo ports.Database
 
 // SetRuntime makes the handler provision real instances (Docker in standalone).
 func (h *DatabaseHandlerV2) SetRuntime(rt *services.DBRuntimeService) { h.rt = rt }
+
+// SetRedeployer makes attaching a database redeploy the app's current image.
+func (h *DatabaseHandlerV2) SetRedeployer(r AppRedeployer) { h.redeployer = r }
 
 // injectWhenReady writes the connection string into the app's env once the
 // database is provisioned. Runs in the background.
@@ -47,8 +55,35 @@ func (h *DatabaseHandlerV2) injectWhenReady(appID string, db *entities.UserDatab
 		}
 		if err := h.appRepo.SetEnvVars(ctx, appID, map[string]string{envKeyForEngine(fresh.Engine): fresh.ConnectionString(pw)}); err != nil {
 			slog.Warn("database runtime: injecting connection string failed", "database", db.ID, "app", appID, "error", err)
+			return
 		}
+		h.redeployApp(ctx, appID)
 	}()
+}
+
+// redeployApp restarts the app on its current image so new env vars apply.
+// An app that has never been deployed has nothing to restart.
+func (h *DatabaseHandlerV2) redeployApp(ctx context.Context, appID string) {
+	if h.redeployer == nil {
+		return
+	}
+	imageTag, err := deploy.CurrentImage(ctx, h.appRepo, appID)
+	if errors.Is(err, deploy.ErrNoImage) {
+		slog.Info("database attached; app not deployed yet, skipping redeploy", "app", appID)
+		return
+	}
+	if err != nil {
+		slog.Warn("database attached; resolving current image failed", "app", appID, "error", err)
+		return
+	}
+	app, err := h.appRepo.GetApp(ctx, appID)
+	if err != nil {
+		slog.Warn("database attached; loading app failed", "app", appID, "error", err)
+		return
+	}
+	if err := h.redeployer.DeployApp(ctx, app, imageTag); err != nil {
+		slog.Warn("database attached; redeploy failed", "app", appID, "error", err)
+	}
 }
 
 // fetchCredentials retrieves the password and connection string for a database.
