@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"context"
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -119,7 +119,7 @@ func (h *MonitoringHandler) StreamLogs(c *fiber.Ctx) error {
 			case entry, ok := <-logCh:
 				if !ok {
 					fmt.Fprintf(w, "event: done\ndata: {}\n\n") //nolint:errcheck
-					w.Flush()                                    //nolint:errcheck
+					w.Flush()                                   //nolint:errcheck
 					return
 				}
 				jsonBytes, _ := json.Marshal(entry)
