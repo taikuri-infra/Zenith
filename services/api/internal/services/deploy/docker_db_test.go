@@ -5,6 +5,7 @@ package deploy
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,5 +47,21 @@ func TestDockerDBBackend_RedisLifecycle(t *testing.T) {
 	}
 	if insp.HostConfig.RestartPolicy.Name != "unless-stopped" {
 		t.Errorf("restart = %q", insp.HostConfig.RestartPolicy.Name)
+	}
+	top, err := cli.ContainerTop(ctx, host, []string{"-o", "pid,user,args"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range top.Processes {
+		if len(p) >= 3 && strings.Contains(p[2], "redis-server") {
+			found = true
+			if p[1] == "root" || p[1] == "0" {
+				t.Errorf("redis-server runs as root: %v", p)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("redis-server process not found: %v", top.Processes)
 	}
 }

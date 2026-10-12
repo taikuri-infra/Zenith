@@ -61,7 +61,7 @@ func specFor(db *entities.UserDatabase, pw string) (dbSpec, error) {
 			test: []string{"CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u" + db.DBUser + " -p$MYSQL_PASSWORD --silent"}}, nil
 	case entities.DatabaseEngineRedis:
 		return dbSpec{image: "redis:7-alpine", port: 6379, data: "/data",
-			cmd:  []string{"sh", "-c", `exec redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes`},
+			cmd:  []string{"sh", "-c", `exec docker-entrypoint.sh redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes`},
 			test: []string{"CMD-SHELL", "redis-cli -a \"$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"},
 			env:  []string{"REDIS_PASSWORD=" + pw}}, nil
 	}
