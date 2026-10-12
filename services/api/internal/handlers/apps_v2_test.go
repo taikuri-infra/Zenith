@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/gofiber/fiber/v2"
 )
@@ -546,6 +548,78 @@ func TestAppCreate_CreatesDefaultProjectWhenNone(t *testing.T) {
 	if resp.StatusCode != 201 {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d: %s", resp.StatusCode, b)
+	}
+	ps, _ := projectRepo.ListProjectsByUser(context.Background(), "user-1")
+	if len(ps) != 1 || ps[0].Name != "Default" {
+		t.Fatalf("projects = %+v, want one named Default", ps)
+	}
+}
+
+// raceConditionProjectRepo wraps a ProjectRepository and simulates a concurrent winner
+// by returning a duplicate error on CreateProject after the inner repo creates it.
+type raceConditionProjectRepo struct {
+	inner *memory.MemoryProjectRepository
+}
+
+func newRaceConditionProjectRepo() *raceConditionProjectRepo {
+	return &raceConditionProjectRepo{
+		inner: memory.NewMemoryProjectRepository(),
+	}
+}
+
+func (r *raceConditionProjectRepo) GetProject(ctx context.Context, id string) (*entities.Project, error) {
+	return r.inner.GetProject(ctx, id)
+}
+
+func (r *raceConditionProjectRepo) GetDefaultProject(ctx context.Context, userID string) (*entities.Project, error) {
+	return r.inner.GetDefaultProject(ctx, userID)
+}
+
+func (r *raceConditionProjectRepo) CreateProject(ctx context.Context, userID, name, slug, description string) (*entities.Project, error) {
+	// First, actually create the project (simulating the concurrent winner)
+	_, _ = r.inner.CreateProject(ctx, userID, name, slug, description)
+	// Then return a duplicate error (simulating the loser hitting the unique constraint)
+	return nil, fmt.Errorf("duplicate project slug")
+}
+
+func (r *raceConditionProjectRepo) ListProjectsByUser(ctx context.Context, userID string) ([]entities.Project, error) {
+	return r.inner.ListProjectsByUser(ctx, userID)
+}
+
+func (r *raceConditionProjectRepo) UpdateProject(ctx context.Context, id string, name, description *string) (*entities.Project, error) {
+	return r.inner.UpdateProject(ctx, id, name, description)
+}
+
+func (r *raceConditionProjectRepo) DeleteProject(ctx context.Context, id string) error {
+	return r.inner.DeleteProject(ctx, id)
+}
+
+func (r *raceConditionProjectRepo) CountProjectsByUser(ctx context.Context, userID string) (int, error) {
+	return r.inner.CountProjectsByUser(ctx, userID)
+}
+
+func (r *raceConditionProjectRepo) SetHarborCredentials(ctx context.Context, id, harborProjectName, robotUser, robotPass string) error {
+	return r.inner.SetHarborCredentials(ctx, id, harborProjectName, robotUser, robotPass)
+}
+
+func (r *raceConditionProjectRepo) UpdateProjectStatus(ctx context.Context, id string, status entities.ProjectStatus) error {
+	return r.inner.UpdateProjectStatus(ctx, id, status)
+}
+
+func TestAppCreate_ConcurrentDefaultProjectCreation(t *testing.T) {
+	appRepo := memory.NewMemoryAppRepository()
+	projectRepo := newRaceConditionProjectRepo()
+	h := handlers.NewAppHandlerV2(appRepo, "example.com", nil, nil)
+	h.SetProjectRepo(projectRepo)
+	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	app.Post("/api/v1/apps", injectUserID("user-1"), h.Create)
+
+	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(`{"name":"whoami","deploy_source":"image","image_url":"traefik/whoami:latest","port":80}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req, -1)
+	if resp.StatusCode != 201 {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d (expected 201): %s", resp.StatusCode, b)
 	}
 	ps, _ := projectRepo.ListProjectsByUser(context.Background(), "user-1")
 	if len(ps) != 1 || ps[0].Name != "Default" {

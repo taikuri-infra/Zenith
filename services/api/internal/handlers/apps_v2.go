@@ -360,9 +360,15 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 			// instead of failing on the project foreign key.
 			np, cErr := h.projectRepo.CreateProject(c.Context(), userID.(string), "Default", "default", "")
 			if cErr != nil {
-				return NewBadRequest("no project: create a project first")
+				// CreateProject failed; if concurrent request won the race, retry GetDefaultProject
+				if dp, retryErr := h.projectRepo.GetDefaultProject(c.Context(), userID.(string)); retryErr == nil && dp != nil {
+					projectID = dp.ID
+				} else {
+					return NewBadRequest("no project: create a project first")
+				}
+			} else {
+				projectID = np.ID
 			}
-			projectID = np.ID
 		}
 	}
 
