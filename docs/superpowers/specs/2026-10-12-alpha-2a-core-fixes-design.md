@@ -67,6 +67,7 @@ The custom-domain dialog tells the user to point an **A record at the server's I
   - The Dockerfile default ARG becomes empty.
   - The stage URL is removed from the self-host build path. `build-images.yml` and `deploy-staging.yml` keep passing their own value explicitly.
 - Ports 3000 and 8080 are no longer published on `0.0.0.0`. They are bound to `127.0.0.1` for local debugging.
+- **Only 80 and 443 are public.** No other host port is opened by the stack, by deployed apps, or by database containers. This is a hard rule.
 
 ## 4. Docker deploy correctness (F-13, F-14, F-17, F-18, F-20)
 
@@ -189,7 +190,7 @@ The re-run is recorded in `docs/alpha/core-audit.md` as a new §6 "Re-run after 
 - **Go:** unit tests per change, using the existing memory repos and fakes. The Docker backends (deploy, db, logs) get tests behind a `docker` build tag that run against the local daemon. The CI job for them is in sub-project 3.
 - **Web:** vitest for `API_BASE_URL` resolution, standalone upsell gating, and the domain dialog text.
 - **Installer:** shellcheck, plus a dry run that renders `.env` and `traefik.yml` for both modes into a temp dir.
-- **Acceptance:** §8 re-run on a fresh install on the audit host, with images built from this branch (pushed as `ghcr.io/taikuri-infra/zenith-{api,web}:alpha-2a`, or loaded locally if push is not approved).
+- **Acceptance:** §8 re-run on a fresh install on the audit host, using `ZENITH_DOMAIN=zenith.freezenith.com` (A + wildcard records exist) and `myapp.freezenith.com` as the custom domain for step 6, with images built from this branch (pushed as `ghcr.io/taikuri-infra/zenith-{api,web}:alpha-2a`, or loaded locally if push is not approved).
 
 ## 10. Risks
 
