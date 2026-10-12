@@ -230,16 +230,43 @@ type Database struct {
 	Port             int    `json:"port"`
 }
 
+// resolveProjectID maps a project ID, name, display name or slug to its ID by
+// listing projects. It returns "" when nothing matches.
+func (c *Client) resolveProjectID(ref string) string {
+	projects, err := c.ListProjects()
+	if err != nil {
+		return ""
+	}
+	for _, p := range projects {
+		if p.ID == ref {
+			return p.ID
+		}
+	}
+	for _, p := range projects {
+		if p.Name == ref || p.DisplayName == ref {
+			return p.ID
+		}
+	}
+	return ""
+}
+
 func (c *Client) ListDatabases(projectID string) ([]Database, error) {
+	id := c.resolveProjectID(projectID)
+	if id == "" {
+		return []Database{}, nil
+	}
 	var dbs []Database
-	if err := c.do("GET", "/api/v1/databases?project_id="+url.QueryEscape(projectID), nil, &dbs); err != nil {
+	if err := c.do("GET", "/api/v1/databases?project_id="+url.QueryEscape(id), nil, &dbs); err != nil {
 		return nil, err
 	}
 	return dbs, nil
 }
 
 func (c *Client) CreateDatabase(projectID string, db *Database) (*Database, error) {
-	req := map[string]any{"name": db.Name, "engine": db.Engine, "project_id": projectID}
+	req := map[string]any{"name": db.Name, "engine": db.Engine}
+	if id := c.resolveProjectID(projectID); id != "" {
+		req["project_id"] = id
+	}
 	var result Database
 	if err := c.do("POST", "/api/v1/databases", req, &result); err != nil {
 		return nil, err

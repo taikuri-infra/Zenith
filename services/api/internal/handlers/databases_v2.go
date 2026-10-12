@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
@@ -41,9 +42,12 @@ func (h *DatabaseHandlerV2) injectWhenReady(appID string, db *entities.UserDatab
 		}
 		pw, err := h.rt.Password(ctx, fresh)
 		if err != nil {
+			slog.Warn("database runtime: reading password failed", "database", db.ID, "error", err)
 			return
 		}
-		_ = h.appRepo.SetEnvVars(ctx, appID, map[string]string{envKeyForEngine(fresh.Engine): fresh.ConnectionString(pw)})
+		if err := h.appRepo.SetEnvVars(ctx, appID, map[string]string{envKeyForEngine(fresh.Engine): fresh.ConnectionString(pw)}); err != nil {
+			slog.Warn("database runtime: injecting connection string failed", "database", db.ID, "app", appID, "error", err)
+		}
 	}()
 }
 
@@ -172,9 +176,10 @@ func (h *DatabaseHandlerV2) List(c *fiber.Ctx) error {
 // GET /api/v1/apps/:appId/databases/:dbId
 func (h *DatabaseHandlerV2) Get(c *fiber.Ctx) error {
 	dbID := c.Params("dbId")
+	userID, _ := c.Locals("user_id").(string)
 
 	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
-	if err != nil {
+	if err != nil || db.AppID != c.Params("appId") || db.UserID != userID {
 		return fiber.NewError(fiber.StatusNotFound, "database not found")
 	}
 
@@ -189,11 +194,19 @@ func (h *DatabaseHandlerV2) Delete(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
 	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
-	if err != nil {
+	if err != nil || db.AppID != c.Params("appId") {
 		return fiber.NewError(fiber.StatusNotFound, "database not found")
 	}
 	if db.UserID != userID {
 		return fiber.NewError(fiber.StatusForbidden, "not your database")
+	}
+
+	if h.rt != nil {
+		if err := h.rt.Delete(c.Context(), db, c.QueryBool("purge", false)); err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		_ = h.appRepo.DeleteEnvVar(c.Context(), db.AppID, envKeyForEngine(db.Engine))
+		return c.JSON(fiber.Map{"message": "database deleted"})
 	}
 
 	// Use DatabaseService for real cleanup if available

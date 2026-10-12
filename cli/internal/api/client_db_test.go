@@ -11,6 +11,10 @@ func TestDatabasesUseStandaloneEndpoints(t *testing.T) {
 	var gotPath, gotQuery string
 	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/projects" {
+			_, _ = w.Write([]byte(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
+			return
+		}
 		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
 		if r.Method == "POST" {
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -22,11 +26,39 @@ func TestDatabasesUseStandaloneEndpoints(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL, "tok")
 
-	dbs, err := c.ListDatabases("proj-1")
-	if err != nil || len(dbs) != 1 || gotPath != "/api/v1/databases" || gotQuery != "project_id=proj-1" {
+	dbs, err := c.ListDatabases("default")
+	if err != nil || len(dbs) != 1 || gotPath != "/api/v1/databases" || gotQuery != "project_id=proj-uuid-1" {
 		t.Fatalf("list: %v %v path=%s q=%s", dbs, err, gotPath, gotQuery)
 	}
-	if _, err := c.CreateDatabase("proj-1", &Database{Name: "pg", Engine: "postgresql"}); err != nil || gotPath != "/api/v1/databases" || body["project_id"] != "proj-1" {
+	if _, err := c.CreateDatabase("default", &Database{Name: "pg", Engine: "postgresql"}); err != nil || gotPath != "/api/v1/databases" || body["project_id"] != "proj-uuid-1" {
 		t.Fatalf("create: %v path=%s body=%v", err, gotPath, body)
+	}
+}
+
+func TestDatabasesUnresolvableProject(t *testing.T) {
+	var body map[string]any
+	dbCalls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/projects" {
+			_, _ = w.Write([]byte(`{"items":[]}`))
+			return
+		}
+		dbCalls++
+		if r.Method == "POST" {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		_, _ = w.Write([]byte(`{"name":"pg"}`))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, "tok")
+	dbs, err := c.ListDatabases("nope")
+	if err != nil || len(dbs) != 0 || dbCalls != 0 {
+		t.Fatalf("list: %v %v calls=%d", dbs, err, dbCalls)
+	}
+	if _, err := c.CreateDatabase("nope", &Database{Name: "pg", Engine: "postgresql"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := body["project_id"]; has {
+		t.Errorf("project_id must be omitted, got %v", body)
 	}
 }
