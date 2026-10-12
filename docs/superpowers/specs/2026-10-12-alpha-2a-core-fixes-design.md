@@ -19,7 +19,7 @@ Sub-project 2 in the parent spec is split in two:
 On a fresh Ubuntu box, `install.sh` followed by the audit's 10-step scenario passes every UI/API/CLI cell marked in §8, with:
 
 - no `ZENITH_LABS`, no plan override, no harness rerouting, no compose override;
-- the dashboard reachable at `http://<server-ip>` with no domain, and at `https://<ZENITH_DOMAIN>` with a publicly trusted certificate once a domain is set;
+- the dashboard reachable at `https://<ZENITH_DOMAIN>` with a publicly trusted certificate, where `ZENITH_DOMAIN` defaults to `<server-ip>.sslip.io`;
 - no request from the browser to any `freezenith.com` host.
 
 ### Out of scope
@@ -52,18 +52,14 @@ The custom-domain dialog tells the user to point an **A record at the server's I
 
 **Design.**
 
-- **Traefik is always on.** Drop `profiles: ["tls"]`. Two modes, chosen by the installer and written to `traefik/traefik.yml`:
-  - **No domain (default):**
-    - The `web` entrypoint (`:80`) serves HTTP.
-    - Routers match any host: `PathPrefix(/api)` goes to the API, everything else to the web.
-    - App routes are `<sub>.<server-ip>.sslip.io` over HTTP. This is so apps are reachable with no DNS. The base domain falls back to `<ip>.sslip.io` when `ZENITH_DOMAIN` is empty.
-  - **Domain set (`ZENITH_DOMAIN`):**
-    - `:80` redirects to `:443`.
-    - The dashboard and API routers carry `tls.certresolver=le`.
-    - Apps get `<sub>.<ZENITH_DOMAIN>` with `le`.
-    - The ACME email comes from `ACME_EMAIL`. Empty is allowed.
+- **Traefik is always on.** Drop `profiles: ["tls"]`. There is **one mode: HTTPS with Let's Encrypt.**
+  - `ZENITH_DOMAIN` is always set. If the user has no domain, the installer sets it to `<public-ip>.sslip.io`. sslip.io is on the Public Suffix List, so each IP has its own Let's Encrypt rate limit.
+  - Apps get `<sub>.<ZENITH_DOMAIN>`, so DNS needs `ZENITH_DOMAIN` and `*.ZENITH_DOMAIN`. With sslip.io both already resolve.
+  - **Every TLS router names `tls.certresolver=le` explicitly.** In Traefik v3 a router that sets `tls=true` without a resolver drops the entrypoint's default resolver, which is the root cause of F-12. This applies to the dashboard, the API and each deployed app.
+  - The ACME email stays optional (empty is allowed).
+  - `zen install`'s self-signed mode, which defines no `le` resolver, is out of 2a scope. It keeps working with Traefik's default certificate plus an error log line about the missing resolver.
 - **Same-origin API.** The web calls the API at `window.location.origin` by default:
-  - `API_BASE_URL` resolves at call time, not module load. The order is: runtime `window.__ENV.NEXT_PUBLIC_API_URL` if non-empty, then `window.location.origin` in the browser, then the build-time value on the server.
+  - `API_BASE_URL` resolves at call time, not module load. The order is: runtime `window.__ENV.NEXT_PUBLIC_API_URL` if non-empty, then the build-time value if non-empty, then `window.location.origin` in the browser, then `http://localhost:8080` on the server.
   - The Dockerfile default ARG becomes empty.
   - The stage URL is removed from the self-host build path. `build-images.yml` and `deploy-staging.yml` keep passing their own value explicitly.
 - Ports 3000 and 8080 are no longer published on `0.0.0.0`. They are bound to `127.0.0.1` for local debugging.
@@ -83,22 +79,22 @@ The custom-domain dialog tells the user to point an **A record at the server's I
 
 **4.3 Env vars: one table.**
 - `app_env_vars_v2` is the single source.
-- `appRepo.SetEnvVars`, used by app create and compose deploy, writes to v2 with `environment_id = NULL` (the app-wide default).
-- `DockerDeployer.resolveEnvVars` merges two scopes, with environment-scoped vars overriding:
-  - app-wide (`environment_id IS NULL`);
-  - the deploy's environment.
+- `DockerDeployer.resolveEnvVars` merges three sources, later ones overriding earlier:
+  1. legacy `app_env_vars`, written by app create, compose import and database attach;
+  2. v2 app-wide (`environment_id IS NULL`), written by the Environment tab;
+  3. v2 scoped to the app's environment.
 - Secrets are decrypted with the env crypto when set.
-- The legacy table is still read when v2 is empty, for existing installs; 2b migrates it.
+- Reading both tables avoids changing every writer in 2a. 2b moves the writers to v2 and drops the legacy read.
 
 **4.4 Apply and restart.**
 - `env-v2/apply` looks for the latest **deployment**, not release.
-- It redeploys through the pipeline, so the same `deploy.Backend` (`DockerDeployer` in standalone) is used.
+- It redeploys through the runtime `deploy.Backend` (`DockerDeployer` in standalone), synchronously.
 - `SetRestarter` and the domain handler get the runtime `deploy.Backend`, not the k8s `Deployer`.
 
 **4.5 Custom domains.**
 - `DockerDeployer` gets a domain lister. `proxyLabels` adds every active custom domain of the app to the Host rule.
-- In domain mode each router carries `tls.certresolver=le`.
-- Adding or removing a domain triggers a redeploy of the current image through the pipeline. This recreates the container with new labels.
+- Each app router carries `tls.certresolver=le`.
+- Adding or removing a domain redeploys the current image through the runtime backend. This recreates the container with new labels.
 
 **4.6 Project required.**
 - On first login in standalone, the API creates a project named `default` if the user has none.
@@ -140,7 +136,7 @@ type Credentials struct{ Host string; Port int; User, Password, DBName string }
 ## 6. Logs on Docker (F-10, F-19)
 
 ```go
-// internal/services/logruntime (new)
+// internal/services (MonitoringService gets an optional AppLogSource; the Docker implementation lives in internal/services/deploy next to the deployer)
 type Backend interface {
     Tail(ctx context.Context, app *entities.App, since time.Time, limit int) ([]LogLine, error)
     Stream(ctx context.Context, app *entities.App, since time.Time) (<-chan LogLine, error)
@@ -161,9 +157,9 @@ type Backend interface {
 - **Remove `storage-init` and `minio/mc`.** On startup the API ensures the platform bucket exists (`HeadBucket`, then `CreateBucket`) with retries until storage is ready. The API no longer depends on a one-shot job.
 - `install.sh` generates `SECRETS_ENCRYPTION_KEY` (64 hex) and `S3_ACCESS_KEY`. The compose file passes them to the API.
 - `install.sh` detects the public IP and writes the Traefik config:
-  - no domain: HTTP mode;
-  - `ZENITH_DOMAIN` set: domain mode with `le`.
-- It prints `http://<ip>` or `https://<domain>`, not `localhost`.
+  - if `ZENITH_DOMAIN` is not given, it writes `ZENITH_DOMAIN=<ip>.sslip.io`;
+  - the shipped `traefik/traefik.yml` (HTTP→HTTPS redirect, `le` resolver) is used as is.
+- It prints `https://<ZENITH_DOMAIN>`, not `localhost`.
 - **Compose env (F-15):** with §4.3 in place, `environment:` from an imported compose file reaches the container. This is covered by a test on the compose → app → container env path.
 
 ## 8. Acceptance: the audit scenario, re-run
