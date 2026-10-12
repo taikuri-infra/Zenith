@@ -23,7 +23,7 @@ WORKDIR /app
 
 # NEXT_PUBLIC_* set at build time as defaults; overridden at runtime by entrypoint.sh
 ARG NEXT_PUBLIC_DEMO_MODE=false
-ARG NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com
+ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_ZENITH_MODE=standalone
 ARG NEXT_PUBLIC_LANDING_URL=https://freezenith.com
 ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE
