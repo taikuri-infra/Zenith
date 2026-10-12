@@ -21,13 +21,14 @@ type DockerLogSource struct{ cli *client.Client }
 
 func NewDockerLogSource(cli *client.Client) *DockerLogSource { return &DockerLogSource{cli: cli} }
 
-func appContainer(app *entities.App) string { return "zenith-app-" + sanitizeName(app.Subdomain) }
-
 func (s *DockerLogSource) open(ctx context.Context, app *entities.App, opts container.LogsOptions) (io.ReadCloser, error) {
 	opts.ShowStdout, opts.ShowStderr, opts.Timestamps = true, true, true
-	rc, err := s.cli.ContainerLogs(ctx, appContainer(app), opts)
+	rc, err := s.cli.ContainerLogs(ctx, appContainerName(app), opts)
 	if err != nil {
-		return nil, fmt.Errorf("container logs %s: %w", appContainer(app), err)
+		if client.IsErrNotFound(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("container logs %s: %w", appContainerName(app), err)
 	}
 	pr, pw := io.Pipe()
 	go func() {
@@ -49,10 +50,13 @@ func parseDockerLine(line string) dto.MonitoringLogEntry {
 func (s *DockerLogSource) Tail(ctx context.Context, app *entities.App, since time.Duration, limit int) ([]dto.MonitoringLogEntry, error) {
 	r, err := s.open(ctx, app, container.LogsOptions{Since: time.Now().Add(-since).Format(time.RFC3339), Tail: fmt.Sprintf("%d", limit)})
 	if err != nil {
+		if client.IsErrNotFound(err) {
+			return []dto.MonitoringLogEntry{}, nil
+		}
 		return nil, err
 	}
 	defer r.Close()
-	var out []dto.MonitoringLogEntry
+	out := []dto.MonitoringLogEntry{}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {

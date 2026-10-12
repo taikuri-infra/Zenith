@@ -72,7 +72,11 @@ func (d *DockerDeployer) SetEnvCrypto(c *pkgCrypto.EnvCrypto) { d.envCrypto = c 
 func (d *DockerDeployer) SetEnvVarRepo(repo ports.EnvVarRepository) { d.envVarRepo = repo }
 
 // containerName is the deterministic name for an app's container.
-func (d *DockerDeployer) containerName(app *entities.App) string {
+func (d *DockerDeployer) containerName(app *entities.App) string { return appContainerName(app) }
+
+// appContainerName is the deterministic container name for an app (shared by
+// the deployer and the log source).
+func appContainerName(app *entities.App) string {
 	return "zenith-app-" + sanitizeName(app.Subdomain)
 }
 
