@@ -190,6 +190,14 @@ func main() {
 	docs.RegisterRoutes(app)
 	provisioner, autoscaler, temporalW, tokenBlacklist, eventBus, redisClient := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, appRepo, pool)
 
+	if os.Getenv("ZENITH_DUMP_ROUTES") == "1" {
+		if err := dumpRoutes(app, os.Stdout); err != nil {
+			slog.Error("dump routes", "error", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	// Start cluster sync if provisioner is available
 	if provisioner != nil {
 		provisioner.StartSync(30 * time.Second)
