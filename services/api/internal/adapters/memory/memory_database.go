@@ -105,7 +105,10 @@ func (r *MemoryDatabaseRepository) CreateDatabase(_ context.Context, appID, user
 	r.passwords[id] = password
 	r.mu.Unlock()
 
-	return db, nil
+	// Return a copy: the stored row is mutated under r.mu by later calls
+	// (e.g. background provisioning), so callers must not share it.
+	out := *db
+	return &out, nil
 }
 
 func (r *MemoryDatabaseRepository) GetDatabase(_ context.Context, id string) (*entities.UserDatabase, error) {
@@ -116,7 +119,8 @@ func (r *MemoryDatabaseRepository) GetDatabase(_ context.Context, id string) (*e
 	if !ok {
 		return nil, fmt.Errorf("database not found: %s", id)
 	}
-	return db, nil
+	out := *db
+	return &out, nil
 }
 
 func (r *MemoryDatabaseRepository) ListDatabasesByApp(_ context.Context, appID string) ([]entities.UserDatabase, error) {
