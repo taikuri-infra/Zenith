@@ -1316,7 +1316,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
             {state.category !== "background" && (
               <>
                 <span className="text-neutral-400">URL</span>
-                <span className="text-white font-mono text-xs">{nameCheckUrl || `https://${state.appName}.apps.stage.freezenith.com`}</span>
+                <span className="text-white font-mono text-xs">{nameCheckUrl || "Assigned on deploy"}</span>
               </>
             )}
             {state.category !== "background" && (

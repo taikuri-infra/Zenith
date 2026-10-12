@@ -108,7 +108,7 @@ export default function DocsPage() {
             />
             <p>
               Zenith auto-detects your framework (Next.js, Go, Flask, etc.) and assigns a subdomain like{" "}
-              <code className="rounded bg-surface-200 px-1.5 py-0.5 text-accent-400">my-next-app.freezenith.com</code>.
+              <code className="rounded bg-surface-200 px-1.5 py-0.5 text-accent-400">my-next-app.your-domain.com</code>.
             </p>
           </Step>
 
