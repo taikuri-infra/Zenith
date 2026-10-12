@@ -265,3 +265,5 @@ func TestRequireAppOwnershipRepoError(t *testing.T) {
 		t.Errorf("Expected 404 for repo error, got %d", resp.StatusCode)
 	}
 }
+
+func (m *mockAppRepository) SetDeploymentImage(_ context.Context, _, _ string) error { return nil }

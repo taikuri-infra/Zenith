@@ -2,12 +2,14 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
 	"github.com/gofiber/fiber/v2"
 )
@@ -374,5 +376,30 @@ func TestEnvVarApplyNoRestarter(t *testing.T) {
 	// Should fail because no restarter is configured
 	if resp.StatusCode != 500 {
 		t.Errorf("Expected 500 (no restarter), got %d", resp.StatusCode)
+	}
+}
+
+type recordingRestarter struct{ image string }
+
+func (r *recordingRestarter) DeployApp(_ context.Context, _ *entities.App, image string) error {
+	r.image = image
+	return nil
+}
+
+func TestEnvVarApply_UsesActiveDeployment(t *testing.T) {
+	fiberApp, handler, appRepo, _ := setupEnvVarTest()
+	appID := createAppForEnvVarTest(t, appRepo)
+	d, _ := appRepo.CreateDeployment(context.Background(), appID, "docker.io/traefik/whoami:latest")
+	_ = appRepo.UpdateDeploymentStatus(context.Background(), d.ID, entities.DeployStatusActive, "", "")
+	rec := &recordingRestarter{}
+	handler.SetRestarter(rec)
+	fiberApp.Post("/api/v1/apps/:appId/env-v2/apply", injectUserID("user-1"), handler.Apply)
+
+	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/env-v2/apply", nil), -1)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if rec.image != "docker.io/traefik/whoami:latest" {
+		t.Errorf("redeployed image = %q", rec.image)
 	}
 }

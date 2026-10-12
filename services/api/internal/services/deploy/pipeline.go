@@ -109,15 +109,19 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 		}
 
 		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusDeploying, "", "")
+		if err := p.appRepo.SetDeploymentImage(ctx, deployment.ID, image); err != nil {
+			slog.Warn("record deployment image failed", "deployment_id", deployment.ID, "error", err)
+		}
 
 		deployingStatus := entities.AppStatusDeploying
 		p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &deployingStatus})
 
 		if p.deployer != nil {
+			p.emitLog(deployment.ID, "info", "Pulling image and starting container...")
 			if err := p.deployer.DeployApp(ctx, app, image); err != nil {
 				p.emitLog(deployment.ID, "error", fmt.Sprintf("Deploy failed: %v", err))
 				p.emitEvent(EventDeployFailed, app, deployment, image, fmt.Sprintf("Deploy failed: %v", err))
-				p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusFailed, "", err.Error())
+				p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusFailed, p.buildLog(deployment.ID), err.Error())
 				failedStatus := entities.AppStatusFailed
 				p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &failedStatus})
 				if p.webhookSvc != nil {
@@ -133,13 +137,14 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 				return
 			}
 		} else {
-			// No deployer — mark as running directly (dev mode)
+			// No deployer — mark as running directly (dev mode). Real backends
+			// set their own status (docker: running, k8s: running/sleeping).
 			runningStatus := entities.AppStatusRunning
 			p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &runningStatus})
 		}
 
-		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusActive, "", "")
 		p.emitLog(deployment.ID, "deploy", fmt.Sprintf("✓ %s is live — %s", app.Name, image))
+		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusActive, p.buildLog(deployment.ID), "")
 		p.emitEvent(EventDeployComplete, app, deployment, image, fmt.Sprintf("%s is live", app.Name))
 
 		// Fire webhook delivery for deploy.success
@@ -209,6 +214,19 @@ func (p *Pipeline) RunningCount() int {
 // LogHub returns the pipeline's log hub for WebSocket access.
 func (p *Pipeline) LogHub() *LogHub {
 	return p.logHub
+}
+
+// buildLog renders the deployment's log history for the deployments.build_log
+// column: one "RFC3339\tlevel\tmessage" line per entry.
+func (p *Pipeline) buildLog(deploymentID string) string {
+	if p.logHub == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, e := range p.logHub.History(deploymentID) {
+		fmt.Fprintf(&b, "%s\t%s\t%s\n", e.Timestamp.UTC().Format(time.RFC3339), e.Level, strings.ReplaceAll(e.Message, "\n", " "))
+	}
+	return b.String()
 }
 
 // emitLog publishes a log entry if a LogHub is configured.
@@ -349,16 +367,26 @@ func (p *Pipeline) emitEvent(eventType EventType, app *entities.App, deployment 
 			Subject:   subject,
 			UserID:    app.UserID,
 			Timestamp: time.Now(),
-			Data: map[string]interface{}{
-				"app_id":        app.ID,
-				"app_name":      app.Name,
-				"deployment_id": deployment.ID,
-				"image":         image,
-				"message":       message,
-			},
+			Data:      deployEventData(app, deployment, image, message, eventType),
 		}
 		if err := p.eventBus.Publish(context.Background(), evt); err != nil {
 			slog.Error("failed to publish event to bus", "error", err)
 		}
 	}
+}
+
+// deployEventData is the payload of a deploy platform event. Failure events
+// carry "error" so notification consumers can log the cause.
+func deployEventData(app *entities.App, deployment *entities.Deployment, image, message string, eventType EventType) map[string]interface{} {
+	data := map[string]interface{}{
+		"app_id":        app.ID,
+		"app_name":      app.Name,
+		"deployment_id": deployment.ID,
+		"image":         image,
+		"message":       message,
+	}
+	if eventType == EventDeployFailed {
+		data["error"] = message
+	}
+	return data
 }

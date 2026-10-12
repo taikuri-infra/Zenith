@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -103,7 +104,11 @@ func (h *MonitoringHandler) StreamLogs(c *fiber.Ctx) error {
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		logCh := make(chan dto.MonitoringLogEntry, 100)
 
-		ctx := c.Context()
+		// fasthttp's RequestCtx only finishes at server shutdown, so own the
+		// lifetime here: cancel on any exit (e.g. write error = client gone)
+		// so the log follower stops.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		go func() {
 			defer close(logCh)
 			_ = h.svc.StreamLogs(ctx, userID, appID, logCh)
@@ -114,16 +119,24 @@ func (h *MonitoringHandler) StreamLogs(c *fiber.Ctx) error {
 			case entry, ok := <-logCh:
 				if !ok {
 					fmt.Fprintf(w, "event: done\ndata: {}\n\n") //nolint:errcheck
-					w.Flush()                                    //nolint:errcheck
+					w.Flush()                                   //nolint:errcheck
 					return
 				}
 				jsonBytes, _ := json.Marshal(entry)
-				fmt.Fprintf(w, "data: %s\n\n", jsonBytes) //nolint:errcheck
-				w.Flush()                                  //nolint:errcheck
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", jsonBytes); err != nil {
+					return
+				}
+				if err := w.Flush(); err != nil {
+					return
+				}
 
 			case <-time.After(30 * time.Second):
-				fmt.Fprintf(w, ": keepalive\n\n") //nolint:errcheck
-				w.Flush()                          //nolint:errcheck
+				if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+					return
+				}
+				if err := w.Flush(); err != nil {
+					return
+				}
 			}
 		}
 	})

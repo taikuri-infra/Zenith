@@ -135,6 +135,7 @@ type AppRepository interface {
 	GetDeployment(ctx context.Context, id string) (*entities.Deployment, error)
 	ListDeployments(ctx context.Context, appID string, limit int) ([]entities.Deployment, error)
 	UpdateDeploymentStatus(ctx context.Context, id string, status entities.DeploymentStatus, buildLog, errMsg string) error
+	SetDeploymentImage(ctx context.Context, id, image string) error
 	GetActiveDeployment(ctx context.Context, appID string) (*entities.Deployment, error)
 
 	// Env Vars
@@ -165,6 +166,9 @@ type DatabaseRepository interface {
 	UpdateDatabaseStatus(ctx context.Context, id string, status entities.DatabaseStatus) error
 	CountDatabasesByUser(ctx context.Context, userID string) (int, error)
 	CountDatabases(ctx context.Context) (int, error)
+	SetDatabaseProvisioned(ctx context.Context, id, host string, port int, secret string) error
+	GetDatabaseSecret(ctx context.Context, id string) (string, error)
+	SetDatabasePort(ctx context.Context, id string, port int) error
 }
 
 // StorageRepository defines per-app storage bucket operations.

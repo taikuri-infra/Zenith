@@ -37,13 +37,14 @@ import {
   Gift,
 } from "lucide-react";
 import { ReferralCard } from "@/components/referral-card";
+import { SHOW_PLANS } from "@/lib/edition";
 
 type SettingsTab = "api-keys" | "sessions" | "mfa" | "webhooks" | "security" | "referral" | "infrastructure" | "general";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("api-keys");
 
-  const tabs: { key: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  const allTabs: { key: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { key: "api-keys", label: "API Keys", icon: KeyRound },
     { key: "mfa", label: "MFA", icon: ShieldCheck },
     { key: "webhooks", label: "Webhooks", icon: Webhook },
@@ -53,6 +54,7 @@ export default function SettingsPage() {
     { key: "infrastructure", label: "Infra", icon: Server },
     { key: "general", label: "General", icon: Settings },
   ];
+  const tabs = allTabs.filter((t) => SHOW_PLANS || t.key !== "referral");
 
   return (
     <Shell>
@@ -394,7 +396,7 @@ function MFATab() {
   return (
     <div className="space-y-4">
       <p className="text-xs text-neutral-500">
-        Two-factor authentication adds an extra layer of security. Requires Pro plan or higher.
+        Two-factor authentication adds an extra layer of security.{SHOW_PLANS && " Requires Pro plan or higher."}
       </p>
 
       {/* Enrollment flow */}
@@ -635,7 +637,7 @@ function WebhooksTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-neutral-500">
-          Receive HTTP callbacks when events happen. Requires Pro plan or higher.
+          Receive HTTP callbacks when events happen.{SHOW_PLANS && " Requires Pro plan or higher."}
         </p>
         <button
           onClick={() => setShowCreate(true)}

@@ -1,4 +1,5 @@
 "use client";
+import { SHOW_PLANS, customDomainInstruction } from "@/lib/edition";
 
 import { Shell } from "@/components/shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -1768,10 +1769,10 @@ function DomainsTab({ appId }: { appId: string }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-neutral-500">
-            Custom domains for your app. Add a CNAME record pointing to your app&apos;s subdomain.
+            {SHOW_PLANS ? "Custom domains for your app. Add a CNAME record pointing to your app's subdomain." : "Custom domains for your app. Point your domain at this server with an A record."}
           </p>
           <p className="text-xs text-neutral-600 mt-1">
-            Requires <span className="text-amber-400">Pro</span> plan or higher.
+            {SHOW_PLANS && <>Requires <span className="text-amber-400">Pro</span> plan or higher.</>}
           </p>
         </div>
         <button
@@ -1787,7 +1788,11 @@ function DomainsTab({ appId }: { appId: string }) {
         <div className="rounded-lg border border-border bg-surface-100 p-4">
           <h3 className="mb-2 text-sm font-medium text-neutral-400">Add Custom Domain</h3>
           <p className="mb-3 text-xs text-neutral-600">
-            First, add a CNAME record: <code className="text-neutral-400">your-domain.com → {appId}.freezenith.com</code>
+            {SHOW_PLANS ? (
+              <>First, add a CNAME record: <code className="text-neutral-400">your-domain.com → {appId}.freezenith.com</code></>
+            ) : (
+              customDomainInstruction()
+            )}
           </p>
           <div className="flex items-end gap-3">
             <div className="flex-1">

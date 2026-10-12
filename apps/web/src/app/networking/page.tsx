@@ -1,4 +1,5 @@
 "use client";
+import { appHost } from "@/lib/edition";
 
 import { Shell } from "@/components/shell";
 import { Modal } from "@/components/modal";
@@ -32,7 +33,7 @@ export default function NetworkingPage() {
       const appDomains: Domain[] = apps
         .filter((a) => a.subdomain && a.status !== "deleted")
         .map((a) => ({
-          domain: `${a.subdomain}.apps.stage.freezenith.com`,
+          domain: appHost(a),
           target: `${a.name}:${a.port || 8080}`,
           ssl: "Active",
           status: a.status === "running" ? "active" : a.status === "deploying" ? "pending" : a.status,

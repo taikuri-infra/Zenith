@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Rocket, Globe, Database, PartyPopper, ChevronRight, ChevronLeft } from "lucide-react";
 import { getApi } from "@/lib/get-api";
 import Link from "next/link";
+import { SHOW_PLANS } from "@/lib/edition";
 
 interface OnboardingWizardProps {
   userName: string;
@@ -147,17 +148,19 @@ export function OnboardingWizard({ userName, onComplete, onDismiss }: Onboarding
             <div className="text-center space-y-4">
               <Database className="mx-auto h-12 w-12 text-purple-400" />
               <h2 className="text-xl font-semibold text-white">Connect a Domain</h2>
-              <p className="text-sm text-neutral-400">Your app is available at a free Zenith subdomain. Upgrade to Pro for custom domains.</p>
+              <p className="text-sm text-neutral-400">{SHOW_PLANS ? "Your app is available at a free Zenith subdomain. Upgrade to Pro for custom domains." : "Your app already has its own subdomain. You can add your own domain from the app's Domains tab."}</p>
               <div className="mt-4 rounded-lg border border-border bg-surface-100 px-4 py-3">
                 <p className="text-xs text-neutral-500">Your app URL</p>
                 <p className="text-sm font-mono text-accent-400 mt-1">your-app.apps.your-domain.com</p>
               </div>
-              <Link
-                href="/billing"
-                className="inline-block mt-2 text-sm text-accent-400 hover:text-accent-300"
-              >
-                Upgrade to Pro for custom domains
-              </Link>
+              {SHOW_PLANS && (
+                <Link
+                  href="/billing"
+                  className="inline-block mt-2 text-sm text-accent-400 hover:text-accent-300"
+                >
+                  Upgrade to Pro for custom domains
+                </Link>
+              )}
             </div>
           )}
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -220,6 +221,7 @@ func (c *Client) GetDeploymentStatus(deploymentID string) (*DeploymentStatus, er
 // Database operations
 
 type Database struct {
+	ID               string `json:"id,omitempty"`
 	Name             string `json:"name"`
 	Engine           string `json:"engine"`
 	Version          string `json:"version"`
@@ -229,22 +231,80 @@ type Database struct {
 	Port             int    `json:"port"`
 }
 
-func (c *Client) ListDatabases(projectID string) ([]Database, error) {
-	var resp struct {
-		Items []Database `json:"items"`
+// resolveProjectID maps a project ID, name, display name or slug to its ID by
+// listing projects. It returns "" when nothing matches.
+func (c *Client) resolveProjectID(ref string) string {
+	projects, err := c.ListProjects()
+	if err != nil {
+		return ""
 	}
-	if err := c.do("GET", fmt.Sprintf("/api/v1/projects/%s/databases", projectID), nil, &resp); err != nil {
+	for _, p := range projects {
+		if p.ID == ref {
+			return p.ID
+		}
+	}
+	for _, p := range projects {
+		if p.Name == ref || p.DisplayName == ref {
+			return p.ID
+		}
+	}
+	return ""
+}
+
+func (c *Client) ListDatabases(projectID string) ([]Database, error) {
+	id := c.resolveProjectID(projectID)
+	if id == "" {
+		return []Database{}, nil
+	}
+	var dbs []Database
+	if err := c.do("GET", "/api/v1/databases?project_id="+url.QueryEscape(id), nil, &dbs); err != nil {
 		return nil, err
 	}
-	return resp.Items, nil
+	return dbs, nil
 }
 
 func (c *Client) CreateDatabase(projectID string, db *Database) (*Database, error) {
+	req := map[string]any{"name": db.Name, "engine": db.Engine}
+	if id := c.resolveProjectID(projectID); id != "" {
+		req["project_id"] = id
+	}
 	var result Database
-	if err := c.do("POST", fmt.Sprintf("/api/v1/projects/%s/databases", projectID), db, &result); err != nil {
+	if err := c.do("POST", "/api/v1/databases", req, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
+}
+
+// GetDatabaseByID fetches a database with its credentials
+// (GET /api/v1/databases/:id).
+func (c *Client) GetDatabaseByID(id string) (*Database, error) {
+	var db Database
+	if err := c.do("GET", "/api/v1/databases/"+url.PathEscape(id), nil, &db); err != nil {
+		return nil, err
+	}
+	return &db, nil
+}
+
+// ResolveProject maps a project reference (ID, name or display name) to a
+// project ID. An empty reference means the first project, the same default
+// `zen status` uses. Returns "" when the user has no projects.
+func (c *Client) ResolveProject(ref string) (string, error) {
+	projects, err := c.ListProjects()
+	if err != nil {
+		return "", err
+	}
+	if len(projects) == 0 {
+		return "", nil
+	}
+	if ref == "" {
+		return projects[0].ID, nil
+	}
+	for _, p := range projects {
+		if p.ID == ref || p.Name == ref || p.DisplayName == ref {
+			return p.ID, nil
+		}
+	}
+	return "", fmt.Errorf("project %q not found", ref)
 }
 
 func (c *Client) GetDatabase(projectID, name string) (*Database, error) {

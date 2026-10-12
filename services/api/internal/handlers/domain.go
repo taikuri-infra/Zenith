@@ -7,6 +7,8 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
+	"github.com/dotechhq/zenith/services/api/internal/validate"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -21,6 +23,7 @@ type DomainHandler struct {
 	appRepo    ports.AppRepository
 	planRepo   ports.UserPlanRepository
 	deployer   AppRedeployer
+	reserved   string // dashboard domain; it and its subdomains can't be custom domains
 }
 
 // NewDomainHandler creates a new DomainHandler.
@@ -32,6 +35,10 @@ func NewDomainHandler(domainRepo ports.DomainRepository, appRepo ports.AppReposi
 func (h *DomainHandler) SetDeployer(deployer AppRedeployer) {
 	h.deployer = deployer
 }
+
+// SetReservedDomain sets the dashboard domain (BASE_DOMAIN). It and every
+// subdomain of it are refused as custom domains.
+func (h *DomainHandler) SetReservedDomain(domain string) { h.reserved = domain }
 
 // Add attaches a custom domain to an app.
 // POST /api/v1/apps/:appId/domains
@@ -61,8 +68,12 @@ func (h *DomainHandler) Add(c *fiber.Ctx) error {
 	if input.Domain == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "domain is required")
 	}
+	name, err := validate.CustomDomain(input.Domain, h.reserved)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
 
-	domain, err := h.domainRepo.AddDomain(c.Context(), appID, userID, input.Domain)
+	domain, err := h.domainRepo.AddDomain(c.Context(), appID, userID, name)
 	if err != nil {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	}
@@ -134,25 +145,20 @@ func (h *DomainHandler) ListByUser(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// refreshIngress re-deploys the app to refresh IngressRoute and Certificate CRDs.
+// refreshIngress re-deploys the app so its routes (Traefik labels / IngressRoute)
+// include the current domains.
 func (h *DomainHandler) refreshIngress(ctx context.Context, app *entities.App) {
 	if h.deployer == nil || app == nil {
 		return
 	}
 
-	// Get the latest deployment to find the current image tag
-	deployments, err := h.appRepo.ListDeployments(ctx, app.ID, 1)
-	if err != nil || len(deployments) == 0 {
-		slog.Warn("no deployments found, skipping IngressRoute refresh", "app_id", app.ID)
+	imageTag, err := deploy.CurrentImage(ctx, h.appRepo, app.ID)
+	if err != nil {
+		slog.Warn("no deployed image, skipping route refresh", "app_id", app.ID)
 		return
 	}
-	imageTag := deployments[0].ImageTag
-	if imageTag == "" {
-		return
-	}
-
 	if err := h.deployer.DeployApp(ctx, app, imageTag); err != nil {
-		slog.Warn("failed to refresh IngressRoute", "app_id", app.ID, "error", err)
+		slog.Warn("failed to refresh app routes", "app_id", app.ID, "error", err)
 	}
 }
 

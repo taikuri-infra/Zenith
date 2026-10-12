@@ -9,15 +9,16 @@ import (
 
 func TestProxyLabels_Traefik(t *testing.T) {
 	app := &entities.App{ID: "app-123", Subdomain: "my-app", Port: 8000}
-	labels := proxyLabels(app, "apps.example.com", "zenith_default")
+	labels := proxyLabels(app, []string{"my-app.apps.example.com", "shop.customer.com"}, "zenith_default", "le")
 
 	want := map[string]string{
-		"zenith.app.id":          "app-123",
-		"traefik.enable":         "true",
-		"traefik.docker.network": "zenith_default",
-		"traefik.http.routers.my-app.rule":                      "Host(`my-app.apps.example.com`)",
+		"zenith.app.id":                                         "app-123",
+		"traefik.enable":                                        "true",
+		"traefik.docker.network":                                "zenith_default",
+		"traefik.http.routers.my-app.rule":                      "Host(`my-app.apps.example.com`) || Host(`shop.customer.com`)",
 		"traefik.http.routers.my-app.entrypoints":               "websecure",
 		"traefik.http.routers.my-app.tls":                       "true",
+		"traefik.http.routers.my-app.tls.certresolver":          "le",
 		"traefik.http.services.my-app.loadbalancer.server.port": "8000",
 	}
 	for k, v := range want {
@@ -25,16 +26,18 @@ func TestProxyLabels_Traefik(t *testing.T) {
 			t.Errorf("label %q = %q, want %q", k, labels[k], v)
 		}
 	}
-	// The resolver moved to the entrypoint (installer-generated traefik.yml), so
-	// no router should name one — that is what lets self-signed mode work.
-	if _, ok := labels["traefik.http.routers.my-app.tls.certresolver"]; ok {
-		t.Error("deployed apps must not set a per-router certresolver")
-	}
-	// The Traefik migration must leave no caddy labels behind.
 	for k := range labels {
 		if strings.HasPrefix(k, "caddy") {
 			t.Errorf("unexpected leftover caddy label %q", k)
 		}
+	}
+}
+
+func TestProxyLabels_NoResolverWhenEmpty(t *testing.T) {
+	app := &entities.App{ID: "a", Subdomain: "x", Port: 80}
+	labels := proxyLabels(app, []string{"x.example.com"}, "zenith_default", "")
+	if _, ok := labels["traefik.http.routers.x.tls.certresolver"]; ok {
+		t.Error("empty resolver must not emit a certresolver label")
 	}
 }
 

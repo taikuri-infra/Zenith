@@ -29,9 +29,7 @@ func NewMemoryDatabaseRepository() *MemoryDatabaseRepository {
 }
 
 func (r *MemoryDatabaseRepository) CreateDatabase(_ context.Context, appID, userID string, input *dto.CreateDatabaseInput) (*entities.UserDatabase, error) {
-	if appID == "" {
-		return nil, fmt.Errorf("app_id is required")
-	}
+	// appID may be empty: standalone databases are not attached to an app.
 	if userID == "" {
 		return nil, fmt.Errorf("user_id is required")
 	}
@@ -107,7 +105,10 @@ func (r *MemoryDatabaseRepository) CreateDatabase(_ context.Context, appID, user
 	r.passwords[id] = password
 	r.mu.Unlock()
 
-	return db, nil
+	// Return a copy: the stored row is mutated under r.mu by later calls
+	// (e.g. background provisioning), so callers must not share it.
+	out := *db
+	return &out, nil
 }
 
 func (r *MemoryDatabaseRepository) GetDatabase(_ context.Context, id string) (*entities.UserDatabase, error) {
@@ -118,7 +119,8 @@ func (r *MemoryDatabaseRepository) GetDatabase(_ context.Context, id string) (*e
 	if !ok {
 		return nil, fmt.Errorf("database not found: %s", id)
 	}
-	return db, nil
+	out := *db
+	return &out, nil
 }
 
 func (r *MemoryDatabaseRepository) ListDatabasesByApp(_ context.Context, appID string) ([]entities.UserDatabase, error) {
@@ -244,4 +246,37 @@ func generatePassword() string {
 		b[i] = charset[int(b[i])%len(charset)]
 	}
 	return string(b)
+}
+
+func (r *MemoryDatabaseRepository) SetDatabaseProvisioned(_ context.Context, id, host string, port int, secret string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	db, ok := r.databases[id]
+	if !ok {
+		return fmt.Errorf("database not found")
+	}
+	db.Host, db.Port, db.Status = host, port, entities.DatabaseStatusReady
+	r.passwords[id] = secret
+	return nil
+}
+
+func (r *MemoryDatabaseRepository) GetDatabaseSecret(_ context.Context, id string) (string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	s, ok := r.passwords[id]
+	if !ok {
+		return "", fmt.Errorf("database not found")
+	}
+	return s, nil
+}
+
+func (r *MemoryDatabaseRepository) SetDatabasePort(_ context.Context, id string, port int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	db, ok := r.databases[id]
+	if !ok {
+		return fmt.Errorf("database not found")
+	}
+	db.Port = port
+	return nil
 }

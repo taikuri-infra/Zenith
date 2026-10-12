@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
@@ -203,5 +204,37 @@ func TestDomainListByUser(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	if len(result) != 2 {
 		t.Errorf("Expected 2 domains, got %d", len(result))
+	}
+}
+
+type recordingRedeployer struct{ image string }
+
+func (r *recordingRedeployer) DeployApp(_ context.Context, _ *entities.App, image string) error {
+	r.image = image
+	return nil
+}
+
+func TestDomainAdd_RedeploysWithCurrentImage(t *testing.T) {
+	appRepo := memory.NewMemoryAppRepository()
+	domainRepo := memory.NewMemoryDomainRepository()
+	planRepo := memory.NewUnlimitedPlanRepository(memory.NewMemoryUserPlanRepository())
+	a, _ := appRepo.CreateApp(context.Background(), &dto.CreateAppInput{UserID: "user-1", Name: "web", ImageURL: "nginx:1", DeploySource: entities.DeploySourceImage})
+	d, _ := appRepo.CreateDeployment(context.Background(), a.ID, "nginx:1")
+	_ = appRepo.UpdateDeploymentStatus(context.Background(), d.ID, entities.DeployStatusActive, "", "")
+
+	h := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
+	rec := &recordingRedeployer{}
+	h.SetDeployer(rec)
+	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	app.Post("/api/v1/apps/:appId/domains", injectUserID("user-1"), h.Add)
+
+	req := httptest.NewRequest("POST", "/api/v1/apps/"+a.ID+"/domains", bytes.NewBufferString(`{"domain":"myapp.example.com"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req, -1)
+	if resp.StatusCode != 201 && resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if rec.image != "nginx:1" {
+		t.Errorf("redeployed image = %q, want nginx:1", rec.image)
 	}
 }

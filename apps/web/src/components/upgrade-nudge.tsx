@@ -2,6 +2,7 @@
 
 import { Zap } from "lucide-react";
 import Link from "next/link";
+import { SHOW_PLANS } from "@/lib/edition";
 
 interface UpgradeNudgeProps {
   resource: string;
@@ -11,7 +12,7 @@ interface UpgradeNudgeProps {
 }
 
 export function UpgradeNudge({ resource, current, limit, className = "" }: UpgradeNudgeProps) {
-  if (current < limit) return null;
+  if (!SHOW_PLANS || current < limit) return null;
 
   return (
     <div className={`rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 ${className}`}>

@@ -344,6 +344,11 @@ func TestApplyManifest_AppKind(t *testing.T) {
 
 func TestApplyManifest_DatabaseKind(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/projects" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
+			return
+		}
 		if !strings.Contains(r.URL.Path, "/databases") {
 			t.Errorf("Expected path to contain '/databases', got '%s'", r.URL.Path)
 		}

@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
@@ -9,6 +11,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -18,6 +21,10 @@ type DatabaseHandlerV2 struct {
 	dbRepo  ports.DatabaseRepository
 	appRepo ports.AppRepository
 	msRepo  ports.ManagedServiceRepository // merged into ListByUser results
+	rt      *services.DBRuntimeService
+	// redeployer restarts an app after a database is attached so the
+	// injected connection string reaches the running container.
+	redeployer AppRedeployer
 }
 
 // NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
@@ -25,8 +32,68 @@ func NewDatabaseHandlerV2(dbSvc *services.DatabaseService, dbRepo ports.Database
 	return &DatabaseHandlerV2{dbSvc: dbSvc, dbRepo: dbRepo, appRepo: appRepo, msRepo: msRepo}
 }
 
+// SetRuntime makes the handler provision real instances (Docker in standalone).
+func (h *DatabaseHandlerV2) SetRuntime(rt *services.DBRuntimeService) { h.rt = rt }
+
+// SetRedeployer makes attaching a database redeploy the app's current image.
+func (h *DatabaseHandlerV2) SetRedeployer(r AppRedeployer) { h.redeployer = r }
+
+// injectWhenReady writes the connection string into the app's env once the
+// database is provisioned. Runs in the background.
+func (h *DatabaseHandlerV2) injectWhenReady(appID string, db *entities.UserDatabase) {
+	go func() {
+		h.rt.Wait(db.ID)
+		ctx := context.Background()
+		fresh, err := h.dbRepo.GetDatabase(ctx, db.ID)
+		if err != nil || fresh.Status != entities.DatabaseStatusReady {
+			return
+		}
+		pw, err := h.rt.Password(ctx, fresh)
+		if err != nil {
+			slog.Warn("database runtime: reading password failed", "database", db.ID, "error", err)
+			return
+		}
+		if err := h.appRepo.SetEnvVars(ctx, appID, map[string]string{envKeyForEngine(fresh.Engine): fresh.ConnectionString(pw)}); err != nil {
+			slog.Warn("database runtime: injecting connection string failed", "database", db.ID, "app", appID, "error", err)
+			return
+		}
+		h.redeployApp(ctx, appID)
+	}()
+}
+
+// redeployApp restarts the app on its current image so new env vars apply.
+// An app that has never been deployed has nothing to restart.
+func (h *DatabaseHandlerV2) redeployApp(ctx context.Context, appID string) {
+	if h.redeployer == nil {
+		return
+	}
+	imageTag, err := deploy.CurrentImage(ctx, h.appRepo, appID)
+	if errors.Is(err, deploy.ErrNoImage) {
+		slog.Info("database attached; app not deployed yet, skipping redeploy", "app", appID)
+		return
+	}
+	if err != nil {
+		slog.Warn("database attached; resolving current image failed", "app", appID, "error", err)
+		return
+	}
+	app, err := h.appRepo.GetApp(ctx, appID)
+	if err != nil {
+		slog.Warn("database attached; loading app failed", "app", appID, "error", err)
+		return
+	}
+	if err := h.redeployer.DeployApp(ctx, app, imageTag); err != nil {
+		slog.Warn("database attached; redeploy failed", "app", appID, "error", err)
+	}
+}
+
 // fetchCredentials retrieves the password and connection string for a database.
 func (h *DatabaseHandlerV2) fetchCredentials(ctx context.Context, db *entities.UserDatabase) (string, string) {
+	if h.rt != nil {
+		if pw, err := h.rt.Password(ctx, db); err == nil {
+			return pw, db.ConnectionString(pw)
+		}
+		return "", ""
+	}
 	if h.dbSvc != nil {
 		if pw, err := h.dbSvc.GetDatabasePassword(ctx, db.ID); err == nil {
 			return pw, db.ConnectionString(pw)
@@ -71,6 +138,21 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 		// valid
 	default:
 		return fiber.NewError(fiber.StatusBadRequest, "unsupported engine: "+string(input.Engine))
+	}
+
+	if h.rt != nil {
+		db, err := h.rt.Create(c.Context(), appID, userID, &input)
+		if err != nil {
+			if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+				return fiber.NewError(fiber.StatusConflict, err.Error())
+			}
+			if strings.Contains(err.Error(), "not available") {
+				return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			}
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		h.injectWhenReady(appID, db)
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
 	}
 
 	// Use DatabaseService for real provisioning if available
@@ -129,9 +211,10 @@ func (h *DatabaseHandlerV2) List(c *fiber.Ctx) error {
 // GET /api/v1/apps/:appId/databases/:dbId
 func (h *DatabaseHandlerV2) Get(c *fiber.Ctx) error {
 	dbID := c.Params("dbId")
+	userID, _ := c.Locals("user_id").(string)
 
 	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
-	if err != nil {
+	if err != nil || db.AppID != c.Params("appId") || db.UserID != userID {
 		return fiber.NewError(fiber.StatusNotFound, "database not found")
 	}
 
@@ -146,11 +229,19 @@ func (h *DatabaseHandlerV2) Delete(c *fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
 	db, err := h.dbRepo.GetDatabase(c.Context(), dbID)
-	if err != nil {
+	if err != nil || db.AppID != c.Params("appId") {
 		return fiber.NewError(fiber.StatusNotFound, "database not found")
 	}
 	if db.UserID != userID {
 		return fiber.NewError(fiber.StatusForbidden, "not your database")
+	}
+
+	if h.rt != nil {
+		if err := h.rt.Delete(c.Context(), db, c.QueryBool("purge", false)); err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		_ = h.appRepo.DeleteEnvVar(c.Context(), db.AppID, envKeyForEngine(db.Engine))
+		return c.JSON(fiber.Map{"message": "database deleted"})
 	}
 
 	// Use DatabaseService for real cleanup if available
@@ -192,6 +283,20 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 		entities.DatabaseEngineMongoDB, entities.DatabaseEngineRabbitMQ:
 	default:
 		return fiber.NewError(fiber.StatusBadRequest, "unsupported engine: "+string(input.Engine))
+	}
+
+	if h.rt != nil {
+		db, err := h.rt.Create(c.Context(), "", userID, &input)
+		if err != nil {
+			if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+				return fiber.NewError(fiber.StatusConflict, err.Error())
+			}
+			if strings.Contains(err.Error(), "not available") {
+				return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			}
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
 	}
 
 	// Use DatabaseService for real provisioning if available
@@ -255,6 +360,12 @@ func (h *DatabaseHandlerV2) DeleteStandalone(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "not your database")
 	}
 
+	if h.rt != nil {
+		if err := h.rt.Delete(c.Context(), db, c.QueryBool("purge", false)); err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(fiber.Map{"message": "database deleted"})
+	}
 	if h.dbSvc != nil {
 		if err := h.dbSvc.DeleteDatabase(c.Context(), dbID); err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
@@ -287,8 +398,13 @@ func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
+	// project_id is caller-supplied: keep only the caller's own rows so a
+	// guessed or foreign project id discloses nothing.
 	result := make([]dto.DatabaseInfo, 0, len(dbs))
 	for i := range dbs {
+		if dbs[i].UserID != userID {
+			continue
+		}
 		result = append(result, toDatabaseInfoV2(&dbs[i], "", ""))
 	}
 
@@ -306,7 +422,7 @@ func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 			seen[r.ID] = true
 		}
 		for i := range msList {
-			if !seen[msList[i].ID] {
+			if msList[i].UserID == userID && !seen[msList[i].ID] {
 				result = append(result, managedServiceToDatabaseInfo(&msList[i]))
 			}
 		}

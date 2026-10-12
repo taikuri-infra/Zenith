@@ -84,6 +84,9 @@ func (h *DeployHandler) Rollback(c *fiber.Ctx) error {
 	if target.AppID != appID {
 		return NewBadRequest("deployment does not belong to this app")
 	}
+	if target.DeployedImage() == "" {
+		return NewBadRequest("deployment has no recorded image to roll back to")
+	}
 
 	// Mark target deployment as active, supersede the current active one
 	currentActive, _ := h.appRepo.GetActiveDeployment(c.Context(), appID)
@@ -105,7 +108,7 @@ func (h *DeployHandler) Rollback(c *fiber.Ctx) error {
 	if h.pipeline != nil {
 		app, _ := h.appRepo.GetApp(c.Context(), appID)
 		if app != nil {
-			if err := h.pipeline.TriggerImageDeploy(app, target, target.ImageTag); err != nil {
+			if err := h.pipeline.TriggerImageDeploy(app, target, target.DeployedImage()); err != nil {
 				return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
 			}
 		}

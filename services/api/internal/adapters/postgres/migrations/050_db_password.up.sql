@@ -1,0 +1,1 @@
+ALTER TABLE user_databases ADD COLUMN IF NOT EXISTS password_enc TEXT NOT NULL DEFAULT '';

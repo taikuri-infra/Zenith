@@ -319,15 +319,18 @@ func TestRedeploy_Error(t *testing.T) {
 
 func TestListDatabases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/projects" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"items":[{"id":"project-1","name":"project-1"}]}`))
+			return
+		}
 		if r.Method != "GET" {
 			t.Errorf("Expected GET method, got '%s'", r.Method)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"items": []map[string]interface{}{
-				{"name": "my-db", "engine": "postgresql", "status": "Ready", "version": "16", "storage": "20Gi"},
-			},
+		json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"name": "my-db", "engine": "postgresql", "status": "Ready", "version": "16", "storage": "20Gi"},
 		})
 	}))
 	defer server.Close()
@@ -348,16 +351,21 @@ func TestListDatabases(t *testing.T) {
 func TestListDatabases_URLConstruction(t *testing.T) {
 	var capturedPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/projects" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"items":[{"id":"pid-1","name":"my-project"}]}`))
+			return
+		}
 		capturedPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"items": []interface{}{}})
+		json.NewEncoder(w).Encode([]interface{}{})
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-token")
 	c.ListDatabases("my-project")
 
-	expectedPath := "/api/v1/projects/my-project/databases"
+	expectedPath := "/api/v1/databases"
 	if capturedPath != expectedPath {
 		t.Errorf("Expected path '%s', got '%s'", expectedPath, capturedPath)
 	}
@@ -365,6 +373,11 @@ func TestListDatabases_URLConstruction(t *testing.T) {
 
 func TestCreateDatabase(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/projects" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"items":[{"id":"project-1","name":"project-1"}]}`))
+			return
+		}
 		if r.Method != "POST" {
 			t.Errorf("Expected POST method, got '%s'", r.Method)
 		}
@@ -596,10 +609,13 @@ func TestListApps_EmptyResponse(t *testing.T) {
 
 func TestListDatabases_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/projects" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"items":[{"id":"project-1","name":"project-1"}]}`))
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"items": []interface{}{},
-		})
+		json.NewEncoder(w).Encode([]interface{}{})
 	}))
 	defer server.Close()
 

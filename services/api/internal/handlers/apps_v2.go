@@ -353,8 +353,22 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 			return NewForbidden("not your project")
 		}
 	} else if projectID == "" && h.projectRepo != nil {
-		if dp, err := h.projectRepo.GetDefaultProject(c.Context(), userID.(string)); err == nil {
+		if dp, err := h.projectRepo.GetDefaultProject(c.Context(), userID.(string)); err == nil && dp != nil {
 			projectID = dp.ID
+		} else {
+			// First app of a fresh install: create the user's default project
+			// instead of failing on the project foreign key.
+			np, cErr := h.projectRepo.CreateProject(c.Context(), userID.(string), "Default", "default", "")
+			if cErr != nil {
+				// CreateProject failed; if concurrent request won the race, retry GetDefaultProject
+				if dp, retryErr := h.projectRepo.GetDefaultProject(c.Context(), userID.(string)); retryErr == nil && dp != nil {
+					projectID = dp.ID
+				} else {
+					return NewBadRequest("no project: create a project first")
+				}
+			} else {
+				projectID = np.ID
+			}
 		}
 	}
 

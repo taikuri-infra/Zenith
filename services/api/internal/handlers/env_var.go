@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"log/slog"
 	"strings"
 	"time"
@@ -476,15 +477,12 @@ func (h *EnvVarHandler) Apply(c *fiber.Ctx) error {
 		return NewNotFound("app not found")
 	}
 
-	// Get current image from latest release
-	releases, err := h.appRepo.ListReleases(c.Context(), appID, 1)
-	if err != nil || len(releases) == 0 {
+	imageTag, err := deploy.CurrentImage(c.Context(), h.appRepo, appID)
+	if err != nil {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 			"error": "no deployment found — deploy the app first before applying env changes",
 		})
 	}
-
-	imageTag := releases[0].Image
 	slog.Info("applying env vars via rolling restart", "app", app.Name, "image", imageTag)
 
 	if err := h.restarter.DeployApp(c.Context(), app, imageTag); err != nil {

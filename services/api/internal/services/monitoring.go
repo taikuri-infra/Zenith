@@ -9,6 +9,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/adapters/lokiclient"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/promclient"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
@@ -20,6 +21,30 @@ type MonitoringService struct {
 	loki    *lokiclient.Client
 	k8s     ports.KubernetesClient
 	appRepo ports.AppRepository
+	logs    AppLogSource
+}
+
+// AppLogSource supplies app logs from the runtime (e.g. Docker) instead of Loki.
+type AppLogSource interface {
+	Tail(ctx context.Context, app *entities.App, since time.Duration, limit int) ([]dto.MonitoringLogEntry, error)
+	Stream(ctx context.Context, app *entities.App, out chan<- dto.MonitoringLogEntry) error
+}
+
+// SetLogSource makes app logs come from the runtime (Docker) instead of Loki.
+func (s *MonitoringService) SetLogSource(src AppLogSource) { s.logs = src }
+
+func filterLogs(in []dto.MonitoringLogEntry, level, search string) []dto.MonitoringLogEntry {
+	out := make([]dto.MonitoringLogEntry, 0, len(in))
+	for _, e := range in {
+		if search != "" && !strings.Contains(strings.ToLower(e.Line), strings.ToLower(search)) {
+			continue
+		}
+		if level != "" && level != "all" && !strings.Contains(strings.ToLower(e.Line), strings.ToLower(level)) && e.Level != level {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // NewMonitoringService creates a new MonitoringService.
@@ -182,6 +207,25 @@ func (s *MonitoringService) GetLogs(ctx context.Context, userID, appID string, l
 		return nil, err
 	}
 
+	if s.logs != nil {
+		app, err := s.appRepo.GetApp(ctx, appID)
+		if err != nil {
+			return nil, fmt.Errorf("app not found")
+		}
+		if limit <= 0 {
+			limit = 100
+		}
+		if since == 0 {
+			since = time.Hour
+		}
+		entries, err := s.logs.Tail(ctx, app, since, limit)
+		if err != nil {
+			return nil, err
+		}
+		entries = filterLogs(entries, level, search)
+		return &dto.MonitoringLogsResponse{Entries: entries, Total: len(entries)}, nil
+	}
+
 	if s.loki == nil {
 		return &dto.MonitoringLogsResponse{Entries: []dto.MonitoringLogEntry{}, Total: 0}, nil
 	}
@@ -235,6 +279,14 @@ func (s *MonitoringService) StreamLogs(ctx context.Context, userID, appID string
 	appName, err := s.resolveApp(ctx, userID, appID)
 	if err != nil {
 		return err
+	}
+
+	if s.logs != nil {
+		app, err := s.appRepo.GetApp(ctx, appID)
+		if err != nil {
+			return fmt.Errorf("app not found")
+		}
+		return s.logs.Stream(ctx, app, out)
 	}
 
 	if s.loki == nil {

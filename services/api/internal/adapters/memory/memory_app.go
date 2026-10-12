@@ -623,3 +623,14 @@ func (r *MemoryAppRepository) GetRelease(ctx context.Context, id string) (*entit
 	}
 	return rel, nil
 }
+
+func (r *MemoryAppRepository) SetDeploymentImage(_ context.Context, id, image string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	d, ok := r.deployments[id]
+	if !ok {
+		return fmt.Errorf("deployment not found")
+	}
+	d.ImageTag = image
+	return nil
+}

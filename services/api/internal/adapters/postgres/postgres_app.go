@@ -756,3 +756,10 @@ func (r *PostgresAppRepository) GetRelease(ctx context.Context, id string) (*ent
 	}
 	return &rel, nil
 }
+
+func (r *PostgresAppRepository) SetDeploymentImage(ctx context.Context, id, image string) error {
+	if _, err := r.pool.Exec(ctx, `UPDATE deployments SET image_tag = $1 WHERE id = $2`, image, id); err != nil {
+		return fmt.Errorf("set deployment image: %w", err)
+	}
+	return nil
+}

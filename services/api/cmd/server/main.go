@@ -190,6 +190,14 @@ func main() {
 	docs.RegisterRoutes(app)
 	provisioner, autoscaler, temporalW, tokenBlacklist, eventBus, redisClient := setupRoutes(app, cfg, userRepo, adminRepo, customerRepo, meteringRepo, appRepo, pool)
 
+	if os.Getenv("ZENITH_DUMP_ROUTES") == "1" {
+		if err := dumpRoutes(app, os.Stdout); err != nil {
+			slog.Error("dump routes", "error", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	// Start cluster sync if provisioner is available
 	if provisioner != nil {
 		provisioner.StartSync(30 * time.Second)
@@ -313,6 +321,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		planRepo = postgres.NewPostgresUserPlanRepository(pool)
 	} else {
 		planRepo = memory.NewMemoryUserPlanRepository()
+	}
+
+	// Self-host: no plan tiers. Every caller of GetUserPlan (domains, MFA,
+	// webhooks, Redis limits, …) sees enterprise limits.
+	if cfg.Mode != "saas" {
+		planRepo = memory.NewUnlimitedPlanRepository(planRepo)
 	}
 
 	// Team members (IAM)
@@ -519,12 +533,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// wired later, alongside the k8s deployer's setters.
 	var backend deploy.Backend = deployer
 	var dockerDeployer *deploy.DockerDeployer
+	var dockerDeployerCli *dockerclient.Client
 	if cfg.Mode != "saas" {
 		if dockerCli, derr := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation()); derr != nil {
 			slog.Warn("docker client unavailable — app deploys will be simulated", "error", derr)
 		} else {
 			dockerDeployer = deploy.NewDockerDeployer(dockerCli, appRepo, nil, planRepo, cfg.BaseDomain, cfg.AppNetwork)
 			backend = dockerDeployer
+			dockerDeployerCli = dockerCli
 			slog.Info("using Docker deployer (standalone self-host)", "network", cfg.AppNetwork)
 		}
 	}
@@ -878,6 +894,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo, msRepo)
+	if cfg.Mode != "saas" && dockerDeployerCli != nil {
+		dbHandlerV2.SetRuntime(services.NewDBRuntimeService(dbRepo, deploy.NewDockerDBBackend(dockerDeployerCli, cfg.AppNetwork), envCrypto))
+		dbHandlerV2.SetRedeployer(backend)
+		slog.Info("database runtime: Docker containers")
+	}
 	appByID.Post("/databases", handlers.CheckLimit(planRepo, "databases", func(c *fiber.Ctx, userID string) (int, error) {
 		return dbRepo.CountDatabasesByUser(c.Context(), userID)
 	}), dbHandlerV2.Create)
@@ -961,7 +982,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo, planRepo)
 	// Wire real backup service when S3 + K8s are configured
-	if cfg.S3Endpoint != "" && k8sClient != nil {
+	if cfg.Mode == "saas" && cfg.S3Endpoint != "" && k8sClient != nil {
 		backupS3 := s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
 		backupSvc := services.NewBackupService(k8sClient, backupRepo, dbRepo, dbSvc, backupS3, cfg.S3PlatformBucket, "zenith-apps")
 		backupHandler.SetBackupService(backupSvc)
@@ -985,7 +1006,17 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// S3 client + BucketService (real per-customer S3 buckets)
 	var objStorage ports.ObjectStorage
 	if cfg.S3Endpoint != "" {
-		objStorage = s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+		s3c := s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+		objStorage = s3c
+		go func(s3c *s3client.Client) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			if err := ensureBucket(ctx, s3c.CreateBucket, cfg.S3PlatformBucket, 60, 2*time.Second); err != nil {
+				slog.Error("platform bucket not ready", "error", err)
+			} else {
+				slog.Info("platform bucket ready", "bucket", cfg.S3PlatformBucket)
+			}
+		}(s3c)
 	} else {
 		objStorage = s3client.NewMemoryClient()
 	}
@@ -1143,6 +1174,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		slog.Info("Loki client configured", "url", cfg.LokiURL)
 	}
 	monitoringSvc := services.NewMonitoringService(promClient, lokiClient, k8sClient, appRepo)
+	if dockerDeployerCli != nil {
+		monitoringSvc.SetLogSource(deploy.NewDockerLogSource(dockerDeployerCli))
+		slog.Info("app logs: Docker container logs")
+	}
 	monitoringHandler := handlers.NewMonitoringHandler(monitoringSvc)
 	appByID.Get("/metrics/overview", monitoringHandler.GetOverview)
 	appByID.Get("/metrics/timeseries", monitoringHandler.GetTimeSeries)
@@ -1272,10 +1307,13 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	if dockerDeployer != nil {
 		dockerDeployer.SetEnvVarRepo(envVarRepo)
 		dockerDeployer.SetEnvCrypto(envCrypto)
+		dockerDeployer.SetDomainRepo(domainRepo)
+		dockerDeployer.SetCertResolver(cfg.CertResolver)
 	}
-	envVarHandler.SetRestarter(deployer)
+	envVarHandler.SetRestarter(backend)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
-	domainHandler.SetDeployer(deployer)
+	domainHandler.SetDeployer(backend)
+	domainHandler.SetReservedDomain(cfg.BaseDomain)
 	appByID.Post("/domains", domainHandler.Add)
 	appByID.Get("/domains", domainHandler.List)
 	appByID.Delete("/domains/:domainId", domainHandler.Delete)

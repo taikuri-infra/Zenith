@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SHOW_PLANS } from "@/lib/edition";
 import { useRouter } from "next/navigation";
 import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
@@ -286,7 +287,7 @@ export default function OverviewPage() {
         </div>
 
         {/* Plan usage banner */}
-        {plan && (
+        {SHOW_PLANS && plan && (
           <div className="rounded-lg border border-border bg-surface-100 p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -456,18 +457,20 @@ export default function OverviewPage() {
         </section>
 
         {/* Referral banner */}
-        <div className="rounded-lg border border-accent-500/20 bg-accent-500/5 p-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-accent-400">Share Zenith, get 1 month Pro free</p>
-            <p className="text-xs text-neutral-500 mt-0.5">Invite a friend — when they deploy their first app, you both get rewarded.</p>
+        {SHOW_PLANS && (
+          <div className="rounded-lg border border-accent-500/20 bg-accent-500/5 p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-accent-400">Share Zenith, get 1 month Pro free</p>
+              <p className="text-xs text-neutral-500 mt-0.5">Invite a friend — when they deploy their first app, you both get rewarded.</p>
+            </div>
+            <Link
+              href="/settings?tab=referral"
+              className="shrink-0 rounded-lg bg-accent-500/10 border border-accent-500/30 px-4 py-2 text-sm font-medium text-accent-400 hover:bg-accent-500/20 transition-colors"
+            >
+              Get your link
+            </Link>
           </div>
-          <Link
-            href="/settings?tab=referral"
-            className="shrink-0 rounded-lg bg-accent-500/10 border border-accent-500/30 px-4 py-2 text-sm font-medium text-accent-400 hover:bg-accent-500/20 transition-colors"
-          >
-            Get your link
-          </Link>
-        </div>
+        )}
 
         {/* Legacy Apps table */}
         {appList.length > 0 && (
