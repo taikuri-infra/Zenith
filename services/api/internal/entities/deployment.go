@@ -26,6 +26,15 @@ type Deployment struct {
 	CreatedAt time.Time        `json:"created_at"`
 }
 
+// DeployedImage is the image this deployment runs. Rows written before
+// image_tag was recorded carry the image in git_sha.
+func (d *Deployment) DeployedImage() string {
+	if d.ImageTag != "" {
+		return d.ImageTag
+	}
+	return d.GitSHA
+}
+
 // EnvVar represents an environment variable for an app.
 type EnvVar struct {
 	ID    string `json:"id"`

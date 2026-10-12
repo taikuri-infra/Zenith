@@ -105,7 +105,7 @@ func (h *DeployHandler) Rollback(c *fiber.Ctx) error {
 	if h.pipeline != nil {
 		app, _ := h.appRepo.GetApp(c.Context(), appID)
 		if app != nil {
-			if err := h.pipeline.TriggerImageDeploy(app, target, target.ImageTag); err != nil {
+			if err := h.pipeline.TriggerImageDeploy(app, target, target.DeployedImage()); err != nil {
 				return fiber.NewError(fiber.StatusServiceUnavailable, err.Error())
 			}
 		}

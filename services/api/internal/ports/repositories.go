@@ -135,6 +135,7 @@ type AppRepository interface {
 	GetDeployment(ctx context.Context, id string) (*entities.Deployment, error)
 	ListDeployments(ctx context.Context, appID string, limit int) ([]entities.Deployment, error)
 	UpdateDeploymentStatus(ctx context.Context, id string, status entities.DeploymentStatus, buildLog, errMsg string) error
+	SetDeploymentImage(ctx context.Context, id, image string) error
 	GetActiveDeployment(ctx context.Context, appID string) (*entities.Deployment, error)
 
 	// Env Vars
