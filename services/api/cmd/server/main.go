@@ -533,12 +533,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// wired later, alongside the k8s deployer's setters.
 	var backend deploy.Backend = deployer
 	var dockerDeployer *deploy.DockerDeployer
+	var dockerDeployerCli *dockerclient.Client
 	if cfg.Mode != "saas" {
 		if dockerCli, derr := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation()); derr != nil {
 			slog.Warn("docker client unavailable — app deploys will be simulated", "error", derr)
 		} else {
 			dockerDeployer = deploy.NewDockerDeployer(dockerCli, appRepo, nil, planRepo, cfg.BaseDomain, cfg.AppNetwork)
 			backend = dockerDeployer
+			dockerDeployerCli = dockerCli
 			slog.Info("using Docker deployer (standalone self-host)", "network", cfg.AppNetwork)
 		}
 	}
@@ -892,6 +894,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo, msRepo)
+	if cfg.Mode != "saas" && dockerDeployerCli != nil {
+		dbHandlerV2.SetRuntime(services.NewDBRuntimeService(dbRepo, deploy.NewDockerDBBackend(dockerDeployerCli, cfg.AppNetwork), envCrypto))
+		slog.Info("database runtime: Docker containers")
+	}
 	appByID.Post("/databases", handlers.CheckLimit(planRepo, "databases", func(c *fiber.Ctx, userID string) (int, error) {
 		return dbRepo.CountDatabasesByUser(c.Context(), userID)
 	}), dbHandlerV2.Create)

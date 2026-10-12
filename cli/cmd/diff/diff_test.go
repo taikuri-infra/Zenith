@@ -750,10 +750,8 @@ func TestFetchRemoteApps_APIError(t *testing.T) {
 func TestFetchRemoteDatabases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"items": []api.Database{
-				{Name: "db1", Engine: "postgresql", Version: "16", Storage: "20Gi"},
-			},
+		json.NewEncoder(w).Encode([]api.Database{
+			{Name: "db1", Engine: "postgresql", Version: "16", Storage: "20Gi"},
 		})
 	}))
 	defer server.Close()

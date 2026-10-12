@@ -29,9 +29,7 @@ func NewMemoryDatabaseRepository() *MemoryDatabaseRepository {
 }
 
 func (r *MemoryDatabaseRepository) CreateDatabase(_ context.Context, appID, userID string, input *dto.CreateDatabaseInput) (*entities.UserDatabase, error) {
-	if appID == "" {
-		return nil, fmt.Errorf("app_id is required")
-	}
+	// appID may be empty: standalone databases are not attached to an app.
 	if userID == "" {
 		return nil, fmt.Errorf("user_id is required")
 	}

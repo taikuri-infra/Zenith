@@ -324,10 +324,8 @@ func TestListDatabases(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"items": []map[string]interface{}{
-				{"name": "my-db", "engine": "postgresql", "status": "Ready", "version": "16", "storage": "20Gi"},
-			},
+		json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"name": "my-db", "engine": "postgresql", "status": "Ready", "version": "16", "storage": "20Gi"},
 		})
 	}))
 	defer server.Close()
@@ -350,14 +348,14 @@ func TestListDatabases_URLConstruction(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"items": []interface{}{}})
+		json.NewEncoder(w).Encode([]interface{}{})
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-token")
 	c.ListDatabases("my-project")
 
-	expectedPath := "/api/v1/projects/my-project/databases"
+	expectedPath := "/api/v1/databases"
 	if capturedPath != expectedPath {
 		t.Errorf("Expected path '%s', got '%s'", expectedPath, capturedPath)
 	}
@@ -597,9 +595,7 @@ func TestListApps_EmptyResponse(t *testing.T) {
 func TestListDatabases_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"items": []interface{}{},
-		})
+		json.NewEncoder(w).Encode([]interface{}{})
 	}))
 	defer server.Close()
 

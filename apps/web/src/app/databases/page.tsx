@@ -26,7 +26,7 @@ const engineBadge: Record<string, { label: string; className: string }> = {
 
 const engines = [
   { id: "postgresql", label: "PostgreSQL", enabled: true },
-  { id: "mysql", label: "MySQL", enabled: false },
+  { id: "mysql", label: "MySQL", enabled: true },
   { id: "mongodb", label: "MongoDB", enabled: true },
   { id: "redis", label: "Redis", enabled: true },
 ];

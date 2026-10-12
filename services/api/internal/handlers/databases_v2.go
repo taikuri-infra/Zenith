@@ -18,6 +18,7 @@ type DatabaseHandlerV2 struct {
 	dbRepo  ports.DatabaseRepository
 	appRepo ports.AppRepository
 	msRepo  ports.ManagedServiceRepository // merged into ListByUser results
+	rt      *services.DBRuntimeService
 }
 
 // NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
@@ -25,8 +26,35 @@ func NewDatabaseHandlerV2(dbSvc *services.DatabaseService, dbRepo ports.Database
 	return &DatabaseHandlerV2{dbSvc: dbSvc, dbRepo: dbRepo, appRepo: appRepo, msRepo: msRepo}
 }
 
+// SetRuntime makes the handler provision real instances (Docker in standalone).
+func (h *DatabaseHandlerV2) SetRuntime(rt *services.DBRuntimeService) { h.rt = rt }
+
+// injectWhenReady writes the connection string into the app's env once the
+// database is provisioned. Runs in the background.
+func (h *DatabaseHandlerV2) injectWhenReady(appID string, db *entities.UserDatabase) {
+	go func() {
+		h.rt.Wait(db.ID)
+		ctx := context.Background()
+		fresh, err := h.dbRepo.GetDatabase(ctx, db.ID)
+		if err != nil || fresh.Status != entities.DatabaseStatusReady {
+			return
+		}
+		pw, err := h.rt.Password(ctx, fresh)
+		if err != nil {
+			return
+		}
+		_ = h.appRepo.SetEnvVars(ctx, appID, map[string]string{envKeyForEngine(fresh.Engine): fresh.ConnectionString(pw)})
+	}()
+}
+
 // fetchCredentials retrieves the password and connection string for a database.
 func (h *DatabaseHandlerV2) fetchCredentials(ctx context.Context, db *entities.UserDatabase) (string, string) {
+	if h.rt != nil {
+		if pw, err := h.rt.Password(ctx, db); err == nil {
+			return pw, db.ConnectionString(pw)
+		}
+		return "", ""
+	}
 	if h.dbSvc != nil {
 		if pw, err := h.dbSvc.GetDatabasePassword(ctx, db.ID); err == nil {
 			return pw, db.ConnectionString(pw)
@@ -71,6 +99,21 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 		// valid
 	default:
 		return fiber.NewError(fiber.StatusBadRequest, "unsupported engine: "+string(input.Engine))
+	}
+
+	if h.rt != nil {
+		db, err := h.rt.Create(c.Context(), appID, userID, &input)
+		if err != nil {
+			if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+				return fiber.NewError(fiber.StatusConflict, err.Error())
+			}
+			if strings.Contains(err.Error(), "not available") {
+				return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			}
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		h.injectWhenReady(appID, db)
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
 	}
 
 	// Use DatabaseService for real provisioning if available
@@ -194,6 +237,20 @@ func (h *DatabaseHandlerV2) CreateStandalone(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "unsupported engine: "+string(input.Engine))
 	}
 
+	if h.rt != nil {
+		db, err := h.rt.Create(c.Context(), "", userID, &input)
+		if err != nil {
+			if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "duplicate") {
+				return fiber.NewError(fiber.StatusConflict, err.Error())
+			}
+			if strings.Contains(err.Error(), "not available") {
+				return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			}
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, "", ""))
+	}
+
 	// Use DatabaseService for real provisioning if available
 	if h.dbSvc != nil {
 		db, err := h.dbSvc.ProvisionDatabase(c.Context(), "", userID, &input)
@@ -255,6 +312,12 @@ func (h *DatabaseHandlerV2) DeleteStandalone(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "not your database")
 	}
 
+	if h.rt != nil {
+		if err := h.rt.Delete(c.Context(), db, c.QueryBool("purge", false)); err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(fiber.Map{"message": "database deleted"})
+	}
 	if h.dbSvc != nil {
 		if err := h.dbSvc.DeleteDatabase(c.Context(), dbID); err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, err.Error())

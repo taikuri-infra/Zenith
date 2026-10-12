@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -230,18 +231,17 @@ type Database struct {
 }
 
 func (c *Client) ListDatabases(projectID string) ([]Database, error) {
-	var resp struct {
-		Items []Database `json:"items"`
-	}
-	if err := c.do("GET", fmt.Sprintf("/api/v1/projects/%s/databases", projectID), nil, &resp); err != nil {
+	var dbs []Database
+	if err := c.do("GET", "/api/v1/databases?project_id="+url.QueryEscape(projectID), nil, &dbs); err != nil {
 		return nil, err
 	}
-	return resp.Items, nil
+	return dbs, nil
 }
 
 func (c *Client) CreateDatabase(projectID string, db *Database) (*Database, error) {
+	req := map[string]any{"name": db.Name, "engine": db.Engine, "project_id": projectID}
 	var result Database
-	if err := c.do("POST", fmt.Sprintf("/api/v1/projects/%s/databases", projectID), db, &result); err != nil {
+	if err := c.do("POST", "/api/v1/databases", req, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
