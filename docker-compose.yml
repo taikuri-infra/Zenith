@@ -119,9 +119,9 @@ services:
   # Reverse proxy with automatic HTTPS. Always runs and owns ports 80/443
   # (the only public ports). ZENITH_DOMAIN is set in .env by the installer.
   #
-  # The static config lives in ./traefik/traefik.yml, which the installer
-  # generates for the chosen TLS mode (HTTP-01, DNS-01, or self-signed). The
-  # repo ships a default HTTP-01 traefik.yml so a manual `docker compose up`
+  # The static config lives in ./traefik/traefik.yml, which install.sh
+  # uses as shipped (HTTP-01); `zen install` may overwrite it for the chosen
+  # TLS mode (HTTP-01, DNS-01, or self-signed). The repo ships a default HTTP-01 traefik.yml so a manual `docker compose up`
   # still works — edit the email in it, or run `zen install`.
   # DNS-01 reads CF_DNS_API_TOKEN (set in .env by the installer) for the
   # Cloudflare challenge.

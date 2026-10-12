@@ -18,11 +18,45 @@ err()  { printf '\033[31mError:\033[0m %s\n' "$1" >&2; }
 
 DRY_RUN="${ZENITH_DRY_RUN:-0}"   # tests: render .env in the current dir, no Docker/git/network
 
+# Sets PUBLIC_IP and IP_SOURCE (ipify | env | local). Runs in the current shell
+# (no command substitution) so the globals survive. Never fails.
 detect_public_ip() {
-  if [ -n "${ZENITH_PUBLIC_IP:-}" ]; then echo "$ZENITH_PUBLIC_IP"; return; fi
-  curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null \
-    || hostname -I 2>/dev/null | awk '{print $1}'
+  PUBLIC_IP=""; IP_SOURCE=""
+  if [ -n "${ZENITH_PUBLIC_IP:-}" ]; then PUBLIC_IP="$ZENITH_PUBLIC_IP"; IP_SOURCE="env"; return 0; fi
+  PUBLIC_IP="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+  if [ -n "$PUBLIC_IP" ]; then IP_SOURCE="ipify"; return 0; fi
+  PUBLIC_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  IP_SOURCE="local"
+  return 0
 }
+
+# Ensure ZENITH_DOMAIN is set: explicit, else <public-ip>.sslip.io. Exits 1
+# (before any file is written) when no valid IP can be found.
+resolve_domain() {
+  [ -n "${ZENITH_DOMAIN:-}" ] && return 0
+  detect_public_ip
+  if ! [[ "$PUBLIC_IP" =~ ^[0-9]+(\.[0-9]+){3}$ ]]; then
+    err "Could not detect this server's public IP. Set ZENITH_DOMAIN=<your domain> (or ZENITH_PUBLIC_IP=<ip>) and re-run."
+    exit 1
+  fi
+  if [ "$IP_SOURCE" = "local" ]; then
+    warn "Public IP lookup failed; using local address $PUBLIC_IP. If it is private, Let's Encrypt cannot issue a certificate for it."
+  fi
+  ZENITH_DOMAIN="${PUBLIC_IP}.sslip.io"
+}
+
+# In-place edit that works on both GNU and BSD/macOS sed.
+set_var() {
+  local key="$1" val="$2"
+  if grep -qE "^${key}=" .env; then
+    sed -i.bak -E "s|^${key}=.*|${key}=${val}|" .env
+  else
+    printf '%s=%s\n' "$key" "$val" >>.env
+  fi
+}
+
+# True when KEY has a non-empty value in .env.
+has_var() { grep -qE "^$1=." .env; }
 
 gen_hex() { # 32 random bytes as 64 hex chars
   od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
@@ -96,6 +130,7 @@ fi  # DRY_RUN
 # ---- Generate .env with strong secrets -------------------------------------
 CREDS_FILE=".zenith-credentials"
 if [ ! -f .env ]; then
+  resolve_domain
   log "Generating .env with strong, unique secrets..."
   cp .env.example .env
 
@@ -105,15 +140,6 @@ if [ ! -f .env ]; then
   S3_SECRET_KEY="$(gen_secret 24)"
   ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
 
-  # In-place edit that works on both GNU and BSD/macOS sed.
-  set_var() {
-    local key="$1" val="$2"
-    if grep -qE "^${key}=" .env; then
-      sed -i.bak -E "s|^${key}=.*|${key}=${val}|" .env
-    else
-      printf '%s=%s\n' "$key" "$val" >>.env
-    fi
-  }
   set_var JWT_SECRET "$JWT_SECRET"
   set_var ADMIN_EMAIL "$ADMIN_EMAIL"
   set_var ADMIN_PASSWORD "$ADMIN_PASSWORD"
@@ -121,10 +147,6 @@ if [ ! -f .env ]; then
   set_var S3_SECRET_KEY "$S3_SECRET_KEY"
   set_var S3_ACCESS_KEY "$(gen_secret 20)"
   set_var SECRETS_ENCRYPTION_KEY "$(gen_hex)"
-  if [ -z "${ZENITH_DOMAIN:-}" ]; then
-    PUBLIC_IP="$(detect_public_ip)"
-    ZENITH_DOMAIN="${PUBLIC_IP}.sslip.io"
-  fi
   set_var ZENITH_DOMAIN "$ZENITH_DOMAIN"
 
   # The API deploys user apps via the Docker socket and runs as a non-root user,
@@ -148,6 +170,18 @@ EOF
   ADMIN_CREDS_GENERATED=1
 else
   log ".env already exists — keeping current configuration."
+  # Upgrade path: the current compose needs these two. Add only if absent;
+  # an existing SECRETS_ENCRYPTION_KEY is never overwritten.
+  if ! has_var ZENITH_DOMAIN; then
+    resolve_domain
+    set_var ZENITH_DOMAIN "$ZENITH_DOMAIN"
+    log "Added ZENITH_DOMAIN=$ZENITH_DOMAIN to .env"
+  fi
+  if ! has_var SECRETS_ENCRYPTION_KEY; then
+    set_var SECRETS_ENCRYPTION_KEY "$(gen_hex)"
+    log "Added SECRETS_ENCRYPTION_KEY to .env"
+  fi
+  rm -f .env.bak
   ADMIN_CREDS_GENERATED=0
 fi
 

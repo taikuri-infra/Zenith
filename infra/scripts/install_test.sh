@@ -25,4 +25,30 @@ grep -qx 'ZENITH_DOMAIN=203.0.113.7.sslip.io' "$env_a" || fail "default domain n
 run "$t/b" ZENITH_DOMAIN=zenith.example.com
 grep -qx 'ZENITH_DOMAIN=zenith.example.com' "$t/b/.env" || fail "explicit domain not kept"
 
+# stubs: nothing real (network, docker, git) may run in any case below
+stubs="$t/stubs"; mkdir -p "$stubs"
+for c in docker git; do printf '#!/bin/sh\necho "stub %s called" >&2; exit 97\n' "$c" >"$stubs/$c"; done
+for c in curl hostname; do printf '#!/bin/sh\nexit 1\n' >"$stubs/$c"; done
+chmod +x "$stubs"/*
+
+# (a) re-run keeps the encryption key byte-identical
+key_before="$(grep '^SECRETS_ENCRYPTION_KEY=' "$env_a")"
+(cd "$t/a" && ZENITH_DRY_RUN=1 bash "$here/install.sh" >/dev/null)
+[ "$key_before" = "$(grep '^SECRETS_ENCRYPTION_KEY=' "$env_a")" ] || fail "re-run changed SECRETS_ENCRYPTION_KEY"
+
+# (b) old-style .env gets domain + key added, other values kept
+mkdir -p "$t/old"; printf 'JWT_SECRET=keepme\nSECRETS_ENCRYPTION_KEY=\n' >"$t/old/.env"
+(cd "$t/old" && env ZENITH_DRY_RUN=1 ZENITH_PUBLIC_IP=203.0.113.9 bash "$here/install.sh" >/dev/null)
+grep -qx 'ZENITH_DOMAIN=203.0.113.9.sslip.io' "$t/old/.env" || fail "upgrade: domain not added"
+grep -qE '^SECRETS_ENCRYPTION_KEY=[0-9a-f]{64}$' "$t/old/.env" || fail "upgrade: key not added"
+grep -qx 'JWT_SECRET=keepme' "$t/old/.env" || fail "upgrade: existing value changed"
+
+# (c) IP lookup failure: clean error, no .env created
+mkdir -p "$t/noip"; cp "$repo/.env.example" "$t/noip/"
+if out="$(cd "$t/noip" && env -u ZENITH_PUBLIC_IP -u ZENITH_DOMAIN PATH="$stubs:$PATH" ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1)"; then
+  fail "installer should fail when the public IP cannot be detected"
+fi
+echo "$out" | grep -q "Could not detect this server's public IP" || fail "missing IP error message"
+[ ! -e "$t/noip/.env" ] || fail ".env created despite IP failure"
+
 echo "install_test: ok"
