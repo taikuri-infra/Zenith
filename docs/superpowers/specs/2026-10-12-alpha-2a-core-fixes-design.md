@@ -97,9 +97,8 @@ The custom-domain dialog tells the user to point an **A record at the server's I
 - Adding or removing a domain redeploys the current image through the runtime backend. This recreates the container with new labels.
 
 **4.6 Project required.**
-- On first login in standalone, the API creates a project named `default` if the user has none.
-- `POST /apps` without a project returns 400 with a clear message, not 500.
-- The web preselects the only project.
+- When an app is created without a project and the user has none, the API creates the user's `Default` project and uses it.
+- If that fails, `POST /apps` returns 400 with a clear message, not 500.
 
 ## 5. Databases on Docker (F-16)
 
