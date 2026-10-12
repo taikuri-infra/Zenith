@@ -35,7 +35,6 @@ type DockerDeployer struct {
 	envCrypto    *pkgCrypto.EnvCrypto
 	baseDomain   string
 	domainRepo   ports.DomainRepository
-	projectRepo  ports.ProjectRepository // optional: compose service-name aliases
 	certResolver string
 	network      string // docker network shared with Traefik
 	// Per-app locks serialize deploy/delete for a given app. Deploys are
@@ -131,9 +130,8 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 	// model as the cloud/k8s edition, which routes via Traefik IngressRoute.
 	labels := proxyLabels(app, d.appHosts(ctx, app), d.network, d.certResolver)
 
-	// Network aliases let other services reach this one by its app name, its
-	// subdomain and its original compose service name (e.g. "db:5432").
-	aliases := networkAliases(app, d.projectSlug(ctx, app))
+	// Network aliases let other services reach this one by app name and subdomain.
+	aliases := networkAliases(app)
 	resp, err := d.cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:  imageTag,
@@ -251,40 +249,12 @@ func (d *DockerDeployer) resolveEnvVars(ctx context.Context, app *entities.App) 
 	return out, nil
 }
 
-// SetProjectRepo lets the deployer resolve an app's project slug, so a compose
-// service named "<slug>-<service>" is also reachable as "<service>".
-func (d *DockerDeployer) SetProjectRepo(repo ports.ProjectRepository) { d.projectRepo = repo }
-
-// projectSlug is the slug of the app's project, or "" when unknown.
-func (d *DockerDeployer) projectSlug(ctx context.Context, app *entities.App) string {
-	if d.projectRepo == nil || app.ProjectID == "" {
-		return ""
-	}
-	p, err := d.projectRepo.GetProject(ctx, app.ProjectID)
-	if err != nil || p == nil {
-		return ""
-	}
-	return p.Slug
-}
-
 // networkAliases are the names other containers on the app network can use
-// for this app: its name, its subdomain and — for compose imports, which name
-// apps "<projectSlug>-<service>" — the bare compose service name.
-func networkAliases(app *entities.App, projectSlug string) []string {
-	aliases := []string{sanitizeName(app.Name), sanitizeName(app.Subdomain)}
-	if projectSlug == "" || !strings.HasPrefix(app.Name, projectSlug+"-") {
-		return aliases
-	}
-	svc := sanitizeName(strings.TrimPrefix(app.Name, projectSlug+"-"))
-	if svc == "" {
-		return aliases
-	}
-	for _, a := range aliases {
-		if a == svc {
-			return aliases
-		}
-	}
-	return append(aliases, svc)
+// for this app. Never the bare compose service name: apps, databases and the
+// control plane share one network, so e.g. "postgres" would shadow the API's
+// own database host (F-21 needs per-project networks).
+func networkAliases(app *entities.App) []string {
+	return []string{sanitizeName(app.Name), sanitizeName(app.Subdomain)}
 }
 
 // SetDomainRepo lets the deployer route an app's active custom domains.

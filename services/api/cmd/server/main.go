@@ -1308,7 +1308,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		dockerDeployer.SetEnvVarRepo(envVarRepo)
 		dockerDeployer.SetEnvCrypto(envCrypto)
 		dockerDeployer.SetDomainRepo(domainRepo)
-		dockerDeployer.SetProjectRepo(projectRepo)
 		dockerDeployer.SetCertResolver(cfg.CertResolver)
 	}
 	envVarHandler.SetRestarter(backend)
