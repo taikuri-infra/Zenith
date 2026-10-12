@@ -323,6 +323,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		planRepo = memory.NewMemoryUserPlanRepository()
 	}
 
+	// Self-host: no plan tiers. Every caller of GetUserPlan (domains, MFA,
+	// webhooks, Redis limits, …) sees enterprise limits.
+	if cfg.Mode != "saas" {
+		planRepo = memory.NewUnlimitedPlanRepository(planRepo)
+	}
+
 	// Team members (IAM)
 	var teamRepo ports.TeamMemberRepository
 	if pool != nil {
