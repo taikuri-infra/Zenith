@@ -11,6 +11,8 @@ import { useToast } from "@/components/toast";
 import { useProject } from "@/hooks/use-project";
 import { getApi } from "@/lib/get-api";
 import { type AppDatabase } from "@/lib/api";
+import { engineOptions } from "@/lib/database-engines";
+import { IS_STANDALONE } from "@/lib/runtime-env";
 import Link from "next/link";
 import { useState } from "react";
 import { Plus, Database, Loader2, Copy, Check, AlertTriangle, Download } from "lucide-react";
@@ -24,12 +26,7 @@ const engineBadge: Record<string, { label: string; className: string }> = {
   kafka: { label: "K", className: "bg-orange-500/20 text-orange-400" },
 };
 
-const engines = [
-  { id: "postgresql", label: "PostgreSQL", enabled: true },
-  { id: "mysql", label: "MySQL", enabled: true },
-  { id: "mongodb", label: "MongoDB", enabled: true },
-  { id: "redis", label: "Redis", enabled: true },
-];
+const engines = engineOptions(IS_STANDALONE);
 
 function CopyField({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
   const [copied, setCopied] = useState(false);
@@ -266,9 +263,9 @@ export default function DatabasesPage() {
                       <Database className="h-4 w-4 text-neutral-400" />
                       <span className="text-sm font-medium text-white">{eng.label}</span>
                     </div>
-                    {!eng.enabled && (
+                    {!eng.enabled && eng.disabledNote && (
                       <span className="absolute right-2 top-2 rounded bg-neutral-500/20 px-1.5 py-0.5 text-[9px] text-neutral-500">
-                        Coming Soon
+                        {eng.disabledNote}
                       </span>
                     )}
                   </button>
