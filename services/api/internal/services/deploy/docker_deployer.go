@@ -16,9 +16,9 @@ import (
 	registrytypes "github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 
+	pkgCrypto "github.com/dotechhq/zenith/services/api/internal/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
-	pkgCrypto "github.com/dotechhq/zenith/services/api/internal/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
@@ -179,42 +179,65 @@ func (d *DockerDeployer) DeleteApp(ctx context.Context, app *entities.App) error
 	return nil
 }
 
-// resolveEnvVars fetches and decrypts the app's env vars, mirroring the k8s deployer.
+// resolveEnvVars builds the container env from three sources, later ones
+// overriding earlier ones by key:
+//  1. legacy app_env_vars (app create, compose import, database attach)
+//  2. v2 app-wide vars (environment_id NULL; the UI Environment tab)
+//  3. v2 vars scoped to the app's environment
+//
+// Secrets are decrypted; a secret that fails to decrypt is skipped.
 func (d *DockerDeployer) resolveEnvVars(ctx context.Context, app *entities.App) ([]entities.EnvVar, error) {
-	var out []entities.EnvVar
-	if d.envVarRepo != nil {
-		vars, err := d.envVarRepo.GetEnvVarsByEnvironment(ctx, app.ID, app.EnvironmentID)
-		if err != nil {
-			return nil, fmt.Errorf("docker-deploy: get env vars: %w", err)
+	merged := map[string]string{}
+	var order []string
+	put := func(k, v string) {
+		if _, ok := merged[k]; !ok {
+			order = append(order, k)
 		}
-		for _, v := range vars {
-			value := v.Value
-			if v.IsSecret && d.envCrypto != nil && pkgCrypto.IsEncrypted(value) {
-				if dec, derr := d.envCrypto.Decrypt(app.UserID, value); derr == nil {
-					value = dec
-				} else {
-					slog.Error("docker-deploy: decrypt env var failed, skipping", "key", v.Key, "error", derr)
-					continue
-				}
-			}
-			out = append(out, entities.EnvVar{ID: v.ID, AppID: v.AppID, Key: v.Key, Value: value})
-		}
-		return out, nil
+		merged[k] = v
 	}
+	decrypt := func(key, value string) (string, bool) {
+		if d.envCrypto != nil && pkgCrypto.IsEncrypted(value) {
+			dec, err := d.envCrypto.Decrypt(app.UserID, value)
+			if err != nil {
+				slog.Error("docker-deploy: decrypt env var failed, skipping", "key", key, "error", err)
+				return "", false
+			}
+			return dec, true
+		}
+		return value, true
+	}
+
 	legacy, err := d.appRepo.GetEnvVars(ctx, app.ID)
 	if err != nil {
 		return nil, fmt.Errorf("docker-deploy: get env vars: %w", err)
 	}
 	for _, v := range legacy {
-		value := v.Value
-		if d.envCrypto != nil && pkgCrypto.IsEncrypted(value) {
-			if dec, derr := d.envCrypto.Decrypt(app.UserID, value); derr == nil {
-				value = dec
-			} else {
-				continue
+		if val, ok := decrypt(v.Key, v.Value); ok {
+			put(v.Key, val)
+		}
+	}
+
+	if d.envVarRepo != nil {
+		scopes := []string{""}
+		if app.EnvironmentID != "" {
+			scopes = append(scopes, app.EnvironmentID)
+		}
+		for _, envID := range scopes {
+			vars, err := d.envVarRepo.GetEnvVarsByEnvironment(ctx, app.ID, envID)
+			if err != nil {
+				return nil, fmt.Errorf("docker-deploy: get env vars: %w", err)
+			}
+			for _, v := range vars {
+				if val, ok := decrypt(v.Key, v.Value); ok {
+					put(v.Key, val)
+				}
 			}
 		}
-		out = append(out, entities.EnvVar{ID: v.ID, AppID: v.AppID, Key: v.Key, Value: value})
+	}
+
+	out := make([]entities.EnvVar, 0, len(order))
+	for _, k := range order {
+		out = append(out, entities.EnvVar{AppID: app.ID, Key: k, Value: merged[k]})
 	}
 	return out, nil
 }
