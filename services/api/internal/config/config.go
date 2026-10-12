@@ -17,10 +17,10 @@ type Config struct {
 	LogLevel    string
 
 	// Kubernetes
-	K8sMode    string // K8S_MODE: "memory" (default) or "real"
-	KubeConfig string
+	K8sMode      string // K8S_MODE: "memory" (default) or "real"
+	KubeConfig   string
 	CertResolver string
-	InCluster  bool
+	InCluster    bool
 
 	// Auth
 	JWTSecret          string
@@ -41,9 +41,9 @@ type Config struct {
 	InternalSecret string
 
 	// Deploy
-	BaseDomain    string
-	AppNetwork    string // docker network app containers join (standalone/DockerDeployer)
-	GatewayDomain string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
+	BaseDomain       string
+	AppNetwork       string // docker network app containers join (standalone/DockerDeployer)
+	GatewayDomain    string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
 	Registry         string // container registry host (e.g. "registry.stage.freezenith.com")
 	RegistryProject  string // Harbor project for user images (e.g. "zenith-stage") — robot account must have push access here
 	RegistryUser     string // robot account for internal registry (same as kaniko-registry-auth)
@@ -70,9 +70,9 @@ type Config struct {
 	DatabaseURL string
 
 	// Stripe Billing (Phase 6)
-	StripeBillingEnabled bool
-	StripeSecretKey      string
-	StripeWebhookSecret  string
+	StripeBillingEnabled  bool
+	StripeSecretKey       string
+	StripeWebhookSecret   string
 	StripeProPriceID      string
 	StripeTeamPriceID     string
 	StripeBusinessPriceID string
@@ -119,14 +119,14 @@ type Config struct {
 	AIModel      string
 
 	// Hetzner Autoscaler (Phase 5)
-	HetznerToken        string
-	AutoscalerEnabled   bool
-	AutoscalerMinNodes  int
-	AutoscalerMaxNodes  int
-	AutoscalerInterval  int // seconds
-	HetznerServerType   string
-	HetznerLocation     string
-	K3sToken            string
+	HetznerToken       string
+	AutoscalerEnabled  bool
+	AutoscalerMinNodes int
+	AutoscalerMaxNodes int
+	AutoscalerInterval int // seconds
+	HetznerServerType  string
+	HetznerLocation    string
+	K3sToken           string
 }
 
 func Load() *Config {
@@ -136,49 +136,49 @@ func Load() *Config {
 	corsDefault := "http://localhost:3000"
 
 	return &Config{
-		Port:        getEnvInt("PORT", 8080),
-		Environment: getEnv("ENVIRONMENT", "development"),
-		Mode:        mode,
-		CORSOrigins: getEnv("CORS_ORIGINS", corsDefault),
-		LogLevel:    getEnv("LOG_LEVEL", "info"),
-		KubeConfig:  getEnv("KUBECONFIG", ""),
-		CertResolver: getEnv("ZENITH_CERT_RESOLVER", "le"),
-		K8sMode:    getEnv("K8S_MODE", "memory"),
-		InCluster:   getEnvBool("IN_CLUSTER", false),
-		JWTSecret:     getEnv("JWT_SECRET", ""),
-		JWTIssuer:     getEnv("JWT_ISSUER", "zenith"),
-		AdminEmail:     getEnv("ADMIN_EMAIL", ""),
-		AdminPassword:  getEnv("ADMIN_PASSWORD", ""),
-		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
-		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
-		GitHubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
-		GitHubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
-		ResendAPIKey:   getEnv("RESEND_API_KEY", ""),
-		AppURL:         getEnv("APP_URL", ""),
-		EmailFrom:      getEnv("EMAIL_FROM", "Zenith <noreply@freezenith.com>"),
-		InternalSecret: getEnv("INTERNAL_SECRET", ""),
-		BaseDomain:    getEnv("BASE_DOMAIN", "freezenith.com"),
-		AppNetwork:    getEnv("ZENITH_APP_NETWORK", "zenith_default"),
-		GatewayDomain: getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
-		Registry:         getEnv("REGISTRY", "registry.freezenith.com"),
-		RegistryProject:  getEnv("REGISTRY_PROJECT", ""),
-		RegistryUser:     getEnv("REGISTRY_USER", ""),
-		RegistryPassword: getEnv("REGISTRY_PASSWORD", ""),
-		HarborURL:        getEnv("HARBOR_URL", ""),
-		HarborUser:     getEnv("HARBOR_USER", ""),
-		HarborPassword: getEnv("HARBOR_PASSWORD", ""),
-		MaxConcurrentDeploys: getEnvInt("MAX_CONCURRENT_DEPLOYS", 5),
-		SecretsKey:          getEnv("SECRETS_ENCRYPTION_KEY", ""),
-		OldSecretsKeys:      getEnv("OLD_SECRETS_KEYS", ""),
-		OTELEndpoint:        getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
-		OTELInsecure:        getEnvBool("OTEL_INSECURE", true),
-		OTELSampleRate:      getEnvFloat("OTEL_SAMPLE_RATE", 1.0),
-		DatabaseURL:         buildDatabaseURL(),
-		StripeBillingEnabled: getEnvBool("STRIPE_BILLING_ENABLED", false),
-		StripeSecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
-		StripeWebhookSecret:  getEnv("STRIPE_WEBHOOK_SECRET", ""),
+		Port:                  getEnvInt("PORT", 8080),
+		Environment:           getEnv("ENVIRONMENT", "development"),
+		Mode:                  mode,
+		CORSOrigins:           getEnv("CORS_ORIGINS", corsDefault),
+		LogLevel:              getEnv("LOG_LEVEL", "info"),
+		KubeConfig:            getEnv("KUBECONFIG", ""),
+		CertResolver:          getEnv("ZENITH_CERT_RESOLVER", "le"),
+		K8sMode:               getEnv("K8S_MODE", "memory"),
+		InCluster:             getEnvBool("IN_CLUSTER", false),
+		JWTSecret:             getEnv("JWT_SECRET", ""),
+		JWTIssuer:             getEnv("JWT_ISSUER", "zenith"),
+		AdminEmail:            getEnv("ADMIN_EMAIL", ""),
+		AdminPassword:         getEnv("ADMIN_PASSWORD", ""),
+		GoogleClientID:        getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret:    getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GitHubClientID:        getEnv("GITHUB_CLIENT_ID", ""),
+		GitHubClientSecret:    getEnv("GITHUB_CLIENT_SECRET", ""),
+		ResendAPIKey:          getEnv("RESEND_API_KEY", ""),
+		AppURL:                getEnv("APP_URL", ""),
+		EmailFrom:             getEnv("EMAIL_FROM", "Zenith <noreply@freezenith.com>"),
+		InternalSecret:        getEnv("INTERNAL_SECRET", ""),
+		BaseDomain:            getEnv("BASE_DOMAIN", "freezenith.com"),
+		AppNetwork:            getEnv("ZENITH_APP_NETWORK", "zenith_default"),
+		GatewayDomain:         getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
+		Registry:              getEnv("REGISTRY", "registry.freezenith.com"),
+		RegistryProject:       getEnv("REGISTRY_PROJECT", ""),
+		RegistryUser:          getEnv("REGISTRY_USER", ""),
+		RegistryPassword:      getEnv("REGISTRY_PASSWORD", ""),
+		HarborURL:             getEnv("HARBOR_URL", ""),
+		HarborUser:            getEnv("HARBOR_USER", ""),
+		HarborPassword:        getEnv("HARBOR_PASSWORD", ""),
+		MaxConcurrentDeploys:  getEnvInt("MAX_CONCURRENT_DEPLOYS", 5),
+		SecretsKey:            getEnv("SECRETS_ENCRYPTION_KEY", ""),
+		OldSecretsKeys:        getEnv("OLD_SECRETS_KEYS", ""),
+		OTELEndpoint:          getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		OTELInsecure:          getEnvBool("OTEL_INSECURE", true),
+		OTELSampleRate:        getEnvFloat("OTEL_SAMPLE_RATE", 1.0),
+		DatabaseURL:           buildDatabaseURL(),
+		StripeBillingEnabled:  getEnvBool("STRIPE_BILLING_ENABLED", false),
+		StripeSecretKey:       getEnv("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret:   getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		StripeProPriceID:      getEnv("STRIPE_PRO_PRICE_ID", ""),
-		StripeTeamPriceID:    getEnv("STRIPE_TEAM_PRICE_ID", ""),
+		StripeTeamPriceID:     getEnv("STRIPE_TEAM_PRICE_ID", ""),
 		StripeBusinessPriceID: getEnv("STRIPE_BUSINESS_PRICE_ID", ""),
 		TemporalEnabled:       getEnvBool("TEMPORAL_ENABLED", false),
 		TemporalHost:          getEnv("TEMPORAL_HOST", "temporal.temporal.svc.cluster.local:7233"),
@@ -194,9 +194,9 @@ func Load() *Config {
 		S3PlatformBucket:      getEnv("S3_PLATFORM_BUCKET", "zenith-platform-storage"),
 		CNPGAdminDSN:          getEnv("CNPG_ADMIN_DSN", ""),
 		PrometheusURL:         getEnv("PROMETHEUS_URL", "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"),
-		LokiURL:              getEnv("LOKI_URL", "http://loki.monitoring.svc.cluster.local:3100"),
-		GrafanaURL:           getEnv("GRAFANA_URL", "http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local:80"),
-		TempoURL:             getEnv("TEMPO_URL", "http://tempo.monitoring.svc.cluster.local:3100"),
+		LokiURL:               getEnv("LOKI_URL", "http://loki.monitoring.svc.cluster.local:3100"),
+		GrafanaURL:            getEnv("GRAFANA_URL", "http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local:80"),
+		TempoURL:              getEnv("TEMPO_URL", "http://tempo.monitoring.svc.cluster.local:3100"),
 		RedisURL:              getEnv("REDIS_URL", ""),
 		NATSEnabled:           getEnvBool("NATS_ENABLED", false),
 		NATSServers:           getEnv("NATS_SERVERS", "nats://nats.nats.svc.cluster.local:4222"),
@@ -206,13 +206,13 @@ func Load() *Config {
 		AIAPIKey:              getEnv("AI_API_KEY", ""),
 		AIModel:               getEnv("AI_MODEL", "gpt-4o-mini"),
 		HetznerToken:          getEnv("HCLOUD_TOKEN", ""),
-		AutoscalerEnabled:   getEnvBool("AUTOSCALER_ENABLED", false),
-		AutoscalerMinNodes:  getEnvInt("AUTOSCALER_MIN_NODES", 2),
-		AutoscalerMaxNodes:  getEnvInt("AUTOSCALER_MAX_NODES", 10),
-		AutoscalerInterval:  getEnvInt("AUTOSCALER_INTERVAL", 60),
-		HetznerServerType:   getEnv("HETZNER_SERVER_TYPE", "cpx31"),
-		HetznerLocation:     getEnv("HETZNER_LOCATION", "fsn1"),
-		K3sToken:            getEnv("K3S_TOKEN", ""),
+		AutoscalerEnabled:     getEnvBool("AUTOSCALER_ENABLED", false),
+		AutoscalerMinNodes:    getEnvInt("AUTOSCALER_MIN_NODES", 2),
+		AutoscalerMaxNodes:    getEnvInt("AUTOSCALER_MAX_NODES", 10),
+		AutoscalerInterval:    getEnvInt("AUTOSCALER_INTERVAL", 60),
+		HetznerServerType:     getEnv("HETZNER_SERVER_TYPE", "cpx31"),
+		HetznerLocation:       getEnv("HETZNER_LOCATION", "fsn1"),
+		K3sToken:              getEnv("K3S_TOKEN", ""),
 	}
 }
 

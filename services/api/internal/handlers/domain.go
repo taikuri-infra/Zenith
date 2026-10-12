@@ -135,7 +135,8 @@ func (h *DomainHandler) ListByUser(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// refreshIngress re-deploys the app to refresh IngressRoute and Certificate CRDs.
+// refreshIngress re-deploys the app so its routes (Traefik labels / IngressRoute)
+// include the current domains.
 func (h *DomainHandler) refreshIngress(ctx context.Context, app *entities.App) {
 	if h.deployer == nil || app == nil {
 		return
