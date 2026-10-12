@@ -253,8 +253,25 @@ func (d *DockerDeployer) resolveEnvVars(ctx context.Context, app *entities.App) 
 // for this app. Never the bare compose service name: apps, databases and the
 // control plane share one network, so e.g. "postgres" would shadow the API's
 // own database host (F-21 needs per-project networks).
+//
+// Names a control-plane service answers to (compose service names, and the
+// zenith-* container names of the stack and managed databases) are dropped:
+// an app called "postgres" would otherwise receive the API's database traffic.
 func networkAliases(app *entities.App) []string {
-	return []string{sanitizeName(app.Name), sanitizeName(app.Subdomain)}
+	var out []string
+	for _, a := range []string{sanitizeName(app.Name), sanitizeName(app.Subdomain)} {
+		if a == "" || reservedAlias(a) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+var controlPlaneHosts = map[string]bool{"postgres": true, "storage": true, "api": true, "web": true, "traefik": true}
+
+func reservedAlias(a string) bool {
+	return controlPlaneHosts[a] || strings.HasPrefix(a, "zenith")
 }
 
 // SetDomainRepo lets the deployer route an app's active custom domains.

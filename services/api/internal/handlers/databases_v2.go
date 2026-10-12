@@ -398,8 +398,13 @@ func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
+	// project_id is caller-supplied: keep only the caller's own rows so a
+	// guessed or foreign project id discloses nothing.
 	result := make([]dto.DatabaseInfo, 0, len(dbs))
 	for i := range dbs {
+		if dbs[i].UserID != userID {
+			continue
+		}
 		result = append(result, toDatabaseInfoV2(&dbs[i], "", ""))
 	}
 
@@ -417,7 +422,7 @@ func (h *DatabaseHandlerV2) ListByUser(c *fiber.Ctx) error {
 			seen[r.ID] = true
 		}
 		for i := range msList {
-			if !seen[msList[i].ID] {
+			if msList[i].UserID == userID && !seen[msList[i].ID] {
 				result = append(result, managedServiceToDatabaseInfo(&msList[i]))
 			}
 		}

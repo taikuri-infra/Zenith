@@ -37,3 +37,12 @@ func TestProxyLabels_PublicAndUnsetExposureAreRouted(t *testing.T) {
 		}
 	}
 }
+
+func TestNetworkAliases_NeverShadowControlPlane(t *testing.T) {
+	for _, name := range []string{"postgres", "storage", "api", "web", "traefik", "Zenith-Postgres-1", "zenith-db-1a2b3c4d"} {
+		app := &entities.App{Name: name, Subdomain: name}
+		if got := networkAliases(app); len(got) != 0 {
+			t.Errorf("app %q got aliases %v, want none (shadows a control-plane host)", name, got)
+		}
+	}
+}
