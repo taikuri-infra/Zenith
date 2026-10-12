@@ -2,7 +2,9 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"testing"
 
@@ -527,5 +529,26 @@ func TestV2CreateAppPlanLimit(t *testing.T) {
 	resp, _ := fiberApp.Test(req, -1)
 	if resp.StatusCode != 403 {
 		t.Errorf("Expected 403 for plan limit, got %d", resp.StatusCode)
+	}
+}
+
+func TestAppCreate_CreatesDefaultProjectWhenNone(t *testing.T) {
+	appRepo := memory.NewMemoryAppRepository()
+	projectRepo := memory.NewMemoryProjectRepository()
+	h := handlers.NewAppHandlerV2(appRepo, "example.com", nil, nil)
+	h.SetProjectRepo(projectRepo)
+	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	app.Post("/api/v1/apps", injectUserID("user-1"), h.Create)
+
+	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(`{"name":"whoami","deploy_source":"image","image_url":"traefik/whoami:latest","port":80}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req, -1)
+	if resp.StatusCode != 201 {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d: %s", resp.StatusCode, b)
+	}
+	ps, _ := projectRepo.ListProjectsByUser(context.Background(), "user-1")
+	if len(ps) != 1 || ps[0].Name != "Default" {
+		t.Fatalf("projects = %+v, want one named Default", ps)
 	}
 }
