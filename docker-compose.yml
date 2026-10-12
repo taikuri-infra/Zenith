@@ -34,24 +34,6 @@ services:
     # publicly). Uncomment to reach the console locally:
     #   ports: ["127.0.0.1:9001:9001"]
 
-  # One-shot job: creates the platform bucket on first boot.
-  # RustFS (like MinIO) doesn't auto-create buckets, so `mc` does it here.
-  storage-init:
-    image: minio/mc:latest
-    restart: "no"
-    depends_on:
-      - storage
-    environment:
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-zenith}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-changeme123}
-      S3_PLATFORM_BUCKET: ${S3_PLATFORM_BUCKET:-zenith-platform-storage}
-    entrypoint: >
-      /bin/sh -c "
-      until mc alias set local http://storage:9000 \"$$S3_ACCESS_KEY\" \"$$S3_SECRET_KEY\"; do sleep 2; done;
-      mc mb -p local/$$S3_PLATFORM_BUCKET;
-      exit 0
-      "
-
   # Prebuilt public image (no build needed). To build from source instead,
   # replace the `image:` line with:
   #   build: { context: ., dockerfile: services/api/Dockerfile }
@@ -61,17 +43,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      storage-init:
-        condition: service_completed_successfully
+      storage:
+        condition: service_started
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       ZENITH_MODE: standalone
       DATABASE_URL: postgres://zenith:${DB_PASSWORD:-zenith}@postgres:5432/zenith?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@localhost}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${ZENITH_DOMAIN:-localhost}}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
+      ZENITH_CERT_RESOLVER: le
       # Apps are subdomains of this (whoami.<BASE_DOMAIN>). Defaults to the
       # dashboard domain; use "localhost" locally (apps get *.localhost; no DNS
       # or public certificate needed for local testing).
@@ -93,16 +77,16 @@ services:
       - "${DOCKER_GID:-999}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    # Routed by Traefik under the `tls` profile: <domain>/api/* -> this service.
-    # Inert when Traefik isn't running (default profile uses the published port).
+    # Routed by Traefik: <domain>/api/* -> this service. The loopback-only
+    # published port is for local debugging.
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.zenith-api.rule=Host(`${ZENITH_DOMAIN:-localhost}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.zenith-api.entrypoints=websecure"
-      # No certresolver here: the websecure entrypoint carries the default
-      # resolver (or a self-signed default cert) via the generated traefik.yml,
-      # so one label set serves HTTP-01, DNS-01, and self-signed alike.
       - "traefik.http.routers.zenith-api.tls=true"
+      # Name the resolver: a router with its own tls section ignores the
+      # entrypoint default, which left the dashboard on the default cert (F-12).
+      - "traefik.http.routers.zenith-api.tls.certresolver=le"
       - "traefik.http.routers.zenith-api.priority=100"
       - "traefik.http.services.zenith-api.loadbalancer.server.port=8080"
 
@@ -116,29 +100,29 @@ services:
     depends_on:
       - api
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
       NEXT_PUBLIC_ZENITH_MODE: standalone
       NEXT_PUBLIC_ZENITH_LABS: ${ZENITH_LABS:-false}
-    # Routed by Traefik under the `tls` profile: <domain>/ -> dashboard.
+    # Routed by Traefik: <domain>/ -> dashboard.
     # Lower priority than the API router so /api/* wins.
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.zenith-web.rule=Host(`${ZENITH_DOMAIN:-localhost}`)"
       - "traefik.http.routers.zenith-web.entrypoints=websecure"
       - "traefik.http.routers.zenith-web.tls=true"
+      - "traefik.http.routers.zenith-web.tls.certresolver=le"
       - "traefik.http.routers.zenith-web.priority=1"
       - "traefik.http.services.zenith-web.loadbalancer.server.port=3000"
 
-  # Production reverse proxy with automatic HTTPS.
-  # Only starts with the `tls` profile:  docker compose --profile tls up -d
-  # Requires ZENITH_DOMAIN set in .env and ports 80/443 open.
+  # Reverse proxy with automatic HTTPS. Always runs and owns ports 80/443
+  # (the only public ports). ZENITH_DOMAIN is set in .env by the installer.
   #
   # The static config lives in ./traefik/traefik.yml, which the installer
   # generates for the chosen TLS mode (HTTP-01, DNS-01, or self-signed). The
-  # repo ships a default HTTP-01 traefik.yml so a manual `docker compose
-  # --profile tls up` still works — edit the email in it, or run `zen install`.
+  # repo ships a default HTTP-01 traefik.yml so a manual `docker compose up`
+  # still works — edit the email in it, or run `zen install`.
   # DNS-01 reads CF_DNS_API_TOKEN (set in .env by the installer) for the
   # Cloudflare challenge.
   #
@@ -153,7 +137,6 @@ services:
     # tags default to API 1.24, which Docker 25+ daemons reject outright.
     image: traefik:v3.7.8
     restart: unless-stopped
-    profiles: ["tls"]
     depends_on:
       - web
       - api

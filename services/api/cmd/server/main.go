@@ -1005,7 +1005,17 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// S3 client + BucketService (real per-customer S3 buckets)
 	var objStorage ports.ObjectStorage
 	if cfg.S3Endpoint != "" {
-		objStorage = s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+		s3c := s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+		objStorage = s3c
+		go func(s3c *s3client.Client) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			if err := ensureBucket(ctx, s3c.CreateBucket, cfg.S3PlatformBucket, 60, 2*time.Second); err != nil {
+				slog.Error("platform bucket not ready", "error", err)
+			} else {
+				slog.Info("platform bucket ready", "bucket", cfg.S3PlatformBucket)
+			}
+		}(s3c)
 	} else {
 		objStorage = s3client.NewMemoryClient()
 	}
