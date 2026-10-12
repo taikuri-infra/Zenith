@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { SHOW_PLANS } from "@/lib/edition";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
@@ -1316,7 +1317,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
             {state.category !== "background" && (
               <>
                 <span className="text-neutral-400">URL</span>
-                <span className="text-white font-mono text-xs">{nameCheckUrl || "Assigned on deploy"}</span>
+                <span className="text-white font-mono text-xs">{nameCheckUrl || (SHOW_PLANS ? `https://${state.appName}.apps.stage.freezenith.com` : "Assigned on deploy")}</span>
               </>
             )}
             {state.category !== "background" && (
