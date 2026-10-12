@@ -11,12 +11,26 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 )
 
-type stubBackend struct{ err error }
+type stubBackend struct {
+	err  error
+	repo *memory.MemoryAppRepository
+	set  entities.AppStatus
+}
 
-func (s *stubBackend) DeployApp(context.Context, *entities.App, string) error { return s.err }
-func (s *stubBackend) DeleteApp(context.Context, *entities.App) error         { return nil }
+func (s *stubBackend) DeployApp(ctx context.Context, app *entities.App, _ string) error {
+	if s.set != "" {
+		st := s.set
+		s.repo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &st})
+	}
+	return s.err
+}
+func (s *stubBackend) DeleteApp(context.Context, *entities.App) error { return nil }
 
 func runDeploy(t *testing.T, backendErr error) (*memory.MemoryAppRepository, *entities.App, *entities.Deployment) {
+	return runDeployWith(t, backendErr, "")
+}
+
+func runDeployWith(t *testing.T, backendErr error, set entities.AppStatus) (*memory.MemoryAppRepository, *entities.App, *entities.Deployment) {
 	t.Helper()
 	repo := memory.NewMemoryAppRepository()
 	app, err := repo.CreateApp(context.Background(), &dto.CreateAppInput{UserID: "u1", Name: "web", DeploySource: entities.DeploySourceImage, ImageURL: "nginx:1"})
@@ -24,7 +38,7 @@ func runDeploy(t *testing.T, backendErr error) (*memory.MemoryAppRepository, *en
 		t.Fatal(err)
 	}
 	dep, _ := repo.CreateDeployment(context.Background(), app.ID, "nginx:1")
-	p := NewPipeline(&stubBackend{err: backendErr}, repo, NewLogHub(50), nil, 5)
+	p := NewPipeline(&stubBackend{err: backendErr, repo: repo, set: set}, repo, NewLogHub(50), nil, 5)
 	if err := p.TriggerImageDeploy(app, dep, "nginx:1"); err != nil {
 		t.Fatal(err)
 	}
@@ -35,12 +49,30 @@ func runDeploy(t *testing.T, backendErr error) (*memory.MemoryAppRepository, *en
 	return repo, app, dep
 }
 
-func TestPipeline_RecordsImageAndRunningStatus(t *testing.T) {
+func TestPipeline_RecordsImageAndLeavesStatusToBackend(t *testing.T) {
 	repo, app, dep := runDeploy(t, nil)
 	got, _ := repo.GetDeployment(context.Background(), dep.ID)
 	if got.ImageTag != "nginx:1" {
 		t.Errorf("image_tag = %q, want nginx:1", got.ImageTag)
 	}
+	a, _ := repo.GetApp(context.Background(), app.ID)
+	if a.Status == entities.AppStatusRunning {
+		t.Errorf("pipeline must not overwrite backend-owned status, got %q", a.Status)
+	}
+}
+
+func TestPipeline_KeepsBackendSleepingStatus(t *testing.T) {
+	repo, app, _ := runDeployWith(t, nil, entities.AppStatusSleeping)
+	a, _ := repo.GetApp(context.Background(), app.ID)
+	if a.Status != entities.AppStatusSleeping {
+		t.Errorf("app status = %q, want sleeping", a.Status)
+	}
+}
+
+func TestDockerDeployer_MarkRunning(t *testing.T) {
+	repo := memory.NewMemoryAppRepository()
+	app, _ := repo.CreateApp(context.Background(), &dto.CreateAppInput{UserID: "u1", Name: "web", DeploySource: entities.DeploySourceImage, ImageURL: "nginx:1"})
+	(&DockerDeployer{appRepo: repo}).markRunning(context.Background(), app)
 	a, _ := repo.GetApp(context.Background(), app.ID)
 	if a.Status != entities.AppStatusRunning {
 		t.Errorf("app status = %q, want running", a.Status)

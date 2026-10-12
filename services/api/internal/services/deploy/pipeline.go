@@ -109,7 +109,9 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 		}
 
 		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusDeploying, "", "")
-		_ = p.appRepo.SetDeploymentImage(ctx, deployment.ID, image)
+		if err := p.appRepo.SetDeploymentImage(ctx, deployment.ID, image); err != nil {
+			slog.Warn("record deployment image failed", "deployment_id", deployment.ID, "error", err)
+		}
 
 		deployingStatus := entities.AppStatusDeploying
 		p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &deployingStatus})
@@ -133,10 +135,12 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 				}
 				return
 			}
+		} else {
+			// No deployer — mark as running directly (dev mode). Real backends
+			// set their own status (docker: running, k8s: running/sleeping).
+			runningStatus := entities.AppStatusRunning
+			p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &runningStatus})
 		}
-		// No deployer (dev mode) also counts as running.
-		runningStatus := entities.AppStatusRunning
-		p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &runningStatus})
 
 		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusActive, "", "")
 		p.emitLog(deployment.ID, "deploy", fmt.Sprintf("✓ %s is live — %s", app.Name, image))

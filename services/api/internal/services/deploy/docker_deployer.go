@@ -16,6 +16,7 @@ import (
 	registrytypes "github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 
+	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	pkgCrypto "github.com/dotechhq/zenith/services/api/internal/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
@@ -147,7 +148,19 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 	}
 	slog.Info("docker-deploy: app running", "app", app.Name, "container", name,
 		"host", fmt.Sprintf("%s.%s", app.Subdomain, d.baseDomain))
+	d.markRunning(ctx, app)
 	return nil
+}
+
+// markRunning records that the app's container started.
+func (d *DockerDeployer) markRunning(ctx context.Context, app *entities.App) {
+	if d.appRepo == nil {
+		return
+	}
+	running := entities.AppStatusRunning
+	if _, err := d.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &running}); err != nil {
+		slog.Warn("docker-deploy: mark app running failed", "app", app.Name, "error", err)
+	}
 }
 
 // DeleteApp stops and removes the app's container.
