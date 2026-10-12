@@ -124,23 +124,23 @@ Open registration (F-02): `/register` is reachable and `POST /auth/register` ret
 
 | ID | Severity | Area | Summary | Repro | Issue |
 |----|----------|------|---------|-------|-------|
-| F-01 | low | api-surface | 12 billing/plan/CRM routes are registered in standalone mode | `ZENITH_DUMP_ROUTES=1` dump, §1.1 | |
-| F-02 | medium | auth | Open registration on a public self-host; signup returns 200 but the account can never be verified (no email service) | `POST /api/v1/auth/register`, then login returns 401 | |
-| F-03 | low | build | 3 TypeScript errors in `use-auth.test.ts`; `tsc --noEmit` fails | `cd apps/web && pnpm exec tsc --noEmit` | |
-| F-04 | critical | install | Installer fails on every fresh box: `minio/mc` no longer pullable (Docker Hub denied, quay 401) | run install.sh | |
-| F-05 | critical | web/security | Published web image bakes `NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com` (`apps/web/Dockerfile:26` default ARG) and the runtime `env.js` override loses to it; admin credentials are POSTed to the staging host | log in at :3000, watch network | |
-| F-06 | critical | api | Standalone install enforces the SaaS free plan (1 app, 1 db, no Redis, no custom domain, no backups). `domain.go:52` and `gateway.go:36` ignore `UnlimitedMode` even in current source | `POST /apps/:id/domains` returns 403 | |
-| F-07 | high | security | Installer doesn't set `SECRETS_ENCRYPTION_KEY`, so secrets are stored in plaintext | api startup WARN | |
-| F-08 | medium | release | Public images are built by hand (workflow_dispatch), carry no revision, report `version: dev`, and are 3 months behind `main` | `docker image inspect` | |
-| F-09 | low | cli | `zen` help and login describe Hetzner/Zenith Cloud; login needs a 1-hour JWT pasted by hand | `zen --help`, `zen login --help` | |
-| F-10 | high | api | Compose mode wires k8s-only services (Loki, Prometheus, CNPG, backup K8s Jobs) | api startup log | |
-| F-11 | high | web | SaaS/upsell/stage-domain UI shown in standalone: Upgrade to Pro, referral, Hetzner tagline, CNAME to `freezenith.com`, `apps.stage.freezenith.com` URLs | §3 rows 6 and 10 | |
-| F-12 | critical | tls | Dashboard/API routers on the `tls` profile never request a Let's Encrypt cert (self-signed default); `ACME_EMAIL` unused | `curl https://$ZENITH_DOMAIN` fails cert verification | |
-| F-13 | high | web | UI deploy without a project returns 500 (FK violation); no way to create an empty project in the UI | Deploy App on a fresh install | |
-| F-14 | high | deploy | App status wrong: stuck `deploying`, then `failed` while the container runs | `GET /apps` vs `docker ps` | |
-| F-15 | critical | deploy | Compose import drops service `environment:`; Postgres crash-loops and dependants never start | §3 row 3 stack | |
-| F-16 | critical | databases | Managed Postgres/MySQL/Redis are metadata-only in Compose: no container, empty host and password, stuck `provisioning` | `POST /databases` | |
-| F-17 | critical | env | Env changes never reach the container: `env-v2/apply` returns 409 "no deployment found"; redeploy doesn't inject vars; Secrets tab 404 | §3 row 5 | |
-| F-18 | critical | domains | Custom domain saved `active` but never routed (no traefik label) | add domain, then curl | |
-| F-19 | critical | logs | App logs need Loki (k8s), returning 500; deploy logs empty; `zen logs` stream resets | §3 row 7 | |
-| F-20 | critical | deploy | Rollback returns 200 then fails silently (`deploy failed`, empty error); image unchanged | `POST /rollback {deployment_id}` | |
+| F-01 | low | api-surface | 12 billing/plan/CRM routes are registered in standalone mode | `ZENITH_DUMP_ROUTES=1` dump, §1.1 | #9 |
+| F-02 | medium | auth | Open registration on a public self-host; signup returns 200 but the account can never be verified (no email service) | `POST /api/v1/auth/register`, then login returns 401 | #10 |
+| F-03 | low | build | 3 TypeScript errors in `use-auth.test.ts`; `tsc --noEmit` fails | `cd apps/web && pnpm exec tsc --noEmit` | #11 |
+| F-04 | critical | install | Installer fails on every fresh box: `minio/mc` no longer pullable (Docker Hub denied, quay 401) | run install.sh | #12 |
+| F-05 | critical | web/security | Published web image bakes `NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com` (`apps/web/Dockerfile:26` default ARG) and the runtime `env.js` override loses to it; admin credentials are POSTed to the staging host | log in at :3000, watch network | #13 |
+| F-06 | critical | api | Standalone install enforces the SaaS free plan (1 app, 1 db, no Redis, no custom domain, no backups). `domain.go:52` and `gateway.go:36` ignore `UnlimitedMode` even in current source | `POST /apps/:id/domains` returns 403 | #14 |
+| F-07 | high | security | Installer doesn't set `SECRETS_ENCRYPTION_KEY`, so secrets are stored in plaintext | api startup WARN | #15 |
+| F-08 | medium | release | Public images are built by hand (workflow_dispatch), carry no revision, report `version: dev`, and are 3 months behind `main` | `docker image inspect` | #16 |
+| F-09 | low | cli | `zen` help and login describe Hetzner/Zenith Cloud; login needs a 1-hour JWT pasted by hand | `zen --help`, `zen login --help` | #17 |
+| F-10 | high | api | Compose mode wires k8s-only services (Loki, Prometheus, CNPG, backup K8s Jobs) | api startup log | #18 |
+| F-11 | high | web | SaaS/upsell/stage-domain UI shown in standalone: Upgrade to Pro, referral, Hetzner tagline, CNAME to `freezenith.com`, `apps.stage.freezenith.com` URLs | §3 rows 6 and 10 | #19 |
+| F-12 | critical | tls | Dashboard/API routers on the `tls` profile never request a Let's Encrypt cert (self-signed default); `ACME_EMAIL` unused | `curl https://$ZENITH_DOMAIN` fails cert verification | #20 |
+| F-13 | high | web | UI deploy without a project returns 500 (FK violation); no way to create an empty project in the UI | Deploy App on a fresh install | #21 |
+| F-14 | high | deploy | App status wrong: stuck `deploying`, then `failed` while the container runs | `GET /apps` vs `docker ps` | #22 |
+| F-15 | critical | deploy | Compose import drops service `environment:`; Postgres crash-loops and dependants never start | §3 row 3 stack | #23 |
+| F-16 | critical | databases | Managed Postgres/MySQL/Redis are metadata-only in Compose: no container, empty host and password, stuck `provisioning` | `POST /databases` | #24 |
+| F-17 | critical | env | Env changes never reach the container: `env-v2/apply` returns 409 "no deployment found"; redeploy doesn't inject vars; Secrets tab 404 | §3 row 5 | #25 |
+| F-18 | critical | domains | Custom domain saved `active` but never routed (no traefik label) | add domain, then curl | #26 |
+| F-19 | critical | logs | App logs need Loki (k8s), returning 500; deploy logs empty; `zen logs` stream resets | §3 row 7 | #27 |
+| F-20 | critical | deploy | Rollback returns 200 then fails silently (`deploy failed`, empty error); image unchanged | `POST /rollback {deployment_id}` | #28 |
