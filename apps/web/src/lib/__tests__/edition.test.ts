@@ -1,11 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@/lib/runtime-env", () => ({ IS_STANDALONE: true }));
-import { SHOW_PLANS, appHost, customDomainInstruction } from "../edition";
+import { SHOW_PLANS, API_SERVICE_EXPOSURE, appHost, customDomainInstruction } from "../edition";
 
 describe("edition (standalone)", () => {
   it("hides plans", () => {
     expect(SHOW_PLANS).toBe(false);
+  });
+  it("API services are public (no JWT gateway; protected means private on self-host)", () => {
+    expect(API_SERVICE_EXPOSURE).toBe("public");
   });
   it("uses the host from the app URL", () => {
     expect(appHost({ url: "https://whoami-1a2b.zenith.example.com", subdomain: "whoami-1a2b" })).toBe("whoami-1a2b.zenith.example.com");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SHOW_PLANS } from "@/lib/edition";
+import { SHOW_PLANS, API_SERVICE_EXPOSURE } from "@/lib/edition";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
@@ -447,7 +447,7 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
     if (cat === "frontend") {
       setState((s) => ({ ...s, category: cat, appType: "web", exposure: "public" }));
     } else if (cat === "api") {
-      setState((s) => ({ ...s, category: cat, appType: "web", exposure: "protected" }));
+      setState((s) => ({ ...s, category: cat, appType: "web", exposure: API_SERVICE_EXPOSURE }));
     } else {
       // background — keep existing backgroundMode
       const bgType = state.backgroundMode === "scheduled" ? "cron" : "worker";
