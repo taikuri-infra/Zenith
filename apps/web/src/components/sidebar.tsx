@@ -37,15 +37,18 @@ import {
   Trash2,
 } from "lucide-react";
 import { useProjectContext } from "@/hooks/use-project";
-import { IS_STANDALONE } from "@/lib/runtime-env";
+import { IS_STANDALONE, LABS_ENABLED } from "@/lib/runtime-env";
+import { isNavItemVisible } from "@/lib/nav-visibility";
 
-const isStandalone = IS_STANDALONE;
+const navCtx = { standalone: IS_STANDALONE, labs: LABS_ENABLED };
+const visible = (i: { saasOnly?: boolean; labs?: boolean }) => isNavItemVisible(i, navCtx);
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   saasOnly?: boolean;
+  labs?: boolean;
 }
 
 interface NavSection {
@@ -66,8 +69,8 @@ const navSections: NavSection[] = [
     items: [
       { name: "Apps", href: "/apps", icon: Boxes },
       { name: "Databases", href: "/databases", icon: Database },
-      { name: "Storage", href: "/storage", icon: HardDrive },
-      { name: "Queues", href: "/queues", icon: ListOrdered },
+      { name: "Storage", href: "/storage", icon: HardDrive, labs: true },
+      { name: "Queues", href: "/queues", icon: ListOrdered, labs: true },
     ],
   },
   {
@@ -80,8 +83,8 @@ const navSections: NavSection[] = [
   {
     label: "SECURITY",
     items: [
-      { name: "Auth", href: "/auth", icon: Shield },
-      { name: "IAM", href: "/iam", icon: KeyRound },
+      { name: "Auth", href: "/auth", icon: Shield, labs: true },
+      { name: "IAM", href: "/iam", icon: KeyRound, labs: true },
       { name: "SSO", href: "/sso", icon: Lock, saasOnly: true },
       { name: "Compliance", href: "/compliance", icon: ShieldCheck, saasOnly: true },
       { name: "Audit Log", href: "/audit", icon: FileText, saasOnly: true },
@@ -94,11 +97,11 @@ const navSections: NavSection[] = [
     label: "OBSERVABILITY",
     items: [
       { name: "Logs", href: "/logs", icon: ScrollText },
-      { name: "Activity", href: "/activity", icon: History },
-      { name: "Monitoring", href: "/monitoring", icon: Activity },
+      { name: "Activity", href: "/activity", icon: History, labs: true },
+      { name: "Monitoring", href: "/monitoring", icon: Activity, labs: true },
       { name: "Alerts", href: "/alerts", icon: Bell, saasOnly: true },
-      { name: "Registry", href: "/registry", icon: Container },
-      { name: "CI/CD", href: "/ci", icon: GitBranch },
+      { name: "Registry", href: "/registry", icon: Container, labs: true },
+      { name: "CI/CD", href: "/ci", icon: GitBranch, labs: true },
     ],
   },
   {
@@ -280,11 +283,9 @@ export function Sidebar() {
       {/* Main nav with sections */}
       <nav className="flex-1 overflow-y-auto px-3 py-3">
         {navSections
-          .filter((s) => !isStandalone || !s.saasOnly)
+          .filter((s) => visible(s))
           .map((section, sectionIdx) => {
-            const items = section.items.filter(
-              (item) => !isStandalone || !item.saasOnly
-            );
+            const items = section.items.filter(visible);
             if (items.length === 0) return null;
             return (
               <div key={section.label} className={sectionIdx > 0 ? "mt-4" : ""}>
@@ -315,7 +316,7 @@ export function Sidebar() {
       {/* Bottom nav */}
       <div className="border-t border-border px-3 py-3 space-y-0.5">
         {bottomNav
-          .filter((item) => !isStandalone || !item.saasOnly)
+          .filter(visible)
           .map((item) => (
             <Link
               key={item.name}
