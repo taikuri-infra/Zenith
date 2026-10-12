@@ -1,6 +1,9 @@
 package entities
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // DeploymentStatus represents the lifecycle status of a single deployment.
 type DeploymentStatus string
@@ -27,12 +30,17 @@ type Deployment struct {
 }
 
 // DeployedImage is the image this deployment runs. Rows written before
-// image_tag was recorded carry the image in git_sha.
+// image_tag was recorded may carry the image in git_sha, but git_sha can also
+// hold a commit SHA or a marker like "project-deploy"; it is only trusted when
+// it looks like an image reference (contains "/" or ":"). Otherwise "".
 func (d *Deployment) DeployedImage() string {
 	if d.ImageTag != "" {
 		return d.ImageTag
 	}
-	return d.GitSHA
+	if strings.ContainsAny(d.GitSHA, "/:") {
+		return d.GitSHA
+	}
+	return ""
 }
 
 // EnvVar represents an environment variable for an app.

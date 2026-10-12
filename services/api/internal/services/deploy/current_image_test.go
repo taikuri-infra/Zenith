@@ -30,3 +30,20 @@ func TestCurrentImage(t *testing.T) {
 		t.Fatalf("got %q, %v; want the active deployment's image nginx:1", img, err)
 	}
 }
+
+func TestCurrentImageSkipsLegacyNonImageGitSHA(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.NewMemoryAppRepository()
+	app, _ := repo.CreateApp(ctx, &dto.CreateAppInput{UserID: "u1", Name: "web", ImageURL: "nginx:1", DeploySource: entities.DeploySourceImage})
+
+	d, _ := repo.CreateDeployment(ctx, app.ID, "project-deploy")
+	_ = repo.UpdateDeploymentStatus(ctx, d.ID, entities.DeployStatusActive, "", "")
+	if _, err := repo.CreateRelease(ctx, app.ID, &dto.CreateReleaseInput{Image: "ghcr.io/acme/web:v3"}); err != nil {
+		t.Fatal(err)
+	}
+
+	img, err := CurrentImage(ctx, repo, app.ID)
+	if err != nil || img != "ghcr.io/acme/web:v3" {
+		t.Fatalf("got %q, %v; want the release image", img, err)
+	}
+}

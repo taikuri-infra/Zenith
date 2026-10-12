@@ -10,3 +10,18 @@ func TestDeployedImage(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestDeployedImageLegacyGitSHA(t *testing.T) {
+	cases := map[string]string{
+		"project-deploy":  "",
+		"abc123def":       "",
+		"docker.io/x/y:1": "docker.io/x/y:1",
+		"nginx:1":         "nginx:1",
+		"":                "",
+	}
+	for sha, want := range cases {
+		if got := (&Deployment{GitSHA: sha}).DeployedImage(); got != want {
+			t.Errorf("GitSHA %q: got %q, want %q", sha, got, want)
+		}
+	}
+}
