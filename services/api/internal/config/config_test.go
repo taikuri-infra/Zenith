@@ -127,3 +127,12 @@ func TestBuildDatabaseURL_SpecialCharsInPassword(t *testing.T) {
 		t.Errorf("expected URL-escaped password, got: %s", u)
 	}
 }
+
+func TestLoad_StandaloneHasNoK8sObservabilityURLs(t *testing.T) {
+	t.Setenv("ZENITH_MODE", "standalone")
+	t.Setenv("JWT_SECRET", "x")
+	cfg := Load()
+	if cfg.LokiURL != "" || cfg.PrometheusURL != "" {
+		t.Errorf("loki=%q prom=%q, want empty in standalone", cfg.LokiURL, cfg.PrometheusURL)
+	}
+}

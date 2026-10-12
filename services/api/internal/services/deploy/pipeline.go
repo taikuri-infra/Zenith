@@ -117,10 +117,11 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 		p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &deployingStatus})
 
 		if p.deployer != nil {
+			p.emitLog(deployment.ID, "info", "Pulling image and starting container...")
 			if err := p.deployer.DeployApp(ctx, app, image); err != nil {
 				p.emitLog(deployment.ID, "error", fmt.Sprintf("Deploy failed: %v", err))
 				p.emitEvent(EventDeployFailed, app, deployment, image, fmt.Sprintf("Deploy failed: %v", err))
-				p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusFailed, "", err.Error())
+				p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusFailed, p.buildLog(deployment.ID), err.Error())
 				failedStatus := entities.AppStatusFailed
 				p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &failedStatus})
 				if p.webhookSvc != nil {
@@ -142,8 +143,8 @@ func (p *Pipeline) TriggerImageDeploy(app *entities.App, deployment *entities.De
 			p.appRepo.UpdateApp(ctx, app.ID, &dto.UpdateAppInput{Status: &runningStatus})
 		}
 
-		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusActive, "", "")
 		p.emitLog(deployment.ID, "deploy", fmt.Sprintf("✓ %s is live — %s", app.Name, image))
+		p.appRepo.UpdateDeploymentStatus(ctx, deployment.ID, entities.DeployStatusActive, p.buildLog(deployment.ID), "")
 		p.emitEvent(EventDeployComplete, app, deployment, image, fmt.Sprintf("%s is live", app.Name))
 
 		// Fire webhook delivery for deploy.success
@@ -213,6 +214,19 @@ func (p *Pipeline) RunningCount() int {
 // LogHub returns the pipeline's log hub for WebSocket access.
 func (p *Pipeline) LogHub() *LogHub {
 	return p.logHub
+}
+
+// buildLog renders the deployment's log history for the deployments.build_log
+// column: one "RFC3339\tlevel\tmessage" line per entry.
+func (p *Pipeline) buildLog(deploymentID string) string {
+	if p.logHub == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, e := range p.logHub.History(deploymentID) {
+		fmt.Fprintf(&b, "%s\t%s\t%s\n", e.Timestamp.UTC().Format(time.RFC3339), e.Level, strings.ReplaceAll(e.Message, "\n", " "))
+	}
+	return b.String()
 }
 
 // emitLog publishes a log entry if a LogHub is configured.

@@ -981,7 +981,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 	backupHandler := handlers.NewBackupHandlerV2(backupRepo, dbRepo, planRepo)
 	// Wire real backup service when S3 + K8s are configured
-	if cfg.S3Endpoint != "" && k8sClient != nil {
+	if cfg.Mode == "saas" && cfg.S3Endpoint != "" && k8sClient != nil {
 		backupS3 := s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
 		backupSvc := services.NewBackupService(k8sClient, backupRepo, dbRepo, dbSvc, backupS3, cfg.S3PlatformBucket, "zenith-apps")
 		backupHandler.SetBackupService(backupSvc)
@@ -1163,6 +1163,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		slog.Info("Loki client configured", "url", cfg.LokiURL)
 	}
 	monitoringSvc := services.NewMonitoringService(promClient, lokiClient, k8sClient, appRepo)
+	if dockerDeployerCli != nil {
+		monitoringSvc.SetLogSource(deploy.NewDockerLogSource(dockerDeployerCli))
+		slog.Info("app logs: Docker container logs")
+	}
 	monitoringHandler := handlers.NewMonitoringHandler(monitoringSvc)
 	appByID.Get("/metrics/overview", monitoringHandler.GetOverview)
 	appByID.Get("/metrics/timeseries", monitoringHandler.GetTimeSeries)

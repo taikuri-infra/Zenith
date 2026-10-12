@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
@@ -100,6 +101,25 @@ func (h *LogHandler) GetLogs(c *fiber.Ctx) error {
 	}
 
 	entries := h.logHub.History(deploymentID)
+
+	if len(entries) == 0 {
+		// Hub is in-memory only; after an API restart fall back to the persisted build log.
+		dep, derr := h.appRepo.GetDeployment(c.Context(), deploymentID)
+		if derr == nil && dep.AppID == appID && dep.BuildLog != "" {
+			items := []logEntryJSON{}
+			for _, line := range strings.Split(dep.BuildLog, "\n") {
+				if line == "" {
+					continue
+				}
+				parts := strings.SplitN(line, "\t", 3)
+				if len(parts) < 3 {
+					continue
+				}
+				items = append(items, logEntryJSON{Timestamp: parts[0], Level: parts[1], Message: parts[2]})
+			}
+			return c.JSON(fiber.Map{"items": items, "total": len(items)})
+		}
+	}
 
 	result := make([]logEntryJSON, len(entries))
 	for i, e := range entries {

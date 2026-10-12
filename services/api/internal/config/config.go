@@ -135,6 +135,12 @@ func Load() *Config {
 	// In standalone mode use localhost; in saas mode require CORS_ORIGINS env var.
 	corsDefault := "http://localhost:3000"
 
+	k8sDefault := func(v string) string {
+		if mode == "saas" {
+			return v
+		}
+		return "" // standalone: no Loki/Prometheus/Grafana/Tempo unless set explicitly
+	}
 	return &Config{
 		Port:                  getEnvInt("PORT", 8080),
 		Environment:           getEnv("ENVIRONMENT", "development"),
@@ -193,10 +199,10 @@ func Load() *Config {
 		S3Region:              getEnv("S3_REGION", "fsn1"),
 		S3PlatformBucket:      getEnv("S3_PLATFORM_BUCKET", "zenith-platform-storage"),
 		CNPGAdminDSN:          getEnv("CNPG_ADMIN_DSN", ""),
-		PrometheusURL:         getEnv("PROMETHEUS_URL", "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"),
-		LokiURL:               getEnv("LOKI_URL", "http://loki.monitoring.svc.cluster.local:3100"),
-		GrafanaURL:            getEnv("GRAFANA_URL", "http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local:80"),
-		TempoURL:              getEnv("TEMPO_URL", "http://tempo.monitoring.svc.cluster.local:3100"),
+		PrometheusURL:         getEnv("PROMETHEUS_URL", k8sDefault("http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090")),
+		LokiURL:               getEnv("LOKI_URL", k8sDefault("http://loki.monitoring.svc.cluster.local:3100")),
+		GrafanaURL:            getEnv("GRAFANA_URL", k8sDefault("http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local:80")),
+		TempoURL:              getEnv("TEMPO_URL", k8sDefault("http://tempo.monitoring.svc.cluster.local:3100")),
 		RedisURL:              getEnv("REDIS_URL", ""),
 		NATSEnabled:           getEnvBool("NATS_ENABLED", false),
 		NATSServers:           getEnv("NATS_SERVERS", "nats://nats.nats.svc.cluster.local:4222"),
