@@ -19,6 +19,7 @@ type Config struct {
 	// Kubernetes
 	K8sMode    string // K8S_MODE: "memory" (default) or "real"
 	KubeConfig string
+	CertResolver string
 	InCluster  bool
 
 	// Auth
@@ -141,6 +142,7 @@ func Load() *Config {
 		CORSOrigins: getEnv("CORS_ORIGINS", corsDefault),
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 		KubeConfig:  getEnv("KUBECONFIG", ""),
+		CertResolver: getEnv("ZENITH_CERT_RESOLVER", "le"),
 		K8sMode:    getEnv("K8S_MODE", "memory"),
 		InCluster:   getEnvBool("IN_CLUSTER", false),
 		JWTSecret:     getEnv("JWT_SECRET", ""),

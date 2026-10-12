@@ -1286,10 +1286,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	if dockerDeployer != nil {
 		dockerDeployer.SetEnvVarRepo(envVarRepo)
 		dockerDeployer.SetEnvCrypto(envCrypto)
+		dockerDeployer.SetDomainRepo(domainRepo)
+		dockerDeployer.SetCertResolver(cfg.CertResolver)
 	}
 	envVarHandler.SetRestarter(backend)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
-	domainHandler.SetDeployer(deployer)
+	domainHandler.SetDeployer(backend)
 	appByID.Post("/domains", domainHandler.Add)
 	appByID.Get("/domains", domainHandler.List)
 	appByID.Delete("/domains/:domainId", domainHandler.Delete)

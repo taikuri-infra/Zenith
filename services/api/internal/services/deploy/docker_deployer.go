@@ -27,13 +27,15 @@ import (
 // and HTTPS are handled by Traefik, which reads the traefik.* container labels
 // this deployer sets — the same proxy the cloud/k8s edition uses (IngressRoute).
 type DockerDeployer struct {
-	cli        *client.Client
-	appRepo    ports.AppRepository
-	envVarRepo ports.EnvVarRepository
-	planRepo   ports.UserPlanRepository
-	envCrypto  *pkgCrypto.EnvCrypto
-	baseDomain string
-	network    string // docker network shared with Traefik
+	cli          *client.Client
+	appRepo      ports.AppRepository
+	envVarRepo   ports.EnvVarRepository
+	planRepo     ports.UserPlanRepository
+	envCrypto    *pkgCrypto.EnvCrypto
+	baseDomain   string
+	domainRepo   ports.DomainRepository
+	certResolver string
+	network      string // docker network shared with Traefik
 	// Per-app locks serialize deploy/delete for a given app. Deploys are
 	// triggered from several places (app creation, project deploy, env-var
 	// apply) that can fire concurrently; without this they race on the
@@ -53,12 +55,13 @@ func (d *DockerDeployer) appLock(appID string) *sync.Mutex {
 // network app containers join (must be the one Traefik watches).
 func NewDockerDeployer(cli *client.Client, appRepo ports.AppRepository, envVarRepo ports.EnvVarRepository, planRepo ports.UserPlanRepository, baseDomain, network string) *DockerDeployer {
 	return &DockerDeployer{
-		cli:        cli,
-		appRepo:    appRepo,
-		envVarRepo: envVarRepo,
-		planRepo:   planRepo,
-		baseDomain: baseDomain,
-		network:    network,
+		cli:          cli,
+		appRepo:      appRepo,
+		envVarRepo:   envVarRepo,
+		planRepo:     planRepo,
+		baseDomain:   baseDomain,
+		certResolver: "le",
+		network:      network,
 	}
 }
 
@@ -120,7 +123,7 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 	// Traefik labels: route <subdomain>.<baseDomain> to this container's port.
 	// Traefik obtains the Let's Encrypt cert (certresolver "le"). Same proxy
 	// model as the cloud/k8s edition, which routes via Traefik IngressRoute.
-	labels := proxyLabels(app, d.baseDomain, d.network)
+	labels := proxyLabels(app, d.appHosts(ctx, app), d.network, d.certResolver)
 
 	// Network aliases let other services reach this one by its original compose
 	// service name (e.g. a backend connecting to "db:5432") and by subdomain.
@@ -242,27 +245,51 @@ func (d *DockerDeployer) resolveEnvVars(ctx context.Context, app *entities.App) 
 	return out, nil
 }
 
-// sanitizeName makes a subdomain safe for a docker container name.
+// SetDomainRepo lets the deployer route an app's active custom domains.
+func (d *DockerDeployer) SetDomainRepo(repo ports.DomainRepository) { d.domainRepo = repo }
+
+// SetCertResolver names the Traefik ACME resolver app routers use ("le").
+// Empty means no resolver label (Traefik serves its default certificate).
+func (d *DockerDeployer) SetCertResolver(name string) { d.certResolver = name }
+
+// appHosts is the app's generated host plus its active custom domains.
+func (d *DockerDeployer) appHosts(ctx context.Context, app *entities.App) []string {
+	hosts := []string{fmt.Sprintf("%s.%s", app.Subdomain, d.baseDomain)}
+	if d.domainRepo == nil {
+		return hosts
+	}
+	domains, err := d.domainRepo.ListDomainsByApp(ctx, app.ID)
+	if err != nil {
+		slog.Warn("docker-deploy: list custom domains failed", "app", app.Name, "error", err)
+		return hosts
+	}
+	for _, cd := range domains {
+		if cd.Status == entities.DomainStatusActive || cd.Status == entities.DomainStatusVerified {
+			hosts = append(hosts, cd.Domain)
+		}
+	}
+	return hosts
+}
+
 // proxyLabels builds the Traefik router/service labels that expose an app
-// container at <subdomain>.<baseDomain> over HTTPS. Router and service names are
-// derived from the subdomain so they're unique and human-readable. This mirrors
-// the Traefik IngressRoute the cloud/k8s edition creates for the same app.
-func proxyLabels(app *entities.App, baseDomain, network string) map[string]string {
-	hosts := []string{fmt.Sprintf("%s.%s", app.Subdomain, baseDomain)}
+// container on the given hosts over HTTPS. Routers must name the resolver:
+// in Traefik v3 a router with its own tls section ignores the entrypoint's
+// default resolver, which left routes on the default (self-signed) cert.
+func proxyLabels(app *entities.App, hosts []string, network, certResolver string) map[string]string {
 	rn := sanitizeName(app.Subdomain)
-	return map[string]string{
+	labels := map[string]string{
 		"zenith.app.id":          app.ID,
 		"traefik.enable":         "true",
 		"traefik.docker.network": network,
-		fmt.Sprintf("traefik.http.routers.%s.rule", rn):        hostRule(hosts),
-		fmt.Sprintf("traefik.http.routers.%s.entrypoints", rn): "websecure",
-		// Enable TLS but name no resolver: the websecure entrypoint carries the
-		// default resolver (HTTP-01/DNS-01) or a self-signed default certificate,
-		// set by the installer-generated traefik.yml. This keeps deployed apps
-		// working across all three TLS modes with one label set.
+		fmt.Sprintf("traefik.http.routers.%s.rule", rn):                      hostRule(hosts),
+		fmt.Sprintf("traefik.http.routers.%s.entrypoints", rn):               "websecure",
 		fmt.Sprintf("traefik.http.routers.%s.tls", rn):                       "true",
 		fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", rn): fmt.Sprintf("%d", app.Port),
 	}
+	if certResolver != "" {
+		labels[fmt.Sprintf("traefik.http.routers.%s.tls.certresolver", rn)] = certResolver
+	}
+	return labels
 }
 
 // hostRule turns hostnames into a Traefik rule: Host(`a`) || Host(`b`).

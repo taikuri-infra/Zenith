@@ -7,6 +7,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -140,19 +141,13 @@ func (h *DomainHandler) refreshIngress(ctx context.Context, app *entities.App) {
 		return
 	}
 
-	// Get the latest deployment to find the current image tag
-	deployments, err := h.appRepo.ListDeployments(ctx, app.ID, 1)
-	if err != nil || len(deployments) == 0 {
-		slog.Warn("no deployments found, skipping IngressRoute refresh", "app_id", app.ID)
+	imageTag, err := deploy.CurrentImage(ctx, h.appRepo, app.ID)
+	if err != nil {
+		slog.Warn("no deployed image, skipping route refresh", "app_id", app.ID)
 		return
 	}
-	imageTag := deployments[0].ImageTag
-	if imageTag == "" {
-		return
-	}
-
 	if err := h.deployer.DeployApp(ctx, app, imageTag); err != nil {
-		slog.Warn("failed to refresh IngressRoute", "app_id", app.ID, "error", err)
+		slog.Warn("failed to refresh app routes", "app_id", app.ID, "error", err)
 	}
 }
 
