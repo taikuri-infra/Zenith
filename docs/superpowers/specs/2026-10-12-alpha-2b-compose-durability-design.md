@@ -41,15 +41,21 @@ k3s, multi-node, scheduled backups, off-site backup targets (S3 upload), the web
 
 **Design:**
 
+- **Control plane off the app network.** The compose file gets three networks:
+  - `zenith_default` (key `default`, name unchanged so existing installs keep it): user apps, managed databases and Traefik;
+  - `zenith_internal`: `postgres`, `storage`, `api`;
+  - `zenith_edge`: `traefik`, `api`, `web`. The `api` and `web` routers carry `traefik.docker.network=zenith_edge`.
+
+  An app container then can't resolve or reach Zenith's own `postgres`, `storage`, `api` or `web`. This matters because those are common compose service names; with them on the app network, a stack's own `postgres` service would be ambiguous.
 - Each project gets its own bridge network, `zenith-proj-<project id, first 12 chars>`. `DockerDeployer` creates it on demand (idempotent), labelled `zenith.project.id`.
 - An app container joins **two** networks:
   - `zenith_default`: for Traefik routing, with aliases unchanged from 2a (app name and subdomain, with control-plane names filtered out);
   - its project network, with alias = its **compose service name**.
 - **Service name source:** a new nullable `apps.service_name` column (migration 051). The compose deploy flow in the web UI sends the parsed service name on app create. For apps created before 2b, the deployer falls back to the app name with the `<project slug>-` prefix removed. With neither, there is no project alias.
-- A managed database attached to an app also joins that app's project network. Its alias there is its compose service name when it came from a compose import, otherwise none. Connection strings keep using the container name (`zenith-db-<id8>`), which resolves on both networks.
+- Managed databases stay on `zenith_default` only. In standalone a compose file's own database service (`db: postgres:16`) is deployed as an app, not a managed database (`compose_parser.go`), so it gets the project alias like any other service. Managed database connection strings use the container name (`zenith-db-<id8>`), which every app resolves on `zenith_default`.
 - Deleting the last app of a project removes the project network. A failure to remove it is logged, not an error.
 
-The project network holds only that project's containers, so a short name like `db` can't shadow the control plane or another tenant.
+The project network holds only that project's containers, and the control plane is on networks apps don't join. So a short name like `db` or `postgres` resolves to the project's own service, never to the control plane or another tenant.
 
 ## 3. Database access over SSH
 
@@ -66,7 +72,7 @@ The project network holds only that project's containers, so a short name like `
 
 Docker already restarts `unless-stopped` containers after a reboot, so the common case works. The reconciler covers what Docker can't: a container that was removed, a restore onto a new server, or a crash mid-deploy.
 
-- `services.Reconciler`, standalone only, runs once, 10 s after API start, in the background:
+- `deploy.Reconciler` (in `internal/services/deploy`, next to the backends it drives), standalone only, runs once, 10 s after API start, in the background:
   - **Databases:** every database with status `ready` whose container is missing or not running is re-provisioned. The reconciler calls `DockerDBBackend.Provision` with the stored decrypted secret. The volume is kept, so the data is kept.
   - **Apps:** every app with status `running` and a recorded image (`deploy.CurrentImage`) whose container is missing or exited is redeployed with `DockerDeployer.DeployApp(app, image)`. Apps in other states are left alone.
   - Databases come first, so apps that depend on them start against a live database.
@@ -79,7 +85,7 @@ Docker already restarts `unless-stopped` containers after a reboot, so the commo
 - `build-public-images.yml`:
   - on `release: published` (tag `v<VERSION>`) it builds both images with `--build-arg VERSION=<tag without v>` and `BUILD_TIME`, and labels them `org.opencontainers.image.revision` and `.version`;
   - pushes `:<version>`, and pushes `:latest` only for non-prerelease tags or when `workflow_dispatch` asks for it;
-  - the web image gets the same version as a build arg, exposed in the footer and `/api/v1/version`.
+  - the web image gets the same `VERSION` build arg; the API reports it at `/api/v1/version` (today it reports `dev`).
 - `install.sh` writes `ZENITH_VERSION=<contents of VERSION>` into a new `.env`. From then on the install runs pinned images, never a moving `:latest`.
 - `zen version` shows the CLI version and the server version from the API.
 
@@ -95,7 +101,7 @@ Docker already restarts `unless-stopped` containers after a reboot, so the commo
 3. Run `zen backup` unless `--skip-backup`, and print the archive path.
 4. Record the rollback point: the current git ref of the install dir and the current `ZENITH_VERSION`.
 5. `git fetch --depth 1 origin tag v<target>` and `git checkout v<target>`. This keeps `docker-compose.yml` and `install.sh` in step with the images.
-6. Set `ZENITH_VERSION=<target>` in `.env`, adding keys the new `.env.example` introduced without overwriting existing values (the installer's upgrade logic, shared).
+6. Run the new version's installer in env-only mode (`ZENITH_DRY_RUN=1 bash infra/scripts/install.sh`), which adds keys the new version needs without overwriting existing values and sets `ZENITH_VERSION` from the checked-out `VERSION` file.
 7. `docker compose pull`, then `docker compose up -d --remove-orphans`.
 8. **Health check:** within 180 s, `/api/v1/health` returns 200 and `/api/v1/version` reports the target version.
 
@@ -124,7 +130,7 @@ A database that fails to dump fails the backup, so there is no partial archive. 
 
 1. Check the manifest. Refuse an archive from a newer Zenith version than the install.
 2. `docker compose stop api web`.
-3. Write `env` over `.env`, keeping the target's `ZENITH_DOMAIN` if it differs (it prints both). Then `docker compose up -d postgres storage`.
+3. Copy the secret keys from the archive's `env` into `.env`: `JWT_SECRET`, `SECRETS_ENCRYPTION_KEY`, `OLD_SECRETS_KEYS`, `DB_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`. Everything else (domain, version, Docker GID) stays the target's. Then `docker compose up -d postgres storage`, and set the control-plane database user's password to the restored `DB_PASSWORD` (the target's Postgres volume was initialized with its own).
 4. Drop and recreate the control-plane database and load `platform.sql`. Empty the storage volume and untar `storage.tar` into it.
 5. `docker compose up -d`. The reconciler (§4) re-creates every database container and app from the restored records. Database containers come back empty if their volumes didn't exist.
 6. For each database in the manifest: wait for its container to be healthy, then load its dump (`psql` / `mysql` / stop Redis, copy `dump.rdb`, start Redis).
