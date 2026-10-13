@@ -539,6 +539,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 			slog.Warn("docker client unavailable — app deploys will be simulated", "error", derr)
 		} else {
 			dockerDeployer = deploy.NewDockerDeployer(dockerCli, appRepo, nil, planRepo, cfg.BaseDomain, cfg.AppNetwork)
+			dockerDeployer.SetProjectRepo(projectRepo)
 			backend = dockerDeployer
 			dockerDeployerCli = dockerCli
 			slog.Info("using Docker deployer (standalone self-host)", "network", cfg.AppNetwork)

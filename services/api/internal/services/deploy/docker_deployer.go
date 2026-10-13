@@ -37,6 +37,7 @@ type DockerDeployer struct {
 	domainRepo   ports.DomainRepository
 	certResolver string
 	network      string // docker network shared with Traefik
+	projectRepo  ports.ProjectRepository
 	// Per-app locks serialize deploy/delete for a given app. Deploys are
 	// triggered from several places (app creation, project deploy, env-var
 	// apply) that can fire concurrently; without this they race on the
@@ -129,6 +130,14 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 	// Traefik obtains the Let's Encrypt cert (certresolver "le"). Same proxy
 	// model as the cloud/k8s edition, which routes via Traefik IngressRoute.
 	labels := proxyLabels(app, d.appHosts(ctx, app), d.network, d.certResolver)
+	if app.ProjectID != "" {
+		labels[projectLabel] = app.ProjectID
+	}
+
+	projNet, err := d.ensureProjectNetwork(ctx, app)
+	if err != nil {
+		return fmt.Errorf("docker-deploy: ensure project network: %w", err)
+	}
 
 	// Network aliases let other services reach this one by app name and subdomain.
 	aliases := networkAliases(app)
@@ -149,6 +158,15 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 		nil, name)
 	if err != nil {
 		return fmt.Errorf("docker-deploy: create container %s: %w", name, err)
+	}
+	if projNet != "" {
+		var aliases []string
+		if a := projectAlias(app, d.projectSlug(ctx, app)); a != "" {
+			aliases = []string{a}
+		}
+		if err := d.cli.NetworkConnect(ctx, projNet, resp.ID, &network.EndpointSettings{Aliases: aliases}); err != nil {
+			return fmt.Errorf("docker-deploy: join project network %s: %w", projNet, err)
+		}
 	}
 	if err := d.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("docker-deploy: start container %s: %w", name, err)
@@ -179,10 +197,12 @@ func (d *DockerDeployer) DeleteApp(ctx context.Context, app *entities.App) error
 	name := d.containerName(app)
 	if err := d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}); err != nil {
 		if client.IsErrNotFound(err) {
+			d.removeProjectNetworkIfUnused(ctx, app.ProjectID)
 			return nil
 		}
 		return fmt.Errorf("docker-deploy: remove container %s: %w", name, err)
 	}
+	d.removeProjectNetworkIfUnused(ctx, app.ProjectID)
 	return nil
 }
 
