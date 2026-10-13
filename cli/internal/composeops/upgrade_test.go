@@ -35,7 +35,7 @@ func TestUpgrade_HappyPath(t *testing.T) {
 	order := []string{
 		"git fetch --depth 1 origin tag v0.1.0-alpha.3",
 		"git checkout v0.1.0-alpha.3",
-		"bash infra/scripts/install.sh",
+		"env ZENITH_DRY_RUN=1 bash infra/scripts/install.sh",
 		"docker compose pull",
 		"docker compose up -d --remove-orphans",
 	}
@@ -100,5 +100,69 @@ func TestUpgrade_DryRunChangesNothing(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), "0.1.0-alpha.3") {
 		t.Fatalf("plan not printed: %s", log.String())
+	}
+}
+
+func bothUnhealthy(context.Context, string) error { return errors.New("down") }
+
+func TestUpgrade_FailedRollbackPointsAtBackup(t *testing.T) {
+	inst := writeInstall(t)
+	res, err := Upgrade(context.Background(), upgradeRunner(), inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", Timeout: time.Second, Now: time.Now, BackupDir: t.TempDir(), Health: bothUnhealthy,
+	}, &bytes.Buffer{})
+	if err == nil || res == nil || res.RolledBack || !res.RollbackFailed || res.Backup == "" {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	if !strings.Contains(err.Error(), "zen backup restore "+res.Backup) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestUpgrade_FailedRollbackWithoutBackup(t *testing.T) {
+	inst := writeInstall(t)
+	res, err := Upgrade(context.Background(), upgradeRunner(), inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", SkipBackup: true, Timeout: time.Second, Now: time.Now, Health: bothUnhealthy,
+	}, &bytes.Buffer{})
+	if err == nil || res.RolledBack || !strings.Contains(err.Error(), "take a backup next time") {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+}
+
+func TestUpgrade_RollbackUpFailure(t *testing.T) {
+	inst := writeInstall(t)
+	r := upgradeRunner()
+	r.fail = map[string]bool{"docker compose up": true}
+	res, err := Upgrade(context.Background(), r, inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", SkipBackup: true, Timeout: time.Second, Now: time.Now,
+		Health: func(context.Context, string) error { return nil },
+	}, &bytes.Buffer{})
+	if err == nil || res.RolledBack || !res.RollbackFailed || !strings.Contains(err.Error(), "docker compose up") {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+}
+
+func TestUpgrade_FetchFailureDoesNotRollBack(t *testing.T) {
+	inst := writeInstall(t)
+	r := upgradeRunner()
+	r.fail = map[string]bool{"git fetch": true}
+	res, err := Upgrade(context.Background(), r, inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", SkipBackup: true, Now: time.Now,
+		Health: func(context.Context, string) error { return nil },
+	}, &bytes.Buffer{})
+	if err == nil || res.RolledBack || res.RollbackFailed || !strings.Contains(err.Error(), "nothing changed") {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	for _, c := range r.cmds() {
+		if strings.HasPrefix(c, "git checkout") || strings.HasPrefix(c, "docker compose") {
+			t.Fatalf("ran %q after fetch failure", c)
+		}
+	}
+}
+
+func TestUpgrade_RejectsInvalidTarget(t *testing.T) {
+	r := upgradeRunner()
+	_, err := Upgrade(context.Background(), r, writeInstall(t), UpgradeOptions{Target: "1.0.0; rm -rf /", Now: time.Now}, &bytes.Buffer{})
+	if err == nil || len(r.cmds()) != 0 {
+		t.Fatalf("err=%v cmds=%v", err, r.cmds())
 	}
 }

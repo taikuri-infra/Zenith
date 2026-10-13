@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -26,14 +27,17 @@ type UpgradeOptions struct {
 // UpgradeResult reports what Upgrade did.
 type UpgradeResult struct {
 	From, To, Backup string
-	RolledBack       bool
+	RolledBack       bool // rollback ran and succeeded
+	RollbackFailed   bool // rollback ran and failed
 }
+
+var targetRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
 
 // Upgrade moves a compose install to opt.Target, rolling back on failure.
 func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, log io.Writer) (*UpgradeResult, error) {
 	target := strings.TrimPrefix(opt.Target, "v")
-	if target == "" {
-		return nil, fmt.Errorf("upgrade target is required")
+	if !targetRe.MatchString(target) {
+		return nil, fmt.Errorf("invalid upgrade target %q: want X.Y.Z or X.Y.Z-prerelease", opt.Target)
 	}
 	if opt.Timeout <= 0 {
 		opt.Timeout = 180 * time.Second
@@ -130,10 +134,14 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 	for i, s := range steps {
 		fmt.Fprintf(log, "[%d/%d] %s\n", i+1, len(steps), s.name)
 		if err := s.fn(); err != nil {
+			if i == 0 { // fetch: nothing has changed yet
+				return res, fmt.Errorf("%s failed: %v — nothing changed", s.name, err)
+			}
 			fmt.Fprintf(log, "step %q failed: %v; rolling back to %s\n", s.name, err, from)
-			res.RolledBack = true
-			rbErr := rollback(ctx, r, inst, oldRef, from, health)
+			rbErr := rollback(context.WithoutCancel(ctx), r, inst, oldRef, from, health)
 			msg := fmt.Sprintf("upgrade failed at %q: %v", s.name, err)
+			res.RolledBack = rbErr == nil
+			res.RollbackFailed = rbErr != nil
 			if rbErr != nil {
 				msg += fmt.Sprintf("; rollback to %s also failed: %v; the database may already be migrated", from, rbErr)
 				if res.Backup != "" {

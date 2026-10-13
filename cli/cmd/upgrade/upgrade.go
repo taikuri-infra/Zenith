@@ -548,6 +548,8 @@ func runComposeUpgrade(cmd *cobra.Command, inst composeops.Install) error {
 		}
 		if res.RolledBack {
 			fmt.Println("rolled back")
+		} else if res.RollbackFailed {
+			fmt.Println("rollback FAILED")
 		}
 	}
 	return err
