@@ -152,13 +152,13 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 	}
 
 	_, err = r.pool.Exec(ctx,
-		`INSERT INTO apps (id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, environment_id, health_check_path, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
+		`INSERT INTO apps (id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, environment_id, health_check_path, service_name, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
 		id, input.UserID, input.ProjectID, input.Name, string(deploySource), input.RepoURL, branch,
 		input.ImageURL, input.RegistryUsername, input.RegistryPassword,
 		string(entities.FrameworkUnknown), string(entities.AppStatusPending), subdomain, port,
 		string(appType), input.Command, input.CronSchedule, string(exposure),
-		envID, healthCheckPath, now, now,
+		envID, healthCheckPath, input.ServiceName, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_apps_project_name") {
@@ -192,6 +192,7 @@ func (r *PostgresAppRepository) CreateApp(ctx context.Context, input *dto.Create
 		Exposure:         exposure,
 		Replicas:         1,
 		HealthCheckPath:  healthCheckPath,
+		ServiceName:      input.ServiceName,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -209,7 +210,7 @@ func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 		&framework, &status, &app.Subdomain, &app.Port,
 		&appType, &app.Command, &app.CronSchedule,
 		&exposure, &autoGatewayID, &environmentID, &app.Replicas,
-		&app.HealthCheckPath, &app.DeletedAt,
+		&app.HealthCheckPath, &app.ServiceName, &app.DeletedAt,
 		&app.CreatedAt, &app.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -241,7 +242,7 @@ func scanApp(scan func(dest ...interface{}) error) (*entities.App, error) {
 	return &app, nil
 }
 
-const appColumns = `id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, auto_gateway_id, environment_id, replicas, health_check_path, deleted_at, created_at, updated_at`
+const appColumns = `id, user_id, project_id, name, deploy_source, repo_url, branch, image_url, registry_username, registry_password, framework, status, subdomain, port, app_type, command, cron_schedule, exposure, auto_gateway_id, environment_id, replicas, health_check_path, service_name, deleted_at, created_at, updated_at`
 
 func (r *PostgresAppRepository) GetApp(ctx context.Context, id string) (*entities.App, error) {
 	row := r.pool.QueryRow(ctx,

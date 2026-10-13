@@ -529,6 +529,7 @@ export default function NewProjectPage() {
         const app = await api.appsDeploy.create({
           project_id: projectId,
           name: appName,
+          service_name: svc.name,
           deploy_source: "image",
           image_url: imageUrl,
           port: svc.port || 8080,

@@ -169,6 +169,8 @@ type DatabaseRepository interface {
 	SetDatabaseProvisioned(ctx context.Context, id, host string, port int, secret string) error
 	GetDatabaseSecret(ctx context.Context, id string) (string, error)
 	SetDatabasePort(ctx context.Context, id string, port int) error
+	SetDatabaseHostPort(ctx context.Context, id string, port int) error
+	ListDatabasesByStatus(ctx context.Context, status entities.DatabaseStatus) ([]entities.UserDatabase, error)
 }
 
 // StorageRepository defines per-app storage bucket operations.

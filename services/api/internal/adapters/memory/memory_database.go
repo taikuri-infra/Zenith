@@ -280,3 +280,27 @@ func (r *MemoryDatabaseRepository) SetDatabasePort(_ context.Context, id string,
 	db.Port = port
 	return nil
 }
+
+func (r *MemoryDatabaseRepository) SetDatabaseHostPort(_ context.Context, id string, port int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	db, ok := r.databases[id]
+	if !ok {
+		return fmt.Errorf("database not found")
+	}
+	db.HostPort = port
+	return nil
+}
+
+func (r *MemoryDatabaseRepository) ListDatabasesByStatus(_ context.Context, status entities.DatabaseStatus) ([]entities.UserDatabase, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []entities.UserDatabase
+	for _, db := range r.databases {
+		if db.Status == status {
+			result = append(result, *db)
+		}
+	}
+	return result, nil
+}

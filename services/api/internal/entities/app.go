@@ -84,5 +84,7 @@ type App struct {
 	// DependsOn lists the K8s service names (subdomains) of apps this app depends on.
 	// Used to generate init containers that wait for dependencies before starting.
 	DependsOn []string `json:"depends_on,omitempty"`
+	// ServiceName is the compose service this app was created from ("" if none).
+	ServiceName string `json:"service_name,omitempty"`
 	Timestamps
 }

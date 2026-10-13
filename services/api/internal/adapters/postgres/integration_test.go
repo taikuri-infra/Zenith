@@ -796,3 +796,65 @@ func createTestUser(t *testing.T, db *testDB, email string) string {
 	}
 	return id
 }
+
+func TestServiceNameAndDatabaseHostPort(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.teardown(t)
+
+	ctx := context.Background()
+	appRepo := NewPostgresAppRepository(db.pool)
+	projRepo := NewPostgresProjectRepository(db.pool)
+	dbRepo := NewPostgresDatabaseRepository(db.pool)
+
+	userID := createTestUser(t, db, "svcname-test@test.com")
+	proj, _ := projRepo.CreateProject(ctx, userID, "SN Project", "sn-project", "")
+
+	app, err := appRepo.CreateApp(ctx, &dto.CreateAppInput{
+		UserID:       userID,
+		ProjectID:    proj.ID,
+		Name:         "shop-db",
+		ServiceName:  "db",
+		DeploySource: entities.DeploySourceImage,
+		ImageURL:     "postgres:16",
+	})
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	got, err := appRepo.GetApp(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if got.ServiceName != "db" {
+		t.Errorf("ServiceName = %q, want db", got.ServiceName)
+	}
+
+	pg, err := dbRepo.CreateDatabase(ctx, "", userID, &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "pg", ProjectID: proj.ID})
+	if err != nil {
+		t.Fatalf("CreateDatabase: %v", err)
+	}
+	other, err := dbRepo.CreateDatabase(ctx, "", userID, &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "pg2", ProjectID: proj.ID})
+	if err != nil {
+		t.Fatalf("CreateDatabase 2: %v", err)
+	}
+	if err := dbRepo.SetDatabaseHostPort(ctx, pg.ID, 49153); err != nil {
+		t.Fatalf("SetDatabaseHostPort: %v", err)
+	}
+	gotDB, err := dbRepo.GetDatabase(ctx, pg.ID)
+	if err != nil {
+		t.Fatalf("GetDatabase: %v", err)
+	}
+	if gotDB.HostPort != 49153 {
+		t.Errorf("HostPort = %d, want 49153", gotDB.HostPort)
+	}
+
+	if err := dbRepo.UpdateDatabaseStatus(ctx, pg.ID, entities.DatabaseStatusReady); err != nil {
+		t.Fatalf("UpdateDatabaseStatus: %v", err)
+	}
+	ready, err := dbRepo.ListDatabasesByStatus(ctx, entities.DatabaseStatusReady)
+	if err != nil {
+		t.Fatalf("ListDatabasesByStatus: %v", err)
+	}
+	if len(ready) != 1 || ready[0].ID != pg.ID {
+		t.Errorf("ready = %+v, want only %s (not %s)", ready, pg.ID, other.ID)
+	}
+}

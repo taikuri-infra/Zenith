@@ -506,6 +506,7 @@ func toDatabaseInfoV2(db *entities.UserDatabase, password, connStr string) dto.D
 		Engine:           db.Engine,
 		Host:             db.Host,
 		Port:             db.Port,
+		HostPort:         db.HostPort,
 		DBName:           db.DBName,
 		DBUser:           db.DBUser,
 		Password:         password,

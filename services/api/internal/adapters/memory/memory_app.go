@@ -117,6 +117,7 @@ func (r *MemoryAppRepository) CreateApp(ctx context.Context, input *dto.CreateAp
 		Exposure:         exposure,
 		HealthCheckPath:  input.HealthCheckPath,
 		DependsOn:        input.DependsOn,
+		ServiceName:      input.ServiceName,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
