@@ -183,3 +183,15 @@ func (b *DockerDBBackend) Delete(ctx context.Context, db *entities.UserDatabase,
 	}
 	return nil
 }
+
+// ContainerRunning reports whether the database container exists and runs.
+func (b *DockerDBBackend) ContainerRunning(ctx context.Context, db *entities.UserDatabase) (bool, error) {
+	insp, err := b.cli.ContainerInspect(ctx, dbContainerName(db))
+	if client.IsErrNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return insp.State != nil && (insp.State.Running || insp.State.Restarting), nil
+}

@@ -116,3 +116,22 @@ func TestProvision_StoresHostPort(t *testing.T) {
 		t.Fatalf("HostPort = %d", got.HostPort)
 	}
 }
+
+func TestReprovision_UsesStoredPassword(t *testing.T) {
+	repo := memory.NewMemoryDatabaseRepository()
+	be := &fakeDBBackend{}
+	s := NewDBRuntimeService(repo, be, nil)
+	db, err := s.Create(context.Background(), "app-1", "user-1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "pg"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Wait(db.ID)
+	first := be.gotPW
+	be.gotPW = ""
+	if err := s.Reprovision(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	if first == "" || be.gotPW != first {
+		t.Fatalf("reprovision password %q, want %q", be.gotPW, first)
+	}
+}

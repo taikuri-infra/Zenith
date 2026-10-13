@@ -386,3 +386,15 @@ func sanitizeName(s string) string {
 	}
 	return strings.Trim(b.String(), "-")
 }
+
+// AppContainerRunning reports whether the app's container exists and runs.
+func (d *DockerDeployer) AppContainerRunning(ctx context.Context, app *entities.App) (bool, error) {
+	insp, err := d.cli.ContainerInspect(ctx, d.containerName(app))
+	if client.IsErrNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return insp.State != nil && (insp.State.Running || insp.State.Restarting), nil
+}

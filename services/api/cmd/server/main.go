@@ -896,7 +896,16 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo, msRepo)
 	if cfg.Mode != "saas" && dockerDeployerCli != nil {
-		dbHandlerV2.SetRuntime(services.NewDBRuntimeService(dbRepo, deploy.NewDockerDBBackend(dockerDeployerCli, cfg.AppNetwork), envCrypto))
+		dockerDBBackend := deploy.NewDockerDBBackend(dockerDeployerCli, cfg.AppNetwork)
+		dbRuntime := services.NewDBRuntimeService(dbRepo, dockerDBBackend, envCrypto)
+		dbHandlerV2.SetRuntime(dbRuntime)
+		if dockerDeployer != nil {
+			reconciler := deploy.NewReconciler(appRepo, dbRepo, dockerDeployer, dockerDBBackend, dbRuntime)
+			go func() {
+				time.Sleep(10 * time.Second)
+				reconciler.Run(context.Background())
+			}()
+		}
 		dbHandlerV2.SetRedeployer(backend)
 		slog.Info("database runtime: Docker containers")
 	}

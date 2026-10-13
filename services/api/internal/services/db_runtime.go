@@ -123,6 +123,17 @@ func (s *DBRuntimeService) provision(ctx context.Context, db *entities.UserDatab
 	return nil
 }
 
+// Reprovision recreates a provisioned database's instance with its stored
+// password. The data volume is kept, so this is safe for a container that
+// vanished or a restore onto a new host.
+func (s *DBRuntimeService) Reprovision(ctx context.Context, db *entities.UserDatabase) error {
+	pw, err := s.Password(ctx, db)
+	if err != nil {
+		return err
+	}
+	return s.provision(ctx, db, pw)
+}
+
 // Wait blocks until the background provisioning of id has finished (tests).
 func (s *DBRuntimeService) Wait(id string) {
 	if v, ok := s.wg.Load(id); ok {
