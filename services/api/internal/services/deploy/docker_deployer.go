@@ -38,6 +38,7 @@ type DockerDeployer struct {
 	certResolver string
 	network      string // docker network shared with Traefik
 	projectRepo  ports.ProjectRepository
+	projectLocks sync.Map // project id -> *sync.Mutex (guards project network lifecycle)
 	// Per-app locks serialize deploy/delete for a given app. Deploys are
 	// triggered from several places (app creation, project deploy, env-var
 	// apply) that can fire concurrently; without this they race on the
@@ -134,6 +135,10 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 		labels[projectLabel] = app.ProjectID
 	}
 
+	// Project lock (inner to the app lock) spans ensure-network through join,
+	// so a concurrent DeleteApp cannot drop the network in between.
+	unlockProject := d.lockProject(app.ProjectID)
+	defer unlockProject()
 	projNet, err := d.ensureProjectNetwork(ctx, app)
 	if err != nil {
 		return fmt.Errorf("docker-deploy: ensure project network: %w", err)
@@ -160,15 +165,18 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 		return fmt.Errorf("docker-deploy: create container %s: %w", name, err)
 	}
 	if projNet != "" {
-		var aliases []string
+		var projAliases []string
 		if a := projectAlias(app, d.projectSlug(ctx, app)); a != "" {
-			aliases = []string{a}
+			projAliases = []string{a}
 		}
-		if err := d.cli.NetworkConnect(ctx, projNet, resp.ID, &network.EndpointSettings{Aliases: aliases}); err != nil {
+		if err := d.cli.NetworkConnect(ctx, projNet, resp.ID, &network.EndpointSettings{Aliases: projAliases}); err != nil {
+			_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
 			return fmt.Errorf("docker-deploy: join project network %s: %w", projNet, err)
 		}
 	}
+	unlockProject()
 	if err := d.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
 		return fmt.Errorf("docker-deploy: start container %s: %w", name, err)
 	}
 	slog.Info("docker-deploy: app running", "app", app.Name, "container", name,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -55,7 +56,11 @@ func (d *DockerDeployer) projectSlug(ctx context.Context, app *entities.App) str
 		return ""
 	}
 	p, err := d.projectRepo.GetProject(ctx, app.ProjectID)
-	if err != nil || p == nil {
+	if err != nil {
+		slog.Warn("docker-deploy: project lookup for alias failed", "project", app.ProjectID, "error", err)
+		return ""
+	}
+	if p == nil {
 		return ""
 	}
 	return p.Slug
@@ -89,12 +94,35 @@ func (d *DockerDeployer) removeProjectNetworkIfUnused(ctx context.Context, proje
 	if name == "" {
 		return
 	}
+	defer d.lockProject(projectID)()
 	left, err := d.cli.ContainerList(ctx, container.ListOptions{All: true,
 		Filters: filters.NewArgs(filters.Arg("label", projectLabel+"="+projectID))})
-	if err != nil || len(left) > 0 {
+	if err != nil {
+		slog.Warn("docker-deploy: list project containers failed", "project", projectID, "error", err)
+		return
+	}
+	if len(left) > 0 {
 		return
 	}
 	if err := d.cli.NetworkRemove(ctx, name); err != nil && !client.IsErrNotFound(err) {
 		slog.Warn("docker-deploy: remove project network failed", "network", name, "error", err)
 	}
+}
+
+// projectLock returns the per-project mutex, creating it on first use.
+func (d *DockerDeployer) projectLock(projectID string) *sync.Mutex {
+	v, _ := d.projectLocks.LoadOrStore(projectID, &sync.Mutex{})
+	return v.(*sync.Mutex)
+}
+
+// lockProject locks the project's mutex and returns an idempotent unlock.
+// With no project id it locks nothing.
+func (d *DockerDeployer) lockProject(projectID string) func() {
+	if projectID == "" {
+		return func() {}
+	}
+	mu := d.projectLock(projectID)
+	mu.Lock()
+	var once sync.Once
+	return func() { once.Do(mu.Unlock) }
 }

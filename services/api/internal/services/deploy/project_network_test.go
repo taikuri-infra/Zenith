@@ -43,3 +43,18 @@ func TestProjectAlias_None(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectLock(t *testing.T) {
+	d := &DockerDeployer{}
+	if d.projectLock("a") != d.projectLock("a") {
+		t.Fatal("same project id must share a mutex")
+	}
+	if d.projectLock("a") == d.projectLock("b") {
+		t.Fatal("different project ids must not share a mutex")
+	}
+	unlock := d.lockProject("a")
+	unlock()
+	unlock() // idempotent
+	d.lockProject("")()
+	d.lockProject("a")() // reacquirable
+}
