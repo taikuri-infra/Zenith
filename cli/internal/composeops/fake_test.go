@@ -37,7 +37,7 @@ func (f *fakeRunner) record(dir, name string, args []string) (string, error) {
 	f.calls = append(f.calls, call{dir, cmd})
 	f.mu.Unlock()
 	for p := range f.fail {
-		if strings.HasPrefix(cmd, p) {
+		if strings.HasPrefix(cmd, p) || (strings.HasPrefix(p, "~") && strings.Contains(cmd, p[1:])) {
 			return "", fmt.Errorf("fake failure: %s", p)
 		}
 	}

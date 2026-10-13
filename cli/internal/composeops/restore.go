@@ -10,10 +10,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+var dbIDPattern = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
 
 // RestoreOptions tunes the readiness polling of Restore.
 type RestoreOptions struct {
@@ -156,12 +159,28 @@ func Restore(ctx context.Context, r Runner, inst Install, archive string, opt Re
 		return nil, fmt.Errorf("unsupported archive format %d", m.Format)
 	}
 	cur := inst.EnvGet("ZENITH_VERSION")
-	if CompareVersions(m.Version, cur) > 0 {
+	if cur == "" {
+		fmt.Fprintln(os.Stderr, "warning: install has no ZENITH_VERSION; skipping the newer-archive check")
+	} else if CompareVersions(m.Version, cur) > 0 {
 		return nil, fmt.Errorf("archive is from Zenith %s, newer than this install (%s) — upgrade first", m.Version, cur)
 	}
 	for _, d := range m.Databases {
-		if d.ID == "" || strings.ContainsAny(d.ID, `/\`) || strings.Contains(d.ID, "..") {
+		if !dbIDPattern.MatchString(d.ID) {
 			return nil, fmt.Errorf("invalid database id in manifest: %q", d.ID)
+		}
+	}
+	required := []string{"platform.sql", "storage.tar", "env"}
+	for _, d := range m.Databases {
+		switch d.Engine {
+		case "redis":
+			required = append(required, "databases/"+d.ID+".rdb")
+		default:
+			required = append(required, "databases/"+d.ID+".sql")
+		}
+	}
+	for _, f := range required {
+		if _, err := os.Stat(filepath.Join(tmp, filepath.FromSlash(f))); err != nil {
+			return nil, fmt.Errorf("archive incomplete: missing %s", f)
 		}
 	}
 
@@ -172,58 +191,61 @@ func Restore(ctx context.Context, r Runner, inst Install, archive string, opt Re
 	if err := dc("stop", "api", "web"); err != nil {
 		return nil, fmt.Errorf("stop api and web: %w", err)
 	}
+	stopped := func(step string, err error) error {
+		return fmt.Errorf("restore stopped at %s: %w — Zenith's API and dashboard are stopped; fix the cause and re-run 'zen backup restore', or run 'docker compose up -d' in %s to start them as they are", step, err, inst.Dir)
+	}
 	archEnv := parseEnv(filepath.Join(tmp, "env"))
 	for _, k := range secretKeys {
 		if v, ok := archEnv[k]; ok {
 			if err := inst.EnvSet(k, v); err != nil {
-				return nil, fmt.Errorf("restore %s: %w", k, err)
+				return nil, stopped("restoring "+k, err)
 			}
 		}
 	}
 	if err := dc("up", "-d", "postgres", "storage"); err != nil {
-		return nil, fmt.Errorf("start postgres and storage: %w", err)
+		return nil, stopped("starting postgres and storage", err)
 	}
 	if err := waitFor(ctx, opt, "postgres", func() bool {
 		return dc("exec", "-T", "postgres", "pg_isready", "-U", "zenith") == nil
 	}); err != nil {
-		return nil, err
+		return nil, stopped("waiting for postgres", err)
 	}
 	if pw := inst.EnvGet("DB_PASSWORD"); pw != "" {
 		q := "ALTER USER zenith PASSWORD '" + strings.ReplaceAll(pw, "'", "''") + "'"
 		if err := dc("exec", "-T", "postgres", "psql", "-U", "zenith", "-d", "postgres", "-c", q); err != nil {
-			return nil, fmt.Errorf("reset control-plane password: %w", err)
+			return nil, stopped("resetting the control-plane password", err)
 		}
 	}
 	if err := dc("exec", "-T", "postgres", "psql", "-U", "zenith", "-d", "postgres",
 		"-c", "DROP DATABASE IF EXISTS zenith WITH (FORCE)", "-c", "CREATE DATABASE zenith OWNER zenith"); err != nil {
-		return nil, fmt.Errorf("recreate platform database: %w", err)
+		return nil, stopped("recreating the platform database", err)
 	}
 	if err := stdinFile(filepath.Join(tmp, "platform.sql"), func(f *os.File) error {
 		_, err := r.Run(ctx, inst.Dir, f, "docker", "compose", "exec", "-T", "postgres",
 			"psql", "-U", "zenith", "-d", "zenith", "-v", "ON_ERROR_STOP=1")
 		return err
 	}); err != nil {
-		return nil, fmt.Errorf("load platform database: %w", err)
+		return nil, stopped("loading the platform database", err)
 	}
 
 	cidOut, err := r.Run(ctx, inst.Dir, nil, "docker", "compose", "ps", "-q", "storage")
 	if err != nil {
-		return nil, fmt.Errorf("find storage container: %w", err)
+		return nil, stopped("finding the storage container", err)
 	}
 	cid := strings.TrimSpace(string(cidOut))
 	if cid == "" {
-		return nil, fmt.Errorf("storage container not found")
+		return nil, stopped("finding the storage container", fmt.Errorf("storage container not found"))
 	}
 	vol, err := mountVolume(ctx, r, inst.Dir, cid)
 	if err != nil {
-		return nil, fmt.Errorf("find storage volume: %w", err)
+		return nil, stopped("finding the storage volume", err)
 	}
 	if _, err := r.Run(ctx, inst.Dir, nil, "docker", "run", "--rm", "-v", vol+":/data", "-v", tmp+":/in:ro",
 		"alpine:3.20", "sh", "-c", "find /data -mindepth 1 -delete && tar -C /data -xf /in/storage.tar"); err != nil {
-		return nil, fmt.Errorf("restore storage volume: %w", err)
+		return nil, stopped("restoring the storage volume", err)
 	}
 	if err := dc("up", "-d"); err != nil {
-		return nil, fmt.Errorf("start stack: %w", err)
+		return nil, stopped("starting the stack", err)
 	}
 
 	var errs []error
@@ -277,12 +299,13 @@ func restoreDB(ctx context.Context, r Runner, inst Install, opt RestoreOptions, 
 		if _, err := r.Run(ctx, inst.Dir, nil, "docker", "stop", c); err != nil {
 			return err
 		}
-		if _, err := r.Run(ctx, inst.Dir, nil, "docker", "run", "--rm", "-v", vol+":/data", "-v", dbDir+":/in:ro",
-			"alpine:3.20", "sh", "-c", "rm -rf /data/appendonlydir && cp /in/"+db.ID+".rdb /data/dump.rdb"); err != nil {
-			return err
+		_, cpErr := r.Run(ctx, inst.Dir, nil, "docker", "run", "--rm", "-v", vol+":/data", "-v", dbDir+":/in:ro",
+			"alpine:3.20", "sh", "-c", `rm -rf /data/appendonlydir && cp "/in/$1.rdb" /data/dump.rdb`, "sh", db.ID)
+		_, startErr := r.Run(ctx, inst.Dir, nil, "docker", "start", c)
+		if cpErr != nil {
+			return cpErr
 		}
-		_, err = r.Run(ctx, inst.Dir, nil, "docker", "start", c)
-		return err
+		return startErr
 	}
 	return fmt.Errorf("unsupported engine %q", db.Engine)
 }

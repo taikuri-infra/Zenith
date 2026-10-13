@@ -237,13 +237,25 @@ func runComposeRestore(cmd *cobra.Command, args []string) error {
 		}
 	}
 	m, err := composeops.Restore(cmd.Context(), composeops.ExecRunner{}, inst, args[0], composeops.RestoreOptions{})
-	if m != nil {
-		fmt.Fprintf(out, "Restored archive from Zenith %s (%d managed database(s)).\n", m.Version, len(m.Databases))
+	if m == nil {
+		return err // nothing restored; cobra prints the (already descriptive) error once
 	}
+	failed := 0
+	if err != nil {
+		if j, ok := err.(interface{ Unwrap() []error }); ok {
+			failed = len(j.Unwrap())
+		} else {
+			failed = 1
+		}
+	}
+	fmt.Fprintf(out, "Restored archive from Zenith %s: %d of %d managed database(s) restored, %d failed.\n",
+		m.Version, len(m.Databases)-failed, len(m.Databases), failed)
 	if err != nil {
 		fmt.Fprintln(out, "Failures:")
 		fmt.Fprintln(out, err.Error())
-		return fmt.Errorf("restore finished with errors")
+		cmd.SilenceErrors = true
+		cmd.SilenceUsage = true
+		return fmt.Errorf("restore finished with %d failed database(s)", failed)
 	}
 	fmt.Fprintln(out, "Restore complete.")
 	return nil
