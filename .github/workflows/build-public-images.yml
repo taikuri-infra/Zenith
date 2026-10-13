@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Image tag (e.g. 0.9.0 or latest). Also always pushes :latest.'
+        description: 'Image tag (e.g. 0.9.0 or latest). :latest is pushed only for the tag latest or a final (non-prerelease) release.'
         required: true
         default: 'latest'
   release:
@@ -51,6 +51,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           if [ "$EVENT_NAME" = "release" ]; then
             TAG="$RELEASE_TAG"
@@ -64,7 +65,14 @@ jobs:
             echo "Refusing unsafe/unexpected tag: '$TAG'" >&2
             exit 1
           fi
+          LATEST=false
+          if [ "$EVENT_NAME" = "release" ]; then
+            [ "$IS_PRERELEASE" = "false" ] && LATEST=true
+          elif [ "$TAG" = "latest" ]; then
+            LATEST=true
+          fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "latest=${LATEST}" >> "$GITHUB_OUTPUT"
 
       - name: Lowercase owner
         id: owner
@@ -91,9 +99,15 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           platforms: linux/amd64,linux/arm64
-          build-args: ${{ matrix.build_args }}
+          build-args: |
+            VERSION=${{ steps.tag.outputs.tag }}
+            BUILD_TIME=${{ github.event.repository.updated_at }}
+            ${{ matrix.build_args }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.tag.outputs.tag }}
+            org.opencontainers.image.revision=${{ github.sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/${{ matrix.image }}:${{ steps.tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/${{ matrix.image }}:latest
+            ${{ steps.tag.outputs.latest == 'true' && format('{0}/{1}/{2}:latest', env.REGISTRY, steps.owner.outputs.owner, matrix.image) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

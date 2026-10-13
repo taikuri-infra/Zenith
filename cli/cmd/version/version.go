@@ -1,10 +1,15 @@
 package version
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"runtime"
+	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dotechhq/zenith/cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -35,6 +40,9 @@ var Cmd = &cobra.Command{
 		fmt.Printf("  %s %s\n", labelStyle.Render("Built:"), valueStyle.Render(BuildTime))
 		fmt.Printf("  %s %s\n", labelStyle.Render("Go:"), valueStyle.Render(runtime.Version()))
 		fmt.Printf("  %s %s/%s\n", labelStyle.Render("OS/Arch:"), valueStyle.Render(runtime.GOOS), valueStyle.Render(runtime.GOARCH))
+		if cfg, err := config.Load(); err == nil && cfg.APIEndpoint != "" {
+			fmt.Printf("  %s %s\n", labelStyle.Render("Server: "), valueStyle.Render(serverVersion(cfg.APIEndpoint)))
+		}
 	},
 }
 
@@ -47,4 +55,21 @@ func GetVersionInfo() map[string]string {
 		"os":        runtime.GOOS,
 		"arch":      runtime.GOARCH,
 	}
+}
+
+// serverVersion asks the API for its version; "unreachable" on any failure.
+func serverVersion(endpoint string) string {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(strings.TrimRight(endpoint, "/") + "/api/v1/version")
+	if err != nil {
+		return "unreachable"
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Version string `json:"version"`
+	}
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&body) != nil || body.Version == "" {
+		return "unreachable"
+	}
+	return body.Version
 }

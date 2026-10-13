@@ -30,6 +30,12 @@ jobs:
       - name: Build CLI
         run: cd services/cli && go build -o /dev/null ./cmd/zenith/
 
+      - name: Test zen CLI (cli/)
+        run: cd cli && go test ./... -race -count=1
+
+      - name: Build zen CLI (cli/)
+        run: cd cli && go build -o /dev/null .
+
       - name: Run Terraform Provider tests
         run: cd services/terraform-provider-zenith && go test ./... -race -count=1
 

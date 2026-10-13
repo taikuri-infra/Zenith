@@ -10,6 +10,7 @@ run() { # $1 = workdir; remaining = env assignments
   local dir="$1"; shift
   mkdir -p "$dir"
   cp "$repo/.env.example" "$dir/.env.example"
+  cp "$repo/VERSION" "$dir/VERSION"
   (cd "$dir" && env "$@" ZENITH_DRY_RUN=1 ZENITH_PUBLIC_IP=203.0.113.7 bash "$here/install.sh" >/dev/null)
 }
 
@@ -21,6 +22,7 @@ env_a="$t/a/.env"
 grep -qE '^SECRETS_ENCRYPTION_KEY=[0-9a-f]{64}$' "$env_a" || fail "SECRETS_ENCRYPTION_KEY not 64 hex"
 grep -qE '^S3_ACCESS_KEY=[A-Za-z0-9]{16,}$' "$env_a" || fail "S3_ACCESS_KEY not generated"
 grep -qx 'ZENITH_DOMAIN=203.0.113.7.sslip.io' "$env_a" || fail "default domain not <ip>.sslip.io"
+grep -qx "ZENITH_VERSION=$(cat "$repo/VERSION")" "$env_a" || fail "ZENITH_VERSION not pinned from VERSION"
 
 run "$t/b" ZENITH_DOMAIN=zenith.example.com
 grep -qx 'ZENITH_DOMAIN=zenith.example.com' "$t/b/.env" || fail "explicit domain not kept"
@@ -37,11 +39,13 @@ key_before="$(grep '^SECRETS_ENCRYPTION_KEY=' "$env_a")"
 [ "$key_before" = "$(grep '^SECRETS_ENCRYPTION_KEY=' "$env_a")" ] || fail "re-run changed SECRETS_ENCRYPTION_KEY"
 
 # (b) old-style .env gets domain + key added, other values kept
-mkdir -p "$t/old"; printf 'JWT_SECRET=keepme\nSECRETS_ENCRYPTION_KEY=\n' >"$t/old/.env"
+mkdir -p "$t/old"; printf 'JWT_SECRET=keepme\nSECRETS_ENCRYPTION_KEY=\nZENITH_VERSION=0.0.1\n' >"$t/old/.env"
+cp "$repo/VERSION" "$t/old/VERSION"
 (cd "$t/old" && env ZENITH_DRY_RUN=1 ZENITH_PUBLIC_IP=203.0.113.9 bash "$here/install.sh" >/dev/null)
 grep -qx 'ZENITH_DOMAIN=203.0.113.9.sslip.io' "$t/old/.env" || fail "upgrade: domain not added"
 grep -qE '^SECRETS_ENCRYPTION_KEY=[0-9a-f]{64}$' "$t/old/.env" || fail "upgrade: key not added"
 grep -qx 'JWT_SECRET=keepme' "$t/old/.env" || fail "upgrade: existing value changed"
+grep -qx "ZENITH_VERSION=$(cat "$repo/VERSION")" "$t/old/.env" || fail "upgrade: ZENITH_VERSION not updated from VERSION"
 
 # (c) IP lookup failure: clean error, no .env created
 mkdir -p "$t/noip"; cp "$repo/.env.example" "$t/noip/"

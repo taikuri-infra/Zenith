@@ -22,6 +22,7 @@ FROM base AS builder
 WORKDIR /app
 
 # NEXT_PUBLIC_* set at build time as defaults; overridden at runtime by entrypoint.sh
+ARG VERSION=dev
 ARG NEXT_PUBLIC_DEMO_MODE=false
 ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_ZENITH_MODE=standalone
