@@ -3,6 +3,7 @@
 package backup
 
 import (
+	"bufio"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -23,6 +24,7 @@ var (
 	flagDomain string
 	flagDir    string
 	flagOut    string
+	flagYes    bool
 )
 
 // Cmd is the `zen backup` top-level command. Subcommands are registered below.
@@ -85,6 +87,9 @@ func init() {
 	createCmd.Flags().StringVar(&flagReason, "reason", "", "Human-readable reason for this backup (informational only)")
 	createCmd.Flags().StringVar(&flagDomain, "domain", "", "Domain of the Zenith installation to back up (uses saved state if omitted)")
 	Cmd.AddCommand(createCmd)
+	restoreCmd.Flags().BoolVar(&flagYes, "yes", false, "Skip the confirmation prompt")
+	restoreCmd.Flags().StringVar(&flagDir, "dir", "", "Compose install directory (default: auto-detect)")
+	Cmd.AddCommand(restoreCmd)
 }
 
 func runBackupCreate(cmd *cobra.Command, args []string) error {
@@ -202,4 +207,44 @@ func sanitizeReason(s string) string {
 		result = result[:200]
 	}
 	return result
+}
+
+var restoreCmd = &cobra.Command{
+	Use:   "restore <archive>",
+	Short: "Restore a Compose install from a zen backup archive",
+	Long: `Rebuild a Docker Compose install (fresh or existing) from an archive written by
+"zen backup". This replaces all data of the install: the platform database,
+object storage and every managed database.
+
+Examples:
+  zen backup restore zenith-backup-0.1.0-alpha.2-20261013T120000Z.tar.gz
+  zen backup restore backup.tar.gz --yes --dir /opt/zenith`,
+	Args: cobra.ExactArgs(1),
+	RunE: runComposeRestore,
+}
+
+func runComposeRestore(cmd *cobra.Command, args []string) error {
+	inst, ok := composeops.Detect(flagDir)
+	if !ok {
+		return fmt.Errorf("no Compose install found (use --dir)")
+	}
+	out := cmd.OutOrStdout()
+	if !flagYes {
+		fmt.Fprintf(out, "This replaces all data of the install in %s. Type 'restore' to continue: ", inst.Dir)
+		line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		if strings.TrimSpace(line) != "restore" {
+			return fmt.Errorf("aborted")
+		}
+	}
+	m, err := composeops.Restore(cmd.Context(), composeops.ExecRunner{}, inst, args[0], composeops.RestoreOptions{})
+	if m != nil {
+		fmt.Fprintf(out, "Restored archive from Zenith %s (%d managed database(s)).\n", m.Version, len(m.Databases))
+	}
+	if err != nil {
+		fmt.Fprintln(out, "Failures:")
+		fmt.Fprintln(out, err.Error())
+		return fmt.Errorf("restore finished with errors")
+	}
+	fmt.Fprintln(out, "Restore complete.")
+	return nil
 }
