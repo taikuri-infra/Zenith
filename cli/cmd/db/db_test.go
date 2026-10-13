@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	cliapi "github.com/dotechhq/zenith/cli/internal/api"
 	"strings"
 	"testing"
 )
@@ -360,5 +361,32 @@ func TestBackupCommand_RequiresArgs(t *testing.T) {
 func TestRestoreCommand_RequiresArgs(t *testing.T) {
 	if restoreCmd.Args == nil {
 		t.Error("Expected restore command to have Args validation")
+	}
+}
+
+func TestTunnelPlan(t *testing.T) {
+	db := &cliapi.Database{Name: "pg1", Engine: "postgresql", HostPort: 49153,
+		ConnectionString: "postgres://u_1:s3cr3t@zenith-db-1a2b3c4d:5432/z_db?sslmode=disable"}
+	args, local, err := tunnelPlan(db, "https://zenith.example.com", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"-N", "-L", "5432:127.0.0.1:49153", "root@zenith.example.com"}
+	if strings.Join(args, " ") != strings.Join(want, " ") {
+		t.Fatalf("ssh args = %v, want %v", args, want)
+	}
+	if local != "postgres://u_1:s3cr3t@127.0.0.1:5432/z_db?sslmode=disable" {
+		t.Fatalf("local = %q", local)
+	}
+	args, local, _ = tunnelPlan(db, "https://zenith.example.com", "admin@10.0.0.5", 15432)
+	if args[2] != "15432:127.0.0.1:49153" || args[3] != "admin@10.0.0.5" || !strings.Contains(local, "@127.0.0.1:15432/") {
+		t.Fatalf("overrides ignored: %v %q", args, local)
+	}
+}
+
+func TestTunnelPlan_NoHostPort(t *testing.T) {
+	_, _, err := tunnelPlan(&cliapi.Database{Name: "pg1", Engine: "postgresql"}, "https://x.example.com", "", 0)
+	if err == nil || !strings.Contains(err.Error(), "no loopback port") {
+		t.Fatalf("err = %v", err)
 	}
 }
