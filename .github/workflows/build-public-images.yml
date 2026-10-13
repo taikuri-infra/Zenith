@@ -65,6 +65,10 @@ jobs:
             echo "Refusing unsafe/unexpected tag: '$TAG'" >&2
             exit 1
           fi
+          if [ "$EVENT_NAME" = "release" ] && [ "$TAG" != "$(tr -d '[:space:]' < VERSION)" ]; then
+            echo "Release tag '$TAG' does not match VERSION '$(cat VERSION)'" >&2
+            exit 1
+          fi
           LATEST=false
           if [ "$EVENT_NAME" = "release" ]; then
             [ "$IS_PRERELEASE" = "false" ] && LATEST=true

@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -37,9 +38,13 @@ func (f fakeDBProbe) ContainerRunning(_ context.Context, db *entities.UserDataba
 type fakeHostPortProbe struct {
 	fakeDBProbe
 	ports map[string]int
+	err   error
 }
 
 func (f fakeHostPortProbe) HostPort(_ context.Context, db *entities.UserDatabase) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
 	return f.ports[db.ID], nil
 }
 
@@ -126,5 +131,35 @@ func TestReconciler_RefreshesHostPortOfRunningDB(t *testing.T) {
 	}
 	if len(dbRT.calls) != 0 {
 		t.Fatalf("running db was re-provisioned: %v", dbRT.calls)
+	}
+}
+
+func TestReconciler_ReprovisionsRunningDBWithoutLoopbackPort(t *testing.T) {
+	ctx := context.Background()
+	dbs := memory.NewMemoryDatabaseRepository()
+	db, _ := dbs.CreateDatabase(ctx, "", "u1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "a"})
+	probe := fakeHostPortProbe{
+		fakeDBProbe: fakeDBProbe{running: map[string]bool{db.ID: true}},
+		err:         fmt.Errorf("zenith-db-a: %w", ErrNoLoopbackPort),
+	}
+	dbRT := &fakeDBRT{}
+	NewReconciler(memory.NewMemoryAppRepository(), dbs, &fakeAppRT{}, probe, dbRT).Run(ctx)
+	if len(dbRT.calls) != 1 || dbRT.calls[0] != db.ID {
+		t.Fatalf("calls = %v, want one reprovision of %s", dbRT.calls, db.ID)
+	}
+}
+
+func TestReconciler_OtherHostPortErrorDoesNotReprovision(t *testing.T) {
+	ctx := context.Background()
+	dbs := memory.NewMemoryDatabaseRepository()
+	db, _ := dbs.CreateDatabase(ctx, "", "u1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "a"})
+	probe := fakeHostPortProbe{
+		fakeDBProbe: fakeDBProbe{running: map[string]bool{db.ID: true}},
+		err:         errors.New("docker hiccup"),
+	}
+	dbRT := &fakeDBRT{}
+	NewReconciler(memory.NewMemoryAppRepository(), dbs, &fakeAppRT{}, probe, dbRT).Run(ctx)
+	if len(dbRT.calls) != 0 {
+		t.Fatalf("unexpected reprovision: %v", dbRT.calls)
 	}
 }

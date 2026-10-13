@@ -135,3 +135,25 @@ func TestReprovision_UsesStoredPassword(t *testing.T) {
 		t.Fatalf("reprovision password %q, want %q", be.gotPW, first)
 	}
 }
+
+func TestPassword_EncryptedSecretWithoutCryptoErrors(t *testing.T) {
+	repo := memory.NewMemoryDatabaseRepository()
+	db, err := repo.CreateDatabase(context.Background(), "app-1", "user-1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "pg"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetDatabaseProvisioned(context.Background(), db.ID, "h", 5432, "enc:v1:abcd"); err != nil {
+		t.Fatal(err)
+	}
+	be := &fakeDBBackend{}
+	s := NewDBRuntimeService(repo, be, nil)
+	if _, err := s.Password(context.Background(), db); err == nil {
+		t.Fatal("Password must fail for an encrypted secret without a key")
+	}
+	if err := s.Reprovision(context.Background(), db); err == nil {
+		t.Fatal("Reprovision must fail")
+	}
+	if be.gotPW != "" {
+		t.Fatalf("ciphertext used as password: %q", be.gotPW)
+	}
+}

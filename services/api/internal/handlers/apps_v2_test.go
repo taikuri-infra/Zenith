@@ -415,6 +415,28 @@ func TestV2CreateCustomHealthCheckPath(t *testing.T) {
 	}
 }
 
+func TestV2CreateKeepsServiceName(t *testing.T) {
+	fiberApp, handler, repo, _ := setupAppsV2Extended()
+	fiberApp.Post("/api/v1/apps", injectUserID("user-1"), handler.Create)
+
+	body := `{"name":"shop-db","repo_url":"https://github.com/user/repo","service_name":"db"}`
+	req := httptest.NewRequest("POST", "/api/v1/apps", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := fiberApp.Test(req, -1)
+	if resp.StatusCode != 201 {
+		t.Fatalf("Expected 201, got %d", resp.StatusCode)
+	}
+	var result handlers.AppV2Response
+	json.NewDecoder(resp.Body).Decode(&result)
+	got, err := repo.GetApp(context.Background(), result.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ServiceName != "db" {
+		t.Errorf("ServiceName = %q, want db", got.ServiceName)
+	}
+}
+
 // --- Image normalization tests ---
 
 func TestV2CreateImageNormalization(t *testing.T) {

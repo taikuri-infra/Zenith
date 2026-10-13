@@ -16,6 +16,7 @@ type fakeRunner struct {
 	calls   []call
 	answers map[string]string // command prefix -> stdout
 	fail    map[string]bool   // command prefix -> error
+	stdins  map[string]string // full command -> stdin content (recorded when stdin is given)
 }
 
 func (f *fakeRunner) match(cmd string, m map[string]string) (string, bool) {
@@ -45,7 +46,16 @@ func (f *fakeRunner) record(dir, name string, args []string) (string, error) {
 	return out, nil
 }
 
-func (f *fakeRunner) Run(_ context.Context, dir string, _ io.Reader, name string, args ...string) ([]byte, error) {
+func (f *fakeRunner) Run(_ context.Context, dir string, stdin io.Reader, name string, args ...string) ([]byte, error) {
+	if stdin != nil {
+		b, _ := io.ReadAll(stdin)
+		f.mu.Lock()
+		if f.stdins == nil {
+			f.stdins = map[string]string{}
+		}
+		f.stdins[strings.TrimSpace(name+" "+strings.Join(args, " "))] = string(b)
+		f.mu.Unlock()
+	}
 	out, err := f.record(dir, name, args)
 	return []byte(out), err
 }

@@ -231,7 +231,10 @@ type connectOpts struct {
 // database's loopback host port, and the connection string to use locally.
 func tunnelPlan(db *cliapi.Database, apiEndpoint, sshTarget string, localPort int) ([]string, string, error) {
 	if db.HostPort == 0 {
-		return nil, "", fmt.Errorf("database %q has no loopback port yet — redeploy it or upgrade Zenith", db.Name)
+		return nil, "", fmt.Errorf("database %q has no loopback port yet — restart the Zenith API (it adds one on startup) or upgrade Zenith", db.Name)
+	}
+	if strings.HasPrefix(sshTarget, "-") {
+		return nil, "", fmt.Errorf("invalid --ssh value %q: must not start with '-'", sshTarget)
 	}
 	if sshTarget == "" {
 		ep, err := url.Parse(apiEndpoint)
@@ -257,6 +260,16 @@ func tunnelPlan(db *cliapi.Database, apiEndpoint, sshTarget string, localPort in
 		local = u.String()
 	}
 	return args, local, nil
+}
+
+// tunnelExecArgs turns tunnelPlan's printable ssh arguments into the argv used
+// to actually run the tunnel: it fails fast if the forward cannot be set up,
+// and `--` stops the target from ever being parsed as an option.
+func tunnelExecArgs(planned []string) []string {
+	n := len(planned)
+	out := []string{"-o", "ExitOnForwardFailure=yes"}
+	out = append(out, planned[:n-1]...)
+	return append(out, "--", planned[n-1])
 }
 
 // connectDatabase prints how to reach the named database and, with
@@ -317,8 +330,8 @@ func connectDatabase(w io.Writer, c *cliapi.Client, project, name string, opts c
 		fmt.Fprintf(w, "  %s\n\n", local)
 		return nil
 	}
-	fmt.Fprintf(w, "  %s\n  %s\n\n", muted.Render("Tunnel open — connect locally with:"), local)
-	cmd := exec.Command("ssh", args...)
+	fmt.Fprintf(w, "  %s\n  %s\n\n", muted.Render("Opening tunnel (Ctrl-C to close)… connect with:"), local)
+	cmd := exec.Command("ssh", tunnelExecArgs(args)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return cmd.Run()
 }

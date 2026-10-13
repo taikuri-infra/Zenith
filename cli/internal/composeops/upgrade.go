@@ -18,10 +18,13 @@ type UpgradeOptions struct {
 	Force      bool   // allow same/older target
 	SkipBackup bool
 	DryRun     bool
-	BackupDir  string                                       // default <dir>/backups
-	Health     func(ctx context.Context, want string) error // nil = HTTP check on 127.0.0.1:8080
-	Timeout    time.Duration                                // default 180s
-	Now        func() time.Time
+	BackupDir  string // default <dir>/backups
+	// Health checks the API; want is the expected version, or "" meaning
+	// "only require /health to return 200" (rolling back a pre-2b install
+	// whose version is unknown). nil = HTTP check on 127.0.0.1:8080.
+	Health  func(ctx context.Context, want string) error
+	Timeout time.Duration // default 180s
+	Now     func() time.Time
 }
 
 // UpgradeResult reports what Upgrade did.
@@ -134,7 +137,7 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 	for i, s := range steps {
 		fmt.Fprintf(log, "[%d/%d] %s\n", i+1, len(steps), s.name)
 		if err := s.fn(); err != nil {
-			if i == 0 { // fetch: nothing has changed yet
+			if i <= 1 { // fetch or checkout: nothing has changed yet
 				return res, fmt.Errorf("%s failed: %v — nothing changed", s.name, err)
 			}
 			fmt.Fprintf(log, "step %q failed: %v; rolling back to %s\n", s.name, err, from)
@@ -163,7 +166,11 @@ func rollback(ctx context.Context, r Runner, inst Install, oldRef, from string, 
 	if _, err := r.Run(ctx, inst.Dir, nil, "git", "checkout", oldRef); err != nil {
 		return fmt.Errorf("git checkout %s: %w", oldRef, err)
 	}
-	if err := inst.EnvSet("ZENITH_VERSION", from); err != nil {
+	if from == "" {
+		if err := inst.EnvUnset("ZENITH_VERSION"); err != nil {
+			return err
+		}
+	} else if err := inst.EnvSet("ZENITH_VERSION", from); err != nil {
 		return err
 	}
 	if _, err := r.Run(ctx, inst.Dir, nil, "docker", "compose", "up", "-d", "--remove-orphans"); err != nil {
@@ -209,6 +216,9 @@ func checkOnce(ctx context.Context, want string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("/health returned %d", resp.StatusCode)
 	}
+	if want == "" {
+		return nil
+	}
 	resp, err = get(ctx, "http://127.0.0.1:8080/api/v1/version")
 	if err != nil {
 		return err
@@ -223,7 +233,7 @@ func checkOnce(ctx context.Context, want string) error {
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		return err
 	}
-	if strings.TrimPrefix(v.Version, "v") != want {
+	if want != "" && strings.TrimPrefix(v.Version, "v") != want {
 		return fmt.Errorf("api reports version %q, want %q", v.Version, want)
 	}
 	return nil

@@ -148,7 +148,10 @@ func (s *DBRuntimeService) Password(ctx context.Context, db *entities.UserDataba
 	if err != nil || secret == "" {
 		return "", fmt.Errorf("no credentials yet")
 	}
-	if s.crypto != nil && pkgCrypto.IsEncrypted(secret) {
+	if pkgCrypto.IsEncrypted(secret) {
+		if s.crypto == nil {
+			return "", fmt.Errorf("database credentials are encrypted but no encryption key is configured")
+		}
 		return s.crypto.Decrypt(db.UserID, secret)
 	}
 	return secret, nil

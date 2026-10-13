@@ -69,6 +69,9 @@ func isInstall(dir string) bool {
 	if dir == "" {
 		return false
 	}
+	if _, err := os.Stat(filepath.Join(dir, ".env")); err != nil {
+		return false
+	}
 	b, err := os.ReadFile(filepath.Join(dir, "docker-compose.yml"))
 	return err == nil && bytes.Contains(b, []byte("zenith-api"))
 }
@@ -141,6 +144,10 @@ func (i Install) EnvSet(key, value string) error {
 	if !found {
 		lines = append(lines, key+"="+value)
 	}
+	return i.writeEnv(lines)
+}
+
+func (i Install) writeEnv(lines []string) error {
 	tmp, err := os.CreateTemp(i.Dir, ".env.tmp-*")
 	if err != nil {
 		return err
@@ -158,6 +165,28 @@ func (i Install) EnvSet(key, value string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), i.envPath())
+}
+
+// EnvUnset removes every line setting key from .env, atomically.
+func (i Install) EnvUnset(key string) error {
+	b, err := os.ReadFile(i.envPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var out []string
+	for _, line := range strings.Split(strings.TrimRight(string(b), "\n"), "\n") {
+		t := strings.TrimSpace(line)
+		if !strings.HasPrefix(t, "#") {
+			if k, _, ok := strings.Cut(t, "="); ok && strings.TrimSpace(k) == key {
+				continue
+			}
+		}
+		out = append(out, line)
+	}
+	return i.writeEnv(out)
 }
 
 // DBRef is a managed database. Engine: postgresql|mysql|redis.
@@ -182,7 +211,7 @@ func (i Install) Databases(ctx context.Context, r Runner) ([]DBRef, error) {
 		if line == "" {
 			continue
 		}
-		p := strings.Split(line, "|")
+		p := strings.SplitN(line, "|", 3)
 		if len(p) != 3 {
 			return nil, fmt.Errorf("unexpected database row %q", line)
 		}

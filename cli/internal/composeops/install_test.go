@@ -1,6 +1,7 @@
 package composeops
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,5 +41,32 @@ func TestEnvGetSet(t *testing.T) {
 	}
 	if st, _ := os.Stat(filepath.Join(inst.Dir, ".env")); st.Mode().Perm() != 0o600 {
 		t.Fatalf(".env mode %v", st.Mode().Perm())
+	}
+}
+
+func TestDetect_RequiresEnvFile(t *testing.T) {
+	inst := writeInstall(t)
+	os.Remove(filepath.Join(inst.Dir, ".env"))
+	if _, ok := Detect(inst.Dir); ok {
+		t.Fatal("a checkout without .env is not an install")
+	}
+}
+
+func TestEnvUnset(t *testing.T) {
+	inst := writeInstall(t)
+	if err := inst.EnvUnset("ZENITH_VERSION"); err != nil {
+		t.Fatal(err)
+	}
+	if inst.EnvGet("ZENITH_VERSION") != "" || inst.EnvGet("DB_PASSWORD") != "old" {
+		t.Fatal("EnvUnset wrong")
+	}
+}
+
+func TestDatabases_NameMayContainPipe(t *testing.T) {
+	inst := writeInstall(t)
+	r := &fakeRunner{answers: map[string]string{"docker compose exec -T postgres psql": "11111111-aaaa|postgresql|my|db\n"}}
+	dbs, err := inst.Databases(context.Background(), r)
+	if err != nil || len(dbs) != 1 || dbs[0].Name != "my|db" || dbs[0].Engine != "postgresql" {
+		t.Fatalf("dbs=%v err=%v", dbs, err)
 	}
 }

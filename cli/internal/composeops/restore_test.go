@@ -52,14 +52,22 @@ func TestRestore_ResetsControlPlanePassword(t *testing.T) {
 		t.Fatal("non-secret keys must stay the target's")
 	}
 	joined := strings.Join(r.cmds(), "\n")
-	if !strings.Contains(joined, "ALTER USER zenith PASSWORD 'fromarchive'") {
-		t.Fatalf("control-plane password not reset:\n%s", joined)
+	if strings.Contains(joined, "fromarchive") {
+		t.Fatalf("password leaked into argv:\n%s", joined)
+	}
+	if got := r.stdins["docker compose exec -T postgres psql -U zenith -d postgres"]; got != "ALTER USER zenith PASSWORD 'fromarchive';" {
+		t.Fatalf("ALTER not sent on stdin: %q", got)
 	}
 	stop := strings.Index(joined, "docker compose stop api web")
 	load := strings.Index(joined, "psql -U zenith -d zenith -v ON_ERROR_STOP=1")
 	up := strings.Index(joined+"\n", "docker compose up -d\n")
 	if stop < 0 || load < 0 || up < 0 || !(stop < load && load < up) {
 		t.Fatalf("order wrong (stop %d, load %d, up %d):\n%s", stop, load, up, joined)
+	}
+	stopStorage := strings.Index(joined, "docker compose stop storage")
+	untar := strings.Index(joined, "tar -C /data -xf")
+	if stopStorage < 0 || untar < 0 || stopStorage > untar {
+		t.Fatalf("storage must be stopped before untar (stop %d, untar %d):\n%s", stopStorage, untar, joined)
 	}
 }
 
@@ -77,7 +85,7 @@ func TestRestore_LoadsEachDatabaseAfterHealthy(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(r.cmds(), "\n")
-	for _, want := range []string{"docker exec -i zenith-db-11111111", "docker stop zenith-db-33333333", "docker start zenith-db-33333333"} {
+	for _, want := range []string{"redis:7-alpine", "rm -rf /data/appendonlydir", "config set appendonly yes", "docker exec -i zenith-db-11111111", "docker stop zenith-db-33333333", "docker start zenith-db-33333333"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing %q in:\n%s", want, joined)
 		}
@@ -236,7 +244,26 @@ func TestRestore_MidFailureReportsState(t *testing.T) {
 	r := &fakeRunner{fail: map[string]bool{"docker compose exec -T postgres psql -U zenith -d zenith": true},
 		answers: map[string]string{"docker compose ps -q storage": "cid\n"}}
 	_, err := Restore(context.Background(), r, writeInstall(t), makeArchive(t, Manifest{Format: 1, Version: "0.1.0-alpha.2"}, ""), RestoreOptions{Wait: time.Second, Poll: time.Millisecond})
-	if err == nil || !strings.Contains(err.Error(), "restore stopped at loading the platform database") || !strings.Contains(err.Error(), "docker compose up -d") {
+	if err == nil || !strings.Contains(err.Error(), "restore stopped at loading the platform database") || !strings.Contains(err.Error(), "incomplete") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRestore_EarlyFailureSuggestsStartingAsIs(t *testing.T) {
+	r := &fakeRunner{fail: map[string]bool{"docker compose up -d postgres storage": true}}
+	_, err := Restore(context.Background(), r, writeInstall(t), makeArchive(t, Manifest{Format: 1, Version: "0.1.0-alpha.2"}, ""), RestoreOptions{Wait: time.Second, Poll: time.Millisecond})
+	if err == nil || !strings.Contains(err.Error(), "docker compose up -d") || strings.Contains(err.Error(), "incomplete") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRestore_FailureAfterPlatformDropWarnsDataIncomplete(t *testing.T) {
+	inst := writeInstall(t)
+	arch := makeArchive(t, Manifest{Format: 1, Version: "0.1.0-alpha.2"}, "DB_PASSWORD=x\n")
+	r := &fakeRunner{answers: map[string]string{"docker compose ps -q storage": "cid\n", "docker inspect": "vol\n"},
+		fail: map[string]bool{"~psql -U zenith -d zenith -v ON_ERROR_STOP=1": true}}
+	_, err := Restore(context.Background(), r, inst, arch, RestoreOptions{Wait: time.Second, Poll: time.Millisecond})
+	if err == nil || !strings.Contains(err.Error(), "incomplete") || strings.Contains(err.Error(), "as they are") {
 		t.Fatalf("err = %v", err)
 	}
 }

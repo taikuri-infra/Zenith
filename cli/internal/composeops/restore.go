@@ -191,7 +191,11 @@ func Restore(ctx context.Context, r Runner, inst Install, archive string, opt Re
 	if err := dc("stop", "api", "web"); err != nil {
 		return nil, fmt.Errorf("stop api and web: %w", err)
 	}
+	platformTouched := false
 	stopped := func(step string, err error) error {
+		if platformTouched {
+			return fmt.Errorf("restore stopped at %s: %w — the platform database was dropped or only partially loaded, so Zenith's data is incomplete until the restore is re-run; fix the cause and re-run 'zen backup restore' (do not start the stack as it is)", step, err)
+		}
 		return fmt.Errorf("restore stopped at %s: %w — Zenith's API and dashboard are stopped; fix the cause and re-run 'zen backup restore', or run 'docker compose up -d' in %s to start them as they are", step, err, inst.Dir)
 	}
 	archEnv := parseEnv(filepath.Join(tmp, "env"))
@@ -211,11 +215,14 @@ func Restore(ctx context.Context, r Runner, inst Install, archive string, opt Re
 		return nil, stopped("waiting for postgres", err)
 	}
 	if pw := inst.EnvGet("DB_PASSWORD"); pw != "" {
-		q := "ALTER USER zenith PASSWORD '" + strings.ReplaceAll(pw, "'", "''") + "'"
-		if err := dc("exec", "-T", "postgres", "psql", "-U", "zenith", "-d", "postgres", "-c", q); err != nil {
+		// SQL goes over stdin so the password is not in argv or error text.
+		q := "ALTER USER zenith PASSWORD '" + strings.ReplaceAll(pw, "'", "''") + "';"
+		if _, err := r.Run(ctx, inst.Dir, strings.NewReader(q), "docker", "compose", "exec", "-T", "postgres",
+			"psql", "-U", "zenith", "-d", "postgres"); err != nil {
 			return nil, stopped("resetting the control-plane password", err)
 		}
 	}
+	platformTouched = true
 	if err := dc("exec", "-T", "postgres", "psql", "-U", "zenith", "-d", "postgres",
 		"-c", "DROP DATABASE IF EXISTS zenith WITH (FORCE)", "-c", "CREATE DATABASE zenith OWNER zenith"); err != nil {
 		return nil, stopped("recreating the platform database", err)
@@ -227,6 +234,7 @@ func Restore(ctx context.Context, r Runner, inst Install, archive string, opt Re
 	}); err != nil {
 		return nil, stopped("loading the platform database", err)
 	}
+	platformTouched = false // platform data is fully loaded; only storage remains
 
 	cidOut, err := r.Run(ctx, inst.Dir, nil, "docker", "compose", "ps", "-q", "storage")
 	if err != nil {
@@ -239,6 +247,9 @@ func Restore(ctx context.Context, r Runner, inst Install, archive string, opt Re
 	vol, err := mountVolume(ctx, r, inst.Dir, cid)
 	if err != nil {
 		return nil, stopped("finding the storage volume", err)
+	}
+	if err := dc("stop", "storage"); err != nil {
+		return nil, stopped("stopping storage", err)
 	}
 	if _, err := r.Run(ctx, inst.Dir, nil, "docker", "run", "--rm", "-v", vol+":/data", "-v", tmp+":/in:ro",
 		"alpine:3.20", "sh", "-c", "find /data -mindepth 1 -delete && tar -C /data -xf /in/storage.tar"); err != nil {
@@ -256,6 +267,14 @@ func Restore(ctx context.Context, r Runner, inst Install, archive string, opt Re
 	}
 	return &m, errors.Join(errs...)
 }
+
+const redisRestoreScript = `rm -rf /data/appendonlydir && cp "/in/$1.rdb" /data/dump.rdb && ` +
+	`redis-server --dir /data --appendonly no --daemonize yes --port 6399 >/dev/null && sleep 1 && ` +
+	`redis-cli -p 6399 config set appendonly yes >/dev/null && ` +
+	`ok=0; for i in $(seq 1 50); do ` +
+	`if redis-cli -p 6399 info persistence | grep -q "aof_rewrite_in_progress:0" && redis-cli -p 6399 info persistence | grep -q "aof_rewrite_scheduled:0"; then ok=1; break; fi; sleep 0.2; done; ` +
+	`redis-cli -p 6399 shutdown; chown -R redis:redis /data; ` +
+	`[ "$ok" = 1 ] || { echo "AOF rewrite did not finish" >&2; exit 1; }`
 
 func mountVolume(ctx context.Context, r Runner, dir, container string) (string, error) {
 	out, err := r.Run(ctx, dir, nil, "docker", "inspect", "-f",
@@ -299,8 +318,10 @@ func restoreDB(ctx context.Context, r Runner, inst Install, opt RestoreOptions, 
 		if _, err := r.Run(ctx, inst.Dir, nil, "docker", "stop", c); err != nil {
 			return err
 		}
+		// With appendonly yes Redis 7 ignores dump.rdb, so load it in a throwaway
+		// server and let that server rewrite the AOF before shutting down.
 		_, cpErr := r.Run(ctx, inst.Dir, nil, "docker", "run", "--rm", "-v", vol+":/data", "-v", dbDir+":/in:ro",
-			"alpine:3.20", "sh", "-c", `rm -rf /data/appendonlydir && cp "/in/$1.rdb" /data/dump.rdb`, "sh", db.ID)
+			"redis:7-alpine", "sh", "-c", redisRestoreScript, "sh", db.ID)
 		_, startErr := r.Run(ctx, inst.Dir, nil, "docker", "start", c)
 		if cpErr != nil {
 			return cpErr

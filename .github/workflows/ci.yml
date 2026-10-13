@@ -21,6 +21,11 @@ jobs:
           go-version-file: services/api/go.mod
           cache-dependency-path: services/api/go.sum
 
+      - name: Run install script tests
+        run: |
+          bash infra/scripts/install_test.sh
+          bash infra/scripts/compose_networks_test.sh
+
       - name: Run API tests
         run: cd services/api && go test ./... -race -count=1
 

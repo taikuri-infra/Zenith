@@ -3,6 +3,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -122,6 +123,10 @@ func loopbackBinding(port int) (nat.PortSet, nat.PortMap) {
 	return nat.PortSet{p: struct{}{}}, nat.PortMap{p: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}}
 }
 
+// ErrNoLoopbackPort means the database container has no 127.0.0.1 binding
+// (it was created before loopback publishing existed).
+var ErrNoLoopbackPort = errors.New("database container has no loopback port")
+
 // HostPort is the loopback port Docker assigned to the engine port.
 func (b *DockerDBBackend) HostPort(ctx context.Context, db *entities.UserDatabase) (int, error) {
 	spec, err := specFor(db, "")
@@ -140,7 +145,7 @@ func (b *DockerDBBackend) HostPort(ctx context.Context, db *entities.UserDatabas
 			return strconv.Atoi(pb.HostPort)
 		}
 	}
-	return 0, fmt.Errorf("%s has no loopback port", dbContainerName(db))
+	return 0, fmt.Errorf("%s: %w", dbContainerName(db), ErrNoLoopbackPort)
 }
 
 // WaitReady polls the container health until healthy, unhealthy, or ctx ends.

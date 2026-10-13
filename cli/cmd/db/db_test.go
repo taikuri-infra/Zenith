@@ -390,3 +390,23 @@ func TestTunnelPlan_NoHostPort(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestTunnelExecArgs(t *testing.T) {
+	db := &cliapi.Database{Name: "pg1", Engine: "postgresql", HostPort: 49153}
+	args, _, err := tunnelPlan(db, "https://zenith.example.com", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(tunnelExecArgs(args), " ")
+	want := "-o ExitOnForwardFailure=yes -N -L 5432:127.0.0.1:49153 -- root@zenith.example.com"
+	if got != want {
+		t.Fatalf("exec args = %q, want %q", got, want)
+	}
+}
+
+func TestTunnelPlan_RejectsDashSSHTarget(t *testing.T) {
+	db := &cliapi.Database{Name: "pg1", Engine: "postgresql", HostPort: 49153}
+	if _, _, err := tunnelPlan(db, "https://x.example.com", "-oProxyCommand=evil", 0); err == nil {
+		t.Fatal("expected error for --ssh starting with '-'")
+	}
+}

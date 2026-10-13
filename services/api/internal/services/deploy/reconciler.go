@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -51,12 +52,16 @@ func (r *Reconciler) Run(ctx context.Context) {
 		db := &dbs[i]
 		up, err := r.dbProbe.ContainerRunning(ctx, db)
 		if err != nil {
+			slog.Warn("reconcile: database probe failed", "db", db.Name, "error", err)
 			continue
 		}
 		if up {
 			// Docker may pick a new loopback port when a container restarts.
-			if canHostPort {
-				r.refreshHostPort(ctx, hp, db)
+			if canHostPort && r.refreshHostPort(ctx, hp, db) {
+				slog.Info("reconcile: database has no loopback port; re-provisioning", "db", db.Name)
+				if err := r.dbRT.Reprovision(ctx, db); err != nil {
+					slog.Error("reconcile: database failed", "db", db.Name, "error", err)
+				}
 			}
 			continue
 		}
@@ -76,7 +81,12 @@ func (r *Reconciler) Run(ctx context.Context) {
 		if app.Status != entities.AppStatusRunning {
 			continue
 		}
-		if up, err := r.appRT.AppContainerRunning(ctx, app); err != nil || up {
+		up, err := r.appRT.AppContainerRunning(ctx, app)
+		if err != nil {
+			slog.Warn("reconcile: app probe failed", "app", app.Name, "error", err)
+			continue
+		}
+		if up {
 			continue
 		}
 		image, err := CurrentImage(ctx, r.apps, app.ID)
@@ -91,16 +101,22 @@ func (r *Reconciler) Run(ctx context.Context) {
 	}
 }
 
-func (r *Reconciler) refreshHostPort(ctx context.Context, hp services.HostPorter, db *entities.UserDatabase) {
+// refreshHostPort stores the current loopback port. It reports true when the
+// running container has no loopback binding at all and must be re-provisioned.
+func (r *Reconciler) refreshHostPort(ctx context.Context, hp services.HostPorter, db *entities.UserDatabase) (needsReprovision bool) {
 	port, err := hp.HostPort(ctx, db)
 	if err != nil {
+		if errors.Is(err, ErrNoLoopbackPort) {
+			return true
+		}
 		slog.Warn("reconcile: database host port unknown", "db", db.Name, "error", err)
-		return
+		return false
 	}
 	if port == db.HostPort {
-		return
+		return false
 	}
 	if err := r.dbs.SetDatabaseHostPort(ctx, db.ID, port); err != nil {
-		slog.Warn("reconcile: store database host port failed", "db", db.Name, "error", err)
+		slog.Warn("store database host port failed", "db", db.Name, "error", err)
 	}
+	return false
 }

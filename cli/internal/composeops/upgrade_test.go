@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +166,53 @@ func TestUpgrade_RejectsInvalidTarget(t *testing.T) {
 	_, err := Upgrade(context.Background(), r, writeInstall(t), UpgradeOptions{Target: "1.0.0; rm -rf /", Now: time.Now}, &bytes.Buffer{})
 	if err == nil || len(r.cmds()) != 0 {
 		t.Fatalf("err=%v cmds=%v", err, r.cmds())
+	}
+}
+
+func TestUpgrade_CheckoutFailureDoesNotRollBack(t *testing.T) {
+	inst := writeInstall(t)
+	r := upgradeRunner()
+	r.fail = map[string]bool{"git checkout": true}
+	res, err := Upgrade(context.Background(), r, inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", SkipBackup: true, Now: time.Now,
+		Health: func(context.Context, string) error { return nil },
+	}, &bytes.Buffer{})
+	if err == nil || res.RolledBack || res.RollbackFailed || !strings.Contains(err.Error(), "nothing changed") {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+	for _, c := range r.cmds() {
+		if strings.HasPrefix(c, "docker compose") {
+			t.Fatalf("ran %q after checkout failure", c)
+		}
+	}
+	if n := strings.Count(strings.Join(r.cmds(), "\n"), "git checkout"); n != 1 {
+		t.Fatalf("git checkout ran %d times, want 1 (no rollback)", n)
+	}
+}
+
+func TestUpgrade_RollbackWithoutKnownVersionUnsetsEnvAndChecksHealthOnly(t *testing.T) {
+	inst := writeInstall(t)
+	if err := inst.EnvUnset("ZENITH_VERSION"); err != nil {
+		t.Fatal(err)
+	}
+	r := upgradeRunner()
+	res, err := Upgrade(context.Background(), r, inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", SkipBackup: true, Timeout: time.Second, Now: time.Now,
+		Health: func(_ context.Context, want string) error {
+			if want != "" {
+				return errors.New("new version unhealthy")
+			}
+			return nil
+		},
+	}, &bytes.Buffer{})
+	if err == nil || res == nil || !res.RolledBack || res.RollbackFailed {
+		t.Fatalf("want successful rollback, got res=%+v err=%v", res, err)
+	}
+	b, _ := os.ReadFile(filepath.Join(inst.Dir, ".env"))
+	if strings.Contains(string(b), "ZENITH_VERSION") {
+		t.Fatalf(".env still has ZENITH_VERSION:\n%s", b)
+	}
+	if !strings.Contains(string(b), "DB_PASSWORD=old") {
+		t.Fatalf("other keys lost:\n%s", b)
 	}
 }
