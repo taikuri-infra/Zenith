@@ -40,12 +40,16 @@ Examples:
   zen backup
   zen backup --out /mnt/backups
   zen backup create --reason "before upgrade"`,
+	Args: cobra.NoArgs,
 	RunE: runComposeBackup,
 }
 
 func runComposeBackup(cmd *cobra.Command, args []string) error {
 	inst, ok := composeops.Detect(flagDir)
 	if !ok {
+		if flagDir != "" {
+			return fmt.Errorf("no Compose install found in %s", flagDir)
+		}
 		return cmd.Help()
 	}
 	out := flagOut

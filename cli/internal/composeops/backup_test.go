@@ -47,6 +47,7 @@ func TestBackup_WritesEveryPart(t *testing.T) {
 		"docker inspect":                          "zenith_storagedata\n",
 		"docker exec zenith-db-11111111 pg_dump":  "-- pg1 dump",
 		"docker exec zenith-db-22222222 sh -c":    "-- my1 dump",
+		"docker exec zenith-db-33333333 sh -c":    "OK\n",
 	}}
 	out := t.TempDir()
 	path, err := Backup(context.Background(), r, inst, out, time.Date(2026, 10, 13, 8, 0, 0, 0, time.UTC))
@@ -95,4 +96,46 @@ func keys(m map[string]string) []string {
 		k = append(k, x)
 	}
 	return k
+}
+
+func TestBackup_ArchiveWriteFailureLeavesNoArchive(t *testing.T) {
+	inst := writeInstall(t)
+	r := &fakeRunner{answers: map[string]string{
+		"docker compose ps -q storage": "cid\n",
+		"docker inspect":               "vol\n",
+	}}
+	afterArchiveOpen = func() error { return io.ErrShortWrite }
+	defer func() { afterArchiveOpen = func() error { return nil } }()
+	out := t.TempDir()
+	if _, err := Backup(context.Background(), r, inst, out, time.Now()); err == nil {
+		t.Fatal("want error")
+	}
+	if left, _ := os.ReadDir(out); len(left) != 0 {
+		t.Fatalf("partial files left: %v", left)
+	}
+}
+
+func TestBackup_MissingStorageAndRedisSave(t *testing.T) {
+	inst := writeInstall(t)
+	r := &fakeRunner{answers: map[string]string{"docker inspect": "vol\n"}}
+	if _, err := Backup(context.Background(), r, inst, t.TempDir(), time.Now()); err == nil || !strings.Contains(err.Error(), "storage container not found") {
+		t.Fatalf("err = %v", err)
+	}
+	r = &fakeRunner{answers: map[string]string{"docker compose ps -q storage": "cid\n"}}
+	if _, err := Backup(context.Background(), r, inst, t.TempDir(), time.Now()); err == nil || !strings.Contains(err.Error(), "storage volume not found") {
+		t.Fatalf("err = %v", err)
+	}
+	r = &fakeRunner{answers: map[string]string{
+		"docker compose exec -T postgres psql": "33333333-cccc|redis|rd1\n",
+		"docker compose ps -q storage":         "cid\n",
+		"docker inspect":                       "vol\n",
+		"docker exec zenith-db-33333333 sh -c": "NOAUTH Authentication required.\n",
+	}}
+	out := t.TempDir()
+	if _, err := Backup(context.Background(), r, inst, out, time.Now()); err == nil || !strings.Contains(err.Error(), "SAVE") {
+		t.Fatalf("err = %v", err)
+	}
+	if left, _ := os.ReadDir(out); len(left) != 0 {
+		t.Fatalf("left: %v", left)
+	}
 }

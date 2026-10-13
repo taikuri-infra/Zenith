@@ -44,12 +44,6 @@ func Backup(ctx context.Context, r Runner, inst Install, outDir string, now time
 		return "", err
 	}
 	defer os.RemoveAll(tmp)
-	defer func() {
-		if err != nil && path != "" {
-			os.Remove(path)
-			path = ""
-		}
-	}()
 
 	dbs, err := inst.Databases(ctx, r)
 	if err != nil {
@@ -67,12 +61,18 @@ func Backup(ctx context.Context, r Runner, inst Install, outDir string, now time
 		return "", fmt.Errorf("find storage container: %w", err)
 	}
 	cid := strings.TrimSpace(string(cidOut))
+	if cid == "" {
+		return "", fmt.Errorf("storage container not found (is the stack running?)")
+	}
 	volOut, err := r.Run(ctx, inst.Dir, nil, "docker", "inspect", "-f",
 		`{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}`, cid)
 	if err != nil {
 		return "", fmt.Errorf("find storage volume: %w", err)
 	}
 	vol := strings.TrimSpace(string(volOut))
+	if vol == "" {
+		return "", fmt.Errorf("storage volume not found")
+	}
 	if err = dumpTo(ctx, r, inst.Dir, filepath.Join(tmp, "storage.tar"), "docker", "run", "--rm",
 		"-v", vol+":/data:ro", "alpine:3.20", "tar", "-C", "/data", "-cf", "-", "."); err != nil {
 		return "", fmt.Errorf("archive storage volume: %w", err)
@@ -100,8 +100,13 @@ func Backup(ctx context.Context, r Runner, inst Install, outDir string, now time
 			err = dumpTo(ctx, r, inst.Dir, base+".sql", "docker", "exec", c, "sh", "-c",
 				`exec mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --single-transaction --no-tablespaces "$MYSQL_DATABASE"`)
 		case "redis":
-			if _, err = r.Run(ctx, inst.Dir, nil, "docker", "exec", c, "sh", "-c",
-				`redis-cli -a "$REDIS_PASSWORD" --no-auth-warning SAVE`); err == nil {
+			var saveOut []byte
+			saveOut, err = r.Run(ctx, inst.Dir, nil, "docker", "exec", c, "sh", "-c",
+				`redis-cli -a "$REDIS_PASSWORD" --no-auth-warning SAVE`)
+			if err == nil && strings.TrimSpace(string(saveOut)) != "OK" {
+				err = fmt.Errorf("redis SAVE did not return OK: %q", strings.TrimSpace(string(saveOut)))
+			}
+			if err == nil {
 				// Pre-create the target so it exists with 0600; docker cp overwrites it.
 				if err = os.WriteFile(base+".rdb", nil, 0o600); err == nil {
 					_, err = r.Run(ctx, inst.Dir, nil, "docker", "cp", c+":/data/dump.rdb", base+".rdb")
@@ -133,13 +138,17 @@ func Backup(ctx context.Context, r Runner, inst Install, outDir string, now time
 		return "", err
 	}
 
-	path = filepath.Join(outDir, fmt.Sprintf("zenith-backup-%s-%s.tar.gz", version, now.UTC().Format("20060102T150405Z")))
-	if err = writeArchive(path, tmp); err != nil {
+	archive := filepath.Join(outDir, fmt.Sprintf("zenith-backup-%s-%s.tar.gz", version, now.UTC().Format("20060102T150405Z")))
+	if err = writeArchive(archive, tmp); err != nil {
 		return "", err
 	}
-	return path, nil
+	return archive, nil
 }
 
+// afterArchiveOpen is a test seam invoked once the archive file exists.
+var afterArchiveOpen = func() error { return nil }
+
+// writeArchive writes the archive and removes it again on any failure.
 func writeArchive(path, src string) (err error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
@@ -149,7 +158,13 @@ func writeArchive(path, src string) (err error) {
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
+		if err != nil {
+			os.Remove(path)
+		}
 	}()
+	if err = afterArchiveOpen(); err != nil {
+		return err
+	}
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
 	err = filepath.WalkDir(src, func(p string, d fs.DirEntry, werr error) error {
