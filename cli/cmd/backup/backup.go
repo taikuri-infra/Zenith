@@ -6,10 +6,12 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dotechhq/zenith/cli/internal/composeops"
 	"github.com/dotechhq/zenith/cli/internal/installstate"
 	"github.com/dotechhq/zenith/cli/internal/sshclient"
 	"github.com/dotechhq/zenith/cli/internal/tui"
@@ -19,17 +21,45 @@ import (
 var (
 	flagReason string
 	flagDomain string
+	flagDir    string
+	flagOut    string
 )
 
 // Cmd is the `zen backup` top-level command. Subcommands are registered below.
 var Cmd = &cobra.Command{
 	Use:   "backup",
-	Short: "Manage Zenith database backups",
-	Long: `Trigger and monitor database backups for a Zenith installation.
+	Short: "Back up Zenith (Compose: whole platform; Helm: zen backup create)",
+	Long: `Back up a Zenith installation.
+
+On a Docker Compose install (run on the server, in the install directory) this
+writes one archive with the platform database, object storage, every managed
+database and the install's .env. Without a Compose install, use
+"zen backup create" for the CNPG database backup.
 
 Examples:
-  zen backup create
+  zen backup
+  zen backup --out /mnt/backups
   zen backup create --reason "before upgrade"`,
+	RunE: runComposeBackup,
+}
+
+func runComposeBackup(cmd *cobra.Command, args []string) error {
+	inst, ok := composeops.Detect(flagDir)
+	if !ok {
+		return cmd.Help()
+	}
+	out := flagOut
+	if out == "" {
+		out = filepath.Join(inst.Dir, "backups")
+	}
+	path, err := composeops.Backup(cmd.Context(), composeops.ExecRunner{}, inst, out, time.Now())
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), path)
+	fmt.Fprintln(cmd.OutOrStdout(), "This archive contains your secrets (SECRETS_ENCRYPTION_KEY).")
+	fmt.Fprintln(cmd.OutOrStdout(), "Copy it off this server: it is on the same disk as the data.")
+	return nil
 }
 
 var createCmd = &cobra.Command{
@@ -46,6 +76,8 @@ Examples:
 }
 
 func init() {
+	Cmd.Flags().StringVar(&flagDir, "dir", "", "Compose install directory (default: auto-detect)")
+	Cmd.Flags().StringVar(&flagOut, "out", "", "Directory for the archive (default: <install>/backups)")
 	createCmd.Flags().StringVar(&flagReason, "reason", "", "Human-readable reason for this backup (informational only)")
 	createCmd.Flags().StringVar(&flagDomain, "domain", "", "Domain of the Zenith installation to back up (uses saved state if omitted)")
 	Cmd.AddCommand(createCmd)
@@ -116,7 +148,7 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 
 	// Poll for backup completion — up to 5 minutes
 	const (
-		pollInterval = 5 * time.Second
+		pollInterval  = 5 * time.Second
 		backupTimeout = 5 * time.Minute
 	)
 	deadline := time.Now().Add(backupTimeout)
