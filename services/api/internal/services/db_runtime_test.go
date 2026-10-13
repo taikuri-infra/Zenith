@@ -96,3 +96,23 @@ func TestDBService_TimeoutStillMarksError(t *testing.T) {
 		t.Errorf("status = %q, want error", got.Status)
 	}
 }
+
+type hostPortBackend struct{ fakeDBBackend }
+
+func (*hostPortBackend) HostPort(context.Context, *entities.UserDatabase) (int, error) {
+	return 49200, nil
+}
+
+func TestProvision_StoresHostPort(t *testing.T) {
+	repo := memory.NewMemoryDatabaseRepository()
+	rt := NewDBRuntimeService(repo, &hostPortBackend{}, nil)
+	db, err := rt.Create(context.Background(), "", "u1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "pg"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.Wait(db.ID)
+	got, _ := repo.GetDatabase(context.Background(), db.ID)
+	if got.HostPort != 49200 {
+		t.Fatalf("HostPort = %d", got.HostPort)
+	}
+}

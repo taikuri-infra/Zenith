@@ -23,6 +23,11 @@ type DBBackend interface {
 	Delete(ctx context.Context, db *entities.UserDatabase, purge bool) error
 }
 
+// HostPorter is an optional DBBackend capability: the host-side port for SSH access.
+type HostPorter interface {
+	HostPort(ctx context.Context, db *entities.UserDatabase) (int, error)
+}
+
 // DBRuntimeService creates database records and provisions them on a DBBackend.
 type DBRuntimeService struct {
 	repo    ports.DatabaseRepository
@@ -105,7 +110,17 @@ func (s *DBRuntimeService) provision(ctx context.Context, db *entities.UserDatab
 			return fmt.Errorf("encrypt password: %w", err)
 		}
 	}
-	return s.repo.SetDatabaseProvisioned(ctx, db.ID, host, port, secret)
+	if err := s.repo.SetDatabaseProvisioned(ctx, db.ID, host, port, secret); err != nil {
+		return err
+	}
+	if hp, ok := s.backend.(HostPorter); ok {
+		if port, err := hp.HostPort(ctx, db); err != nil {
+			slog.Warn("database host port unknown", "db", db.Name, "error", err)
+		} else if err := s.repo.SetDatabaseHostPort(ctx, db.ID, port); err != nil {
+			slog.Warn("store database host port failed", "db", db.Name, "error", err)
+		}
+	}
+	return nil
 }
 
 // Wait blocks until the background provisioning of id has finished (tests).

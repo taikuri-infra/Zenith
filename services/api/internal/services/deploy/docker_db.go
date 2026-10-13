@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -12,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/services"
@@ -20,7 +22,7 @@ import (
 var _ services.DBBackend = (*DockerDBBackend)(nil)
 
 // DockerDBBackend runs each managed database as its own container on the
-// app network. Data lives in a named volume; no host port is published.
+// app network. Data lives in a named volume; the engine port is published on 127.0.0.1 only.
 type DockerDBBackend struct {
 	cli     *client.Client
 	network string
@@ -83,19 +85,22 @@ func (b *DockerDBBackend) Provision(ctx context.Context, db *entities.UserDataba
 	_ = rc.Close()
 
 	name := dbContainerName(db)
+	exposed, bindings := loopbackBinding(spec.port)
 	_ = b.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
 	resp, err := b.cli.ContainerCreate(ctx,
 		&container.Config{
-			Image:  spec.image,
-			Env:    spec.env,
-			Cmd:    spec.cmd,
-			Labels: map[string]string{"zenith.db.id": db.ID, "zenith.db.engine": string(db.Engine)},
+			Image:        spec.image,
+			ExposedPorts: exposed,
+			Env:          spec.env,
+			Cmd:          spec.cmd,
+			Labels:       map[string]string{"zenith.db.id": db.ID, "zenith.db.engine": string(db.Engine)},
 			Healthcheck: &container.HealthConfig{
 				Test: spec.test, Interval: 3 * time.Second, Timeout: 3 * time.Second, Retries: 40, StartPeriod: 5 * time.Second,
 			},
 		},
 		&container.HostConfig{
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
+			PortBindings:  bindings,
 			Mounts:        []mount.Mount{{Type: mount.TypeVolume, Source: name, Target: spec.data}},
 		},
 		&network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{b.network: {Aliases: []string{name}}}},
@@ -107,6 +112,35 @@ func (b *DockerDBBackend) Provision(ctx context.Context, db *entities.UserDataba
 		return "", 0, fmt.Errorf("start %s: %w", name, err)
 	}
 	return name, spec.port, nil
+}
+
+// loopbackBinding publishes the engine port on 127.0.0.1 only, with a port
+// Docker picks. Loopback isn't reachable from the internet; it is reachable
+// through an SSH tunnel (zen db connect --tunnel).
+func loopbackBinding(port int) (nat.PortSet, nat.PortMap) {
+	p := nat.Port(fmt.Sprintf("%d/tcp", port))
+	return nat.PortSet{p: struct{}{}}, nat.PortMap{p: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: ""}}}
+}
+
+// HostPort is the loopback port Docker assigned to the engine port.
+func (b *DockerDBBackend) HostPort(ctx context.Context, db *entities.UserDatabase) (int, error) {
+	spec, err := specFor(db, "")
+	if err != nil {
+		return 0, err
+	}
+	insp, err := b.cli.ContainerInspect(ctx, dbContainerName(db))
+	if err != nil {
+		return 0, err
+	}
+	if insp.NetworkSettings == nil {
+		return 0, fmt.Errorf("no network settings")
+	}
+	for _, pb := range insp.NetworkSettings.Ports[nat.Port(fmt.Sprintf("%d/tcp", spec.port))] {
+		if pb.HostIP == "127.0.0.1" {
+			return strconv.Atoi(pb.HostPort)
+		}
+	}
+	return 0, fmt.Errorf("%s has no loopback port", dbContainerName(db))
 }
 
 // WaitReady polls the container health until healthy, unhealthy, or ctx ends.
