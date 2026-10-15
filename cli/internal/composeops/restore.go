@@ -74,8 +74,12 @@ func extractArchive(archive, dst string) error {
 			if err != nil {
 				return err
 			}
-			if _, err := io.Copy(out, tr); err != nil {
+			// Bound the copy by the entry's declared size; a short read means a truncated archive.
+			if n, err := io.CopyN(out, tr, h.Size); err != nil {
 				out.Close()
+				if err == io.EOF {
+					return fmt.Errorf("truncated archive entry %q: got %d of %d bytes", h.Name, n, h.Size)
+				}
 				return err
 			}
 			if err := out.Close(); err != nil {

@@ -38,6 +38,7 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 }
 
 func (ExecRunner) exec(ctx context.Context, dir string, stdin io.Reader, stdout io.Writer, name string, args ...string) error {
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- name and args are assembled by composeops from constants plus validated identifiers and version strings; no raw user input reaches this call.
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdin = stdin
