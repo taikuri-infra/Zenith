@@ -3,13 +3,16 @@
 package backup
 
 import (
+	"bufio"
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dotechhq/zenith/cli/internal/composeops"
 	"github.com/dotechhq/zenith/cli/internal/installstate"
 	"github.com/dotechhq/zenith/cli/internal/sshclient"
 	"github.com/dotechhq/zenith/cli/internal/tui"
@@ -19,17 +22,50 @@ import (
 var (
 	flagReason string
 	flagDomain string
+	flagDir    string
+	flagOut    string
+	flagYes    bool
 )
 
 // Cmd is the `zen backup` top-level command. Subcommands are registered below.
 var Cmd = &cobra.Command{
 	Use:   "backup",
-	Short: "Manage Zenith database backups",
-	Long: `Trigger and monitor database backups for a Zenith installation.
+	Short: "Back up Zenith (Compose: whole platform; Helm: zen backup create)",
+	Long: `Back up a Zenith installation.
+
+On a Docker Compose install (run on the server, in the install directory) this
+writes one archive with the platform database, object storage, every managed
+database and the install's .env. Without a Compose install, use
+"zen backup create" for the CNPG database backup.
 
 Examples:
-  zen backup create
+  zen backup
+  zen backup --out /mnt/backups
   zen backup create --reason "before upgrade"`,
+	Args: cobra.NoArgs,
+	RunE: runComposeBackup,
+}
+
+func runComposeBackup(cmd *cobra.Command, args []string) error {
+	inst, ok := composeops.Detect(flagDir)
+	if !ok {
+		if flagDir != "" {
+			return fmt.Errorf("no Compose install found in %s", flagDir)
+		}
+		return cmd.Help()
+	}
+	out := flagOut
+	if out == "" {
+		out = filepath.Join(inst.Dir, "backups")
+	}
+	path, err := composeops.Backup(cmd.Context(), composeops.ExecRunner{}, inst, out, time.Now())
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), path)
+	fmt.Fprintln(cmd.OutOrStdout(), "This archive contains your secrets (SECRETS_ENCRYPTION_KEY).")
+	fmt.Fprintln(cmd.OutOrStdout(), "Copy it off this server: it is on the same disk as the data.")
+	return nil
 }
 
 var createCmd = &cobra.Command{
@@ -46,9 +82,14 @@ Examples:
 }
 
 func init() {
+	Cmd.Flags().StringVar(&flagDir, "dir", "", "Compose install directory (default: auto-detect)")
+	Cmd.Flags().StringVar(&flagOut, "out", "", "Directory for the archive (default: <install>/backups)")
 	createCmd.Flags().StringVar(&flagReason, "reason", "", "Human-readable reason for this backup (informational only)")
 	createCmd.Flags().StringVar(&flagDomain, "domain", "", "Domain of the Zenith installation to back up (uses saved state if omitted)")
 	Cmd.AddCommand(createCmd)
+	restoreCmd.Flags().BoolVar(&flagYes, "yes", false, "Skip the confirmation prompt")
+	restoreCmd.Flags().StringVar(&flagDir, "dir", "", "Compose install directory (default: auto-detect)")
+	Cmd.AddCommand(restoreCmd)
 }
 
 func runBackupCreate(cmd *cobra.Command, args []string) error {
@@ -116,7 +157,7 @@ func runBackupCreate(cmd *cobra.Command, args []string) error {
 
 	// Poll for backup completion — up to 5 minutes
 	const (
-		pollInterval = 5 * time.Second
+		pollInterval  = 5 * time.Second
 		backupTimeout = 5 * time.Minute
 	)
 	deadline := time.Now().Add(backupTimeout)
@@ -166,4 +207,56 @@ func sanitizeReason(s string) string {
 		result = result[:200]
 	}
 	return result
+}
+
+var restoreCmd = &cobra.Command{
+	Use:   "restore <archive>",
+	Short: "Restore a Compose install from a zen backup archive",
+	Long: `Rebuild a Docker Compose install (fresh or existing) from an archive written by
+"zen backup". This replaces all data of the install: the platform database,
+object storage and every managed database.
+
+Examples:
+  zen backup restore zenith-backup-0.1.0-alpha.2-20261013T120000Z.tar.gz
+  zen backup restore backup.tar.gz --yes --dir /opt/zenith`,
+	Args: cobra.ExactArgs(1),
+	RunE: runComposeRestore,
+}
+
+func runComposeRestore(cmd *cobra.Command, args []string) error {
+	inst, ok := composeops.Detect(flagDir)
+	if !ok {
+		return fmt.Errorf("no Compose install found (use --dir)")
+	}
+	out := cmd.OutOrStdout()
+	if !flagYes {
+		fmt.Fprintf(out, "This replaces all data of the install in %s. Type 'restore' to continue: ", inst.Dir)
+		line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		if strings.TrimSpace(line) != "restore" {
+			return fmt.Errorf("aborted")
+		}
+	}
+	m, err := composeops.Restore(cmd.Context(), composeops.ExecRunner{}, inst, args[0], composeops.RestoreOptions{})
+	if m == nil {
+		return err // nothing restored; cobra prints the (already descriptive) error once
+	}
+	failed := 0
+	if err != nil {
+		if j, ok := err.(interface{ Unwrap() []error }); ok {
+			failed = len(j.Unwrap())
+		} else {
+			failed = 1
+		}
+	}
+	fmt.Fprintf(out, "Restored archive from Zenith %s: %d of %d managed database(s) restored, %d failed.\n",
+		m.Version, len(m.Databases)-failed, len(m.Databases), failed)
+	if err != nil {
+		fmt.Fprintln(out, "Failures:")
+		fmt.Fprintln(out, err.Error())
+		cmd.SilenceErrors = true
+		cmd.SilenceUsage = true
+		return fmt.Errorf("restore finished with %d failed database(s)", failed)
+	}
+	fmt.Fprintln(out, "Restore complete.")
+	return nil
 }

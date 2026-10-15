@@ -148,6 +148,8 @@ if [ ! -f .env ]; then
   set_var S3_ACCESS_KEY "$(gen_secret 20)"
   set_var SECRETS_ENCRYPTION_KEY "$(gen_hex)"
   set_var ZENITH_DOMAIN "$ZENITH_DOMAIN"
+  # Pin the images to this checkout's release, never a moving :latest.
+  if [ -f VERSION ]; then set_var ZENITH_VERSION "$(tr -d '[:space:]' < VERSION)"; fi
 
   # The API deploys user apps via the Docker socket and runs as a non-root user,
   # so it needs the host's docker group GID.
@@ -181,6 +183,8 @@ else
     set_var SECRETS_ENCRYPTION_KEY "$(gen_hex)"
     log "Added SECRETS_ENCRYPTION_KEY to .env"
   fi
+  # Pin the images to this checkout's release, never a moving :latest.
+  if [ -f VERSION ]; then set_var ZENITH_VERSION "$(tr -d '[:space:]' < VERSION)"; fi
   rm -f .env.bak
   ADMIN_CREDS_GENERATED=0
 fi

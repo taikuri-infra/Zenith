@@ -96,3 +96,64 @@ func TestDBService_TimeoutStillMarksError(t *testing.T) {
 		t.Errorf("status = %q, want error", got.Status)
 	}
 }
+
+type hostPortBackend struct{ fakeDBBackend }
+
+func (*hostPortBackend) HostPort(context.Context, *entities.UserDatabase) (int, error) {
+	return 49200, nil
+}
+
+func TestProvision_StoresHostPort(t *testing.T) {
+	repo := memory.NewMemoryDatabaseRepository()
+	rt := NewDBRuntimeService(repo, &hostPortBackend{}, nil)
+	db, err := rt.Create(context.Background(), "", "u1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "pg"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.Wait(db.ID)
+	got, _ := repo.GetDatabase(context.Background(), db.ID)
+	if got.HostPort != 49200 {
+		t.Fatalf("HostPort = %d", got.HostPort)
+	}
+}
+
+func TestReprovision_UsesStoredPassword(t *testing.T) {
+	repo := memory.NewMemoryDatabaseRepository()
+	be := &fakeDBBackend{}
+	s := NewDBRuntimeService(repo, be, nil)
+	db, err := s.Create(context.Background(), "app-1", "user-1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "pg"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Wait(db.ID)
+	first := be.gotPW
+	be.gotPW = ""
+	if err := s.Reprovision(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	if first == "" || be.gotPW != first {
+		t.Fatalf("reprovision password %q, want %q", be.gotPW, first)
+	}
+}
+
+func TestPassword_EncryptedSecretWithoutCryptoErrors(t *testing.T) {
+	repo := memory.NewMemoryDatabaseRepository()
+	db, err := repo.CreateDatabase(context.Background(), "app-1", "user-1", &dto.CreateDatabaseInput{Engine: entities.DatabaseEnginePostgres, Name: "pg"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetDatabaseProvisioned(context.Background(), db.ID, "h", 5432, "enc:v1:abcd"); err != nil {
+		t.Fatal(err)
+	}
+	be := &fakeDBBackend{}
+	s := NewDBRuntimeService(repo, be, nil)
+	if _, err := s.Password(context.Background(), db); err == nil {
+		t.Fatal("Password must fail for an encrypted secret without a key")
+	}
+	if err := s.Reprovision(context.Background(), db); err == nil {
+		t.Fatal("Reprovision must fail")
+	}
+	if be.gotPW != "" {
+		t.Fatalf("ciphertext used as password: %q", be.gotPW)
+	}
+}

@@ -22,13 +22,13 @@ func NewPostgresDatabaseRepository(pool *pgxpool.Pool) *PostgresDatabaseReposito
 	return &PostgresDatabaseRepository{pool: pool}
 }
 
-const dbSelectCols = `id, app_id, user_id, project_id, name, engine, db_name, db_user, host, port, size_mb, max_size_mb, status, provisioner, created_at, updated_at`
+const dbSelectCols = `id, app_id, user_id, project_id, name, engine, db_name, db_user, host, port, host_port, size_mb, max_size_mb, status, provisioner, created_at, updated_at`
 
 func scanDatabase(scanner interface{ Scan(dest ...any) error }) (*entities.UserDatabase, error) {
 	var d entities.UserDatabase
 	err := scanner.Scan(
 		&d.ID, &d.AppID, &d.UserID, &d.ProjectID, &d.Name, &d.Engine,
-		&d.DBName, &d.DBUser, &d.Host, &d.Port,
+		&d.DBName, &d.DBUser, &d.Host, &d.Port, &d.HostPort,
 		&d.SizeMB, &d.MaxSizeMB, &d.Status, &d.Provisioner,
 		&d.CreatedAt, &d.UpdatedAt,
 	)
@@ -271,4 +271,34 @@ func (r *PostgresDatabaseRepository) SetDatabasePort(ctx context.Context, id str
 		return fmt.Errorf("set database port: %w", err)
 	}
 	return nil
+}
+
+// SetDatabaseHostPort records the loopback host port a database is published on.
+func (r *PostgresDatabaseRepository) SetDatabaseHostPort(ctx context.Context, id string, port int) error {
+	_, err := r.pool.Exec(ctx, `UPDATE user_databases SET host_port = $2, updated_at = NOW() WHERE id = $1`, id, port)
+	if err != nil {
+		return fmt.Errorf("set database host port: %w", err)
+	}
+	return nil
+}
+
+// ListDatabasesByStatus returns all databases in the given status, oldest first.
+func (r *PostgresDatabaseRepository) ListDatabasesByStatus(ctx context.Context, status entities.DatabaseStatus) ([]entities.UserDatabase, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+dbSelectCols+` FROM user_databases WHERE status = $1 ORDER BY created_at`, string(status),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list databases by status: %w", err)
+	}
+	defer rows.Close()
+
+	var dbs []entities.UserDatabase
+	for rows.Next() {
+		d, err := scanDatabase(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan database: %w", err)
+		}
+		dbs = append(dbs, *d)
+	}
+	return dbs, rows.Err()
 }

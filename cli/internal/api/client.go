@@ -229,6 +229,7 @@ type Database struct {
 	Status           string `json:"status"`
 	ConnectionString string `json:"connection_string"`
 	Port             int    `json:"port"`
+	HostPort         int    `json:"host_port"`
 }
 
 // resolveProjectID maps a project ID, name, display name or slug to its ID by

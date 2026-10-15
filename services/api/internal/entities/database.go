@@ -42,6 +42,8 @@ type UserDatabase struct {
 	DBUser      string              `json:"db_user"`
 	Host        string              `json:"host"`
 	Port        int                 `json:"port"`
+	// HostPort is the loopback host port the managed database is published on (0 if none).
+	HostPort    int                 `json:"host_port"`
 	SizeMB      int                 `json:"size_mb"`
 	MaxSizeMB   int                 `json:"max_size_mb"`
 	Status      DatabaseStatus      `json:"status"`

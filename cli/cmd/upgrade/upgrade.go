@@ -3,6 +3,7 @@
 package upgrade
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dotechhq/zenith/cli/internal/composeops"
 	"github.com/dotechhq/zenith/cli/internal/installstate"
 	semverPkg "github.com/dotechhq/zenith/cli/internal/semver"
 	"github.com/dotechhq/zenith/cli/internal/sshclient"
@@ -19,19 +21,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var versionRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+var versionRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
 
 func validateVersion(v string) error {
 	if !versionRe.MatchString(v) {
-		return fmt.Errorf("invalid version %q: must be in X.Y.Z format (e.g. 1.5.0)", v)
+		return fmt.Errorf("invalid version %q: must be in X.Y.Z format (e.g. 1.5.0 or 0.1.0-alpha.3)", v)
 	}
 	return nil
 }
 
 var (
-	flagVersion  string
-	flagDryRun   bool
+	flagVersion    string
+	flagDryRun     bool
 	flagSkipBackup bool
+	flagDir        string
+	flagForce      bool
 )
 
 // Cmd is the `zen upgrade` command.
@@ -46,6 +50,10 @@ var Cmd = &cobra.Command{
   4. Health-check the Mission Control API
   5. Roll back automatically if any step fails
 
+On a Docker Compose install, zen upgrade runs on the server in the install
+directory: it backs up, checks out the new release tag, refreshes .env, pulls,
+restarts, health-checks, and rolls back automatically on failure.
+
 Examples:
   zen upgrade
   zen upgrade --version 1.5.0
@@ -58,6 +66,8 @@ func init() {
 	Cmd.Flags().StringVar(&flagVersion, "version", "", "Target chart version (uses latest if empty)")
 	Cmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "Print upgrade plan without executing")
 	Cmd.Flags().BoolVar(&flagSkipBackup, "skip-backup", false, "Skip the pre-upgrade database backup")
+	Cmd.Flags().StringVar(&flagDir, "dir", "", "Compose install directory (default: detect)")
+	Cmd.Flags().BoolVar(&flagForce, "force", false, "Compose: allow upgrading to the same or an older version")
 }
 
 // stepFuncs are the ordered upgrade steps.
@@ -69,6 +79,9 @@ type stepFunc struct {
 }
 
 func runUpgrade(cmd *cobra.Command, args []string) error {
+	if inst, ok := composeops.Detect(flagDir); ok {
+		return runComposeUpgrade(cmd, inst)
+	}
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2)
 	muted := lipgloss.NewStyle().Foreground(tui.ColorMuted).PaddingLeft(2)
 	checkStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
@@ -502,4 +515,42 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
 	return fmt.Sprintf("%.1fs", d.Seconds())
+}
+
+// runComposeUpgrade upgrades a Docker Compose install in place.
+func runComposeUpgrade(cmd *cobra.Command, inst composeops.Install) error {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	target := strings.TrimPrefix(flagVersion, "v")
+	if target == "" {
+		latest, err := composeops.LatestRelease(ctx, "taikuri-infra/Zenith")
+		if err != nil {
+			return fmt.Errorf("resolve latest release: %w", err)
+		}
+		target = latest
+	}
+	if err := validateVersion(target); err != nil {
+		return err
+	}
+	res, err := composeops.Upgrade(ctx, composeops.ExecRunner{}, inst, composeops.UpgradeOptions{
+		Target:     target,
+		Force:      flagForce,
+		SkipBackup: flagSkipBackup,
+		DryRun:     flagDryRun,
+		Now:        time.Now,
+	}, os.Stdout)
+	if res != nil && !flagDryRun {
+		fmt.Printf("%s -> %s\n", res.From, res.To)
+		if res.Backup != "" {
+			fmt.Printf("backup: %s\n", res.Backup)
+		}
+		if res.RolledBack {
+			fmt.Println("rolled back")
+		} else if res.RollbackFailed {
+			fmt.Println("rollback FAILED")
+		}
+	}
+	return err
 }

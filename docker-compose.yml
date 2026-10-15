@@ -8,6 +8,7 @@ services:
       POSTGRES_DB: zenith
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks: [internal]
     # Not published to the host — only the API reaches it over the compose
     # network. Exposing 5432 publicly would put the database on the internet.
     healthcheck:
@@ -29,6 +30,7 @@ services:
       RUSTFS_CONSOLE_ADDRESS: ":9001"
     volumes:
       - storagedata:/data
+    networks: [internal]
     # S3 API (9000) and console (9001) are reached only by the API over the
     # compose network — not published to the host (would expose object storage
     # publicly). Uncomment to reach the console locally:
@@ -45,6 +47,9 @@ services:
         condition: service_healthy
       storage:
         condition: service_started
+    # The API needs no access to the app network: it drives apps through the
+    # Docker socket.
+    networks: [internal, edge]
     ports:
       - "127.0.0.1:8080:8080"
     environment:
@@ -81,6 +86,7 @@ services:
     # published port is for local debugging.
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=zenith_edge"
       - "traefik.http.routers.zenith-api.rule=Host(`${ZENITH_DOMAIN:-localhost}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.zenith-api.entrypoints=websecure"
       - "traefik.http.routers.zenith-api.tls=true"
@@ -99,6 +105,7 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    networks: [edge]
     ports:
       - "127.0.0.1:3000:3000"
     environment:
@@ -109,6 +116,7 @@ services:
     # Lower priority than the API router so /api/* wins.
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=zenith_edge"
       - "traefik.http.routers.zenith-web.rule=Host(`${ZENITH_DOMAIN:-localhost}`)"
       - "traefik.http.routers.zenith-web.entrypoints=websecure"
       - "traefik.http.routers.zenith-web.tls=true"
@@ -140,6 +148,7 @@ services:
     depends_on:
       - web
       - api
+    networks: [default, edge]
     environment:
       # Consumed by the Cloudflare DNS-01 challenge (DNS-01 mode only; empty otherwise).
       CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:-}
@@ -154,8 +163,16 @@ services:
       - traefik_letsencrypt:/letsencrypt
 
 networks:
+  # User apps, managed databases and Traefik. Key and name are unchanged from
+  # earlier versions so existing installs keep their app network.
   default:
     name: zenith_default
+  # Control plane only: apps can't resolve or reach postgres/storage/api.
+  internal:
+    name: zenith_internal
+  # Traefik <-> dashboard/API routing.
+  edge:
+    name: zenith_edge
 
 volumes:
   pgdata:

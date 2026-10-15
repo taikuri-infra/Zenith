@@ -8,13 +8,13 @@ import (
 )
 
 func TestValidateVersion(t *testing.T) {
-	valid := []string{"1.0.0", "1.5.0", "0.1.2", "10.20.30"}
+	valid := []string{"1.0.0", "1.5.0", "0.1.2", "10.20.30", "0.1.0-alpha.3"}
 	for _, v := range valid {
 		if err := validateVersion(v); err != nil {
 			t.Errorf("validateVersion(%q) = %v, want nil", v, err)
 		}
 	}
-	invalid := []string{"1.0", "v1.0.0", "1.5.0; rm -rf /", "latest", "", "1.0.0-beta"}
+	invalid := []string{"1.0", "v1.0.0", "1.5.0; rm -rf /", "latest", "", "1.0.0-beta; ls", "1.0.0-"}
 	for _, v := range invalid {
 		if err := validateVersion(v); err == nil {
 			t.Errorf("validateVersion(%q) = nil, want error", v)

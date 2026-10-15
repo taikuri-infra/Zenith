@@ -675,6 +675,7 @@ export interface DeployApp {
 export interface CreateDeployAppRequest {
   project_id?: string;
   name: string;
+  service_name?: string;
   deploy_source: "git" | "image";
   port?: number;
   app_type?: AppType;

@@ -21,3 +21,14 @@ func TestRedisSpecRunsThroughImageEntrypoint(t *testing.T) {
 		t.Errorf("redis cmd lost its flags: %q", spec.cmd)
 	}
 }
+
+func TestLoopbackBinding(t *testing.T) {
+	exposed, bindings := loopbackBinding(5432)
+	if _, ok := exposed["5432/tcp"]; !ok {
+		t.Fatalf("exposed = %v", exposed)
+	}
+	b := bindings["5432/tcp"]
+	if len(b) != 1 || b[0].HostIP != "127.0.0.1" || b[0].HostPort != "" {
+		t.Fatalf("binding = %+v, want 127.0.0.1 with a docker-picked port", b)
+	}
+}

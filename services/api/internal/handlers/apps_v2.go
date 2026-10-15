@@ -180,6 +180,7 @@ type CreateAppV2Request struct {
 	Exposure         string   `json:"exposure,omitempty"`         // "public" or "protected"
 	HealthCheckPath  string   `json:"health_check_path,omitempty"` // custom liveness/readiness probe path (default "/")
 	EnvironmentID    string   `json:"environment_id,omitempty"`    // link to a specific environment
+	ServiceName      string   `json:"service_name,omitempty"`      // compose service this app was created from
 	// DependsOn is a list of K8s service names (app subdomains) this app waits for.
 	// The deployer generates init containers for each dependency.
 	DependsOn []string `json:"depends_on,omitempty"`
@@ -405,6 +406,7 @@ func (h *AppHandlerV2) Create(c *fiber.Ctx) error {
 		UserID:           userID.(string),
 		ProjectID:        projectID,
 		EnvironmentID:    req.EnvironmentID,
+		ServiceName:      req.ServiceName,
 		Name:             req.Name,
 		DeploySource:     deploySource,
 		RepoURL:          req.RepoURL,

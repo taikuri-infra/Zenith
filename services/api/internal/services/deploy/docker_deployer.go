@@ -37,6 +37,8 @@ type DockerDeployer struct {
 	domainRepo   ports.DomainRepository
 	certResolver string
 	network      string // docker network shared with Traefik
+	projectRepo  ports.ProjectRepository
+	projectLocks sync.Map // project id -> *sync.Mutex (guards project network lifecycle)
 	// Per-app locks serialize deploy/delete for a given app. Deploys are
 	// triggered from several places (app creation, project deploy, env-var
 	// apply) that can fire concurrently; without this they race on the
@@ -129,6 +131,18 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 	// Traefik obtains the Let's Encrypt cert (certresolver "le"). Same proxy
 	// model as the cloud/k8s edition, which routes via Traefik IngressRoute.
 	labels := proxyLabels(app, d.appHosts(ctx, app), d.network, d.certResolver)
+	if app.ProjectID != "" {
+		labels[projectLabel] = app.ProjectID
+	}
+
+	// Project lock (inner to the app lock) spans ensure-network through join,
+	// so a concurrent DeleteApp cannot drop the network in between.
+	unlockProject := d.lockProject(app.ProjectID)
+	defer unlockProject()
+	projNet, err := d.ensureProjectNetwork(ctx, app)
+	if err != nil {
+		return fmt.Errorf("docker-deploy: ensure project network: %w", err)
+	}
 
 	// Network aliases let other services reach this one by app name and subdomain.
 	aliases := networkAliases(app)
@@ -150,7 +164,19 @@ func (d *DockerDeployer) DeployApp(ctx context.Context, app *entities.App, image
 	if err != nil {
 		return fmt.Errorf("docker-deploy: create container %s: %w", name, err)
 	}
+	if projNet != "" {
+		var projAliases []string
+		if a := projectAlias(app, d.projectSlug(ctx, app)); a != "" {
+			projAliases = []string{a}
+		}
+		if err := d.cli.NetworkConnect(ctx, projNet, resp.ID, &network.EndpointSettings{Aliases: projAliases}); err != nil {
+			_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+			return fmt.Errorf("docker-deploy: join project network %s: %w", projNet, err)
+		}
+	}
+	unlockProject()
 	if err := d.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
 		return fmt.Errorf("docker-deploy: start container %s: %w", name, err)
 	}
 	slog.Info("docker-deploy: app running", "app", app.Name, "container", name,
@@ -179,10 +205,12 @@ func (d *DockerDeployer) DeleteApp(ctx context.Context, app *entities.App) error
 	name := d.containerName(app)
 	if err := d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}); err != nil {
 		if client.IsErrNotFound(err) {
+			d.removeProjectNetworkIfUnused(ctx, app.ProjectID)
 			return nil
 		}
 		return fmt.Errorf("docker-deploy: remove container %s: %w", name, err)
 	}
+	d.removeProjectNetworkIfUnused(ctx, app.ProjectID)
 	return nil
 }
 
@@ -357,4 +385,16 @@ func sanitizeName(s string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
+}
+
+// AppContainerRunning reports whether the app's container exists and runs.
+func (d *DockerDeployer) AppContainerRunning(ctx context.Context, app *entities.App) (bool, error) {
+	insp, err := d.cli.ContainerInspect(ctx, d.containerName(app))
+	if client.IsErrNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return insp.State != nil && (insp.State.Running || insp.State.Restarting), nil
 }

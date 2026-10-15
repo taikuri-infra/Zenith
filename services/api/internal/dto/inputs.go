@@ -25,6 +25,8 @@ type CreateAppInput struct {
 	// DependsOn is a list of K8s service names (app subdomains) this app depends on.
 	// The deployer generates init containers that wait for each dependency before starting.
 	DependsOn []string `json:"depends_on,omitempty"`
+	// ServiceName is the compose service this app was created from ("" if none).
+	ServiceName string `json:"service_name"`
 }
 
 // UpdateAppInput is the request body for updating an existing app.
@@ -170,6 +172,7 @@ type DatabaseInfo struct {
 	Engine           entities.DatabaseEngine `json:"engine"`
 	Host             string                 `json:"host"`
 	Port             int                    `json:"port"`
+	HostPort         int                    `json:"host_port,omitempty"`
 	DBName           string                 `json:"db_name"`
 	DBUser           string                 `json:"db_user"`
 	Password         string                 `json:"db_password,omitempty"`

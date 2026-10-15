@@ -3,6 +3,11 @@ package db
 import (
 	"fmt"
 	"io"
+	"net"
+	"net/url"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -42,16 +47,17 @@ Example:
 
 var connectCmd = &cobra.Command{
 	Use:   "connect [name]",
-	Short: "Show a database's connection string",
-	Long: `Print the connection string for a database.
+	Short: "Show how to connect to a database (SSH tunnel)",
+	Long: `Print the connection strings for a database.
 
-Databases are not published on a host port; they are reachable only from
-containers on the app network. Use the connection string from an app (it is
-injected as DATABASE_URL / MYSQL_URL / REDIS_URL when you attach the database),
-or run a client inside an app container.
+Databases are internal-only: they listen on a loopback-only port on the Zenith
+server. This command prints the in-network connection string (for apps) and an
+SSH tunnel command plus a local connection string for use from your machine.
+With --tunnel, zen runs the ssh command for you.
 
 Example:
-  zen db connect my-db`,
+  zen db connect my-db
+  zen db connect my-db --tunnel --local-port 15432`,
 	Args: cobra.ExactArgs(1),
 	RunE: runConnect,
 }
@@ -74,12 +80,20 @@ var (
 	flagProject string
 	flagName    string
 	flagEngine  string
+
+	flagTunnel    bool
+	flagSSH       string
+	flagLocalPort int
 )
 
 func init() {
 	Cmd.PersistentFlags().StringVarP(&flagProject, "project", "p", "", "Project name or ID (defaults to the configured project, else the first project)")
 	createCmd.Flags().StringVarP(&flagName, "name", "n", "", "Database name (required)")
 	createCmd.Flags().StringVarP(&flagEngine, "engine", "e", "postgresql", "Engine: postgresql, mysql or redis")
+
+	connectCmd.Flags().BoolVar(&flagTunnel, "tunnel", false, "Run the ssh tunnel instead of only printing it")
+	connectCmd.Flags().StringVar(&flagSSH, "ssh", "", "SSH target (default root@<API host>)")
+	connectCmd.Flags().IntVar(&flagLocalPort, "local-port", 0, "Local port for the tunnel (default: the engine's standard port)")
 
 	Cmd.AddCommand(listCmd)
 	Cmd.AddCommand(createCmd)
@@ -89,21 +103,22 @@ func init() {
 }
 
 // clientAndProject loads the CLI config and returns an API client plus the
-// project reference (--project, else the configured project).
-func clientAndProject() (*cliapi.Client, string, error) {
+// project reference (--project, else the configured project) and the API
+// endpoint.
+func clientAndProject() (*cliapi.Client, string, string, error) {
 	cfg, err := config.Load()
 	if err != nil || cfg.Token == "" {
-		return nil, "", fmt.Errorf("not logged in — run: zen login")
+		return nil, "", "", fmt.Errorf("not logged in — run: zen login")
 	}
 	project := flagProject
 	if project == "" {
 		project = cfg.Project
 	}
-	return cliapi.NewClient(cfg.APIEndpoint, cfg.Token), project, nil
+	return cliapi.NewClient(cfg.APIEndpoint, cfg.Token), project, cfg.APIEndpoint, nil
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	c, project, err := clientAndProject()
+	c, project, _, err := clientAndProject()
 	if err != nil {
 		return err
 	}
@@ -111,7 +126,7 @@ func runList(cmd *cobra.Command, args []string) error {
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
-	c, project, err := clientAndProject()
+	c, project, _, err := clientAndProject()
 	if err != nil {
 		return err
 	}
@@ -119,11 +134,16 @@ func runCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runConnect(cmd *cobra.Command, args []string) error {
-	c, project, err := clientAndProject()
+	c, project, endpoint, err := clientAndProject()
 	if err != nil {
 		return err
 	}
-	return connectDatabase(cmd.OutOrStdout(), c, project, args[0])
+	return connectDatabase(cmd.OutOrStdout(), c, project, args[0], connectOpts{
+		apiEndpoint: endpoint,
+		sshTarget:   flagSSH,
+		localPort:   flagLocalPort,
+		tunnel:      flagTunnel,
+	})
 }
 
 // projectDatabases resolves the project and lists its databases.
@@ -200,8 +220,61 @@ func createDatabase(w io.Writer, c *cliapi.Client, project, name, engine string)
 	return nil
 }
 
-// connectDatabase prints the connection string of the named database.
-func connectDatabase(w io.Writer, c *cliapi.Client, project, name string) error {
+type connectOpts struct {
+	apiEndpoint string
+	sshTarget   string
+	localPort   int
+	tunnel      bool
+}
+
+// tunnelPlan builds the ssh arguments that forward a local port to the
+// database's loopback host port, and the connection string to use locally.
+func tunnelPlan(db *cliapi.Database, apiEndpoint, sshTarget string, localPort int) ([]string, string, error) {
+	if db.HostPort == 0 {
+		return nil, "", fmt.Errorf("database %q has no loopback port yet — restart the Zenith API (it adds one on startup) or upgrade Zenith", db.Name)
+	}
+	if strings.HasPrefix(sshTarget, "-") {
+		return nil, "", fmt.Errorf("invalid --ssh value %q: must not start with '-'", sshTarget)
+	}
+	if sshTarget == "" {
+		ep, err := url.Parse(apiEndpoint)
+		if err != nil || ep.Hostname() == "" {
+			return nil, "", fmt.Errorf("cannot derive an SSH host from API endpoint %q — pass --ssh user@host", apiEndpoint)
+		}
+		sshTarget = "root@" + ep.Hostname()
+	}
+	if localPort == 0 {
+		localPort = DefaultPort(db.Engine)
+		if localPort == 0 {
+			return nil, "", fmt.Errorf("unknown engine %q — pass --local-port", db.Engine)
+		}
+	}
+	args := []string{"-N", "-L", fmt.Sprintf("%d:127.0.0.1:%d", localPort, db.HostPort), sshTarget}
+	local := ""
+	if db.ConnectionString != "" {
+		u, err := url.Parse(db.ConnectionString)
+		if err != nil {
+			return nil, "", fmt.Errorf("parse connection string: %w", err)
+		}
+		u.Host = net.JoinHostPort("127.0.0.1", strconv.Itoa(localPort))
+		local = u.String()
+	}
+	return args, local, nil
+}
+
+// tunnelExecArgs turns tunnelPlan's printable ssh arguments into the argv used
+// to actually run the tunnel: it fails fast if the forward cannot be set up,
+// and `--` stops the target from ever being parsed as an option.
+func tunnelExecArgs(planned []string) []string {
+	n := len(planned)
+	out := []string{"-o", "ExitOnForwardFailure=yes"}
+	out = append(out, planned[:n-1]...)
+	return append(out, "--", planned[n-1])
+}
+
+// connectDatabase prints how to reach the named database and, with
+// opts.tunnel, runs the ssh tunnel.
+func connectDatabase(w io.Writer, c *cliapi.Client, project, name string, opts connectOpts) error {
 	dbs, err := projectDatabases(c, project)
 	if err != nil {
 		return fmt.Errorf("list databases: %w", err)
@@ -216,28 +289,51 @@ func connectDatabase(w io.Writer, c *cliapi.Client, project, name string) error 
 	if match == nil {
 		return fmt.Errorf("database %q not found — create one with 'zen db create'", name)
 	}
-	conn := match.ConnectionString
-	if conn == "" && match.ID != "" {
-		full, err := c.GetDatabaseByID(match.ID)
+	rec := *match
+	if (rec.ConnectionString == "" || rec.HostPort == 0) && rec.ID != "" {
+		full, err := c.GetDatabaseByID(rec.ID)
 		if err != nil {
 			return fmt.Errorf("get database: %w", err)
 		}
-		conn = full.ConnectionString
+		if rec.ConnectionString == "" {
+			rec.ConnectionString = full.ConnectionString
+		}
+		if rec.HostPort == 0 {
+			rec.HostPort = full.HostPort
+		}
 	}
-	if conn == "" {
-		return fmt.Errorf("database %q has no connection string yet (status: %s)", name, match.Status)
+	if rec.ConnectionString == "" {
+		return fmt.Errorf("database %q has no connection string yet (status: %s)", name, rec.Status)
 	}
 
+	muted := lipgloss.NewStyle().Foreground(tui.ColorMuted)
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(tui.ColorPrimary).
 		Render(fmt.Sprintf("  Connect: %s", name))
 	fmt.Fprintln(w, header)
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  %s\n\n", conn)
-	fmt.Fprintf(w, "  %s\n\n", lipgloss.NewStyle().Foreground(tui.ColorMuted).Render(
-		"The database is reachable only on the app network: use this from an app container (no host port is published)."))
-	return nil
+	fmt.Fprintf(w, "  %s\n", muted.Render("Inside the app network:"))
+	fmt.Fprintf(w, "  %s\n\n", rec.ConnectionString)
+
+	args, local, err := tunnelPlan(&rec, opts.apiEndpoint, opts.sshTarget, opts.localPort)
+	if err != nil {
+		if opts.tunnel {
+			return err
+		}
+		fmt.Fprintf(w, "  %s\n\n", muted.Render(err.Error()))
+		return nil
+	}
+	if !opts.tunnel {
+		fmt.Fprintf(w, "  %s\n", muted.Render("From your machine:"))
+		fmt.Fprintf(w, "  ssh %s\n", strings.Join(args, " "))
+		fmt.Fprintf(w, "  %s\n\n", local)
+		return nil
+	}
+	fmt.Fprintf(w, "  %s\n  %s\n\n", muted.Render("Opening tunnel (Ctrl-C to close)… connect with:"), local)
+	cmd := exec.Command("ssh", tunnelExecArgs(args)...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
 }
 
 func runBackup(cmd *cobra.Command, args []string) error {

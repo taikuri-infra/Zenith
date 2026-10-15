@@ -32,7 +32,7 @@ func (f *fakeAPI) server(t *testing.T) *httptest.Server {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"id":"db-3","name":"orders","engine":"mysql","status":"provisioning"}`))
 		case r.Method == "GET" && r.URL.Path == "/api/v1/databases/db-1":
-			_, _ = w.Write([]byte(`{"id":"db-1","name":"main","engine":"postgresql","status":"ready","connection_string":"postgresql://u:p@zenith-db-db1:5432/main"}`))
+			_, _ = w.Write([]byte(`{"id":"db-1","name":"main","engine":"postgresql","status":"ready","host_port":49153,"connection_string":"postgresql://u:p@zenith-db-db1:5432/main"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -110,17 +110,20 @@ func TestConnectPrintsConnectionString(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	if err := connectDatabase(&out, cliapi.NewClient(srv.URL, "tok"), "shop", "main"); err != nil {
+	if err := connectDatabase(&out, cliapi.NewClient(srv.URL, "tok"), "shop", "main", connectOpts{apiEndpoint: "https://zenith.example.com"}); err != nil {
 		t.Fatal(err)
 	}
 	s := out.String()
 	if !strings.Contains(s, "postgresql://u:p@zenith-db-db1:5432/main") {
 		t.Errorf("output missing connection string:\n%s", s)
 	}
-	if !strings.Contains(s, "app container") {
-		t.Errorf("output missing the run-from-an-app-container note:\n%s", s)
+	for _, want := range []string{"Inside the app network:", "From your machine:",
+		"ssh -N -L 5432:127.0.0.1:49153 root@zenith.example.com", "postgresql://u:p@127.0.0.1:5432/main"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("output missing %q:\n%s", want, s)
+		}
 	}
-	if err := connectDatabase(&bytes.Buffer{}, cliapi.NewClient(srv.URL, "tok"), "shop", "nope"); err == nil {
+	if err := connectDatabase(&bytes.Buffer{}, cliapi.NewClient(srv.URL, "tok"), "shop", "nope", connectOpts{}); err == nil {
 		t.Error("want an error for an unknown database")
 	}
 }
