@@ -2,8 +2,8 @@ apiVersion: v2
 name: zenith
 description: Zenith - Kubernetes-native PaaS platform
 type: application
-version: 0.3.0
-appVersion: "0.3.0"
+version: 0.9.0
+appVersion: 0.9.0
 home: https://freezenith.com
 sources:
   - https://github.com/dotechhq/zenith
