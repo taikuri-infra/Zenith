@@ -198,3 +198,38 @@ Images were rebuilt from `a39b88e` and the stack recreated. Live checks:
 - **F-27 fixed:** `zen db list` lists the 5 real databases.
 - **F-21 still open:** a bare compose-service alias on the shared `zenith_default` network would collide with control-plane names (`postgres`, `storage`) and across projects. The fix needs one network per project and is moved to 2b.
 
+
+## 7. After 2b
+
+- **Date / commit / images:** live acceptance on 2026-10-13, post-reboot checks on 2026-10-14. Branch `feat/alpha-2b-compose-durability` at `060dc85`. `zenith-api` and `zenith-web` were built locally from the branch as `0.1.0-alpha.2` (before the final fix wave) and `0.1.0-alpha.3`. The public `0.1.0-alpha.3` images are published by the GitHub release made at the merge of this branch.
+- **Install:** the §6 install at `zenith.freezenith.com`, upgraded in place with `zen upgrade` rather than reinstalled, so the apps and databases created before 2b were part of the test. `.env` carries `ZENITH_VERSION=0.1.0-alpha.3`, and the compose file pins `ghcr.io/taikuri-infra/zenith-api:${ZENITH_VERSION}` and `zenith-web:${ZENITH_VERSION}` (F-08).
+- **Spec:** docs/superpowers/specs/2026-10-12-alpha-2b-compose-durability-design.md. Task-by-task evidence: `.superpowers/sdd/2026-10-13-alpha-2b-compose-durability/progress.md`.
+
+The spec's five success criteria, checked on the live install:
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | F-21: compose services reach each other by compose service name; another project cannot | works | A stack with `web`, `api` and `postgres` in one project and a second stack in another project. Each project gets its own bridge network (`zenith-proj-abe674e3-68c`, `zenith-proj-d17a14fc-246`); a stack's containers join their project network, with the compose service name as the alias, plus `zenith_default` for Traefik. `web` reached `postgres` by name; the other project's `web` could not resolve it. Apps deployed before 2b stay on `zenith_default` only until they are redeployed. |
+| 2 | Managed databases reachable over SSH, no new public port | works | Every managed database publishes its port on `127.0.0.1` only (`127.0.0.1:32768`–`32773` after the reboot). `zen db connect tun1 --tunnel` opened the tunnel over SSH to the host, and the database answered on `127.0.0.1`. Zenith's public listeners are still only 80 and 443. |
+| 3 | Reboot: every app and database back with its data, no manual step | works | Owner-approved host reboot at 09:47 UTC on 2026-10-13, checked 22 h later. The running container set matches the pre-reboot list (the only difference is an unrelated, exited xrdp container). `zenith.freezenith.com` and `myapp.freezenith.com` return 200. `/api/v1/version` reports `0.1.0-alpha.3`. The marker rows in `pg1` (`backup-marker`), `rd1` (`bkmarker=yes`) and `tun1` (`before-rm`) are intact. `user_databases.host_port` equals the live loopback port for all 6 databases, so the reconciler refreshed the Docker-picked ports after the restart. Before the reboot, the reconciler was also tested by removing a database container and an app container; both were recreated with their data (host port refresh 32836→32837). |
+| 4 | `zen upgrade` A→B; a forced failure rolls back to A; data survives both | works | `0.1.0-alpha.2` → `0.1.0-alpha.3.test` in 11 s, with a backup taken first. A forced-failure upgrade to a deliberately broken `0.1.0-alpha.4.bad` rolled back to `0.1.0-alpha.3.test` automatically, and the data was intact after both. |
+| 5 | `zen backup`, then `zen backup restore` on a fresh server | works | `zen backup` archived the install in 5 s (platform database, object storage, every managed database, `.env`), archive mode 0600. Restore into an isolated Docker-in-Docker install brought back login, apps, and the Postgres and MySQL rows. Redis first came back empty: the server loads its AOF and ignored the restored RDB. The final fix wave makes restore rebuild the AOF from the RDB; re-tested, Redis data restored. |
+
+### 7.1 Findings
+
+- **F-08 fixed:** `VERSION` file, images built from a GitHub release carry the version and revision, the installer pins `ZENITH_VERSION`, and `/api/v1/version` reports it. `build-public-images.yml` refuses a release tag that differs from `VERSION`.
+- **F-21 fixed:** one Docker network per project, compose-service-name aliases.
+- **§4 (reboot) is no longer "not run":** criterion 3 above covers every item listed there, including a row in a managed Postgres surviving the reboot.
+- Databases created before 2b had no loopback port; the reconciler now re-provisions such a database at startup (volume and password kept, one restart). Done on the live install, data intact.
+- Still open, for 2c: F-01, F-02, F-03, F-09, F-23, F-24, F-25, F-26, F-28.
+
+### 7.2 Known gaps (deferred, not blocking)
+
+- The version check in `zen upgrade` and `composeops` rejects a `-` inside the prerelease part (`0.1.0-alpha.3-test`), which semver allows.
+- `zen self-update` reads GitHub's latest non-prerelease release, so it does not see alpha releases. `zen upgrade` uses the newest release including prereleases.
+- After a rollback the install's checkout is a detached HEAD at the previous tag.
+- `BUILD_TIME` in published images is the repository's `updated_at`, not the build time; locally built images report `unknown`.
+- No integration test covers the Docker network lifecycle; the HTTP paths of the upgrade health check and release lookup are untested; the `zen backup --dir` error branch is untested.
+- The postgres integration test `TestDeploymentCRUD` fails on `main` as well (pre-existing, not from 2b).
+
+**Result:** alpha exit criteria 3 (reboot), 4 (upgrade) and 5 (backup/restore) are met on the live install, and F-08 and F-21 are closed. 2b is complete. 2c is the self-host UI and CLI cleanup.
