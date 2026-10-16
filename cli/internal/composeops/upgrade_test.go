@@ -216,3 +216,16 @@ func TestUpgrade_RollbackWithoutKnownVersionUnsetsEnvAndChecksHealthOnly(t *test
 		t.Fatalf("other keys lost:\n%s", b)
 	}
 }
+
+func TestTargetReAcceptsDashInPrerelease(t *testing.T) {
+	for _, ok := range []string{"1.5.0", "0.1.0-alpha.3", "0.1.0-alpha.3-test", "0.1.0-rc-1.2"} {
+		if !targetRe.MatchString(ok) {
+			t.Errorf("%q rejected", ok)
+		}
+	}
+	for _, bad := range []string{"v1.5.0", "1.5", "1.5.0-", "1.5.0 ", "latest"} {
+		if targetRe.MatchString(bad) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

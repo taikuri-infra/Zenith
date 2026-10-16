@@ -64,7 +64,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	client := cliapi.NewClient(cfg.APIEndpoint, cfg.Token)
+	client := cliapi.NewClientFromConfig(cfg)
 
 	// Header
 	fmt.Println(titleStyle.Render("  Zenith Project Status"))

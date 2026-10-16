@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -11,13 +12,19 @@ type Config struct {
 	// APIEndpoint is the Zenith API server URL
 	APIEndpoint string `yaml:"api_endpoint"`
 
-	// Token is the authentication token
+	// Token is the access token (or a deploy token "znt_id_…:znt_sk_…")
 	Token string `yaml:"token,omitempty"`
+
+	// RefreshToken renews Token when it expires; empty for pasted tokens.
+	RefreshToken string `yaml:"refresh_token,omitempty"`
+
+	// TokenExpiresAt is when Token stops working; zero when unknown.
+	TokenExpiresAt time.Time `yaml:"token_expires_at,omitempty"`
 
 	// Project is the current active project
 	Project string `yaml:"project,omitempty"`
 
-	// Region is the default Hetzner region
+	// Region is the default region for cloud installs (unused on self-host)
 	Region string `yaml:"region,omitempty"`
 
 	// OutputFormat is the default output format (table, json, yaml)

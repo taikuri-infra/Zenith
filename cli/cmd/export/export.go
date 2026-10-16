@@ -86,7 +86,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 		project = "default"
 	}
 
-	client := api.NewClient(cfg.APIEndpoint, cfg.Token)
+	client := api.NewClientFromConfig(cfg)
 
 	infoStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
 	valueStyle := lipgloss.NewStyle().Foreground(tui.ColorText)

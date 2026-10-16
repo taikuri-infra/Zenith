@@ -10,6 +10,7 @@ import (
 	exportcmd "github.com/dotechhq/zenith/cli/cmd/export"
 	"github.com/dotechhq/zenith/cli/cmd/install"
 	"github.com/dotechhq/zenith/cli/cmd/login"
+	"github.com/dotechhq/zenith/cli/cmd/logout"
 	"github.com/dotechhq/zenith/cli/cmd/logs"
 	"github.com/dotechhq/zenith/cli/cmd/selfupdate"
 	"github.com/dotechhq/zenith/cli/cmd/status"
@@ -22,13 +23,16 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "zen",
-	Short: "Zenith - Kubernetes-native PaaS on Hetzner Cloud",
-	Long: `Zenith is a 100% free, open-source, Kubernetes-native PaaS on Hetzner Cloud.
+	Short: "Zenith - open-source self-hosted PaaS",
+	Long: `Zenith is a free, open-source PaaS you run on your own server.
 
-One command installs everything:
-  zen install --provider hetzner --token hc_xxx
+Install on a fresh Ubuntu box:
+  zen install --edition compose --domain zenith.example.com
 
-You get: Apps, Databases, Storage, Auth, Gateway, Monitoring, Registry.`,
+Then log in, deploy and operate it:
+  zen login --endpoint https://zenith.example.com
+  zen deploy --image traefik/whoami:latest
+  zen status · zen logs · zen db connect · zen backup · zen upgrade`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -36,6 +40,7 @@ You get: Apps, Databases, Storage, Auth, Gateway, Monitoring, Registry.`,
 func init() {
 	rootCmd.AddCommand(version.Cmd)
 	rootCmd.AddCommand(login.Cmd)
+	rootCmd.AddCommand(logout.Cmd)
 	rootCmd.AddCommand(install.Cmd)
 	rootCmd.AddCommand(deploy.Cmd)
 	rootCmd.AddCommand(dev.Cmd)
