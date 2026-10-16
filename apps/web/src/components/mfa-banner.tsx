@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ShieldAlert, X } from "lucide-react";
 import Link from "next/link";
 import { getApi, isDemoMode } from "@/lib/get-api";
+import { SHOW_PLANS } from "@/lib/edition";
 
 const MFA_BANNER_DISMISSED_KEY = "zenith_mfa_banner_dismissed";
 
@@ -16,6 +17,8 @@ export function MFABanner() {
 
   useEffect(() => {
     if (isDemoMode()) return;
+    // The banner targets paid tiers; self-host has no plans (and no /plan route), so it never shows there.
+    if (!SHOW_PLANS) return;
 
     // Check if already dismissed this session
     const dismissed = sessionStorage.getItem(MFA_BANNER_DISMISSED_KEY);

@@ -12,6 +12,8 @@ import { useApi } from "@/hooks/use-api";
 import { useDeployLogs } from "@/hooks/use-deploy-logs";
 import { type DeployApp, type Deployment, type EnvVar, type AppEnvVar, type Secret, type Release, type AppDatabase, type DatabaseBackup, type AppAuthConfig, type AppAuthUser, type AppBucket, type CustomDomain, type PodStatus, monitoring } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
+import { DomainStatus } from "@/components/domain-status";
+import { isManagedEnv, managedEnvLabel } from "@/lib/env-source";
 import { useState, useCallback, useEffect } from "react";
 import { useDeployEvents } from "@/hooks/use-deploy-events";
 import {
@@ -799,6 +801,9 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
                     <div className="flex items-center gap-1.5">
                       {ev.is_secret && <Lock className="h-3 w-3 text-amber-400 shrink-0" />}
                       {ev.key}
+                      {isManagedEnv(ev) && (
+                        <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">{managedEnvLabel(ev)}</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-2 font-mono text-xs text-neutral-300">
@@ -859,7 +864,7 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
                           Cancel
                         </button>
                       </div>
-                    ) : (
+                    ) : !isManagedEnv(ev) && (
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => startEdit(ev)}
@@ -883,6 +888,9 @@ function EnvTab({ appId, projectId }: { appId: string; projectId?: string }) {
             </tbody>
           </table>
         </div>
+      )}
+      {items.some(isManagedEnv) && (
+        <p className="text-xs text-neutral-500">Variables from an attached database are read-only; detach the database to remove them.</p>
       )}
     </div>
   );
@@ -1731,11 +1739,24 @@ function DomainsTab({ appId }: { appId: string }) {
   const [domainInput, setDomainInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [checkingId, setCheckingId] = useState<string | null>(null);
 
   if (loading) return <PageWithTableSkeleton cols={4} rows={2} />;
   if (error) return <ErrorState message={error} onRetry={refetch} />;
 
   const items: CustomDomain[] = domains || [];
+
+  const handleCheck = async (domainId: string) => {
+    setCheckingId(domainId);
+    try {
+      await appsDeploy.verifyDomain(appId, domainId);
+      refetch();
+    } catch {
+      toast("error", "Domain check failed");
+    } finally {
+      setCheckingId(null);
+    }
+  };
 
   const handleAdd = async () => {
     if (!domainInput.trim()) return;
@@ -1840,8 +1861,7 @@ function DomainsTab({ appId }: { appId: string }) {
             <thead>
               <tr className="border-b border-border bg-surface-100">
                 <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Domain</th>
-                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Status</th>
-                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">TLS</th>
+                <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500" colSpan={2}>Status</th>
                 <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500">Added</th>
                 <th className="whitespace-nowrap px-4 py-3 text-xs font-medium text-neutral-500 w-20">Actions</th>
               </tr>
@@ -1852,30 +1872,8 @@ function DomainsTab({ appId }: { appId: string }) {
                   <td className="whitespace-nowrap px-4 py-3 font-mono text-sm text-accent-400">
                     {d.domain}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <span className={`inline-flex items-center gap-1.5 text-xs ${
-                      d.status === "active" ? "text-emerald-400" :
-                      d.status === "verified" ? "text-blue-400" :
-                      d.status === "pending" ? "text-amber-400" :
-                      "text-red-400"
-                    }`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${
-                        d.status === "active" ? "bg-emerald-400" :
-                        d.status === "verified" ? "bg-blue-400" :
-                        d.status === "pending" ? "bg-amber-400 animate-pulse" :
-                        "bg-red-400"
-                      }`} />
-                      {d.status}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs">
-                    {d.tls_ready ? (
-                      <span className="text-emerald-400 flex items-center gap-1">
-                        <Lock className="h-3 w-3" /> Active
-                      </span>
-                    ) : (
-                      <span className="text-neutral-500">Pending</span>
-                    )}
+                  <td className="px-4 py-3" colSpan={2}>
+                    <DomainStatus domain={d} onCheck={() => handleCheck(d.id)} checking={checkingId === d.id} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-neutral-500">
                     {new Date(d.created_at).toLocaleDateString()}

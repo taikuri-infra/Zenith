@@ -17,6 +17,12 @@ type Client struct {
 	BaseURL    string
 	Token      string
 	HTTPClient *http.Client
+
+	// Session state for email/password logins. RefreshToken empty = no refresh.
+	RefreshToken string
+	ExpiresAt    time.Time
+	// OnTokens is called after every successful login or refresh so the caller can persist the session.
+	OnTokens func(TokenSet)
 }
 
 func NewClient(baseURL, token string) *Client {
@@ -30,72 +36,63 @@ func NewClient(baseURL, token string) *Client {
 }
 
 func (c *Client) do(method, path string, body interface{}, result interface{}) error {
+	if path != "/api/v1/auth/refresh" {
+		c.refreshIfExpiring()
+	}
+	status, err := c.doOnce(method, path, body, result)
+	if status == http.StatusUnauthorized && c.RefreshToken != "" && path != "/api/v1/auth/refresh" {
+		if _, rerr := c.Refresh(); rerr != nil {
+			return ErrSessionExpired
+		}
+		_, err = c.doOnce(method, path, body, result)
+	}
+	return err
+}
+
+// doOnce performs one request and returns the HTTP status with the error.
+func (c *Client) doOnce(method, path string, body interface{}, result interface{}) (int, error) {
 	var reqBody io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("marshal request: %w", err)
+			return 0, fmt.Errorf("marshal request: %w", err)
 		}
 		reqBody = bytes.NewReader(data)
 	}
-
 	req, err := http.NewRequest(method, c.BaseURL+path, reqBody)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return 0, fmt.Errorf("create request: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
-	if c.Token != "" {
-		// Deploy tokens are stored as "znt_id_xxx:znt_sk_xxx" — use DeployToken scheme.
-		// Regular JWT tokens use Bearer.
-		if strings.HasPrefix(c.Token, "znt_id_") {
-			req.Header.Set("Authorization", "DeployToken "+c.Token)
-		} else {
-			req.Header.Set("Authorization", "Bearer "+c.Token)
-		}
-	}
-
+	c.setAuth(req)
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return 0, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+		return resp.StatusCode, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
 	}
-
 	if result != nil {
 		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-			return fmt.Errorf("decode response: %w", err)
+			return resp.StatusCode, fmt.Errorf("decode response: %w", err)
 		}
 	}
-
-	return nil
+	return resp.StatusCode, nil
 }
 
-// Auth operations
-
-type loginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-type loginTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-}
-
-// Login authenticates with email+password and returns the access token.
-func (c *Client) Login(email, password string) (string, error) {
-	var resp loginTokenResponse
-	if err := c.do("POST", "/api/v1/auth/login", loginRequest{email, password}, &resp); err != nil {
-		return "", err
+// setAuth adds the Authorization header. Deploy tokens are stored as
+// "znt_id_xxx:znt_sk_xxx" and use the DeployToken scheme; JWTs use Bearer.
+func (c *Client) setAuth(req *http.Request) {
+	if c.Token == "" {
+		return
 	}
-	return resp.AccessToken, nil
+	if strings.HasPrefix(c.Token, "znt_id_") {
+		req.Header.Set("Authorization", "DeployToken "+c.Token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 }
 
 // Project operations
@@ -150,7 +147,7 @@ type App struct {
 func (c *Client) ListApps(projectID string) ([]App, error) {
 	path := "/api/v1/apps"
 	if projectID != "" {
-		path = fmt.Sprintf("/api/v1/projects/%s/apps", projectID)
+		path += "?project_id=" + url.QueryEscape(projectID)
 	}
 	var resp struct {
 		Items []App `json:"items"`
@@ -159,6 +156,18 @@ func (c *Client) ListApps(projectID string) ([]App, error) {
 		return nil, err
 	}
 	return resp.Items, nil
+}
+
+// ServerInfo is GET /api/v1/version.
+type ServerInfo struct {
+	Version string `json:"version"`
+	Mode    string `json:"mode"`
+}
+
+func (c *Client) ServerInfo() (ServerInfo, error) {
+	var info ServerInfo
+	err := c.do("GET", "/api/v1/version", nil, &info)
+	return info, err
 }
 
 func (c *Client) CreateApp(projectID string, app *App) (*App, error) {
@@ -264,6 +273,15 @@ func (c *Client) ListDatabases(projectID string) ([]Database, error) {
 	return dbs, nil
 }
 
+// ListAllDatabases lists every database of the caller, across projects (GET /api/v1/databases).
+func (c *Client) ListAllDatabases() ([]Database, error) {
+	var dbs []Database
+	if err := c.do("GET", "/api/v1/databases", nil, &dbs); err != nil {
+		return nil, err
+	}
+	return dbs, nil
+}
+
 func (c *Client) CreateDatabase(projectID string, db *Database) (*Database, error) {
 	req := map[string]any{"name": db.Name, "engine": db.Engine}
 	if id := c.resolveProjectID(projectID); id != "" {
@@ -352,17 +370,12 @@ func (c *Client) GetAppLogs(appID, level, since string, limit int) (*LogsRespons
 // Returns when the stream ends or handler returns false.
 // Uses a separate HTTP client with no timeout for long-lived connections.
 func (c *Client) StreamAppLogs(appID string, handler func(entry LogEntry) bool) error {
+	c.refreshIfExpiring()
 	req, err := http.NewRequest("GET", c.BaseURL+fmt.Sprintf("/api/v1/apps/%s/logs/stream", appID), nil)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
-	if c.Token != "" {
-		if strings.HasPrefix(c.Token, "znt_id_") {
-			req.Header.Set("Authorization", "DeployToken "+c.Token)
-		} else {
-			req.Header.Set("Authorization", "Bearer "+c.Token)
-		}
-	}
+	c.setAuth(req)
 	req.Header.Set("Accept", "text/event-stream")
 
 	// Use a no-timeout client for the streaming connection.

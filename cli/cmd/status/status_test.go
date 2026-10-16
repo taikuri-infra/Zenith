@@ -1,10 +1,17 @@
 package status
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	cliapi "github.com/dotechhq/zenith/cli/internal/api"
+	"github.com/dotechhq/zenith/cli/internal/config"
 )
 
 func TestRenderProgressBar(t *testing.T) {
@@ -306,4 +313,126 @@ func lipglossTestHeaderStyle() lipgloss.Style {
 
 func lipglossTestCellStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Padding(0, 1)
+}
+
+// statusServer serves two projects; apps and databases honour project_id. Queries are recorded per path.
+func statusServer(t *testing.T, mode string, queries map[string][]string) *httptest.Server {
+	t.Helper()
+	var mu sync.Mutex
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		queries[r.URL.Path] = append(queries[r.URL.Path], r.URL.RawQuery)
+		mu.Unlock()
+		pid := r.URL.Query().Get("project_id")
+		switch r.URL.Path {
+		case "/api/v1/version":
+			json.NewEncoder(w).Encode(map[string]any{"version": "0.1.0-alpha.4", "build_time": "x", "go_version": "go", "mode": mode})
+		case "/api/v1/projects":
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"p1","name":"default","display_name":"Default","plan":"free","region":""},{"id":"p2","name":"shop","display_name":"Shop","plan":"free","region":""}]}`))
+		case "/api/v1/apps":
+			switch pid {
+			case "":
+				json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"a1","name":"whoami","status":"running","url":"https://whoami.example.com"},{"id":"a2","name":"storefront","status":"running","url":"https://storefront.example.com"}]}`))
+			case "p1":
+				json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"a1","name":"whoami","status":"running","url":"https://whoami.example.com"}]}`))
+			default:
+				json.NewEncoder(w).Encode(json.RawMessage(`{"items":[]}`))
+			}
+		case "/api/v1/databases":
+			switch pid {
+			case "":
+				json.NewEncoder(w).Encode(json.RawMessage(`[{"id":"d1","name":"pg1","engine":"postgresql","status":"ready"},{"id":"d2","name":"shopdb","engine":"mysql","status":"ready"}]`))
+			case "p1":
+				json.NewEncoder(w).Encode(json.RawMessage(`[{"id":"d1","name":"pg1","engine":"postgresql","status":"ready"}]`))
+			default:
+				json.NewEncoder(w).Encode(json.RawMessage(`[]`))
+			}
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+}
+
+func runRender(t *testing.T, srv *httptest.Server, project string) string {
+	t.Helper()
+	cfg := &config.Config{APIEndpoint: srv.URL, Token: "t", Project: project}
+	var out bytes.Buffer
+	if err := renderStatus(&out, cliapi.NewClientFromConfig(cfg), cfg); err != nil {
+		t.Fatal(err)
+	}
+	return out.String()
+}
+
+func TestRenderStatusStandaloneNoProjectListsEverything(t *testing.T) {
+	q := map[string][]string{}
+	srv := statusServer(t, "standalone", q)
+	defer srv.Close()
+	s := runRender(t, srv, "")
+	for _, want := range []string{"0.1.0-alpha.4", srv.URL, "whoami", "https://whoami.example.com", "storefront", "pg1", "postgresql", "shopdb", "mysql"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("output lacks %q:\n%s", want, s)
+		}
+	}
+	for _, no := range []string{"Project:", "Plan", "Cost", "Region"} {
+		if strings.Contains(s, no) {
+			t.Errorf("standalone output must not contain %q:\n%s", no, s)
+		}
+	}
+	if got := q["/api/v1/apps"]; len(got) != 1 || got[0] != "" {
+		t.Errorf("apps must be fetched once without a project filter, got %q", got)
+	}
+	if got := q["/api/v1/databases"]; len(got) != 1 || got[0] != "" {
+		t.Errorf("databases must be fetched once without a project filter, got %q", got)
+	}
+}
+
+func TestRenderStatusStandaloneWithProjectFilters(t *testing.T) {
+	q := map[string][]string{}
+	srv := statusServer(t, "standalone", q)
+	defer srv.Close()
+	s := runRender(t, srv, "p1")
+	for _, want := range []string{"Project:", "Default", "whoami", "pg1"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("output lacks %q:\n%s", want, s)
+		}
+	}
+	for _, no := range []string{"storefront", "shopdb", "Plan", "Cost", "Region"} {
+		if strings.Contains(s, no) {
+			t.Errorf("output must not contain %q:\n%s", no, s)
+		}
+	}
+	for _, path := range []string{"/api/v1/apps", "/api/v1/databases"} {
+		for _, raw := range q[path] {
+			if raw != "project_id=p1" {
+				t.Errorf("%s must be filtered to p1, got %q", path, raw)
+			}
+		}
+	}
+}
+
+func TestRenderStatusSaaSKeepsPlan(t *testing.T) {
+	q := map[string][]string{}
+	srv := statusServer(t, "saas", q)
+	defer srv.Close()
+	s := runRender(t, srv, "p1")
+	for _, want := range []string{"Project:", "Default", "Region", "Plan", "Cost Estimate", "whoami"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("saas output lacks %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "storefront") {
+		t.Errorf("saas with a project must stay filtered:\n%s", s)
+	}
+}
+
+func TestRenderStatusSaaSNoProjectKeepsHeaderListsEverything(t *testing.T) {
+	q := map[string][]string{}
+	srv := statusServer(t, "saas", q)
+	defer srv.Close()
+	s := runRender(t, srv, "")
+	for _, want := range []string{"Project:", "Default", "Plan", "Cost Estimate", "whoami", "storefront", "shopdb"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("saas output lacks %q:\n%s", want, s)
+		}
+	}
 }

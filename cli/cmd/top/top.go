@@ -56,9 +56,9 @@ type tickMsg struct{}
 
 func initialModel() model {
 	return model{
-		width:  80,
-		height: 24,
-		apps:   []appResource{},
+		width:     80,
+		height:    24,
+		apps:      []appResource{},
 		databases: []dbResource{},
 	}
 }

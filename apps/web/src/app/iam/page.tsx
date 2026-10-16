@@ -4,6 +4,7 @@ import { Shell } from "@/components/shell";
 import { Modal } from "@/components/modal";
 import { useState, useEffect, useCallback } from "react";
 import { getApi } from "@/lib/get-api";
+import { SHOW_PLANS } from "@/lib/edition";
 import type { TeamMember, APIKey } from "@/lib/api";
 
 const api = getApi();
@@ -57,7 +58,7 @@ export default function IAMPage() {
       const [keysRes, membersRes, planRes] = await Promise.all([
         api.apiKeys.list(),
         api.team.list(),
-        api.userPlan.get(),
+        SHOW_PLANS ? api.userPlan.get() : Promise.resolve(null),
       ]);
       setApiKeys(keysRes.items || []);
       setTeamMembers(membersRes.items || []);

@@ -114,7 +114,7 @@ func clientAndProject() (*cliapi.Client, string, string, error) {
 	if project == "" {
 		project = cfg.Project
 	}
-	return cliapi.NewClient(cfg.APIEndpoint, cfg.Token), project, cfg.APIEndpoint, nil
+	return cliapi.NewClientFromConfig(cfg), project, cfg.APIEndpoint, nil
 }
 
 func runList(cmd *cobra.Command, args []string) error {

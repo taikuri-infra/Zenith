@@ -27,6 +27,32 @@ type DatabaseService struct {
 	adminDSN  string // CNPG admin connection string (shared cluster)
 	cnpgHost  string // parsed host from adminDSN
 	namespace string // K8s namespace for secrets/CRDs
+
+	managedEnv *ManagedEnv // when set, injected variables go to env-v2
+}
+
+// SetManagedEnv routes the injected connection variables to env-v2 (Compose edition).
+func (s *DatabaseService) SetManagedEnv(m *ManagedEnv) { s.managedEnv = m }
+
+// setInjectedEnv writes the database's connection variable on its app, via env-v2 when configured.
+func (s *DatabaseService) setInjectedEnv(ctx context.Context, appID, key, value, dbID string) {
+	if s.managedEnv != nil {
+		if err := s.managedEnv.Set(ctx, appID, key, value, dbID); err != nil {
+			slog.Warn("database: inject env failed", "app", appID, "key", key, "error", err)
+		}
+		return
+	}
+	s.appRepo.SetEnvVars(ctx, appID, map[string]string{key: value})
+}
+
+func (s *DatabaseService) clearInjectedEnv(ctx context.Context, appID, key, dbID string) {
+	if s.managedEnv != nil {
+		if err := s.managedEnv.Clear(ctx, appID, dbID); err != nil {
+			slog.Warn("database: clear env failed", "app", appID, "error", err)
+		}
+		return
+	}
+	s.appRepo.DeleteEnvVar(ctx, appID, key)
 }
 
 // NewDatabaseService creates a new DatabaseService.
@@ -193,7 +219,7 @@ func (s *DatabaseService) ProvisionDatabase(ctx context.Context, appID, userID s
 	// 5. Auto-inject DATABASE_URL env var on the app
 	if appID != "" {
 		envKey := envKeyForDBEngine(db.Engine)
-		s.appRepo.SetEnvVars(ctx, appID, map[string]string{envKey: connStr})
+		s.setInjectedEnv(ctx, appID, envKey, connStr, db.ID)
 	}
 
 	return db, nil
@@ -445,7 +471,7 @@ func (s *DatabaseService) DeleteDatabase(ctx context.Context, id string) error {
 	// Remove auto-injected env var
 	if db.AppID != "" {
 		envKey := envKeyForDBEngine(db.Engine)
-		s.appRepo.DeleteEnvVar(ctx, db.AppID, envKey)
+		s.clearInjectedEnv(ctx, db.AppID, envKey, db.ID)
 	}
 
 	// Delete metadata
@@ -566,7 +592,7 @@ func (s *DatabaseService) ResetDatabasePassword(ctx context.Context, id string) 
 			"zenith.io/user":     db.UserID,
 		})
 		if db.AppID != "" {
-			s.appRepo.SetEnvVars(ctx, db.AppID, map[string]string{"REDIS_URL": connStr})
+			s.setInjectedEnv(ctx, db.AppID, "REDIS_URL", connStr, db.ID)
 		}
 		return newPassword, connStr, nil
 	}
@@ -631,7 +657,7 @@ func (s *DatabaseService) ResetDatabasePassword(ctx context.Context, id string) 
 
 	// Update app env var if linked
 	if db.AppID != "" {
-		s.appRepo.SetEnvVars(ctx, db.AppID, map[string]string{resetEnvKey: connStr})
+		s.setInjectedEnv(ctx, db.AppID, resetEnvKey, connStr, db.ID)
 	}
 
 	return newPassword, connStr, nil
@@ -886,7 +912,7 @@ func (s *DatabaseService) resetRabbitMQPassword(ctx context.Context, db *entitie
 		"zenith.io/user":     db.UserID,
 	})
 	if db.AppID != "" {
-		s.appRepo.SetEnvVars(ctx, db.AppID, map[string]string{"RABBITMQ_URL": connStr})
+		s.setInjectedEnv(ctx, db.AppID, "RABBITMQ_URL", connStr, db.ID)
 	}
 	return newPassword, connStr, nil
 }
@@ -922,7 +948,7 @@ func (s *DatabaseService) resetMongoDBPassword(ctx context.Context, db *entities
 		"zenith.io/user":     db.UserID,
 	})
 	if db.AppID != "" {
-		s.appRepo.SetEnvVars(ctx, db.AppID, map[string]string{"MONGODB_URL": connStr})
+		s.setInjectedEnv(ctx, db.AppID, "MONGODB_URL", connStr, db.ID)
 	}
 	return newPassword, connStr, nil
 }
@@ -1134,7 +1160,7 @@ func (s *DatabaseService) resetKafkaPassword(ctx context.Context, db *entities.U
 		"zenith.io/user":     db.UserID,
 	})
 	if db.AppID != "" {
-		s.appRepo.SetEnvVars(ctx, db.AppID, map[string]string{"KAFKA_BROKERS": connStr})
+		s.setInjectedEnv(ctx, db.AppID, "KAFKA_BROKERS", connStr, db.ID)
 	}
 	return newPassword, connStr, nil
 }

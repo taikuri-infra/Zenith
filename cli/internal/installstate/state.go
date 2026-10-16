@@ -19,21 +19,21 @@ func DefaultPath() (string, error) {
 
 // State holds all persisted installation state.
 type State struct {
-	Domain            string    `yaml:"domain"`
-	ServerIP          string    `yaml:"server_ip"`
-	MissionControlURL string    `yaml:"mission_control_url"`
-	CloudURL          string    `yaml:"cloud_url"`
-	AdminUser         string    `yaml:"admin_user"`
-	ZenithVersion     string    `yaml:"zenith_version,omitempty"`
-	SSHKeyPath        string    `yaml:"ssh_key_path"`
+	Domain            string `yaml:"domain"`
+	ServerIP          string `yaml:"server_ip"`
+	MissionControlURL string `yaml:"mission_control_url"`
+	CloudURL          string `yaml:"cloud_url"`
+	AdminUser         string `yaml:"admin_user"`
+	ZenithVersion     string `yaml:"zenith_version,omitempty"`
+	SSHKeyPath        string `yaml:"ssh_key_path"`
 	// ServerHostKey is the base64-encoded SSH host public key captured on first connection.
 	// Used to prevent MITM attacks on subsequent connections.
-	ServerHostKey     string    `yaml:"server_host_key,omitempty"`
-	Provider          string    `yaml:"provider"`
-	Region            string    `yaml:"region"`
-	ServerID          string    `yaml:"server_id"`
-	SSHKeyID          string    `yaml:"ssh_key_id"`
-	InstalledAt       time.Time `yaml:"installed_at"`
+	ServerHostKey string    `yaml:"server_host_key,omitempty"`
+	Provider      string    `yaml:"provider"`
+	Region        string    `yaml:"region"`
+	ServerID      string    `yaml:"server_id"`
+	SSHKeyID      string    `yaml:"ssh_key_id"`
+	InstalledAt   time.Time `yaml:"installed_at"`
 
 	// CompletedSteps tracks which installation steps have been completed.
 	// Used by --resume to skip already-completed steps.

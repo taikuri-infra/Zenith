@@ -71,7 +71,7 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	client := cliapi.NewClient(cfg.APIEndpoint, cfg.Token)
+	client := cliapi.NewClientFromConfig(cfg)
 
 	// Find the app by name across all user apps
 	apps, err := client.ListApps("")

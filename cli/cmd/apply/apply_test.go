@@ -346,7 +346,7 @@ func TestApplyManifest_DatabaseKind(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
 			return
 		}
 		if !strings.Contains(r.URL.Path, "/databases") {
@@ -415,7 +415,7 @@ func TestApplyManifest_UnsupportedKind(t *testing.T) {
 func TestApplyManifest_AppAPIFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal server error"))
+		json.NewEncoder(w).Encode("internal server error")
 	}))
 	defer server.Close()
 
@@ -441,7 +441,7 @@ func TestApplyManifest_AppAPIFailure(t *testing.T) {
 func TestApplyManifest_DatabaseAPIFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("bad request"))
+		json.NewEncoder(w).Encode("bad request")
 	}))
 	defer server.Close()
 

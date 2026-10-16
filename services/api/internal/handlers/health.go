@@ -25,6 +25,7 @@ type VersionResponse struct {
 	Version   string `json:"version"`
 	BuildTime string `json:"build_time"`
 	GoVersion string `json:"go_version"`
+	Mode      string `json:"mode"`
 }
 
 func HealthCheck(version string) fiber.Handler {
@@ -65,12 +66,14 @@ func ReadinessCheck(pool *pgxpool.Pool) fiber.Handler {
 	}
 }
 
-func VersionInfo(version, buildTime string) fiber.Handler {
+// VersionInfo reports the build and the install mode ("standalone" or "saas").
+func VersionInfo(version, buildTime, mode string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		return c.JSON(VersionResponse{
 			Version:   version,
 			BuildTime: buildTime,
 			GoVersion: runtime.Version(),
+			Mode:      mode,
 		})
 	}
 }

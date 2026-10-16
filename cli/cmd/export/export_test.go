@@ -231,8 +231,8 @@ func TestMarshalManifest_MetadataPreservation(t *testing.T) {
 			Name:      "labeled-app",
 			Namespace: "my-namespace",
 			Labels: map[string]string{
-				"zenith.dev/project": "demo",
-				"app.kubernetes.io/name": "labeled-app",
+				"zenith.dev/project":        "demo",
+				"app.kubernetes.io/name":    "labeled-app",
 				"app.kubernetes.io/version": "v1.0.0",
 			},
 		},

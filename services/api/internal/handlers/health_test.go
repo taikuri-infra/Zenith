@@ -80,7 +80,7 @@ func TestReadinessCheck(t *testing.T) {
 
 func TestVersionInfo(t *testing.T) {
 	app := setupApp()
-	app.Get("/version", handlers.VersionInfo("1.0.0", "2026-01-01"))
+	app.Get("/version", handlers.VersionInfo("1.0.0", "2026-01-01", "standalone"))
 
 	req := httptest.NewRequest("GET", "/version", nil)
 	resp, err := app.Test(req, -1)

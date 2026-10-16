@@ -14,7 +14,7 @@ func TestRegisterAndReleaseSubdomain_Client(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Header.Get("Authorization") != "Bearer test-token" {
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"error":"unauthorized"}`))
 			return
 		}
 		switch r.URL.Path {
@@ -24,13 +24,13 @@ func TestRegisterAndReleaseSubdomain_Client(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&req)
 			if req["ip"] == "" {
 				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(`{"error":"no ip"}`))
+				_ = json.NewEncoder(w).Encode(json.RawMessage(`{"error":"no ip"}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"hostname":"swift-otter-abcd.apps.freezenith.com"}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"hostname":"swift-otter-abcd.apps.freezenith.com"}`))
 		case "/release":
 			sawRelease = true
-			_, _ = w.Write([]byte(`{"status":"released"}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"status":"released"}`))
 		}
 	}))
 	defer srv.Close()

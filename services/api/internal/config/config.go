@@ -129,6 +129,10 @@ type Config struct {
 	K3sToken           string
 }
 
+// IsStandalone reports whether this install is self-hosted (the default).
+// Only ZENITH_MODE=saas turns it off.
+func (c *Config) IsStandalone() bool { return c.Mode != "saas" }
+
 func Load() *Config {
 	mode := getEnv("ZENITH_MODE", "standalone")
 	// Never default to wildcard CORS — require explicit origin allowlist.

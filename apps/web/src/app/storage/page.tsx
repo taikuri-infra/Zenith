@@ -9,6 +9,7 @@ import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type StorageBucketV2 } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
+import { SHOW_PLANS } from "@/lib/edition";
 import Link from "next/link";
 import { useState, useMemo } from "react";
 
@@ -31,7 +32,7 @@ export default function StoragePage() {
   } = useApi(() => storageBuckets.list(projectId || undefined), [projectId]);
 
   const { data: planData, loading: planLoading } = useApi(
-    () => userPlan.get(),
+    () => (SHOW_PLANS ? userPlan.get() : Promise.resolve(null)),
     []
   );
 

@@ -298,8 +298,8 @@ func TestCompareSpecs_NumericTypeDifferences(t *testing.T) {
 	// When parsed from JSON, numbers are float64; from Go code, they could be int
 	// The comparison uses fmt.Sprintf("%v", val), so int(2) == "2" and float64(2) == "2"
 	local := map[string]interface{}{
-		"replicas": 2,     // int
-		"port":     8080,  // int
+		"replicas": 2,    // int
+		"port":     8080, // int
 	}
 	remote := map[string]interface{}{
 		"replicas": float64(2),    // float64 (from JSON)
@@ -334,12 +334,12 @@ func TestCompareSpecs_NumericTypeDifferencesWithDecimal(t *testing.T) {
 
 func TestCompareSpecs_BooleanValues(t *testing.T) {
 	local := map[string]interface{}{
-		"tls":    true,
-		"debug":  false,
+		"tls":   true,
+		"debug": false,
 	}
 	remote := map[string]interface{}{
-		"tls":    false,
-		"debug":  false,
+		"tls":   false,
+		"debug": false,
 	}
 
 	changes := CompareSpecs(local, remote)
@@ -751,7 +751,7 @@ func TestFetchRemoteDatabases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

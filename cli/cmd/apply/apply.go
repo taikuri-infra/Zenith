@@ -52,11 +52,11 @@ func init() {
 
 // ApplyResult holds the result of applying a single manifest.
 type ApplyResult struct {
-	Name      string
-	Kind      string
-	Action    string // created, updated, unchanged, failed
-	Error     error
-	FilePath  string
+	Name     string
+	Kind     string
+	Action   string // created, updated, unchanged, failed
+	Error    error
+	FilePath string
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
@@ -84,7 +84,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		project = "default"
 	}
 
-	client := api.NewClient(cfg.APIEndpoint, cfg.Token)
+	client := api.NewClientFromConfig(cfg)
 
 	// Collect manifests
 	var manifests []*export.ZenithManifest

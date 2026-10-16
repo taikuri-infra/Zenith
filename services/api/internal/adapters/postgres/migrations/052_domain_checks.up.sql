@@ -1,0 +1,2 @@
+ALTER TABLE custom_domains ADD COLUMN IF NOT EXISTS status_message TEXT NOT NULL DEFAULT '';
+ALTER TABLE custom_domains ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ NULL;

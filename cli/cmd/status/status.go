@@ -2,6 +2,7 @@ package status
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,8 +15,8 @@ import (
 var Cmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show project status overview",
-	Long: `Display a rich overview of the current project including apps,
-databases, nodes, and cost estimates.
+	Long: `Show the server version and the apps and databases of the selected project,
+or of every project when none is selected.
 
 Example:
   zen status`,
@@ -34,125 +35,111 @@ type ResourceStatus struct {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(tui.ColorPrimary).
-		MarginBottom(1)
+	cfg, err := config.Load()
+	if err != nil || cfg.Token == "" {
+		fmt.Fprintln(cmd.OutOrStdout(), lipgloss.NewStyle().Foreground(tui.ColorError).Render("  Not logged in — run: zen login"))
+		return nil
+	}
+	return renderStatus(cmd.OutOrStdout(), cliapi.NewClientFromConfig(cfg), cfg)
+}
 
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(tui.ColorPrimary).
-		Padding(0, 1)
-
-	cellStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorText).
-		Padding(0, 1)
-
-	sectionStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(tui.ColorText).
-		MarginTop(1)
-
+// renderStatus prints the overview. On a self-hosted server there is no plan, region or cost.
+func renderStatus(w io.Writer, client *cliapi.Client, cfg *config.Config) error {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).MarginBottom(1)
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).Padding(0, 1)
+	cellStyle := lipgloss.NewStyle().Foreground(tui.ColorText).Padding(0, 1)
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).MarginTop(1)
 	infoStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
 	valStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
 	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
 
-	// Load config and create API client
-	cfg, err := config.Load()
-	if err != nil || cfg.Token == "" {
-		fmt.Println(errStyle.Render("  Not logged in — run: zen login"))
-		return nil
-	}
-
-	client := cliapi.NewClient(cfg.APIEndpoint, cfg.Token)
-
-	// Header
-	fmt.Println(titleStyle.Render("  Zenith Project Status"))
-
-	// Fetch projects
-	projects, err := client.ListProjects()
+	info, err := client.ServerInfo()
 	if err != nil {
-		fmt.Println(errStyle.Render("  Failed to fetch projects: " + err.Error()))
+		fmt.Fprintln(w, errStyle.Render("  Failed to reach the server: "+err.Error()))
 		return nil
 	}
-	if len(projects) == 0 {
-		fmt.Println(infoStyle.Render("  No projects found. Create one at the dashboard."))
-		return nil
-	}
+	standalone := info.Mode != "saas"
 
-	// Select current project: prefer cfg.Project match by name or ID, else first project
-	current := projects[0]
-	for _, p := range projects {
-		if cfg.Project != "" && (p.ID == cfg.Project || p.Name == cfg.Project || p.DisplayName == cfg.Project) {
-			current = p
-			break
+	fmt.Fprintln(w, titleStyle.Render("  Zenith Status"))
+	fmt.Fprintf(w, "  %s %s (%s)\n", infoStyle.Render("Server: "), valStyle.Render(cfg.APIEndpoint), info.Version)
+
+	// With no project selected, apps and databases of every project are listed. SaaS still shows the
+	// first project's header (region, plan); standalone has no project header then.
+	allProjects := cfg.Project == ""
+	projectID := ""
+	if !standalone || !allProjects {
+		projects, err := client.ListProjects()
+		if err != nil {
+			fmt.Fprintln(w, errStyle.Render("  Failed to fetch projects: "+err.Error()))
+			return nil
 		}
-	}
-
-	displayName := current.DisplayName
-	if displayName == "" {
-		displayName = current.Name
-	}
-	region := current.Region
-	if region == "" {
-		region = cfg.Region
-	}
-	plan := current.Plan
-	if plan == "" {
-		plan = "free"
-	}
-
-	fmt.Printf("  %s %s\n", infoStyle.Render("Project:"), valStyle.Render(displayName))
-	fmt.Printf("  %s %s\n", infoStyle.Render("Region: "), valStyle.Render(region))
-	fmt.Printf("  %s %s\n", infoStyle.Render("Plan:   "), valStyle.Render(plan))
-
-	// Apps section
-	fmt.Println()
-	fmt.Println(sectionStyle.Render("  Apps"))
-
-	apps, err := client.ListApps(current.ID)
-	if err != nil {
-		fmt.Println("  " + errStyle.Render("Failed to fetch apps: "+err.Error()))
-	} else {
-		appRows := make([][]string, 0, len(apps))
-		for _, a := range apps {
-			replicas := fmt.Sprintf("%d", a.Replicas)
-			if replicas == "0" {
-				replicas = "—"
+		if len(projects) == 0 {
+			fmt.Fprintln(w, infoStyle.Render("  No projects found. Create one at the dashboard."))
+			return nil
+		}
+		current := projects[0]
+		for _, p := range projects {
+			if cfg.Project != "" && (p.ID == cfg.Project || p.Name == cfg.Project || p.DisplayName == cfg.Project) {
+				current = p
+				break
 			}
-			appRows = append(appRows, []string{a.Name, a.Status, replicas, a.CPU, a.Memory})
 		}
-		fmt.Println(renderTable(
-			[]string{"NAME", "STATUS", "REPLICAS", "CPU", "MEMORY"},
-			appRows,
-			headerStyle, cellStyle,
-		))
+		if !allProjects {
+			projectID = current.ID
+		}
+		displayName := current.DisplayName
+		if displayName == "" {
+			displayName = current.Name
+		}
+		fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Project:"), valStyle.Render(displayName))
+		if !standalone {
+			region := current.Region
+			if region == "" {
+				region = cfg.Region
+			}
+			plan := current.Plan
+			if plan == "" {
+				plan = "free"
+			}
+			fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Region: "), valStyle.Render(region))
+			fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Plan:   "), valStyle.Render(plan))
+		}
 	}
 
-	// Databases section
-	fmt.Println(sectionStyle.Render("  Databases"))
-
-	dbs, err := client.ListDatabases(current.ID)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, sectionStyle.Render("  Apps"))
+	apps, err := client.ListApps(projectID)
 	if err != nil {
-		fmt.Println("  " + errStyle.Render("Failed to fetch databases: "+err.Error()))
+		fmt.Fprintln(w, "  "+errStyle.Render("Failed to fetch apps: "+err.Error()))
 	} else {
-		dbRows := make([][]string, 0, len(dbs))
-		for _, d := range dbs {
-			dbRows = append(dbRows, []string{d.Name, d.Engine, d.Storage, "—", d.Status})
+		rows := make([][]string, 0, len(apps))
+		for _, a := range apps {
+			rows = append(rows, []string{a.Name, a.Status, a.URL})
 		}
-		fmt.Println(renderTable(
-			[]string{"NAME", "ENGINE", "STORAGE", "BACKUP", "STATUS"},
-			dbRows,
-			headerStyle, cellStyle,
-		))
+		fmt.Fprint(w, renderTable([]string{"NAME", "STATUS", "URL"}, rows, headerStyle, cellStyle))
 	}
 
-	// Cost summary (placeholder — requires billing API)
-	fmt.Println(sectionStyle.Render("  Cost Estimate"))
-	fmt.Printf("  %s %s\n\n",
-		infoStyle.Render("Monthly:"),
-		lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).Render("€0.00"))
+	fmt.Fprintln(w, sectionStyle.Render("  Databases"))
+	var dbs []cliapi.Database
+	if allProjects {
+		dbs, err = client.ListAllDatabases()
+	} else {
+		dbs, err = client.ListDatabases(projectID)
+	}
+	if err != nil {
+		fmt.Fprintln(w, "  "+errStyle.Render("Failed to fetch databases: "+err.Error()))
+	} else {
+		rows := make([][]string, 0, len(dbs))
+		for _, d := range dbs {
+			rows = append(rows, []string{d.Name, d.Engine, d.Status})
+		}
+		fmt.Fprint(w, renderTable([]string{"NAME", "ENGINE", "STATUS"}, rows, headerStyle, cellStyle))
+	}
 
+	if !standalone {
+		fmt.Fprintln(w, sectionStyle.Render("  Cost Estimate"))
+		fmt.Fprintf(w, "  %s %s\n\n", infoStyle.Render("Monthly:"), lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).Render("€0.00"))
+	}
 	return nil
 }
 

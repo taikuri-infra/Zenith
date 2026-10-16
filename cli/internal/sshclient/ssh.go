@@ -142,7 +142,7 @@ func (c *Client) RunIgnoreError(cmd string) string {
 }
 
 // shellQuote wraps s in POSIX single quotes, escaping any embedded single
-// quotes using the '\'' idiom. This prevents path injection in shell commands.
+// quotes using the '\” idiom. This prevents path injection in shell commands.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
