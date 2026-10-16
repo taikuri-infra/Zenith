@@ -896,6 +896,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo, msRepo)
+	managedEnv := services.NewManagedEnv(envVarRepo, appRepo)
+	if envCrypto != nil {
+		managedEnv.SetEncrypter(envCrypto)
+	}
+	dbHandlerV2.SetManagedEnv(managedEnv)
+	if dbSvc != nil {
+		dbSvc.SetManagedEnv(managedEnv)
+	}
 	if cfg.Mode != "saas" && dockerDeployerCli != nil {
 		dockerDBBackend := deploy.NewDockerDBBackend(dockerDeployerCli, cfg.AppNetwork)
 		dbRuntime := services.NewDBRuntimeService(dbRepo, dockerDBBackend, envCrypto)
@@ -905,6 +913,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 			go func() {
 				time.Sleep(10 * time.Second)
 				reconciler.Run(context.Background())
+			}()
+			go func() {
+				time.Sleep(20 * time.Second)
+				if n, err := services.MigrateManagedEnv(context.Background(), dbRepo, appRepo, managedEnv); err != nil {
+					slog.Warn("managed env migration failed", "error", err)
+				} else if n > 0 {
+					slog.Info("managed env migration done", "moved", n)
+				}
 			}()
 		}
 		dbHandlerV2.SetRedeployer(backend)
