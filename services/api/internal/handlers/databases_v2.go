@@ -25,11 +25,31 @@ type DatabaseHandlerV2 struct {
 	// redeployer restarts an app after a database is attached so the
 	// injected connection string reaches the running container.
 	redeployer AppRedeployer
+	// managedEnv, when set, stores injected variables as env-v2 rows.
+	managedEnv *services.ManagedEnv
 }
 
 // NewDatabaseHandlerV2 creates a new DatabaseHandlerV2.
 func NewDatabaseHandlerV2(dbSvc *services.DatabaseService, dbRepo ports.DatabaseRepository, appRepo ports.AppRepository, msRepo ports.ManagedServiceRepository) *DatabaseHandlerV2 {
 	return &DatabaseHandlerV2{dbSvc: dbSvc, dbRepo: dbRepo, appRepo: appRepo, msRepo: msRepo}
+}
+
+// SetManagedEnv routes injected connection variables to env-v2.
+func (h *DatabaseHandlerV2) SetManagedEnv(m *services.ManagedEnv) { h.managedEnv = m }
+
+func (h *DatabaseHandlerV2) setInjectedEnv(ctx context.Context, appID, key, value, dbID string) error {
+	if h.managedEnv != nil {
+		return h.managedEnv.Set(ctx, appID, key, value, dbID)
+	}
+	return h.appRepo.SetEnvVars(ctx, appID, map[string]string{key: value})
+}
+
+func (h *DatabaseHandlerV2) clearInjectedEnv(ctx context.Context, appID, key, dbID string) {
+	if h.managedEnv != nil {
+		_ = h.managedEnv.Clear(ctx, appID, dbID)
+		return
+	}
+	_ = h.appRepo.DeleteEnvVar(ctx, appID, key)
 }
 
 // SetRuntime makes the handler provision real instances (Docker in standalone).
@@ -53,7 +73,7 @@ func (h *DatabaseHandlerV2) injectWhenReady(appID string, db *entities.UserDatab
 			slog.Warn("database runtime: reading password failed", "database", db.ID, "error", err)
 			return
 		}
-		if err := h.appRepo.SetEnvVars(ctx, appID, map[string]string{envKeyForEngine(fresh.Engine): fresh.ConnectionString(pw)}); err != nil {
+		if err := h.setInjectedEnv(ctx, appID, envKeyForEngine(fresh.Engine), fresh.ConnectionString(pw), db.ID); err != nil {
 			slog.Warn("database runtime: injecting connection string failed", "database", db.ID, "app", appID, "error", err)
 			return
 		}
@@ -184,7 +204,7 @@ func (h *DatabaseHandlerV2) Create(c *fiber.Ctx) error {
 	pw, connStr := h.fetchCredentials(c.Context(), db)
 	if connStr != "" {
 		envKey := envKeyForEngine(db.Engine)
-		h.appRepo.SetEnvVars(c.Context(), appID, map[string]string{envKey: connStr})
+		h.setInjectedEnv(c.Context(), appID, envKey, connStr, db.ID)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(toDatabaseInfoV2(db, pw, connStr))
@@ -240,7 +260,7 @@ func (h *DatabaseHandlerV2) Delete(c *fiber.Ctx) error {
 		if err := h.rt.Delete(c.Context(), db, c.QueryBool("purge", false)); err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 		}
-		_ = h.appRepo.DeleteEnvVar(c.Context(), db.AppID, envKeyForEngine(db.Engine))
+		h.clearInjectedEnv(c.Context(), db.AppID, envKeyForEngine(db.Engine), db.ID)
 		return c.JSON(fiber.Map{"message": "database deleted"})
 	}
 
@@ -259,7 +279,7 @@ func (h *DatabaseHandlerV2) Delete(c *fiber.Ctx) error {
 
 	// Remove auto-injected env var
 	envKey := envKeyForEngine(db.Engine)
-	h.appRepo.DeleteEnvVar(c.Context(), db.AppID, envKey)
+	h.clearInjectedEnv(c.Context(), db.AppID, envKey, db.ID)
 
 	return c.JSON(fiber.Map{"message": "database deleted"})
 }
@@ -461,22 +481,7 @@ func (h *DatabaseHandlerV2) ResetPassword(c *fiber.Ctx) error {
 	})
 }
 
-func envKeyForEngine(engine entities.DatabaseEngine) string {
-	switch engine {
-	case entities.DatabaseEngineRedis:
-		return "REDIS_URL"
-	case entities.DatabaseEngineMySQL:
-		return "MYSQL_URL"
-	case entities.DatabaseEngineMongoDB:
-		return "MONGODB_URL"
-	case entities.DatabaseEngineRabbitMQ:
-		return "RABBITMQ_URL"
-	case entities.DatabaseEngineKafka:
-		return "KAFKA_BROKERS"
-	default:
-		return "DATABASE_URL"
-	}
-}
+func envKeyForEngine(engine entities.DatabaseEngine) string { return services.EnvKeyForEngine(engine) }
 
 // managedServiceToDatabaseInfo converts a ManagedService to DatabaseInfo so both
 // standalone databases and compose-provisioned services appear in the same list.
