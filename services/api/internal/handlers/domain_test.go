@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http/httptest"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -236,5 +238,95 @@ func TestDomainAdd_RedeploysWithCurrentImage(t *testing.T) {
 	}
 	if rec.image != "nginx:1" {
 		t.Errorf("redeployed image = %q, want nginx:1", rec.image)
+	}
+}
+
+type stubResolver struct{ ips map[string][]string }
+
+func (s stubResolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, error) {
+	ips, ok := s.ips[host]
+	if !ok {
+		return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+	}
+	out := make([]net.IPAddr, 0, len(ips))
+	for _, s := range ips {
+		out = append(out, net.IPAddr{IP: net.ParseIP(s)})
+	}
+	return out, nil
+}
+
+type stubProber struct{ valid bool }
+
+func (s stubProber) Probe(context.Context, string, string) (bool, error) { return s.valid, nil }
+
+func TestDomainAddIsPendingWithChecker(t *testing.T) {
+	fiberApp, handler, repo, appID := setupDomainTest()
+	checker := services.NewDomainChecker(repo, stubResolver{}, stubProber{}, "zenith.example.com")
+	handler.SetChecker(checker)
+	fiberApp.Post("/api/v1/apps/:appId/domains", injectUserID("user-1"), handler.Add)
+
+	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains", bytes.NewBufferString(`{"domain":"app.example.com"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := fiberApp.Test(req, -1)
+	if resp.StatusCode != 201 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	var out dto.DomainInfo
+	json.NewDecoder(resp.Body).Decode(&out)
+	if out.Status != entities.DomainStatusPending || out.StatusMessage != "waiting for DNS check" {
+		t.Fatalf("got %+v", out)
+	}
+}
+
+func TestDomainAddStaysActiveWithoutChecker(t *testing.T) {
+	fiberApp, handler, _, appID := setupDomainTest()
+	fiberApp.Post("/api/v1/apps/:appId/domains", injectUserID("user-1"), handler.Add)
+	req := httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains", bytes.NewBufferString(`{"domain":"app.example.com"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := fiberApp.Test(req, -1)
+	var out dto.DomainInfo
+	json.NewDecoder(resp.Body).Decode(&out)
+	if out.Status != entities.DomainStatusActive {
+		t.Fatalf("saas behaviour changed: %+v", out)
+	}
+}
+
+func TestDomainVerifyRunsOneCheck(t *testing.T) {
+	fiberApp, handler, repo, appID := setupDomainTest()
+	checker := services.NewDomainChecker(repo, stubResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}, "app.example.com": {"1.2.3.4"}}}, stubProber{valid: true}, "zenith.example.com")
+	handler.SetChecker(checker)
+	fiberApp.Post("/api/v1/apps/:appId/domains/:domainId/verify", injectUserID("user-1"), handler.Verify)
+	d, _ := repo.AddDomain(context.Background(), appID, "user-1", "app.example.com")
+	_ = checker.MarkPending(context.Background(), d.ID)
+
+	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains/"+d.ID+"/verify", nil), -1)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	var out dto.DomainInfo
+	json.NewDecoder(resp.Body).Decode(&out)
+	if out.Status != entities.DomainStatusActive || !out.TLSReady || out.LastCheckedAt == nil {
+		t.Fatalf("got %+v", out)
+	}
+}
+
+func TestDomainVerifyForbiddenForOtherUser(t *testing.T) {
+	fiberApp, handler, repo, appID := setupDomainTest()
+	handler.SetChecker(services.NewDomainChecker(repo, stubResolver{}, stubProber{}, "zenith.example.com"))
+	fiberApp.Post("/api/v1/apps/:appId/domains/:domainId/verify", injectUserID("user-2"), handler.Verify)
+	d, _ := repo.AddDomain(context.Background(), appID, "user-1", "app.example.com")
+	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains/"+d.ID+"/verify", nil), -1)
+	if resp.StatusCode != 403 {
+		t.Fatalf("status %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestDomainVerifyWithoutCheckerIs404(t *testing.T) {
+	fiberApp, handler, repo, appID := setupDomainTest()
+	fiberApp.Post("/api/v1/apps/:appId/domains/:domainId/verify", injectUserID("user-1"), handler.Verify)
+	d, _ := repo.AddDomain(context.Background(), appID, "user-1", "app.example.com")
+	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains/"+d.ID+"/verify", nil), -1)
+	if resp.StatusCode != 404 {
+		t.Fatalf("status %d, want 404", resp.StatusCode)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -1333,9 +1334,19 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(backend)
 	domainHandler.SetReservedDomain(cfg.BaseDomain)
+	if cfg.IsStandalone() && dockerDeployer != nil {
+		domainChecker := services.NewDomainChecker(domainRepo, net.DefaultResolver, &services.TraefikTLSProber{}, cfg.BaseDomain)
+		domainHandler.SetChecker(domainChecker)
+		go func() {
+			time.Sleep(15 * time.Second)
+			domainChecker.Run(context.Background())
+		}()
+		slog.Info("custom domains: DNS and certificate checks enabled", "dashboard", cfg.BaseDomain)
+	}
 	appByID.Post("/domains", domainHandler.Add)
 	appByID.Get("/domains", domainHandler.List)
 	appByID.Delete("/domains/:domainId", domainHandler.Delete)
+	appByID.Post("/domains/:domainId/verify", domainHandler.Verify)
 	protected.Get("/domains", domainHandler.ListByUser)
 
 	// API Keys (Phase 6.5)

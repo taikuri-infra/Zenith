@@ -8,6 +8,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
 	"github.com/dotechhq/zenith/services/api/internal/validate"
 	"github.com/gofiber/fiber/v2"
@@ -24,8 +25,12 @@ type DomainHandler struct {
 	appRepo    ports.AppRepository
 	planRepo   ports.UserPlanRepository
 	deployer   AppRedeployer
-	reserved   string // dashboard domain; it and its subdomains can't be custom domains
+	reserved   string                  // dashboard domain; it and its subdomains can't be custom domains
+	checker    *services.DomainChecker // nil = no DNS/TLS checks (SaaS)
 }
+
+// SetChecker enables DNS and certificate checks: new domains start pending and /verify works.
+func (h *DomainHandler) SetChecker(c *services.DomainChecker) { h.checker = c }
 
 // NewDomainHandler creates a new DomainHandler.
 func NewDomainHandler(domainRepo ports.DomainRepository, appRepo ports.AppRepository, planRepo ports.UserPlanRepository) *DomainHandler {
@@ -77,6 +82,14 @@ func (h *DomainHandler) Add(c *fiber.Ctx) error {
 	domain, err := h.domainRepo.AddDomain(c.Context(), appID, userID, name)
 	if err != nil {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
+	}
+
+	if h.checker != nil {
+		if err := h.checker.MarkPending(c.Context(), domain.ID); err != nil {
+			slog.Warn("domain: mark pending failed", "domain", domain.Domain, "error", err)
+		} else if fresh, gerr := h.domainRepo.GetDomain(c.Context(), domain.ID); gerr == nil {
+			domain = fresh
+		}
 	}
 
 	// Refresh IngressRoute + Certificate to include the new custom domain
@@ -179,4 +192,25 @@ func toDomainInfo(d *entities.CustomDomain) dto.DomainInfo {
 		LastCheckedAt: checked,
 		CreatedAt:     d.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}
+}
+
+// Verify runs the DNS and certificate check for one domain now.
+// POST /api/v1/apps/:appId/domains/:domainId/verify
+func (h *DomainHandler) Verify(c *fiber.Ctx) error {
+	if h.checker == nil {
+		return fiber.NewError(fiber.StatusNotFound, "domain checks are not available on this install")
+	}
+	userID, _ := c.Locals("user_id").(string)
+	domain, err := h.domainRepo.GetDomain(c.Context(), c.Params("domainId"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "domain not found")
+	}
+	if domain.UserID != userID {
+		return fiber.NewError(fiber.StatusForbidden, "not your domain")
+	}
+	checked, err := h.checker.Check(c.Context(), domain)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadGateway, err.Error())
+	}
+	return c.JSON(toDomainInfo(checked))
 }
