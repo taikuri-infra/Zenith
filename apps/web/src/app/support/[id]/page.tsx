@@ -3,7 +3,7 @@
 import { Shell } from "@/components/shell";
 import { ErrorState } from "@/components/error-state";
 import { useApi } from "@/hooks/use-api";
-import { type SupportMessage } from "@/lib/api";
+import { type SupportMessage, type SupportTicket } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -46,7 +46,7 @@ export default function SupportTicketPage() {
   const ticketId = params.id as string;
   const { support } = getApi();
 
-  const { data, loading, error, refetch } = useApi(
+  const { data, loading, error, refetch } = useApi<{ ticket: SupportTicket; messages: SupportMessage[] }>(
     () => support.get(ticketId),
     [ticketId]
   );

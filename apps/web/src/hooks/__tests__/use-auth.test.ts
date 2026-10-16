@@ -52,8 +52,8 @@ describe("useAuth", () => {
     vi.mocked(auth.login).mockResolvedValue({
       access_token: jwt,
       refresh_token: "refresh",
-      mfa_required: false,
-      mfa_token: "",
+      token_type: "Bearer",
+      expires_in: 3600,
     });
 
     const { result } = renderHook(() => useAuth());
@@ -72,6 +72,8 @@ describe("useAuth", () => {
     vi.mocked(auth.login).mockResolvedValue({
       access_token: "",
       refresh_token: "",
+      token_type: "Bearer",
+      expires_in: 0,
       mfa_required: true,
       mfa_token: "mfa-token-123",
     });
@@ -93,8 +95,8 @@ describe("useAuth", () => {
     vi.mocked(auth.login).mockResolvedValue({
       access_token: jwt,
       refresh_token: "refresh",
-      mfa_required: false,
-      mfa_token: "",
+      token_type: "Bearer",
+      expires_in: 3600,
     });
 
     const { result } = renderHook(() => useAuth());

@@ -906,12 +906,14 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
             <div className="text-neutral-600">|</div>
             <div className="text-sm text-white">{res.ram}</div>
           </div>
-          <p className="mt-1.5 text-[11px] text-neutral-500">
-            {isPro ? "Pro plan" : "Free plan"} per-app limit.
-            {!isPro && (
-              <span className="ml-1 text-amber-400">Upgrade to Pro for more resources.</span>
-            )}
-          </p>
+          {SHOW_PLANS && (
+            <p className="mt-1.5 text-[11px] text-neutral-500">
+              {isPro ? "Pro plan" : "Free plan"} per-app limit.
+              {!isPro && (
+                <span className="ml-1 text-amber-400">Upgrade to Pro for more resources.</span>
+              )}
+            </p>
+          )}
         </div>
       </div>
 

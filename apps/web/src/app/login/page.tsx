@@ -6,6 +6,7 @@ import { LogIn, UserPlus, Github, Loader2, Mail, RefreshCw, Shield } from "lucid
 import { useAuth } from "@/hooks/use-auth";
 import { auth } from "@/lib/api";
 import { isDemoMode } from "@/lib/get-api";
+import { IS_STANDALONE } from "@/lib/runtime-env";
 
 export default function LoginPage() {
   return (
@@ -19,7 +20,7 @@ function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, mfaLogin, register, mfaToken } = useAuth();
-  const initialMode = searchParams.get("mode") === "register" ? "register" : "login";
+  const initialMode = !IS_STANDALONE && searchParams.get("mode") === "register" ? "register" : "login";
   const [mode, setMode] = useState<"login" | "register" | "mfa">(initialMode);
   const [verifyEmailSent, setVerifyEmailSent] = useState(false);
 
@@ -298,7 +299,7 @@ function LoginPageInner() {
             <span className="text-2xl font-bold text-white">Zenith</span>
           </div>
           <p className="text-neutral-400 text-sm">
-            Kubernetes-native PaaS on Hetzner Cloud
+            {IS_STANDALONE ? "Self-hosted PaaS" : "Kubernetes-native PaaS on Hetzner Cloud"}
           </p>
         </div>
 
@@ -308,6 +309,8 @@ function LoginPageInner() {
             {mode === "login" ? "Sign in to your account" : "Create an account"}
           </h2>
 
+          {!IS_STANDALONE && (
+            <>
           {/* OAuth buttons */}
           <div className="grid grid-cols-2 gap-3 mb-6">
             <a
@@ -353,6 +356,8 @@ function LoginPageInner() {
               </span>
             </div>
           </div>
+            </>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -423,6 +428,7 @@ function LoginPageInner() {
           </form>
 
           {/* Toggle mode */}
+          {!IS_STANDALONE && (
           <div className="mt-6 text-center text-sm text-neutral-400">
             {mode === "login" ? (
               <>
@@ -452,13 +458,16 @@ function LoginPageInner() {
               </>
             )}
           </div>
+          )}
         </div>
 
         {/* Footer */}
-        <p className="mt-6 text-center text-xs text-neutral-600">
-          By continuing, you agree to the Zenith Terms of Service and Privacy
-          Policy.
-        </p>
+        {!IS_STANDALONE && (
+          <p className="mt-6 text-center text-xs text-neutral-600">
+            By continuing, you agree to the Zenith Terms of Service and Privacy
+            Policy.
+          </p>
+        )}
       </div>
     </div>
   );
