@@ -227,6 +227,10 @@ type DomainRepository interface {
 	ListDomainsByApp(ctx context.Context, appID string) ([]entities.CustomDomain, error)
 	ListDomainsByUser(ctx context.Context, userID string) ([]entities.CustomDomain, error)
 	UpdateDomainStatus(ctx context.Context, id string, status entities.DomainStatus, tlsReady bool) error
+	// UpdateDomainCheck records one checker outcome.
+	UpdateDomainCheck(ctx context.Context, id string, status entities.DomainStatus, tlsReady bool, message string, checkedAt time.Time) error
+	// ListAllDomains returns every custom domain (the checker's work list).
+	ListAllDomains(ctx context.Context) ([]entities.CustomDomain, error)
 	DeleteDomain(ctx context.Context, id string) error
 }
 

@@ -40,37 +40,13 @@ func (r *MemoryDomainRepository) AddDomain(_ context.Context, appID, userID, dom
 		AppID:  appID,
 		UserID: userID,
 		Domain: domain,
-		Status: entities.DomainStatusPending,
+		Status: entities.DomainStatusActive,
 		Timestamps: entities.Timestamps{
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
 	}
-
 	r.domains[d.ID] = d
-
-	// Simulate async DNS verification
-	go func() {
-		time.Sleep(3 * time.Second)
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if dom, ok := r.domains[d.ID]; ok && dom.Status == entities.DomainStatusPending {
-			dom.Status = entities.DomainStatusVerified
-			dom.UpdatedAt = time.Now()
-			// Simulate TLS provisioning
-			go func() {
-				time.Sleep(2 * time.Second)
-				r.mu.Lock()
-				defer r.mu.Unlock()
-				if dom2, ok := r.domains[d.ID]; ok && dom2.Status == entities.DomainStatusVerified {
-					dom2.Status = entities.DomainStatusActive
-					dom2.TLSReady = true
-					dom2.UpdatedAt = time.Now()
-				}
-			}()
-		}
-	}()
-
 	return d, nil
 }
 
@@ -134,4 +110,27 @@ func (r *MemoryDomainRepository) DeleteDomain(_ context.Context, id string) erro
 	}
 	delete(r.domains, id)
 	return nil
+}
+
+func (r *MemoryDomainRepository) UpdateDomainCheck(_ context.Context, id string, status entities.DomainStatus, tlsReady bool, message string, checkedAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	d, ok := r.domains[id]
+	if !ok {
+		return fmt.Errorf("domain not found: %s", id)
+	}
+	at := checkedAt
+	d.Status, d.TLSReady, d.StatusMessage, d.LastCheckedAt = status, tlsReady, message, &at
+	d.UpdatedAt = time.Now()
+	return nil
+}
+
+func (r *MemoryDomainRepository) ListAllDomains(_ context.Context) ([]entities.CustomDomain, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]entities.CustomDomain, 0, len(r.domains))
+	for _, d := range r.domains {
+		out = append(out, *d)
+	}
+	return out, nil
 }

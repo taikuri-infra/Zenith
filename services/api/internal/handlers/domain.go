@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -163,12 +164,19 @@ func (h *DomainHandler) refreshIngress(ctx context.Context, app *entities.App) {
 }
 
 func toDomainInfo(d *entities.CustomDomain) dto.DomainInfo {
+	var checked *string
+	if d.LastCheckedAt != nil {
+		s := d.LastCheckedAt.UTC().Format(time.RFC3339)
+		checked = &s
+	}
 	return dto.DomainInfo{
-		ID:        d.ID,
-		AppID:     d.AppID,
-		Domain:    d.Domain,
-		Status:    d.Status,
-		TLSReady:  d.TLSReady,
-		CreatedAt: d.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		ID:            d.ID,
+		AppID:         d.AppID,
+		Domain:        d.Domain,
+		Status:        d.Status,
+		TLSReady:      d.TLSReady,
+		StatusMessage: d.StatusMessage,
+		LastCheckedAt: checked,
+		CreatedAt:     d.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 }
