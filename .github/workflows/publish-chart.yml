@@ -1,13 +1,19 @@
 name: Publish Helm Chart (Release)
 
-# Triggered on version tags (v1.0.0, v1.2.3, etc.)
+# Triggered on chart tags (chart-v0.9.1) or by hand. Platform releases (v0.1.0-alpha.3)
+# publish the self-host images via build-public-images.yml and do not touch the chart.
 # Packages the Zenith Helm chart and publishes it to the public OCI registry
 # at ghcr.io/dotechhq/zenith/charts/zenith so that `zen install` can pull it.
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'chart-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chart version to publish (e.g. 0.9.1)'
+        required: true
 
 permissions:
   contents: read
@@ -29,8 +35,14 @@ jobs:
       - name: Extract version from tag
         id: version
         # GITHUB_REF_NAME is the tag (e.g. v1.2.3); strip leading v for semver
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#chart-v}"
+          fi
           echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Publishing chart version ${VERSION} from tag ${GITHUB_REF_NAME}"
