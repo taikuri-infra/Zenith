@@ -141,9 +141,13 @@ func (r *PostgresDomainRepository) DeleteDomain(ctx context.Context, id string) 
 }
 
 func (r *PostgresDomainRepository) UpdateDomainCheck(ctx context.Context, id string, status entities.DomainStatus, tlsReady bool, message string, checkedAt time.Time) error {
+	var checked any // zero time stores NULL (never checked)
+	if !checkedAt.IsZero() {
+		checked = checkedAt
+	}
 	ct, err := r.pool.Exec(ctx,
 		`UPDATE custom_domains SET status = $1, tls_ready = $2, status_message = $3, last_checked_at = $4, updated_at = $5 WHERE id = $6`,
-		string(status), tlsReady, message, checkedAt, time.Now(), id,
+		string(status), tlsReady, message, checked, time.Now(), id,
 	)
 	if err != nil {
 		return fmt.Errorf("update domain check: %w", err)

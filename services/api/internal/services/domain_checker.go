@@ -39,10 +39,21 @@ type DomainChecker struct {
 	stepTimeout     time.Duration
 	now             func() time.Time
 
-	mu         sync.Mutex
-	expected   []net.IP
-	expectedAt time.Time
+	refresher RouteRefresher
+
+	mu          sync.Mutex
+	lastRefresh map[string]time.Time
+	expected    []net.IP
+	expectedAt  time.Time
 }
+
+// RouteRefresher redeploys an app's routes. Traefik requests an ACME certificate only when its
+// dynamic config changes, so a refresh is what makes it try (and retry) once DNS points here.
+type RouteRefresher interface {
+	RefreshRoutes(ctx context.Context, appID string) error
+}
+
+const refreshEvery = 10 * time.Minute
 
 const (
 	checkEvery        = 30 * time.Second
@@ -54,12 +65,16 @@ const (
 
 func NewDomainChecker(repo ports.DomainRepository, resolver DomainResolver, prober TLSProber, dashboardDomain string) *DomainChecker {
 	return &DomainChecker{repo: repo, resolver: resolver, prober: prober, dashboardDomain: dashboardDomain,
-		traefikAddr: "traefik:443", stepTimeout: 5 * time.Second, now: time.Now}
+		traefikAddr: "traefik:443", stepTimeout: 5 * time.Second, now: time.Now,
+		lastRefresh: map[string]time.Time{}}
 }
+
+// SetRefresher enables route refreshes when a domain is verified.
+func (c *DomainChecker) SetRefresher(r RouteRefresher) { c.refresher = r }
 
 // MarkPending sets a freshly added domain to pending with the initial message.
 func (c *DomainChecker) MarkPending(ctx context.Context, id string) error {
-	return c.repo.UpdateDomainCheck(ctx, id, entities.DomainStatusPending, false, "waiting for DNS check", c.now())
+	return c.repo.UpdateDomainCheck(ctx, id, entities.DomainStatusPending, false, "waiting for DNS check", time.Time{})
 }
 
 // Run checks due domains every 30 s until ctx ends.
@@ -125,20 +140,49 @@ func (c *DomainChecker) Check(ctx context.Context, d *entities.CustomDomain) (*e
 	if err != nil {
 		return d, fmt.Errorf("resolve dashboard domain %s: %w", c.dashboardDomain, err)
 	}
-	status, tlsReady, msg := c.evaluate(ctx, d.Domain, expected)
+	status, tlsReady, msg := c.evaluate(ctx, d, expected)
 	now := c.now()
 	if err := c.repo.UpdateDomainCheck(ctx, d.ID, status, tlsReady, msg, now); err != nil {
 		return d, err
 	}
 	out := *d
 	out.Status, out.TLSReady, out.StatusMessage, out.LastCheckedAt = status, tlsReady, msg, &now
+	if status == entities.DomainStatusVerified {
+		c.maybeRefresh(ctx, d, now)
+	}
 	return &out, nil
 }
 
-func (c *DomainChecker) evaluate(ctx context.Context, domain string, expected []net.IP) (entities.DomainStatus, bool, string) {
+// maybeRefresh redeploys the app's routes when a domain just became verified, and again every 10 min while it stays so.
+func (c *DomainChecker) maybeRefresh(ctx context.Context, prev *entities.CustomDomain, now time.Time) {
+	if c.refresher == nil {
+		return
+	}
+	c.mu.Lock()
+	last, seen := c.lastRefresh[prev.ID]
+	due := prev.Status != entities.DomainStatusVerified || !seen || now.Sub(last) >= refreshEvery
+	if due {
+		c.lastRefresh[prev.ID] = now
+	}
+	c.mu.Unlock()
+	if !due {
+		return
+	}
+	if err := c.refresher.RefreshRoutes(ctx, prev.AppID); err != nil {
+		slog.Warn("domain check: route refresh failed", "domain", prev.Domain, "error", err)
+	}
+}
+
+func (c *DomainChecker) evaluate(ctx context.Context, d *entities.CustomDomain, expected []net.IP) (entities.DomainStatus, bool, string) {
+	domain := d.Domain
 	dctx, cancel := context.WithTimeout(ctx, c.stepTimeout)
 	addrs, err := c.resolver.LookupIPAddr(dctx, domain)
 	cancel()
+	var dnsErr *net.DNSError
+	if err != nil && !(errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
+		// Transient resolver trouble must not demote a domain: keep its state, report the problem.
+		return d.Status, d.TLSReady, "DNS check failed: " + err.Error()
+	}
 	if err != nil || len(addrs) == 0 {
 		return entities.DomainStatusPending, false,
 			fmt.Sprintf("DNS: no A/AAAA record for %s; create an A record to %s", domain, expected[0])
@@ -207,7 +251,8 @@ func joinIPs(addrs []net.IPAddr) string {
 }
 
 // TraefikTLSProber dials Traefik with SNI and full chain verification for the domain.
-// Roots nil means the system roots (Let's Encrypt). The dial itself makes Traefik request the certificate.
+// Roots nil means the system roots (Let's Encrypt). The probe only observes the certificate Traefik serves;
+// getting Traefik to request one is the route refresh's job.
 // A handshake that fails only because the chain does not verify (Traefik's default certificate
 // while ACME is pending) is reported as (false, nil); any other failure is an error.
 type TraefikTLSProber struct{ Roots *x509.CertPool }

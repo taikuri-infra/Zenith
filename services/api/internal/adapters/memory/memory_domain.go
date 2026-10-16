@@ -119,8 +119,11 @@ func (r *MemoryDomainRepository) UpdateDomainCheck(_ context.Context, id string,
 	if !ok {
 		return fmt.Errorf("domain not found: %s", id)
 	}
-	at := checkedAt
-	d.Status, d.TLSReady, d.StatusMessage, d.LastCheckedAt = status, tlsReady, message, &at
+	d.Status, d.TLSReady, d.StatusMessage, d.LastCheckedAt = status, tlsReady, message, nil
+	if !checkedAt.IsZero() {
+		at := checkedAt
+		d.LastCheckedAt = &at
+	}
 	d.UpdatedAt = time.Now()
 	return nil
 }

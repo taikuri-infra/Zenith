@@ -309,7 +309,8 @@ func (d *DockerDeployer) SetDomainRepo(repo ports.DomainRepository) { d.domainRe
 // Empty means no resolver label (Traefik serves its default certificate).
 func (d *DockerDeployer) SetCertResolver(name string) { d.certResolver = name }
 
-// appHosts is the app's generated host plus its active custom domains.
+// appHosts is the app's generated host plus all its custom domains (routed at once,
+// whatever their check status, so Traefik can obtain a certificate once DNS points here).
 func (d *DockerDeployer) appHosts(ctx context.Context, app *entities.App) []string {
 	hosts := []string{fmt.Sprintf("%s.%s", app.Subdomain, d.baseDomain)}
 	if d.domainRepo == nil {
@@ -321,9 +322,6 @@ func (d *DockerDeployer) appHosts(ctx context.Context, app *entities.App) []stri
 		return hosts
 	}
 	for _, cd := range domains {
-		if cd.Status != entities.DomainStatusActive && cd.Status != entities.DomainStatusVerified {
-			continue
-		}
 		// Defense in depth: the domain handler validates on add, but a row
 		// stored before that (or written elsewhere) must never reach the
 		// Traefik Host rule unvalidated.

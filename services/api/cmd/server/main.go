@@ -1337,6 +1337,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	if cfg.IsStandalone() && dockerDeployer != nil {
 		domainChecker := services.NewDomainChecker(domainRepo, net.DefaultResolver, &services.TraefikTLSProber{}, cfg.BaseDomain)
 		domainHandler.SetChecker(domainChecker)
+		domainChecker.SetRefresher(domainHandler)
 		go func() {
 			time.Sleep(15 * time.Second)
 			domainChecker.Run(context.Background())

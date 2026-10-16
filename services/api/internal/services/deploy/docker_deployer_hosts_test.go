@@ -41,7 +41,7 @@ func TestAppHosts(t *testing.T) {
 		ids[c.name] = cd.ID
 	}
 
-	want := []string{"web.example.com", "a.example.org", "b.example.org"}
+	want := []string{"web.example.com", "a.example.org", "b.example.org", "c.example.org", "d.example.org"}
 	if got := sortedCustom(d.appHosts(ctx, app)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("hosts = %v, want %v", got, want)
 	}
@@ -49,8 +49,8 @@ func TestAppHosts(t *testing.T) {
 	if err := repo.DeleteDomain(ctx, ids["a.example.org"]); err != nil {
 		t.Fatal(err)
 	}
-	want = []string{"web.example.com", "b.example.org"}
-	if got := d.appHosts(ctx, app); !reflect.DeepEqual(got, want) {
+	want = []string{"web.example.com", "b.example.org", "c.example.org", "d.example.org"}
+	if got := sortedCustom(d.appHosts(ctx, app)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("after delete hosts = %v, want %v", got, want)
 	}
 }

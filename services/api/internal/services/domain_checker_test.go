@@ -120,11 +120,125 @@ func TestDomainChecker_ActiveGoesBackToPendingWhenDNSMoves(t *testing.T) {
 }
 
 func TestDomainChecker_DashboardUnresolvableSkipsRound(t *testing.T) {
-	c, repo, d := newCheckerForTest(fakeResolver{ips: map[string][]string{}}, &fakeProber{valid: true})
+	p := &fakeProber{valid: true}
+	c, repo, d := newCheckerForTest(fakeResolver{ips: map[string][]string{"app.example.com": {"1.2.3.4"}}}, p)
+	if !c.due(d) {
+		t.Fatal("precondition: never-checked domain must be due")
+	}
 	c.CheckAll(context.Background())
 	stored, _ := repo.GetDomain(context.Background(), d.ID)
-	if stored.Status != entities.DomainStatusPending || stored.StatusMessage != "waiting for DNS check" {
-		t.Fatalf("round must be skipped when the dashboard domain does not resolve: %+v", stored)
+	if p.calls != 0 || stored.Status != entities.DomainStatusPending || stored.StatusMessage != "waiting for DNS check" || stored.LastCheckedAt != nil {
+		t.Fatalf("round must be skipped when the dashboard domain does not resolve: calls=%d %+v", p.calls, stored)
+	}
+}
+
+type recRefresher struct{ apps []string }
+
+func (r *recRefresher) RefreshRoutes(_ context.Context, appID string) error {
+	r.apps = append(r.apps, appID)
+	return nil
+}
+
+func TestDomainChecker_PendingToVerifiedRefreshesRoutes(t *testing.T) {
+	r := fakeResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}}}
+	c, _, d := newCheckerForTest(r, &fakeProber{valid: false})
+	rf := &recRefresher{}
+	c.SetRefresher(rf)
+	got, _ := c.Check(context.Background(), d)
+	if len(rf.apps) != 0 {
+		t.Fatalf("pending must not refresh: %v", rf.apps)
+	}
+	r.ips["app.example.com"] = []string{"1.2.3.4"}
+	got, _ = c.Check(context.Background(), got)
+	if got.Status != entities.DomainStatusVerified || len(rf.apps) != 1 || rf.apps[0] != "app-1" {
+		t.Fatalf("status %s refreshes %v", got.Status, rf.apps)
+	}
+	got, _ = c.Check(context.Background(), got)
+	if len(rf.apps) != 1 {
+		t.Fatalf("no refresh within 10 min: %v", rf.apps)
+	}
+	base := c.now()
+	c.now = func() time.Time { return base.Add(11 * time.Minute) }
+	_, _ = c.Check(context.Background(), got)
+	if len(rf.apps) != 2 {
+		t.Fatalf("refresh after 11 min expected: %v", rf.apps)
+	}
+}
+
+func TestDomainChecker_ActiveDoesNotRefresh(t *testing.T) {
+	c, _, d := newCheckerForTest(fakeResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}, "app.example.com": {"1.2.3.4"}}}, &fakeProber{valid: true})
+	rf := &recRefresher{}
+	c.SetRefresher(rf)
+	got, _ := c.Check(context.Background(), d)
+	if got.Status != entities.DomainStatusActive || len(rf.apps) != 0 {
+		t.Fatalf("%s %v", got.Status, rf.apps)
+	}
+}
+
+type errResolver struct {
+	fakeResolver
+	err error
+}
+
+func (e errResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	if host == "app.example.com" {
+		return nil, e.err
+	}
+	return e.fakeResolver.LookupIPAddr(ctx, host)
+}
+
+func TestDomainChecker_ResolverErrorKeepsActive(t *testing.T) {
+	ok := fakeResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}, "app.example.com": {"1.2.3.4"}}}
+	c, repo, d := newCheckerForTest(ok, &fakeProber{valid: true})
+	got, _ := c.Check(context.Background(), d)
+	c.resolver = errResolver{ok, errors.New("i/o timeout")}
+	got, err := c.Check(context.Background(), got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != entities.DomainStatusActive || !got.TLSReady || got.StatusMessage != "DNS check failed: i/o timeout" {
+		t.Fatalf("got %s/%v %q", got.Status, got.TLSReady, got.StatusMessage)
+	}
+	stored, _ := repo.GetDomain(context.Background(), d.ID)
+	if stored.Status != entities.DomainStatusActive || !stored.TLSReady || stored.LastCheckedAt == nil {
+		t.Fatalf("stored %+v", stored)
+	}
+}
+
+func TestDomainChecker_IPv6FirstStillShowsIPv4(t *testing.T) {
+	c, _, d := newCheckerForTest(fakeResolver{ips: map[string][]string{"zenith.example.com": {"2001:db8::1", "1.2.3.4"}}}, &fakeProber{})
+	got, _ := c.Check(context.Background(), d)
+	if got.StatusMessage != "DNS: no A/AAAA record for app.example.com; create an A record to 1.2.3.4" {
+		t.Fatalf("message = %q", got.StatusMessage)
+	}
+}
+
+type countResolver struct {
+	fakeResolver
+	dashCalls int
+}
+
+func (r *countResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	if host == "zenith.example.com" {
+		r.dashCalls++
+	}
+	return r.fakeResolver.LookupIPAddr(ctx, host)
+}
+
+func TestDomainChecker_ExpectedIPsCached(t *testing.T) {
+	cr := &countResolver{fakeResolver: fakeResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}}}}
+	c, _, d := newCheckerForTest(fakeResolver{}, &fakeProber{})
+	c.resolver = cr
+	_, _ = c.Check(context.Background(), d)
+	_, _ = c.Check(context.Background(), d)
+	if cr.dashCalls != 1 {
+		t.Fatalf("dashboard lookups = %d, want 1", cr.dashCalls)
+	}
+	base := c.now()
+	c.now = func() time.Time { return base.Add(11 * time.Minute) }
+	_, _ = c.Check(context.Background(), d)
+	if cr.dashCalls != 2 {
+		t.Fatalf("dashboard lookups = %d, want 2", cr.dashCalls)
 	}
 }
 

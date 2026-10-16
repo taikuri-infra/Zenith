@@ -176,6 +176,17 @@ func (h *DomainHandler) refreshIngress(ctx context.Context, app *entities.App) {
 	}
 }
 
+// RefreshRoutes redeploys an app so Traefik sees its current domains; the
+// domain checker calls it to make Traefik (re)try the ACME certificate.
+func (h *DomainHandler) RefreshRoutes(ctx context.Context, appID string) error {
+	app, err := h.appRepo.GetApp(ctx, appID)
+	if err != nil {
+		return err
+	}
+	h.refreshIngress(ctx, app)
+	return nil
+}
+
 func toDomainInfo(d *entities.CustomDomain) dto.DomainInfo {
 	var checked *string
 	if d.LastCheckedAt != nil {

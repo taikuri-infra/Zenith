@@ -273,7 +273,7 @@ func TestDomainAddIsPendingWithChecker(t *testing.T) {
 	}
 	var out dto.DomainInfo
 	json.NewDecoder(resp.Body).Decode(&out)
-	if out.Status != entities.DomainStatusPending || out.StatusMessage != "waiting for DNS check" {
+	if out.Status != entities.DomainStatusPending || out.StatusMessage != "waiting for DNS check" || out.LastCheckedAt != nil {
 		t.Fatalf("got %+v", out)
 	}
 }
@@ -328,5 +328,26 @@ func TestDomainVerifyWithoutCheckerIs404(t *testing.T) {
 	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains/"+d.ID+"/verify", nil), -1)
 	if resp.StatusCode != 404 {
 		t.Fatalf("status %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestDomainVerifyUnknownDomainIs404(t *testing.T) {
+	fiberApp, handler, repo, appID := setupDomainTest()
+	handler.SetChecker(services.NewDomainChecker(repo, stubResolver{}, stubProber{}, "zenith.example.com"))
+	fiberApp.Post("/api/v1/apps/:appId/domains/:domainId/verify", injectUserID("user-1"), handler.Verify)
+	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains/nope/verify", nil), -1)
+	if resp.StatusCode != 404 {
+		t.Fatalf("status %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestDomainVerifyCheckerErrorIs502(t *testing.T) {
+	fiberApp, handler, repo, appID := setupDomainTest()
+	handler.SetChecker(services.NewDomainChecker(repo, stubResolver{}, stubProber{}, "zenith.example.com")) // dashboard does not resolve
+	fiberApp.Post("/api/v1/apps/:appId/domains/:domainId/verify", injectUserID("user-1"), handler.Verify)
+	d, _ := repo.AddDomain(context.Background(), appID, "user-1", "app.example.com")
+	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains/"+d.ID+"/verify", nil), -1)
+	if resp.StatusCode != 502 {
+		t.Fatalf("status %d, want 502", resp.StatusCode)
 	}
 }
