@@ -132,15 +132,15 @@ Still untested until it is re-run after F-16 is fixed:
 
 | ID | Severity | Area | Summary | Repro | Issue |
 |----|----------|------|---------|-------|-------|
-| F-01 | low | api-surface | 12 billing/plan/CRM routes are registered in standalone mode | `ZENITH_DUMP_ROUTES=1` dump, §1.1 | #9 |
-| F-02 | medium | auth | Open registration on a public self-host; signup returns 200 but the account can never be verified (no email service) | `POST /api/v1/auth/register`, then login returns 401 | #10 |
-| F-03 | low | build | 3 TypeScript errors in `use-auth.test.ts`; `tsc --noEmit` fails | `cd apps/web && pnpm exec tsc --noEmit` | #11 |
+| F-01 | low (fixed in 2c) | api-surface | 12 billing/plan/CRM routes are registered in standalone mode | `ZENITH_DUMP_ROUTES=1` dump, §1.1 | #9 |
+| F-02 | medium (fixed in 2c) | auth | Open registration on a public self-host; signup returns 200 but the account can never be verified (no email service) | `POST /api/v1/auth/register`, then login returns 401 | #10 |
+| F-03 | low (fixed in 2c) | build | 3 TypeScript errors in `use-auth.test.ts`; `tsc --noEmit` fails | `cd apps/web && pnpm exec tsc --noEmit` | #11 |
 | F-04 | critical | install | Installer fails on every fresh box: `minio/mc` no longer pullable (Docker Hub denied, quay 401) | run install.sh | #12 |
 | F-05 | critical | web/security | Published web image bakes `NEXT_PUBLIC_API_URL=https://api.stage.freezenith.com` (`apps/web/Dockerfile:26` default ARG) and the runtime `env.js` override loses to it; admin credentials are POSTed to the staging host | log in at :3000, watch network | #13 |
 | F-06 | critical | api | Standalone install enforces the SaaS free plan (1 app, 1 db, no Redis, no custom domain, no backups). `domain.go:52` and `gateway.go:36` ignore `UnlimitedMode` even in current source | `POST /apps/:id/domains` returns 403 | #14 |
 | F-07 | high | security | Installer doesn't set `SECRETS_ENCRYPTION_KEY`, so secrets are stored in plaintext | api startup WARN | #15 |
 | F-08 | medium | release | Public images are built by hand (workflow_dispatch), carry no revision, report `version: dev`, and are 3 months behind `main` | `docker image inspect` | #16 |
-| F-09 | low | cli | `zen` help and login describe Hetzner/Zenith Cloud; login needs a 1-hour JWT pasted by hand | `zen --help`, `zen login --help` | #17 |
+| F-09 | low (fixed in 2c) | cli | `zen` help and login describe Hetzner/Zenith Cloud; login needs a 1-hour JWT pasted by hand | `zen --help`, `zen login --help` | #17 |
 | F-10 | high | api | Compose mode wires k8s-only services (Loki, Prometheus, CNPG, backup K8s Jobs) | api startup log | #18 |
 | F-11 | high | web | SaaS/upsell/stage-domain UI shown in standalone: Upgrade to Pro, referral, Hetzner tagline, CNAME to `freezenith.com`, `apps.stage.freezenith.com` URLs | §3 rows 6 and 10 | #19 |
 | F-12 | critical | tls | Dashboard/API routers on the `tls` profile never request a Let's Encrypt cert (self-signed default); `ACME_EMAIL` unused | `curl https://$ZENITH_DOMAIN` fails cert verification | #20 |
@@ -154,12 +154,12 @@ Still untested until it is re-run after F-16 is fixed:
 | F-20 | critical | deploy | Rollback returns 200 then fails silently (`deploy failed`, empty error); image unchanged | `POST /rollback {deployment_id}` | #28 |
 | F-21 | high | deploy | Compose services can't reach each other by compose service name. Network aliases use the prefixed app name (`stack1-db`), not `db` | §6 row 3: `pg_isready -h db` returns no response | |
 | F-22 | medium (fixed in a39b88e) | deploy | Private compose services still get a public Traefik router and an https URL | §6 row 3: `traefik.enable=true` on `stack1-db` | |
-| F-23 | low | web | The Docs page has SaaS content (sign up at freezenith.com, api.freezenith.com examples) | `/docs` | |
-| F-24 | low | web | Plan leftovers: overview "Plan enterprise" tile, deploy wizard "(Pro plan)" resource label; the Databases header count omits MySQL | `/`, the deploy wizard review step, `/databases` | |
-| F-25 | medium | web/auth | The login page shows the SaaS tagline (Hetzner) and Google/GitHub/Sign up, which don't work in self-host (related to F-02) | `/login` | |
-| F-26 | low | api | Custom domain `tls_ready` never becomes true; database env injected on attach is not visible in the Environment tab (legacy table) | `GET /apps/:id/domains`; the app Environment tab | |
+| F-23 | low (fixed in 2c) | web | The Docs page has SaaS content (sign up at freezenith.com, api.freezenith.com examples) | `/docs` | |
+| F-24 | low (fixed in 2c) | web | Plan leftovers: overview "Plan enterprise" tile, deploy wizard "(Pro plan)" resource label; the Databases header count omits MySQL | `/`, the deploy wizard review step, `/databases` | |
+| F-25 | medium (fixed in 2c) | web/auth | The login page shows the SaaS tagline (Hetzner) and Google/GitHub/Sign up, which don't work in self-host (related to F-02) | `/login` | |
+| F-26 | low (fixed in 2c) | api | Custom domain `tls_ready` never becomes true; database env injected on attach is not visible in the Environment tab (legacy table) | `GET /apps/:id/domains`; the app Environment tab | |
 | F-27 | high (fixed in a39b88e) | cli | `zen db list/create/connect` are stubs and never call the API | `zen db list` prints "No databases found" while 4 exist | |
-| F-28 | medium | cli | `zen status` apps section returns 404 (legacy project endpoint) and shows "Plan: free" and a cost estimate | `zen status` | |
+| F-28 | medium (fixed in 2c) | cli | `zen status` apps section returns 404 (legacy project endpoint) and shows "Plan: free" and a cost estimate | `zen status` | |
 
 ## 6. Re-run after 2a
 
@@ -233,3 +233,45 @@ The spec's five success criteria, checked on the live install:
 - The postgres integration test `TestDeploymentCRUD` fails on `main` as well (pre-existing, not from 2b).
 
 **Result:** alpha exit criteria 3 (reboot), 4 (upgrade) and 5 (backup/restore) are met on the live install, and F-08 and F-21 are closed. 2b is complete. 2c is the self-host UI and CLI cleanup.
+
+## 8. After 2c
+
+- **Date / commit / images:** live acceptance on 2026-10-16 23:00–23:15 UTC, branch `feat/alpha-2c-self-host-cleanup` at `df32584` (code at `a4c604b`; `VERSION` `0.1.0-alpha.4`). `zenith-api` and `zenith-web` were built locally from `a4c604b` as `0.1.0-alpha.4` and served from the host's local registry for the upgrade; the public images are published by the GitHub prerelease made at the merge.
+- **Install:** the §7 install at `zenith.freezenith.com`, upgraded in place with `zen upgrade --version 0.1.0-alpha.4` (backup taken first; a first attempt against unpublished ghcr tags failed at `docker compose pull` and rolled back cleanly to alpha.3, which is the designed behaviour). Apps, databases, the custom domain and the legacy env rows from 2a/2b were part of the test. `/api/v1/version` reports `0.1.0-alpha.4` and `"mode":"standalone"`.
+- **Spec:** docs/superpowers/specs/2026-10-16-alpha-2c-self-host-cleanup-design.md. Ledger: `.superpowers/sdd/2026-10-16-alpha-2c-self-host-cleanup/progress.md`.
+- **Harness:** `curl` and the API with the admin's session token; headless Chrome (playwright-core, `--no-sandbox`) logged in as the admin, visiting every core page with the console and failed requests recorded; `zen` built from the branch.
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | No SaaS routes in standalone; registration refused | works | Route dump inside the running container: 387 routes, 0 matching billing/plan/referral/admin CRM (24 fewer than §1.1 listed… the 12 SaaS-looking paths of §1.1 are gone). `POST /api/v1/auth/register` → 403 `{"code":403,"message":"registration is disabled on self-hosted installs; the administrator account is created by the installer"}`. |
+| 2 | Login page, Docs, Overview, wizard, Databases show no SaaS content | works | `/login` and `/login?mode=register` render "Sign in to your account" with the tagline `Self-hosted PaaS`; no Google, GitHub, Sign up, Hetzner or Terms text. Docs page: Compose-only content with "Custom domain and HTTPS", `zen backup`, `zen upgrade`, A record, a link to the releases page. Overview: Apps, Databases and Services Health tiles, no Plan tile, no `/api/v1/plan` request on any page (only a pre-existing `favicon.svg` 404). Deploy wizard steps 1–2: no plan or upgrade copy. Databases header: `6 instances, 6 ready, 3 PostgreSQL, 1 MySQL, 2 Redis`. |
+| 3 | `tsc --noEmit` passes and runs in CI | works | 0 errors locally (the three `use-auth.test.ts` fixtures plus six pre-existing errors fixed); CI "Typecheck frontend" step runs in PR #32 and the `Run Tests` job passes. |
+| 4 | `zen login` with email/password; `zen status`; transparent refresh; `zen logout` | works | `zen login --endpoint https://zenith.freezenith.com --email … ` (password from `ZEN_PASSWORD`) → `Logged in to … as …`; config holds `token`, `refresh_token`, `token_expires_at`. `zen status` prints Server `0.1.0-alpha.4`, all 9 apps with URLs and all 6 databases, no Project/Region/Plan/Cost lines. After forcing `token_expires_at` to 2020 the next `zen status` succeeded and rewrote the expiry. `zen logout` → `Logged out`; `zen status` → `Not logged in — run: zen login`. |
+| 5 | Custom domain pending → verified → active; Check now | partial (DNS flip pending) | Two domains added before DNS existed: both returned `pending` / `waiting for DNS check` at once, and within 30 s the checker stored `DNS: no A/AAAA record for <domain>; create an A record to 161.35.82.211`. The app page's Domains tab and the Networking page show the status, the message, the check time and a Check now button; `POST …/verify` returns 200 with a fresh `last_checked_at` (404 for an unknown id). The pre-existing `myapp.freezenith.com` (DNS already pointing here) was checked on the first round and is `active` with `HTTPS ready`. The pending → verified → active transition on a fresh record (`app2c.freezenith.com`) waits for the A record to be created at the DNS provider, which this host cannot do; it is re-checked at merge time (see 8.2). |
+| 6 | Attached database variable visible read-only in the Environment tab; detach removes it; pre-2c attachments migrated | works | Startup migration log: 2 legacy rows moved to env-v2 (`DATABASE_URL`, `REDIS_URL` of the §6 app); the Environment tab shows them with a `from database` badge, no edit/delete controls, and the read-only hint, next to the manual `AUDIT` and `TOKEN`. Attaching a new Redis to `oth-web`: env-v2 row `REDIS_URL` (`managed_service`, `source_id` = database id) appeared and the app was redeployed within 10 s with `REDIS_URL` in the container (`docker inspect`); detaching removed the row. |
+| 7 | `0.1.0-alpha.4` published and the live install upgraded to it | works (upgrade); publish at merge | Live install upgraded with `zen upgrade` (6 steps, health check passed); the prerelease and the ghcr images follow the squash merge, after which the install is switched from the local registry to the published tags. |
+
+### 8.1 Findings
+
+- **F-01 fixed:** 23 billing/plan/referral/CRM/exit-survey routes are registered only when `ZENITH_MODE=saas`; the standalone route dump has none.
+- **F-02 fixed:** registration returns 403 on self-hosted installs with the message above.
+- **F-03 fixed:** `tsc --noEmit` is clean and runs in CI.
+- **F-09 fixed:** `zen login` takes email and password (MFA supported), stores and refreshes the session; `zen logout`; help text without Zenith Cloud or Hetzner.
+- **F-23, F-24, F-25 fixed:** Compose-only Docs; no plan tile, plan copy or upgrade nudges in standalone (Overview, deploy wizard, MFA banner and six more pages no longer call `/plan`); login page without OAuth, sign-up, SaaS tagline or legal footer; the Databases header counts MySQL.
+- **F-26 fixed:** `status_message`, `last_checked_at` and a DNS + certificate checker with `tls_ready`; `POST …/domains/:id/verify`. Managed-database variables live in env-v2 (`managed_service`) and show in the Environment tab; legacy rows migrate once at startup; a manual variable with the same key is never overwritten.
+- **F-28 fixed:** `zen status` uses the v2 apps route, lists every project when none is selected, and prints no plan or cost on self-host.
+- Also closed from §7.2: the version regex now accepts `-` inside a prerelease.
+- Still open: nothing from §5. The remaining §7.2 items (detached HEAD after rollback, `BUILD_TIME`, test gaps) stay.
+
+### 8.2 Known gaps (deferred, not blocking)
+
+- **DNS flip not yet observed live.** The checker's pending → verified → active transition on a newly created record is covered by unit tests (fake resolver and prober) but was not observed on the live install because no DNS record could be created from the host during acceptance. It is re-run as soon as `app2c.freezenith.com` has its A record.
+- While a domain waits for its certificate the checker refreshes the app's routes (a container recreate, image pull included) at most four times (at once, then after 10 min, 30 min, 2 h), then stops with a message; Check now restarts the schedule. Each refresh restarts the app.
+- The capped message can replace a transient `DNS check failed` message; the checker's in-memory schedule is not pruned for deleted domains.
+- `zen logout` with an already-expired access token does not revoke the refresh token server-side (the request is rejected before the body is read).
+- The Networking page calls the domain endpoints directly, not through the demo-mode switch; a failed list shows the empty state rather than an error.
+- Labs pages (queues, storage, SSO, audit, support) keep their own plan-based gates; the IAM page shows 1/1 members with Invite disabled.
+- No page-level tests for the app page's Domains and Environment tabs; the deploy wizard's review step was not reached by the headless run (its copy is covered by unit tests).
+- A detached database's variable stays in the running container until the next deploy (the Environment tab no longer shows it).
+
+**Result:** the nine §5 findings assigned to 2c are fixed on the live install; the self-host dashboard, API surface and CLI carry no SaaS content; attached databases are visible in the Environment tab; custom domains report DNS and certificate state. One live check (the DNS flip to active) is outstanding on an external DNS record. 2c is complete; next is sub-project 3 (E2E and release).
