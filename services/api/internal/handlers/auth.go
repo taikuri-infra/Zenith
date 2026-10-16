@@ -16,11 +16,16 @@ import (
 )
 
 type AuthHandler struct {
-	svc       *services.AuthService
-	appURL    string // frontend URL for OAuth redirect
-	blacklist *middleware.TokenBlacklist
-	eventRepo ports.UserEventRepository
+	svc                  *services.AuthService
+	appURL               string // frontend URL for OAuth redirect
+	blacklist            *middleware.TokenBlacklist
+	eventRepo            ports.UserEventRepository
+	registrationDisabled bool
 }
+
+// SetRegistrationDisabled turns POST /auth/register into a 403. Self-hosted
+// installs have one administrator, created by the installer.
+func (h *AuthHandler) SetRegistrationDisabled(disabled bool) { h.registrationDisabled = disabled }
 
 func NewAuthHandler(svc *services.AuthService, blacklist *middleware.TokenBlacklist) *AuthHandler {
 	return &AuthHandler{svc: svc, blacklist: blacklist}
@@ -179,6 +184,10 @@ func (h *AuthHandler) MFALogin(c *fiber.Ctx) error {
 
 // Register creates a new user and sends a verification email.
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
+	if h.registrationDisabled {
+		return fiber.NewError(fiber.StatusForbidden,
+			"registration is disabled on self-hosted installs; the administrator account is created by the installer")
+	}
 	var req registerRequest
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
