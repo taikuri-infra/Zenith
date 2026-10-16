@@ -8,6 +8,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
 type prefixEncrypter struct{}
@@ -126,5 +127,81 @@ func TestMigrateManagedEnv_SkipsUnattachedAndNotReady(t *testing.T) {
 	_ = apps.SetEnvVars(context.Background(), appID, map[string]string{"DATABASE_URL": "pg"})
 	if n, err := MigrateManagedEnv(context.Background(), dbs, apps, env); n != 0 || err != nil {
 		t.Fatalf("n=%d err=%v", n, err)
+	}
+}
+
+func seedManual(t *testing.T, vars *memory.MemoryEnvVarRepository, appID string) {
+	t.Helper()
+	if err := vars.SetEnvVar(context.Background(), &entities.AppEnvVar{AppID: appID, Key: "DATABASE_URL", Value: "mine", Source: entities.EnvVarSourceManual}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManagedEnv_SetKeepsManualVariable(t *testing.T) {
+	env, vars, _, appID := managedEnvFixture(t)
+	seedManual(t, vars, appID)
+	if err := env.Set(context.Background(), appID, "DATABASE_URL", "pg", "db-1"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := vars.GetEnvVarsByEnvironment(context.Background(), appID, "")
+	if len(got) != 1 || got[0].Value != "mine" || got[0].Source != entities.EnvVarSourceManual {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestManagedEnv_ClearKeepsManualVariable(t *testing.T) {
+	env, vars, _, appID := managedEnvFixture(t)
+	seedManual(t, vars, appID)
+	_ = env.Set(context.Background(), appID, "DATABASE_URL", "pg", "db-1")
+	if err := env.Clear(context.Background(), appID, "db-1"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := vars.GetEnvVarsByEnvironment(context.Background(), appID, "")
+	if len(got) != 1 || got[0].Value != "mine" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestMigrateManagedEnv_ManualVariableWins(t *testing.T) {
+	env, vars, apps, appID := managedEnvFixture(t)
+	dbs := memory.NewMemoryDatabaseRepository()
+	readyDB(t, dbs, appID, entities.DatabaseEnginePostgres, "pg1")
+	seedManual(t, vars, appID)
+	_ = apps.SetEnvVars(context.Background(), appID, map[string]string{"DATABASE_URL": "legacy"})
+	n, err := MigrateManagedEnv(context.Background(), dbs, apps, env)
+	if n != 0 || err != nil {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	legacy, _ := apps.GetEnvVars(context.Background(), appID)
+	v2, _ := vars.GetEnvVarsByEnvironment(context.Background(), appID, "")
+	if len(legacy) != 1 || len(v2) != 1 || v2[0].Value != "mine" || v2[0].Source != entities.EnvVarSourceManual {
+		t.Fatalf("legacy=%+v v2=%+v", legacy, v2)
+	}
+}
+
+// twoPostgres lists two ready Postgres databases on one app (the memory repo cannot create that itself).
+type twoPostgres struct {
+	ports.DatabaseRepository
+	appID string
+}
+
+func (r twoPostgres) ListDatabasesByStatus(context.Context, entities.DatabaseStatus) ([]entities.UserDatabase, error) {
+	return []entities.UserDatabase{
+		{ID: "a", AppID: r.appID, Name: "a", Engine: entities.DatabaseEnginePostgres},
+		{ID: "b", AppID: r.appID, Name: "b", Engine: entities.DatabaseEnginePostgres},
+	}, nil
+}
+
+func TestMigrateManagedEnv_AmbiguousSameEngineSkipped(t *testing.T) {
+	env, vars, apps, appID := managedEnvFixture(t)
+	_ = apps.SetEnvVars(context.Background(), appID, map[string]string{"DATABASE_URL": "legacy"})
+	n, err := MigrateManagedEnv(context.Background(), twoPostgres{memory.NewMemoryDatabaseRepository(), appID}, apps, env)
+	if n != 0 || err != nil {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	legacy, _ := apps.GetEnvVars(context.Background(), appID)
+	v2, _ := vars.GetEnvVarsByEnvironment(context.Background(), appID, "")
+	if len(legacy) != 1 || len(v2) != 0 {
+		t.Fatalf("legacy=%+v v2=%+v", legacy, v2)
 	}
 }

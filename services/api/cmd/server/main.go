@@ -896,13 +896,16 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	dbHandlerV2 := handlers.NewDatabaseHandlerV2(dbSvc, dbRepo, appRepo, msRepo)
-	managedEnv := services.NewManagedEnv(envVarRepo, appRepo)
-	if envCrypto != nil {
-		managedEnv.SetEncrypter(envCrypto)
-	}
-	dbHandlerV2.SetManagedEnv(managedEnv)
-	if dbSvc != nil {
-		dbSvc.SetManagedEnv(managedEnv)
+	var managedEnv *services.ManagedEnv
+	if cfg.IsStandalone() {
+		managedEnv = services.NewManagedEnv(envVarRepo, appRepo)
+		if envCrypto != nil {
+			managedEnv.SetEncrypter(envCrypto)
+		}
+		dbHandlerV2.SetManagedEnv(managedEnv)
+		if dbSvc != nil {
+			dbSvc.SetManagedEnv(managedEnv)
+		}
 	}
 	if cfg.Mode != "saas" && dockerDeployerCli != nil {
 		dockerDBBackend := deploy.NewDockerDBBackend(dockerDeployerCli, cfg.AppNetwork)

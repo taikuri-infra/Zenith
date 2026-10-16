@@ -67,11 +67,29 @@ func (m *ManagedEnv) Set(ctx context.Context, appID, key, value, dbID string) er
 }
 
 // SetRaw upserts an already-stored value (used by the migration, which must not re-encrypt).
+// A variable the user set themselves under the same key is never overwritten.
 func (m *ManagedEnv) SetRaw(ctx context.Context, appID, key, storedValue, dbID string) error {
-	return m.vars.SetEnvVar(ctx, &entities.AppEnvVar{
+	_, err := m.setRaw(ctx, appID, key, storedValue, dbID)
+	return err
+}
+
+// setRaw reports whether the value was written (false when a non-managed variable takes precedence).
+func (m *ManagedEnv) setRaw(ctx context.Context, appID, key, storedValue, dbID string) (bool, error) {
+	existing, err := m.vars.GetEnvVarsByEnvironment(ctx, appID, "")
+	if err != nil {
+		return false, err
+	}
+	for _, v := range existing {
+		if v.Key == key && v.Source != entities.EnvVarSourceManagedService {
+			slog.Warn(fmt.Sprintf("managed env: manual variable %s on app %s takes precedence over database %s", key, appID, dbID))
+			return false, nil
+		}
+	}
+	err = m.vars.SetEnvVar(ctx, &entities.AppEnvVar{
 		AppID: appID, EnvironmentID: "", Key: key, Value: storedValue, IsSecret: true,
 		Source: entities.EnvVarSourceManagedService, SourceID: dbID,
 	})
+	return err == nil, err
 }
 
 // Clear deletes the variables that database dbID injected into appID; other sources and databases are untouched.
@@ -112,10 +130,25 @@ func MigrateManagedEnv(ctx context.Context, dbs ports.DatabaseRepository, apps p
 	if err != nil {
 		return 0, err
 	}
+	type group struct{ appID, key string }
+	counts := map[group]int{}
+	for i := range ready {
+		if ready[i].AppID != "" {
+			counts[group{ready[i].AppID, EnvKeyForEngine(ready[i].Engine)}]++
+		}
+	}
+	warned := map[group]bool{}
 	migrated := 0
 	for i := range ready {
 		db := &ready[i]
 		if db.AppID == "" {
+			continue
+		}
+		if g := (group{db.AppID, EnvKeyForEngine(db.Engine)}); counts[g] > 1 {
+			if !warned[g] {
+				warned[g] = true
+				slog.Warn(fmt.Sprintf("managed env migration: app %s has %d ready %s databases; cannot attribute %s, skipping", g.appID, counts[g], db.Engine, g.key))
+			}
 			continue
 		}
 		has, err := env.Has(ctx, db.AppID, db.ID)
@@ -132,8 +165,12 @@ func MigrateManagedEnv(ctx context.Context, dbs ports.DatabaseRepository, apps p
 			if l.Key != key {
 				continue
 			}
-			if err := env.SetRaw(ctx, db.AppID, key, l.Value, db.ID); err != nil {
+			written, err := env.setRaw(ctx, db.AppID, key, l.Value, db.ID)
+			if err != nil {
 				slog.Warn("managed env migration: copy failed; legacy row kept", "app", db.AppID, "key", key, "error", err)
+				break
+			}
+			if !written {
 				break
 			}
 			if err := apps.DeleteEnvVar(ctx, db.AppID, key); err != nil {
