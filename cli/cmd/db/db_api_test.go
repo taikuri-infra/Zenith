@@ -22,17 +22,17 @@ func (f *fakeAPI) server(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == "GET" && r.URL.Path == "/api/v1/projects":
-			_, _ = w.Write([]byte(`{"items":[{"id":"p-1","name":"shop"},{"id":"p-2","name":"blog"}]}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"p-1","name":"shop"},{"id":"p-2","name":"blog"}]}`))
 		case r.Method == "GET" && r.URL.Path == "/api/v1/databases":
 			f.listQuery = r.URL.Query().Get("project_id")
-			_, _ = w.Write([]byte(`[{"id":"db-1","name":"main","engine":"postgresql","status":"ready","port":5432},
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`[{"id":"db-1","name":"main","engine":"postgresql","status":"ready","port":5432},
 				{"id":"db-2","name":"cache","engine":"redis","status":"provisioning","port":6379}]`))
 		case r.Method == "POST" && r.URL.Path == "/api/v1/databases":
 			_ = json.NewDecoder(r.Body).Decode(&f.created)
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"id":"db-3","name":"orders","engine":"mysql","status":"provisioning"}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"id":"db-3","name":"orders","engine":"mysql","status":"provisioning"}`))
 		case r.Method == "GET" && r.URL.Path == "/api/v1/databases/db-1":
-			_, _ = w.Write([]byte(`{"id":"db-1","name":"main","engine":"postgresql","status":"ready","host_port":49153,"connection_string":"postgresql://u:p@zenith-db-db1:5432/main"}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"id":"db-1","name":"main","engine":"postgresql","status":"ready","host_port":49153,"connection_string":"postgresql://u:p@zenith-db-db1:5432/main"}`))
 		default:
 			http.NotFound(w, r)
 		}

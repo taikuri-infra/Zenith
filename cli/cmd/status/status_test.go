@@ -2,7 +2,7 @@ package status
 
 import (
 	"bytes"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -326,26 +326,26 @@ func statusServer(t *testing.T, mode string, queries map[string][]string) *httpt
 		pid := r.URL.Query().Get("project_id")
 		switch r.URL.Path {
 		case "/api/v1/version":
-			fmt.Fprintf(w, `{"version":"0.1.0-alpha.4","build_time":"x","go_version":"go","mode":%q}`, mode)
+			json.NewEncoder(w).Encode(map[string]any{"version": "0.1.0-alpha.4", "build_time": "x", "go_version": "go", "mode": mode})
 		case "/api/v1/projects":
-			w.Write([]byte(`{"items":[{"id":"p1","name":"default","display_name":"Default","plan":"free","region":""},{"id":"p2","name":"shop","display_name":"Shop","plan":"free","region":""}]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"p1","name":"default","display_name":"Default","plan":"free","region":""},{"id":"p2","name":"shop","display_name":"Shop","plan":"free","region":""}]}`))
 		case "/api/v1/apps":
 			switch pid {
 			case "":
-				w.Write([]byte(`{"items":[{"id":"a1","name":"whoami","status":"running","url":"https://whoami.example.com"},{"id":"a2","name":"storefront","status":"running","url":"https://storefront.example.com"}]}`))
+				json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"a1","name":"whoami","status":"running","url":"https://whoami.example.com"},{"id":"a2","name":"storefront","status":"running","url":"https://storefront.example.com"}]}`))
 			case "p1":
-				w.Write([]byte(`{"items":[{"id":"a1","name":"whoami","status":"running","url":"https://whoami.example.com"}]}`))
+				json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"a1","name":"whoami","status":"running","url":"https://whoami.example.com"}]}`))
 			default:
-				w.Write([]byte(`{"items":[]}`))
+				json.NewEncoder(w).Encode(json.RawMessage(`{"items":[]}`))
 			}
 		case "/api/v1/databases":
 			switch pid {
 			case "":
-				w.Write([]byte(`[{"id":"d1","name":"pg1","engine":"postgresql","status":"ready"},{"id":"d2","name":"shopdb","engine":"mysql","status":"ready"}]`))
+				json.NewEncoder(w).Encode(json.RawMessage(`[{"id":"d1","name":"pg1","engine":"postgresql","status":"ready"},{"id":"d2","name":"shopdb","engine":"mysql","status":"ready"}]`))
 			case "p1":
-				w.Write([]byte(`[{"id":"d1","name":"pg1","engine":"postgresql","status":"ready"}]`))
+				json.NewEncoder(w).Encode(json.RawMessage(`[{"id":"d1","name":"pg1","engine":"postgresql","status":"ready"}]`))
 			default:
-				w.Write([]byte(`[]`))
+				json.NewEncoder(w).Encode(json.RawMessage(`[]`))
 			}
 		default:
 			w.WriteHeader(404)

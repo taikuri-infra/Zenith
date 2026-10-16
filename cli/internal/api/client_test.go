@@ -113,7 +113,7 @@ func TestGetProject(t *testing.T) {
 func TestAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("unauthorized"))
+		json.NewEncoder(w).Encode("unauthorized")
 	}))
 	defer server.Close()
 
@@ -148,7 +148,7 @@ func TestAPIError_StatusCodes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.body))
+				json.NewEncoder(w).Encode(tt.body)
 			}))
 			defer server.Close()
 
@@ -273,7 +273,7 @@ func TestCreateApp(t *testing.T) {
 func TestCreateApp_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte("app already exists"))
+		json.NewEncoder(w).Encode("app already exists")
 	}))
 	defer server.Close()
 
@@ -308,7 +308,7 @@ func TestRedeploy(t *testing.T) {
 func TestRedeploy_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("app not found"))
+		json.NewEncoder(w).Encode("app not found")
 	}))
 	defer server.Close()
 
@@ -323,7 +323,7 @@ func TestListDatabases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"items":[{"id":"project-1","name":"project-1"}]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"project-1","name":"project-1"}]}`))
 			return
 		}
 		if r.Method != "GET" {
@@ -355,7 +355,7 @@ func TestListDatabases_URLConstruction(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"items":[{"id":"pid-1","name":"my-project"}]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"pid-1","name":"my-project"}]}`))
 			return
 		}
 		capturedPath = r.URL.Path
@@ -377,7 +377,7 @@ func TestCreateDatabase(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"items":[{"id":"project-1","name":"project-1"}]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"project-1","name":"project-1"}]}`))
 			return
 		}
 		if r.Method != "POST" {
@@ -459,7 +459,7 @@ func TestGetDatabase(t *testing.T) {
 func TestGetDatabase_NotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("database not found"))
+		json.NewEncoder(w).Encode("database not found")
 	}))
 	defer server.Close()
 
@@ -613,7 +613,7 @@ func TestListDatabases_EmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"items":[{"id":"project-1","name":"project-1"}]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"project-1","name":"project-1"}]}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

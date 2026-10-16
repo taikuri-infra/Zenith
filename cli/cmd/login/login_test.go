@@ -15,7 +15,7 @@ func TestLoginWithPasswordSavesSession(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/auth/login":
-			w.Write([]byte(`{"access_token":"acc","refresh_token":"ref","token_type":"Bearer","expires_in":3600}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"access_token":"acc","refresh_token":"ref","token_type":"Bearer","expires_in":3600}`))
 		default:
 			w.WriteHeader(404)
 		}
@@ -41,14 +41,14 @@ func TestLoginMFAPrompt(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/auth/login":
-			w.Write([]byte(`{"mfa_required":true,"mfa_token":"m1"}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"mfa_required":true,"mfa_token":"m1"}`))
 		case "/api/v1/auth/login/mfa":
 			var body map[string]string
 			json.NewDecoder(r.Body).Decode(&body)
 			if body["code"] != "000111" {
 				t.Errorf("code = %q", body["code"])
 			}
-			w.Write([]byte(`{"access_token":"acc","refresh_token":"ref","token_type":"Bearer","expires_in":3600}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"access_token":"acc","refresh_token":"ref","token_type":"Bearer","expires_in":3600}`))
 		}
 	}))
 	defer srv.Close()
@@ -67,7 +67,7 @@ func TestLoginMFAPrompt(t *testing.T) {
 func TestLoginWrongPassword(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)
-		w.Write([]byte(`{"error":"invalid credentials"}`))
+		json.NewEncoder(w).Encode(json.RawMessage(`{"error":"invalid credentials"}`))
 	}))
 	defer srv.Close()
 	err := runLoginTo(&bytes.Buffer{}, loginInputs{endpoint: srv.URL, email: "a@b.c", password: "bad", configPath: filepath.Join(t.TempDir(), "c.yaml")})

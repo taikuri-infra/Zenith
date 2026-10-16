@@ -751,7 +751,7 @@ func TestFetchRemoteDatabases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

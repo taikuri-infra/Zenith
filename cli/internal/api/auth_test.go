@@ -11,9 +11,8 @@ import (
 	"time"
 )
 
-func tokenJSON(access, refresh string, expiresIn int) string {
-	b, _ := json.Marshal(map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer", "expires_in": expiresIn})
-	return string(b)
+func tokenJSON(access, refresh string, expiresIn int) map[string]any {
+	return map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer", "expires_in": expiresIn}
 }
 
 func TestLoginWithPassword(t *testing.T) {
@@ -26,7 +25,7 @@ func TestLoginWithPassword(t *testing.T) {
 		if body["email"] != "a@b.c" || body["password"] != "pw" {
 			t.Errorf("body = %v", body)
 		}
-		w.Write([]byte(tokenJSON("acc", "ref", 3600)))
+		json.NewEncoder(w).Encode(tokenJSON("acc", "ref", 3600))
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, "")
@@ -47,14 +46,14 @@ func TestLoginWithPassword_MFARequired(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/auth/login":
-			w.Write([]byte(`{"mfa_required":true,"mfa_token":"mfa-1"}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"mfa_required":true,"mfa_token":"mfa-1"}`))
 		case "/api/v1/auth/login/mfa":
 			var body map[string]string
 			json.NewDecoder(r.Body).Decode(&body)
 			if body["mfa_token"] != "mfa-1" || body["code"] != "123456" {
 				t.Errorf("body = %v", body)
 			}
-			w.Write([]byte(tokenJSON("acc2", "ref2", 3600)))
+			json.NewEncoder(w).Encode(tokenJSON("acc2", "ref2", 3600))
 		}
 	}))
 	defer srv.Close()
@@ -81,12 +80,12 @@ func TestClient_RefreshesBeforeExpiry(t *testing.T) {
 			if body["refresh_token"] != "ref" {
 				t.Errorf("body = %v", body)
 			}
-			w.Write([]byte(tokenJSON("fresh", "ref2", 3600)))
+			json.NewEncoder(w).Encode(tokenJSON("fresh", "ref2", 3600))
 		case "/api/v1/projects":
 			if r.Header.Get("Authorization") != "Bearer fresh" {
 				t.Errorf("Authorization = %q", r.Header.Get("Authorization"))
 			}
-			w.Write([]byte(`{"items":[]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[]}`))
 		}
 	}))
 	defer srv.Close()
@@ -107,13 +106,13 @@ func TestClient_RefreshesAndRetriesOn401(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/auth/refresh":
-			w.Write([]byte(tokenJSON("fresh", "ref", 3600)))
+			json.NewEncoder(w).Encode(tokenJSON("fresh", "ref", 3600))
 		case "/api/v1/projects":
 			if atomic.AddInt32(&calls, 1) == 1 {
 				w.WriteHeader(401)
 				return
 			}
-			w.Write([]byte(`{"items":[]}`))
+			json.NewEncoder(w).Encode(json.RawMessage(`{"items":[]}`))
 		}
 	}))
 	defer srv.Close()

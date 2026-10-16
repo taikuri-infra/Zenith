@@ -12,16 +12,16 @@ func TestDatabasesUseStandaloneEndpoints(t *testing.T) {
 	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
-			_, _ = w.Write([]byte(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"items":[{"id":"proj-uuid-1","name":"default"}]}`))
 			return
 		}
 		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
 		if r.Method == "POST" {
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			_, _ = w.Write([]byte(`{"name":"pg","engine":"postgresql","status":"provisioning","port":5432}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"name":"pg","engine":"postgresql","status":"provisioning","port":5432}`))
 			return
 		}
-		_, _ = w.Write([]byte(`[{"name":"pg","engine":"postgresql","status":"ready","port":5432}]`))
+		_ = json.NewEncoder(w).Encode(json.RawMessage(`[{"name":"pg","engine":"postgresql","status":"ready","port":5432}]`))
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, "tok")
@@ -40,14 +40,14 @@ func TestDatabasesUnresolvableProject(t *testing.T) {
 	dbCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/projects" {
-			_, _ = w.Write([]byte(`{"items":[]}`))
+			_ = json.NewEncoder(w).Encode(json.RawMessage(`{"items":[]}`))
 			return
 		}
 		dbCalls++
 		if r.Method == "POST" {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 		}
-		_, _ = w.Write([]byte(`{"name":"pg"}`))
+		_ = json.NewEncoder(w).Encode(json.RawMessage(`{"name":"pg"}`))
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, "tok")

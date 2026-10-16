@@ -1,6 +1,7 @@
 package selfupdate
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -54,7 +55,7 @@ func TestEqualHex(t *testing.T) {
 func TestLatestRelease(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"tag_name":"zen-v0.2.0","assets":[{"name":"zen_linux_amd64","browser_download_url":"https://x/z"}]}`))
+		_ = json.NewEncoder(w).Encode(json.RawMessage(`{"tag_name":"zen-v0.2.0","assets":[{"name":"zen_linux_amd64","browser_download_url":"https://x/z"}]}`))
 	}))
 	defer srv.Close()
 
