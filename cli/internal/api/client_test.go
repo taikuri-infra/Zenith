@@ -199,20 +199,22 @@ func TestListApps(t *testing.T) {
 }
 
 func TestListApps_URLConstruction(t *testing.T) {
-	var capturedPath string
+	var capturedURI string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedPath = r.URL.Path
+		capturedURI = r.URL.RequestURI()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"items": []interface{}{}})
 	}))
 	defer server.Close()
 
 	c := NewClient(server.URL, "test-token")
-	c.ListApps("my-project")
-
-	expectedPath := "/api/v1/projects/my-project/apps"
-	if capturedPath != expectedPath {
-		t.Errorf("Expected path '%s', got '%s'", expectedPath, capturedPath)
+	c.ListApps("my project")
+	if want := "/api/v1/apps?project_id=my+project"; capturedURI != want {
+		t.Errorf("Expected '%s', got '%s'", want, capturedURI)
+	}
+	c.ListApps("")
+	if want := "/api/v1/apps"; capturedURI != want {
+		t.Errorf("Expected '%s', got '%s'", want, capturedURI)
 	}
 }
 

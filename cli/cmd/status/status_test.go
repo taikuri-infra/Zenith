@@ -1,10 +1,16 @@
 package status
 
 import (
+	"bytes"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	cliapi "github.com/dotechhq/zenith/cli/internal/api"
+	"github.com/dotechhq/zenith/cli/internal/config"
 )
 
 func TestRenderProgressBar(t *testing.T) {
@@ -306,4 +312,59 @@ func lipglossTestHeaderStyle() lipgloss.Style {
 
 func lipglossTestCellStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Padding(0, 1)
+}
+
+func statusServer(t *testing.T, mode string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/version":
+			fmt.Fprintf(w, `{"version":"0.1.0-alpha.4","build_time":"x","go_version":"go","mode":%q}`, mode)
+		case "/api/v1/projects":
+			w.Write([]byte(`{"items":[{"id":"p1","name":"default","display_name":"Default","plan":"free","region":""}]}`))
+		case "/api/v1/apps":
+			if r.URL.Query().Get("project_id") != "p1" {
+				t.Errorf("apps must be filtered by project_id, got %q", r.URL.RawQuery)
+			}
+			w.Write([]byte(`{"items":[{"id":"a1","name":"whoami","status":"running","url":"https://whoami.example.com"}]}`))
+		case "/api/v1/databases":
+			w.Write([]byte(`[{"id":"d1","name":"pg1","engine":"postgresql","status":"ready"}]`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+}
+
+func TestRenderStatusStandalone(t *testing.T) {
+	srv := statusServer(t, "standalone")
+	defer srv.Close()
+	cfg := &config.Config{APIEndpoint: srv.URL, Token: "t"}
+	var out bytes.Buffer
+	if err := renderStatus(&out, cliapi.NewClientFromConfig(cfg), cfg); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	for _, want := range []string{"0.1.0-alpha.4", srv.URL, "whoami", "https://whoami.example.com", "pg1", "postgresql"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("output lacks %q:\n%s", want, s)
+		}
+	}
+	for _, no := range []string{"Plan", "Cost", "Region"} {
+		if strings.Contains(s, no) {
+			t.Errorf("standalone output must not contain %q:\n%s", no, s)
+		}
+	}
+}
+
+func TestRenderStatusSaaSKeepsPlan(t *testing.T) {
+	srv := statusServer(t, "saas")
+	defer srv.Close()
+	cfg := &config.Config{APIEndpoint: srv.URL, Token: "t"}
+	var out bytes.Buffer
+	if err := renderStatus(&out, cliapi.NewClientFromConfig(cfg), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Plan") {
+		t.Fatalf("saas output must keep the plan line:\n%s", out.String())
+	}
 }

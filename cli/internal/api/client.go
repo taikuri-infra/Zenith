@@ -147,7 +147,7 @@ type App struct {
 func (c *Client) ListApps(projectID string) ([]App, error) {
 	path := "/api/v1/apps"
 	if projectID != "" {
-		path = fmt.Sprintf("/api/v1/projects/%s/apps", projectID)
+		path += "?project_id=" + url.QueryEscape(projectID)
 	}
 	var resp struct {
 		Items []App `json:"items"`
@@ -156,6 +156,18 @@ func (c *Client) ListApps(projectID string) ([]App, error) {
 		return nil, err
 	}
 	return resp.Items, nil
+}
+
+// ServerInfo is GET /api/v1/version.
+type ServerInfo struct {
+	Version string `json:"version"`
+	Mode    string `json:"mode"`
+}
+
+func (c *Client) ServerInfo() (ServerInfo, error) {
+	var info ServerInfo
+	err := c.do("GET", "/api/v1/version", nil, &info)
+	return info, err
 }
 
 func (c *Client) CreateApp(projectID string, app *App) (*App, error) {
