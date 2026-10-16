@@ -250,7 +250,7 @@ export default function GatewayPage() {
   const [selectedGwId, setSelectedGwId] = useState<string | null>(null);
   const activeGw = gwList?.find((g: ApiGateway) => g.id === selectedGwId) ?? gwList?.[0] ?? null;
 
-  const { data: routes, loading: routesLoading, refetch: routesRefetch } = useApi(
+  const { data: routes, loading: routesLoading, refetch: routesRefetch } = useApi<GatewayRouteInfo[]>(
     () => activeGw ? gateways.listRoutes(activeGw.id) : Promise.resolve([]), [activeGw?.id]);
   const { data: groups, refetch: groupsRefetch } = useApi(
     () => activeGw ? gateways.listGroups(activeGw.id) : Promise.resolve([]), [activeGw?.id]);

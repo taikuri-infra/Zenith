@@ -12,6 +12,7 @@ import { useProject } from "@/hooks/use-project";
 import { getApi } from "@/lib/get-api";
 import { type AppDatabase } from "@/lib/api";
 import { engineOptions } from "@/lib/database-engines";
+import { databaseSummary } from "@/lib/database-summary";
 import { IS_STANDALONE } from "@/lib/runtime-env";
 import Link from "next/link";
 import { useState } from "react";
@@ -104,9 +105,6 @@ export default function DatabasesPage() {
   }
 
   const dbs: AppDatabase[] = dbList || [];
-  const readyCount = dbs.filter((d) => d.status === "ready").length;
-  const pgCount = dbs.filter((d) => d.engine === "postgresql").length;
-  const redisCount = dbs.filter((d) => d.engine === "redis").length;
 
   return (
     <Shell>
@@ -115,9 +113,7 @@ export default function DatabasesPage() {
           <div>
             <h1 className="text-lg font-semibold text-white">Databases</h1>
             <p className="text-sm text-neutral-500">
-              {dbs.length} instances, {readyCount} ready
-              {pgCount > 0 ? `, ${pgCount} PostgreSQL` : ""}
-              {redisCount > 0 ? `, ${redisCount} Redis` : ""}
+              {databaseSummary(dbs)}
             </p>
           </div>
           <button

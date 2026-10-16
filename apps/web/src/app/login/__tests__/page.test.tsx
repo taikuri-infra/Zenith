@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
+vi.mock("@/lib/runtime-env", () => ({ IS_STANDALONE: false }));
+
 // Mock next/navigation
 vi.mock("next/navigation", () => ({
   useRouter: () => ({

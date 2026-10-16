@@ -65,7 +65,7 @@ export default function OverviewPage() {
 
   const {
     data: planData,
-  } = useApi(() => userPlan.get(), []);
+  } = useApi(() => (SHOW_PLANS ? userPlan.get() : Promise.resolve(null)), []);
 
   const { onboarding } = getApi();
   const {
@@ -274,13 +274,15 @@ export default function OverviewPage() {
             value={totalServices > 0 ? `${Math.round((healthyServices / totalServices) * 100)}%` : "--"}
             sub={totalServices > 0 ? `${healthyServices}/${totalServices} healthy` : "no services"}
           />
+          {SHOW_PLANS && (
+            <StatCard
+              label="Plan"
+              value={planData?.tier || "--"}
+              sub={project?.slug || ""}
+            />
+          )}
           <StatCard
-            label="Plan"
-            value={planData?.tier || "--"}
-            sub={project?.slug || ""}
-          />
-          <StatCard
-            label="Legacy Apps"
+            label="Apps"
             value={`${runningApps}/${appList.length}`}
             sub={`${runningApps} running`}
           />

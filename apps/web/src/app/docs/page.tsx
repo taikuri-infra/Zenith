@@ -13,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { useState } from "react";
+import { IS_STANDALONE } from "@/lib/runtime-env";
 
 function CodeBlock({ code, lang = "bash" }: { code: string; lang?: string }) {
   const [copied, setCopied] = useState(false);
@@ -65,7 +66,7 @@ function Step({
   );
 }
 
-export default function DocsPage() {
+function SaasDocs() {
   return (
     <Shell>
       <div className="mx-auto max-w-3xl space-y-8">
@@ -282,4 +283,107 @@ export async function POST(req: Request) {
       </div>
     </Shell>
   );
+}
+
+function dashboardOrigin(): string {
+  return typeof window !== "undefined" ? window.location.origin : "https://<your-dashboard-domain>";
+}
+
+function StandaloneDocs() {
+  const origin = dashboardOrigin();
+  return (
+    <Shell>
+      <div className="mx-auto max-w-3xl space-y-8">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Rocket className="h-5 w-5 text-accent-400" />
+            <h1 className="text-lg font-semibold text-white">Deploy an app on your own server</h1>
+          </div>
+          <p className="text-sm text-neutral-500">
+            Zenith runs on this server with Docker Compose. Everything below works from the dashboard or the zen CLI.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface-100 p-4">
+          <h2 className="mb-2 text-sm font-medium text-white">Prerequisites</h2>
+          <ul className="space-y-1 text-xs text-neutral-400">
+            <li>The administrator account the installer created (ADMIN_EMAIL / ADMIN_PASSWORD)</li>
+            <li>A container image or a docker-compose.yml for your app</li>
+            <li>Optional: the zen CLI on your laptop</li>
+          </ul>
+          <div className="mt-3">
+            <CodeBlock code={`curl -fsSL https://github.com/taikuri-infra/Zenith/releases/latest/download/zen_linux_amd64 -o zen && chmod +x zen
+./zen login --endpoint ${origin}`} />
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          <Step number={1} title="Create an app" icon={GitBranch}>
+            <p>
+              Go to <strong className="text-white">Apps</strong> → <strong className="text-white">New App</strong>. Deploy a public image
+              (for example <code className="text-neutral-300">traefik/whoami:latest</code>) or paste a docker-compose.yml. Each service
+              of a compose file becomes an app in the same project, and services reach each other by their compose service name.
+            </p>
+            <CodeBlock code={`zen deploy --image traefik/whoami:latest`} />
+          </Step>
+
+          <Step number={2} title="Add a database and attach it" icon={Database}>
+            <p>
+              <strong className="text-white">Databases</strong> → <strong className="text-white">Create Database</strong> (PostgreSQL, MySQL or Redis).
+              Attach it to an app: the connection string is injected as <code className="text-neutral-300">DATABASE_URL</code>,
+              <code className="text-neutral-300">MYSQL_URL</code> or <code className="text-neutral-300">REDIS_URL</code> and the app restarts.
+              From your laptop, open an SSH tunnel to the database:
+            </p>
+            <CodeBlock code={`zen db connect <name> --tunnel`} />
+          </Step>
+
+          <Step number={3} title="Environment variables and secrets" icon={Shield}>
+            <p>
+              The app&apos;s <strong className="text-white">Environment</strong> tab holds plain variables and secrets; secrets are stored encrypted
+              and masked. Variables injected by an attached database are read-only there; detach the database to remove them.
+              Click <strong className="text-white">Restart now</strong> after a change.
+            </p>
+          </Step>
+
+          <Step number={4} title="Custom domain and HTTPS" icon={Globe}>
+            <p>
+              Create an <strong className="text-white">A record</strong> for your domain pointing at this server&apos;s public IP, then add the domain in the app&apos;s
+              <strong className="text-white"> Domains</strong> tab. The domain shows <em>pending</em> until DNS points here, <em>verified</em> while the
+              certificate is being issued, and <em>active</em> when HTTPS works. Use <strong className="text-white">Check now</strong> to re-check at once.
+            </p>
+          </Step>
+
+          <Step number={5} title="Logs and rollback" icon={Terminal}>
+            <p>
+              The <strong className="text-white">Logs</strong> tab streams the container&apos;s output. <strong className="text-white">Deployments</strong> lists every
+              release; <strong className="text-white">Rollback</strong> redeploys a previous image and keeps the domain and variables.
+            </p>
+            <CodeBlock code={`zen logs <app> --follow`} />
+          </Step>
+
+          <Step number={6} title="Backup and upgrade" icon={HardDrive}>
+            <p>
+              On the server, one archive holds the platform database, object storage, every managed database and the config.
+              Upgrades take a backup first and roll back on a failed health check.
+            </p>
+            <CodeBlock code={`zen backup
+zen backup restore <archive>
+zen upgrade --version <next>`} />
+          </Step>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface-100 p-5">
+          <h2 className="mb-3 text-sm font-medium text-white">API</h2>
+          <p className="mb-2 text-xs text-neutral-400">The dashboard uses the same API. Log in to get a token, then call it with a Bearer header.</p>
+          <CodeBlock code={`curl -s ${origin}/api/v1/auth/login -H 'Content-Type: application/json' \\
+  -d '{"email":"you@example.com","password":"…"}'
+curl -s ${origin}/api/v1/apps -H "Authorization: Bearer $TOKEN"`} />
+        </div>
+      </div>
+    </Shell>
+  );
+}
+
+export default function DocsPage() {
+  return IS_STANDALONE ? <StandaloneDocs /> : <SaasDocs />;
 }
