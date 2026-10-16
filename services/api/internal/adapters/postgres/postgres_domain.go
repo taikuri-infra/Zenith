@@ -21,13 +21,13 @@ func NewPostgresDomainRepository(pool *pgxpool.Pool) *PostgresDomainRepository {
 	return &PostgresDomainRepository{pool: pool}
 }
 
-const domainSelectCols = `id, app_id, user_id, domain, status, tls_ready, created_at, updated_at`
+const domainSelectCols = `id, app_id, user_id, domain, status, tls_ready, status_message, last_checked_at, created_at, updated_at`
 
 func scanDomain(scanner interface{ Scan(dest ...any) error }) (*entities.CustomDomain, error) {
 	var d entities.CustomDomain
 	err := scanner.Scan(
 		&d.ID, &d.AppID, &d.UserID, &d.Domain, &d.Status,
-		&d.TLSReady, &d.CreatedAt, &d.UpdatedAt,
+		&d.TLSReady, &d.StatusMessage, &d.LastCheckedAt, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -138,4 +138,40 @@ func (r *PostgresDomainRepository) DeleteDomain(ctx context.Context, id string) 
 		return fmt.Errorf("domain not found: %s", id)
 	}
 	return nil
+}
+
+func (r *PostgresDomainRepository) UpdateDomainCheck(ctx context.Context, id string, status entities.DomainStatus, tlsReady bool, message string, checkedAt time.Time) error {
+	var checked any // zero time stores NULL (never checked)
+	if !checkedAt.IsZero() {
+		checked = checkedAt
+	}
+	ct, err := r.pool.Exec(ctx,
+		`UPDATE custom_domains SET status = $1, tls_ready = $2, status_message = $3, last_checked_at = $4, updated_at = $5 WHERE id = $6`,
+		string(status), tlsReady, message, checked, time.Now(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update domain check: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("domain not found: %s", id)
+	}
+	return nil
+}
+
+func (r *PostgresDomainRepository) ListAllDomains(ctx context.Context) ([]entities.CustomDomain, error) {
+	rows, err := r.pool.Query(ctx, `SELECT `+domainSelectCols+` FROM custom_domains ORDER BY created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("list domains: %w", err)
+	}
+	defer rows.Close()
+
+	var domains []entities.CustomDomain
+	for rows.Next() {
+		d, err := scanDomain(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan domain: %w", err)
+		}
+		domains = append(domains, *d)
+	}
+	return domains, rows.Err()
 }

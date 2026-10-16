@@ -339,12 +339,14 @@ type AddDomainInput struct {
 
 // DomainInfo is the response for a custom domain.
 type DomainInfo struct {
-	ID       string               `json:"id"`
-	AppID    string               `json:"app_id"`
-	Domain   string               `json:"domain"`
-	Status   entities.DomainStatus `json:"status"`
-	TLSReady bool                 `json:"tls_ready"`
-	CreatedAt string              `json:"created_at"`
+	ID            string                `json:"id"`
+	AppID         string                `json:"app_id"`
+	Domain        string                `json:"domain"`
+	Status        entities.DomainStatus `json:"status"`
+	TLSReady      bool                  `json:"tls_ready"`
+	StatusMessage string                `json:"status_message"`
+	LastCheckedAt *string               `json:"last_checked_at"`
+	CreatedAt     string                `json:"created_at"`
 }
 
 // --- Billing DTOs (Phase 6) ---

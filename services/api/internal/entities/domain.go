@@ -1,5 +1,7 @@
 package entities
 
+import "time"
+
 // DomainStatus represents the lifecycle of a custom domain.
 type DomainStatus string
 
@@ -12,11 +14,13 @@ const (
 
 // CustomDomain represents a custom domain attached to an app.
 type CustomDomain struct {
-	ID       string       `json:"id"`
-	AppID    string       `json:"app_id"`
-	UserID   string       `json:"user_id"`
-	Domain   string       `json:"domain"`
-	Status   DomainStatus `json:"status"`
-	TLSReady bool         `json:"tls_ready"`
+	ID            string       `json:"id"`
+	AppID         string       `json:"app_id"`
+	UserID        string       `json:"user_id"`
+	Domain        string       `json:"domain"`
+	Status        DomainStatus `json:"status"`
+	TLSReady      bool         `json:"tls_ready"`
+	StatusMessage string       `json:"status_message"`
+	LastCheckedAt *time.Time   `json:"last_checked_at,omitempty"`
 	Timestamps
 }

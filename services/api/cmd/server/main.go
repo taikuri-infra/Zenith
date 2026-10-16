@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -513,6 +514,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	authHandler := handlers.NewAuthHandler(authSvc, tokenBlacklist)
+	authHandler.SetRegistrationDisabled(cfg.IsStandalone())
 	authHandler.SetEventRepo(eventRepo)
 
 	// App Auth (created early so public routes can be registered before protected group)
@@ -668,7 +670,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	backstageHandler := handlers.NewBackstageHandler(k8sClient)
 
 	api := app.Group("/api/v1")
-	api.Get("/version", handlers.VersionInfo(Version, BuildTime))
+	api.Get("/version", handlers.VersionInfo(Version, BuildTime, cfg.Mode))
 
 	// Public auth routes (no token required) — rate limited
 	authLimiterConfig := limiter.Config{
@@ -1242,14 +1244,18 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	planSvc.SetGatewayRepo(gwRepo)
 	planSvc.SetAuthPoolRepo(authPoolRepo)
 	planHandler := handlers.NewPlanHandler(planSvc)
-	protected.Get("/plan", planHandler.GetMyPlan)
-	protected.Post("/plan/upgrade", planHandler.UpgradePlan)
+	if !cfg.IsStandalone() {
+		protected.Get("/plan", planHandler.GetMyPlan)
+		protected.Post("/plan/upgrade", planHandler.UpgradePlan)
+	}
 
 	// Referral System
 	referralHandler := handlers.NewReferralHandler(referralRepo, eventRepo, cfg.AppURL)
-	protected.Get("/referral", referralHandler.GetSummary)
-	protected.Get("/referral/rewards", referralHandler.ListRewards)
-	protected.Post("/referral/share", referralHandler.TrackShare)
+	if !cfg.IsStandalone() {
+		protected.Get("/referral", referralHandler.GetSummary)
+		protected.Get("/referral/rewards", referralHandler.ListRewards)
+		protected.Post("/referral/share", referralHandler.TrackShare)
+	}
 
 	// Stripe Billing (Phase 6)
 	var billingRepo ports.BillingRepository
@@ -1272,15 +1278,19 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		cfg.StripeProPriceID, cfg.StripeTeamPriceID, cfg.StripeBusinessPriceID, cfg.BaseDomain,
 	)
 	billingHandler := handlers.NewBillingHandler(billingSvc)
-	protected.Get("/billing", billingHandler.GetBillingStatus)
-	protected.Post("/billing/checkout", billingHandler.CreateCheckoutSession)
-	protected.Post("/billing/portal", billingHandler.CreatePortalSession)
-	protected.Post("/billing/cancel", billingHandler.CancelSubscription)
-	protected.Get("/billing/invoices", billingHandler.ListInvoices)
+	if !cfg.IsStandalone() {
+		protected.Get("/billing", billingHandler.GetBillingStatus)
+		protected.Post("/billing/checkout", billingHandler.CreateCheckoutSession)
+		protected.Post("/billing/portal", billingHandler.CreatePortalSession)
+		protected.Post("/billing/cancel", billingHandler.CancelSubscription)
+		protected.Get("/billing/invoices", billingHandler.ListInvoices)
+	}
 
 	// Exit Survey (captures feedback before cancellation)
 	exitSurveyHandler := handlers.NewExitSurveyHandler(exitSurveyRepo, eventRepo, planRepo)
-	protected.Post("/billing/exit-survey", exitSurveyHandler.SubmitAndCancel)
+	if !cfg.IsStandalone() {
+		protected.Post("/billing/exit-survey", exitSurveyHandler.SubmitAndCancel)
+	}
 
 	// Stripe webhook (unauthenticated — uses Stripe signature verification)
 	if stripeAPI != nil {
@@ -1324,9 +1334,20 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(backend)
 	domainHandler.SetReservedDomain(cfg.BaseDomain)
+	if cfg.IsStandalone() && dockerDeployer != nil {
+		domainChecker := services.NewDomainChecker(domainRepo, net.DefaultResolver, &services.TraefikTLSProber{}, cfg.BaseDomain)
+		domainHandler.SetChecker(domainChecker)
+		domainChecker.SetRefresher(domainHandler)
+		go func() {
+			time.Sleep(15 * time.Second)
+			domainChecker.Run(context.Background())
+		}()
+		slog.Info("custom domains: DNS and certificate checks enabled", "dashboard", cfg.BaseDomain)
+	}
 	appByID.Post("/domains", domainHandler.Add)
 	appByID.Get("/domains", domainHandler.List)
 	appByID.Delete("/domains/:domainId", domainHandler.Delete)
+	appByID.Post("/domains/:domainId/verify", domainHandler.Verify)
 	protected.Get("/domains", domainHandler.ListByUser)
 
 	// API Keys (Phase 6.5)
@@ -1619,9 +1640,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		admin.Post("/customers/:id/cluster/upgrade", customerHandler.UpgradeCluster)
 
 		// Plan management (admin)
-		admin.Get("/plans", customerHandler.ListPlans)
-		admin.Post("/plans", customerHandler.CreatePlan)
-		admin.Put("/plans/:id", customerHandler.UpdatePlan)
+		if !cfg.IsStandalone() {
+			admin.Get("/plans", customerHandler.ListPlans)
+			admin.Post("/plans", customerHandler.CreatePlan)
+			admin.Put("/plans/:id", customerHandler.UpdatePlan)
+		}
 
 		// Cluster management (CAPI)
 		admin.Get("/clusters", adminHandler.ListClusters)
@@ -1646,7 +1669,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// User management (SaaS — Phase 4)
 	adminUserHandler := handlers.NewAdminUserHandler(userRepo, planRepo, appRepo, dbRepo, storageRepo)
 	admin.Get("/users/:userId", adminUserHandler.GetUser)
-	admin.Post("/users/:userId/plan", adminUserHandler.SetUserPlan)
+	if !cfg.IsStandalone() {
+		admin.Post("/users/:userId/plan", adminUserHandler.SetUserPlan)
+	}
 	admin.Get("/users/:userId/apps", adminUserHandler.ListUserApps)
 	admin.Get("/users/:userId/databases", adminUserHandler.ListUserDatabases)
 
@@ -1701,15 +1726,19 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	admin.Get("/surveys", userEventHandler.SurveyInsights)
 
 	// Exit Survey (admin analytics)
-	admin.Get("/exit-surveys", exitSurveyHandler.AdminList)
-	admin.Get("/exit-surveys/stats", exitSurveyHandler.AdminStats)
+	if !cfg.IsStandalone() {
+		admin.Get("/exit-surveys", exitSurveyHandler.AdminList)
+		admin.Get("/exit-surveys/stats", exitSurveyHandler.AdminStats)
+	}
 
 	// Email Campaign Stats
 	emailStatsHandler := handlers.NewEmailStatsHandler(emailSendRepo)
 	admin.Get("/emails/stats", emailStatsHandler.GetStats)
 
 	// Referral Admin
-	admin.Get("/referrals", referralHandler.AdminList)
+	if !cfg.IsStandalone() {
+		admin.Get("/referrals", referralHandler.AdminList)
+	}
 
 	// ── Mission Control v2 handlers ──
 
@@ -1723,11 +1752,13 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// CRM Pipeline
 	crmHandler := handlers.NewAdminCRMHandler(pool)
-	admin.Get("/crm/pipeline", crmHandler.GetPipeline)
-	admin.Get("/crm/health-scores", crmHandler.GetHealthScores)
-	admin.Post("/crm/customers/:id/notes", crmHandler.SaveNote)
-	admin.Get("/crm/customers/:id/notes", crmHandler.GetNotes)
-	admin.Put("/crm/customers/:id/tags", crmHandler.UpdateTags)
+	if !cfg.IsStandalone() {
+		admin.Get("/crm/pipeline", crmHandler.GetPipeline)
+		admin.Get("/crm/health-scores", crmHandler.GetHealthScores)
+		admin.Post("/crm/customers/:id/notes", crmHandler.SaveNote)
+		admin.Get("/crm/customers/:id/notes", crmHandler.GetNotes)
+		admin.Put("/crm/customers/:id/tags", crmHandler.UpdateTags)
+	}
 
 	// Services Health
 	servicesHandler := handlers.NewAdminServicesHandler(k8sClient)
