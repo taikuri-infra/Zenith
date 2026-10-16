@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -169,13 +170,25 @@ func TestClient_NoRefreshWithoutRefreshToken(t *testing.T) {
 }
 
 func TestLogout(t *testing.T) {
-	var hit bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hit = r.URL.Path == "/api/v1/auth/logout" && r.Header.Get("Authorization") == "Bearer acc"
-	}))
-	defer srv.Close()
-	c := NewClient(srv.URL, "acc")
-	if err := c.Logout(); err != nil || !hit {
-		t.Fatalf("err = %v hit = %v", err, hit)
+	for _, tc := range []struct{ refresh, wantBody string }{
+		{"ref", `{"refresh_token":"ref"}`},
+		{"", `{"refresh_token":""}`},
+	} {
+		var hit bool
+		var body string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hit = r.URL.Path == "/api/v1/auth/logout" && r.Method == "POST" && r.Header.Get("Authorization") == "Bearer acc"
+			b, _ := io.ReadAll(r.Body)
+			body = string(b)
+		}))
+		c := NewClient(srv.URL, "acc")
+		c.RefreshToken = tc.refresh
+		if err := c.Logout(); err != nil || !hit {
+			t.Fatalf("err = %v hit = %v", err, hit)
+		}
+		if body != tc.wantBody {
+			t.Errorf("body = %s, want %s", body, tc.wantBody)
+		}
+		srv.Close()
 	}
 }

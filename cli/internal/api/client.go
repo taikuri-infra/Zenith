@@ -273,6 +273,15 @@ func (c *Client) ListDatabases(projectID string) ([]Database, error) {
 	return dbs, nil
 }
 
+// ListAllDatabases lists every database of the caller, across projects (GET /api/v1/databases).
+func (c *Client) ListAllDatabases() ([]Database, error) {
+	var dbs []Database
+	if err := c.do("GET", "/api/v1/databases", nil, &dbs); err != nil {
+		return nil, err
+	}
+	return dbs, nil
+}
+
 func (c *Client) CreateDatabase(projectID string, db *Database) (*Database, error) {
 	req := map[string]any{"name": db.Name, "engine": db.Engine}
 	if id := c.resolveProjectID(projectID); id != "" {

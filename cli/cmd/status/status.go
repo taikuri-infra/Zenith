@@ -15,7 +15,8 @@ import (
 var Cmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show project status overview",
-	Long: `Show the server version, the current project's apps and databases.
+	Long: `Show the server version and the apps and databases of the selected project,
+or of every project when none is selected.
 
 Example:
   zen status`,
@@ -62,43 +63,52 @@ func renderStatus(w io.Writer, client *cliapi.Client, cfg *config.Config) error 
 	fmt.Fprintln(w, titleStyle.Render("  Zenith Status"))
 	fmt.Fprintf(w, "  %s %s (%s)\n", infoStyle.Render("Server: "), valStyle.Render(cfg.APIEndpoint), info.Version)
 
-	projects, err := client.ListProjects()
-	if err != nil {
-		fmt.Fprintln(w, errStyle.Render("  Failed to fetch projects: "+err.Error()))
-		return nil
-	}
-	if len(projects) == 0 {
-		fmt.Fprintln(w, infoStyle.Render("  No projects found. Create one at the dashboard."))
-		return nil
-	}
-	current := projects[0]
-	for _, p := range projects {
-		if cfg.Project != "" && (p.ID == cfg.Project || p.Name == cfg.Project || p.DisplayName == cfg.Project) {
-			current = p
-			break
+	// With no project selected, apps and databases of every project are listed. SaaS still shows the
+	// first project's header (region, plan); standalone has no project header then.
+	allProjects := cfg.Project == ""
+	projectID := ""
+	if !standalone || !allProjects {
+		projects, err := client.ListProjects()
+		if err != nil {
+			fmt.Fprintln(w, errStyle.Render("  Failed to fetch projects: "+err.Error()))
+			return nil
 		}
-	}
-	displayName := current.DisplayName
-	if displayName == "" {
-		displayName = current.Name
-	}
-	fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Project:"), valStyle.Render(displayName))
-	if !standalone {
-		region := current.Region
-		if region == "" {
-			region = cfg.Region
+		if len(projects) == 0 {
+			fmt.Fprintln(w, infoStyle.Render("  No projects found. Create one at the dashboard."))
+			return nil
 		}
-		plan := current.Plan
-		if plan == "" {
-			plan = "free"
+		current := projects[0]
+		for _, p := range projects {
+			if cfg.Project != "" && (p.ID == cfg.Project || p.Name == cfg.Project || p.DisplayName == cfg.Project) {
+				current = p
+				break
+			}
 		}
-		fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Region: "), valStyle.Render(region))
-		fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Plan:   "), valStyle.Render(plan))
+		if !allProjects {
+			projectID = current.ID
+		}
+		displayName := current.DisplayName
+		if displayName == "" {
+			displayName = current.Name
+		}
+		fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Project:"), valStyle.Render(displayName))
+		if !standalone {
+			region := current.Region
+			if region == "" {
+				region = cfg.Region
+			}
+			plan := current.Plan
+			if plan == "" {
+				plan = "free"
+			}
+			fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Region: "), valStyle.Render(region))
+			fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Plan:   "), valStyle.Render(plan))
+		}
 	}
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, sectionStyle.Render("  Apps"))
-	apps, err := client.ListApps(current.ID)
+	apps, err := client.ListApps(projectID)
 	if err != nil {
 		fmt.Fprintln(w, "  "+errStyle.Render("Failed to fetch apps: "+err.Error()))
 	} else {
@@ -110,7 +120,12 @@ func renderStatus(w io.Writer, client *cliapi.Client, cfg *config.Config) error 
 	}
 
 	fmt.Fprintln(w, sectionStyle.Render("  Databases"))
-	dbs, err := client.ListDatabases(current.ID)
+	var dbs []cliapi.Database
+	if allProjects {
+		dbs, err = client.ListAllDatabases()
+	} else {
+		dbs, err = client.ListDatabases(projectID)
+	}
 	if err != nil {
 		fmt.Fprintln(w, "  "+errStyle.Render("Failed to fetch databases: "+err.Error()))
 	} else {

@@ -111,9 +111,10 @@ func (c *Client) refreshIfExpiring() {
 	_, _ = c.Refresh()
 }
 
-// Logout invalidates the access token server-side (best effort).
+// Logout revokes the access token and the refresh token server-side (best effort).
+// The refresh token is always sent, empty when the session has none.
 func (c *Client) Logout() error {
-	_, err := c.doOnce("POST", "/api/v1/auth/logout", nil, nil)
+	_, err := c.doOnce("POST", "/api/v1/auth/logout", map[string]string{"refresh_token": c.RefreshToken}, nil)
 	return err
 }
 
