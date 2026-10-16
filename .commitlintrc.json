@@ -1,11 +1,41 @@
 {
-  "extends": ["@commitlint/config-conventional"],
+  "extends": [
+    "@commitlint/config-conventional"
+  ],
   "rules": {
-    "scope-enum": [1, "always", [
-      "api", "web", "admin", "landing", "mc",
-      "cli", "operator", "helm", "terraform",
-      "ci", "infra", "deps", "installer"
-    ]],
-    "subject-case": [1, "always", "lower-case"]
+    "scope-enum": [
+      1,
+      "always",
+      [
+        "api",
+        "web",
+        "admin",
+        "landing",
+        "mc",
+        "cli",
+        "operator",
+        "helm",
+        "terraform",
+        "ci",
+        "infra",
+        "deps",
+        "installer"
+      ]
+    ],
+    "subject-case": [
+      1,
+      "always",
+      "lower-case"
+    ],
+    "body-max-line-length": [
+      0,
+      "always",
+      100
+    ],
+    "footer-max-line-length": [
+      0,
+      "always",
+      100
+    ]
   }
 }

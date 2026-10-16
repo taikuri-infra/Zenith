@@ -1,8 +1,12 @@
 name: Release
 
+# Paused during the alpha program: releases are created by hand with
+# `gh release create v<VERSION>` (see docs/alpha), which triggers
+# build-public-images.yml and release-cli.yml. release-please also chokes on
+# the older "Merge pull request" commits on main. Re-enable the push trigger
+# when the SaaS release train resumes.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
