@@ -462,10 +462,12 @@ function LoginPageInner() {
         </div>
 
         {/* Footer */}
-        <p className="mt-6 text-center text-xs text-neutral-600">
-          By continuing, you agree to the Zenith Terms of Service and Privacy
-          Policy.
-        </p>
+        {!IS_STANDALONE && (
+          <p className="mt-6 text-center text-xs text-neutral-600">
+            By continuing, you agree to the Zenith Terms of Service and Privacy
+            Policy.
+          </p>
+        )}
       </div>
     </div>
   );

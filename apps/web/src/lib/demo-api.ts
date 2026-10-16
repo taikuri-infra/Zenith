@@ -630,7 +630,7 @@ export const demoAppsDeploy = {
     await delay();
     if (appId === "da-1") {
       return [
-        { id: "dom-1", app_id: "da-1", domain: "myapp.example.com", status: "active", tls_ready: true, created_at: "2026-02-18T10:00:00Z" },
+        { id: "dom-1", app_id: "da-1", domain: "myapp.example.com", status: "active", tls_ready: true, status_message: "", last_checked_at: null, created_at: "2026-02-18T10:00:00Z" },
       ];
     }
     return [];
@@ -639,6 +639,9 @@ export const demoAppsDeploy = {
     throw new Error("Not available in demo mode");
   },
   deleteDomain: async (): Promise<{ message: string }> => {
+    throw new Error("Not available in demo mode");
+  },
+  verifyDomain: async (): Promise<CustomDomain> => {
     throw new Error("Not available in demo mode");
   },
 

@@ -311,10 +311,14 @@ function StandaloneDocs() {
             <li>A container image or a docker-compose.yml for your app</li>
             <li>Optional: the zen CLI on your laptop</li>
           </ul>
-          <div className="mt-3">
-            <CodeBlock code={`curl -fsSL https://github.com/taikuri-infra/Zenith/releases/latest/download/zen_linux_amd64 -o zen && chmod +x zen
-./zen login --endpoint ${origin}`} />
-          </div>
+          <p className="mt-3 mb-2 text-xs text-neutral-400">
+            Download zen for your platform from the newest release at{" "}
+            <a href="https://github.com/taikuri-infra/Zenith/releases" className="text-accent-400 hover:underline">
+              https://github.com/taikuri-infra/Zenith/releases
+            </a>
+            , then:
+          </p>
+          <CodeBlock code={`zen login --endpoint ${origin}`} />
         </div>
 
         <div className="space-y-8">

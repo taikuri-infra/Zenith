@@ -1074,8 +1074,10 @@ export interface CustomDomain {
   id: string;
   app_id: string;
   domain: string;
-  status: string;
+  status: "pending" | "verified" | "active" | "failed" | string;
   tls_ready: boolean;
+  status_message: string;
+  last_checked_at: string | null;
   created_at: string;
 }
 
@@ -1583,6 +1585,8 @@ export const appsDeploy = {
     apiFetch<{ message: string }>(`/api/v1/apps/${appId}/domains/${domainId}`, {
       method: "DELETE",
     }),
+  verifyDomain: (appId: string, domainId: string) =>
+    apiFetch<CustomDomain>(`/api/v1/apps/${appId}/domains/${domainId}/verify`, { method: "POST" }),
 
   // Database Backups (per-database, Phase 3)
   listBackups: (appId: string, dbId: string) =>
@@ -1635,6 +1639,10 @@ export const appsDeploy = {
       `/api/v1/apps/${appId}/auth/users/${userId}`,
       { method: "DELETE" }
     ),
+};
+
+export const customDomains = {
+  list: () => apiFetch<CustomDomain[]>("/api/v1/domains"),
 };
 
 // ---- Billing types (Phase 6) ----

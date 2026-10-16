@@ -28,6 +28,7 @@ describe("LoginPage (standalone)", () => {
     expect(screen.queryByText("GitHub")).toBeNull();
     expect(screen.queryByText(/create.*account|sign.*up/i)).toBeNull();
     expect(screen.queryByText(/Hetzner|Kubernetes/)).toBeNull();
+    expect(screen.queryByText(/Terms of Service/)).toBeNull();
     expect(screen.getByText("Self-hosted PaaS")).toBeInTheDocument();
   });
 
