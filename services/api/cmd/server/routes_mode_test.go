@@ -44,3 +44,22 @@ func TestStandaloneRegistersNoSaaSRoutes(t *testing.T) {
 		t.Fatalf("core routes missing: %v", paths)
 	}
 }
+
+func TestSaaSRegistersSaaSRoutes(t *testing.T) {
+	paths := registeredPaths(t, "saas")
+	for _, want := range []string{"/api/v1/billing", "/api/v1/plan", "/api/v1/admin/crm/pipeline"} {
+		found := false
+		for p := range paths {
+			if p == want || strings.HasPrefix(p, want+"/") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("saas mode did not register %s", want)
+		}
+	}
+	if !paths["/api/v1/auth/register"] {
+		t.Fatal("core routes missing in saas mode")
+	}
+}

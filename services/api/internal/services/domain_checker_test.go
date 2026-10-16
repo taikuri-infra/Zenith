@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -132,47 +133,213 @@ func TestDomainChecker_DashboardUnresolvableSkipsRound(t *testing.T) {
 	}
 }
 
-type recRefresher struct{ apps []string }
+// recRefresher records refreshes; calls arrive on a goroutine, so tests wait on the channel.
+// When block is non-nil each call waits on it before returning (to hold a refresh in flight).
+type recRefresher struct {
+	mu    sync.Mutex
+	apps  []string
+	calls chan string
+	block chan struct{}
+}
+
+func newRecRefresher() *recRefresher { return &recRefresher{calls: make(chan string, 16)} }
 
 func (r *recRefresher) RefreshRoutes(_ context.Context, appID string) error {
+	if r.block != nil {
+		<-r.block
+	}
+	r.mu.Lock()
 	r.apps = append(r.apps, appID)
+	r.mu.Unlock()
+	r.calls <- appID
 	return nil
+}
+
+// waitRefreshes waits for n more refresh calls, then checks no extra one arrives shortly after.
+func (r *recRefresher) waitRefreshes(t *testing.T, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		select {
+		case <-r.calls:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("refresh %d of %d did not happen", i+1, n)
+		}
+	}
+	select {
+	case app := <-r.calls:
+		t.Fatalf("unexpected extra refresh for %s", app)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func verifiedSetup(t *testing.T) (*DomainChecker, *memory.MemoryDomainRepository, *entities.CustomDomain, *recRefresher, *time.Time) {
+	t.Helper()
+	r := fakeResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}, "app.example.com": {"1.2.3.4"}}}
+	c, repo, d := newCheckerForTest(r, &fakeProber{valid: false})
+	now := c.now()
+	c.now = func() time.Time { return now }
+	rf := newRecRefresher()
+	c.SetRefresher(rf)
+	return c, repo, d, rf, &now
 }
 
 func TestDomainChecker_PendingToVerifiedRefreshesRoutes(t *testing.T) {
 	r := fakeResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}}}
 	c, _, d := newCheckerForTest(r, &fakeProber{valid: false})
-	rf := &recRefresher{}
+	rf := newRecRefresher()
 	c.SetRefresher(rf)
 	got, _ := c.Check(context.Background(), d)
-	if len(rf.apps) != 0 {
-		t.Fatalf("pending must not refresh: %v", rf.apps)
-	}
+	rf.waitRefreshes(t, 0)
 	r.ips["app.example.com"] = []string{"1.2.3.4"}
 	got, _ = c.Check(context.Background(), got)
-	if got.Status != entities.DomainStatusVerified || len(rf.apps) != 1 || rf.apps[0] != "app-1" {
-		t.Fatalf("status %s refreshes %v", got.Status, rf.apps)
+	if got.Status != entities.DomainStatusVerified {
+		t.Fatalf("status %s", got.Status)
 	}
-	got, _ = c.Check(context.Background(), got)
-	if len(rf.apps) != 1 {
-		t.Fatalf("no refresh within 10 min: %v", rf.apps)
+	rf.waitRefreshes(t, 1)
+	if rf.apps[0] != "app-1" {
+		t.Fatalf("refreshed %v", rf.apps)
 	}
-	base := c.now()
-	c.now = func() time.Time { return base.Add(11 * time.Minute) }
-	_, _ = c.Check(context.Background(), got)
-	if len(rf.apps) != 2 {
-		t.Fatalf("refresh after 11 min expected: %v", rf.apps)
+}
+
+func TestDomainChecker_RefreshScheduleIsCapped(t *testing.T) {
+	c, repo, d, rf, now := verifiedSetup(t)
+	ctx := context.Background()
+	got, _ := c.Check(ctx, d) // pending -> verified: attempt 1
+	rf.waitRefreshes(t, 1)
+	steps := []struct {
+		after   time.Duration
+		refresh int
+	}{
+		{9 * time.Minute, 0}, {1 * time.Minute, 1}, // attempt 2 at +10m
+		{29 * time.Minute, 0}, {1 * time.Minute, 1}, // attempt 3 at +30m
+		{119 * time.Minute, 0}, {1 * time.Minute, 1}, // attempt 4 at +2h
+		{2 * time.Hour, 0}, {24 * time.Hour, 0}, // capped
 	}
+	for i, s := range steps {
+		*now = now.Add(s.after)
+		got, _ = c.Check(ctx, got)
+		rf.waitRefreshes(t, s.refresh)
+		if got.Status != entities.DomainStatusVerified || got.TLSReady {
+			t.Fatalf("step %d: %s tls=%v", i, got.Status, got.TLSReady)
+		}
+	}
+	stored, _ := repo.GetDomain(ctx, d.ID)
+	want := "DNS ok; certificate not issued after 4 route refreshes; check the Traefik logs or press Check now"
+	if stored.StatusMessage != want || got.StatusMessage != want {
+		t.Fatalf("message %q / %q", stored.StatusMessage, got.StatusMessage)
+	}
+	if len(rf.apps) != 4 {
+		t.Fatalf("refreshes %d, want 4", len(rf.apps))
+	}
+}
+
+func TestDomainChecker_LeavingVerifiedResetsSchedule(t *testing.T) {
+	c, _, d, rf, now := verifiedSetup(t)
+	r := c.resolver.(fakeResolver)
+	ctx := context.Background()
+	got, _ := c.Check(ctx, d)
+	rf.waitRefreshes(t, 1)
+	delete(r.ips, "app.example.com") // DNS goes away: back to pending
+	*now = now.Add(time.Minute)
+	got, _ = c.Check(ctx, got)
+	if got.Status != entities.DomainStatusPending {
+		t.Fatalf("status %s", got.Status)
+	}
+	rf.waitRefreshes(t, 0)
+	r.ips["app.example.com"] = []string{"1.2.3.4"}
+	*now = now.Add(time.Minute) // well inside the 10 min gap of the old schedule
+	got, _ = c.Check(ctx, got)
+	rf.waitRefreshes(t, 1) // entering verified again is attempt 1
+	*now = now.Add(5 * time.Minute)
+	_, _ = c.Check(ctx, got)
+	rf.waitRefreshes(t, 0)
+}
+
+func TestDomainChecker_AlreadyVerifiedIsSeededWithoutRefresh(t *testing.T) {
+	c, repo, d, rf, now := verifiedSetup(t)
+	ctx := context.Background()
+	_ = repo.UpdateDomainCheck(ctx, d.ID, entities.DomainStatusVerified, false, "DNS ok; waiting for the certificate", *now)
+	d, _ = repo.GetDomain(ctx, d.ID)
+	got, _ := c.Check(ctx, d) // first sight after a restart
+	rf.waitRefreshes(t, 0)
+	*now = now.Add(10 * time.Minute) // schedule continues: attempt 2
+	_, _ = c.Check(ctx, got)
+	rf.waitRefreshes(t, 1)
+}
+
+func TestDomainChecker_ResetRefreshRefreshesOnNextCheck(t *testing.T) {
+	c, repo, d, rf, now := verifiedSetup(t)
+	ctx := context.Background()
+	_ = repo.UpdateDomainCheck(ctx, d.ID, entities.DomainStatusVerified, false, "x", *now)
+	d, _ = repo.GetDomain(ctx, d.ID)
+	got, _ := c.Check(ctx, d)
+	rf.waitRefreshes(t, 0)
+	c.ResetRefresh(d.ID)
+	*now = now.Add(time.Minute)
+	got, _ = c.Check(ctx, got)
+	rf.waitRefreshes(t, 1)
+	*now = now.Add(time.Minute) // backoff restarted: nothing until +10m
+	_, _ = c.Check(ctx, got)
+	rf.waitRefreshes(t, 0)
+}
+
+func TestDomainChecker_ResetRefreshLiftsCap(t *testing.T) {
+	c, _, d, rf, now := verifiedSetup(t)
+	ctx := context.Background()
+	got, _ := c.Check(ctx, d)
+	rf.waitRefreshes(t, 1)
+	for i, gap := range []time.Duration{10 * time.Minute, 30 * time.Minute, 2 * time.Hour, 3 * time.Hour} {
+		*now = now.Add(gap)
+		got, _ = c.Check(ctx, got)
+		want := 0
+		if i < 3 {
+			want = 1
+		}
+		rf.waitRefreshes(t, want)
+	}
+	if got.StatusMessage != "DNS ok; certificate not issued after 4 route refreshes; check the Traefik logs or press Check now" {
+		t.Fatalf("not capped: %q", got.StatusMessage)
+	}
+	c.ResetRefresh(d.ID)
+	got, _ = c.Check(ctx, got)
+	rf.waitRefreshes(t, 1)
+	if got.StatusMessage != "DNS ok; waiting for the certificate" {
+		t.Fatalf("message after reset %q", got.StatusMessage)
+	}
+}
+
+func TestDomainChecker_NoOverlappingRefreshForOneApp(t *testing.T) {
+	c, repo, d, rf, _ := verifiedSetup(t)
+	ctx := context.Background()
+	rf.block = make(chan struct{})
+	r := c.resolver.(fakeResolver)
+	r.ips["www.example.com"] = []string{"1.2.3.4"}
+	d2, _ := repo.AddDomain(ctx, "app-1", "user-1", "www.example.com")
+	_ = c.MarkPending(ctx, d2.ID)
+	d2, _ = repo.GetDomain(ctx, d2.ID)
+	_, _ = c.Check(ctx, d) // starts a refresh of app-1, held in flight
+	got2, _ := c.Check(ctx, d2)
+	close(rf.block)
+	rf.waitRefreshes(t, 1) // the second domain's refresh was skipped while app-1 was in flight
+	c.mu.Lock()
+	inflight := c.refreshing["app-1"]
+	c.mu.Unlock()
+	if inflight {
+		t.Fatal("in-flight flag not cleared")
+	}
+	_, _ = c.Check(ctx, got2) // not refreshed yet, so the next check refreshes
+	rf.waitRefreshes(t, 1)
 }
 
 func TestDomainChecker_ActiveDoesNotRefresh(t *testing.T) {
 	c, _, d := newCheckerForTest(fakeResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}, "app.example.com": {"1.2.3.4"}}}, &fakeProber{valid: true})
-	rf := &recRefresher{}
+	rf := newRecRefresher()
 	c.SetRefresher(rf)
 	got, _ := c.Check(context.Background(), d)
-	if got.Status != entities.DomainStatusActive || len(rf.apps) != 0 {
-		t.Fatalf("%s %v", got.Status, rf.apps)
+	if got.Status != entities.DomainStatusActive {
+		t.Fatalf("%s", got.Status)
 	}
+	rf.waitRefreshes(t, 0)
 }
 
 type errResolver struct {

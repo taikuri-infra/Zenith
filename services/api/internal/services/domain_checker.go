@@ -41,10 +41,18 @@ type DomainChecker struct {
 
 	refresher RouteRefresher
 
-	mu          sync.Mutex
-	lastRefresh map[string]time.Time
-	expected    []net.IP
-	expectedAt  time.Time
+	mu         sync.Mutex
+	refreshSt  map[string]*refreshState // per domain id
+	refreshing map[string]bool          // per app id: a refresh is running
+	expected   []net.IP
+	expectedAt time.Time
+}
+
+// refreshState is one domain's route-refresh schedule while it is verified.
+// refreshes == 0 means a refresh is due on the next verified check (entering verified, or ResetRefresh).
+type refreshState struct {
+	refreshes   int
+	lastRefresh time.Time
 }
 
 // RouteRefresher redeploys an app's routes. Traefik requests an ACME certificate only when its
@@ -53,7 +61,14 @@ type RouteRefresher interface {
 	RefreshRoutes(ctx context.Context, appID string) error
 }
 
-const refreshEvery = 10 * time.Minute
+// refreshGaps are the waits after refresh 1, 2 and 3; after the 4th refresh the checker stops.
+var refreshGaps = []time.Duration{10 * time.Minute, 30 * time.Minute, 2 * time.Hour}
+
+const (
+	maxRefreshes   = 4
+	refreshTimeout = 2 * time.Minute
+	cappedMessage  = "DNS ok; certificate not issued after 4 route refreshes; check the Traefik logs or press Check now"
+)
 
 const (
 	checkEvery        = 30 * time.Second
@@ -66,7 +81,14 @@ const (
 func NewDomainChecker(repo ports.DomainRepository, resolver DomainResolver, prober TLSProber, dashboardDomain string) *DomainChecker {
 	return &DomainChecker{repo: repo, resolver: resolver, prober: prober, dashboardDomain: dashboardDomain,
 		traefikAddr: "traefik:443", stepTimeout: 5 * time.Second, now: time.Now,
-		lastRefresh: map[string]time.Time{}}
+		refreshSt: map[string]*refreshState{}, refreshing: map[string]bool{}}
+}
+
+// ResetRefresh restarts a domain's refresh schedule, so its next verified check refreshes routes at once.
+func (c *DomainChecker) ResetRefresh(id string) {
+	c.mu.Lock()
+	c.refreshSt[id] = &refreshState{}
+	c.mu.Unlock()
 }
 
 // SetRefresher enables route refreshes when a domain is verified.
@@ -142,34 +164,79 @@ func (c *DomainChecker) Check(ctx context.Context, d *entities.CustomDomain) (*e
 	}
 	status, tlsReady, msg := c.evaluate(ctx, d, expected)
 	now := c.now()
+	refresh := false
+	if status == entities.DomainStatusVerified {
+		var capped bool
+		refresh, capped = c.planRefresh(d, now)
+		if capped {
+			msg = cappedMessage
+		}
+	} else { // leaving verified (or never in it) resets the schedule
+		c.mu.Lock()
+		delete(c.refreshSt, d.ID)
+		c.mu.Unlock()
+	}
 	if err := c.repo.UpdateDomainCheck(ctx, d.ID, status, tlsReady, msg, now); err != nil {
+		if refresh {
+			c.mu.Lock()
+			c.refreshing[d.AppID] = false
+			c.mu.Unlock()
+		}
 		return d, err
 	}
 	out := *d
 	out.Status, out.TLSReady, out.StatusMessage, out.LastCheckedAt = status, tlsReady, msg, &now
-	if status == entities.DomainStatusVerified {
-		c.maybeRefresh(ctx, d, now)
+	if refresh {
+		go c.refresh(d.AppID, d.ID)
 	}
 	return &out, nil
 }
 
-// maybeRefresh redeploys the app's routes when a domain just became verified, and again every 10 min while it stays so.
-func (c *DomainChecker) maybeRefresh(ctx context.Context, prev *entities.CustomDomain, now time.Time) {
+// planRefresh advances the domain's refresh schedule for a verified result: refresh on entering verified,
+// then 10 min, 30 min and 2 h later; after the 4th refresh it reports capped instead. A domain first seen
+// already verified (after an API restart) is seeded at refresh 1 without refreshing. When refresh is
+// true the app is marked in flight; the caller must run c.refresh or clear the flag.
+func (c *DomainChecker) planRefresh(prev *entities.CustomDomain, now time.Time) (refresh, capped bool) {
 	if c.refresher == nil {
-		return
+		return false, false
 	}
 	c.mu.Lock()
-	last, seen := c.lastRefresh[prev.ID]
-	due := prev.Status != entities.DomainStatusVerified || !seen || now.Sub(last) >= refreshEvery
-	if due {
-		c.lastRefresh[prev.ID] = now
+	defer c.mu.Unlock()
+	st, seen := c.refreshSt[prev.ID]
+	switch {
+	case !seen && prev.Status == entities.DomainStatusVerified:
+		c.refreshSt[prev.ID] = &refreshState{refreshes: 1, lastRefresh: now}
+		return false, false
+	case !seen || prev.Status != entities.DomainStatusVerified:
+		st = &refreshState{}
+		c.refreshSt[prev.ID] = st
 	}
-	c.mu.Unlock()
-	if !due {
-		return
+	if st.refreshes >= maxRefreshes {
+		return false, true
 	}
-	if err := c.refresher.RefreshRoutes(ctx, prev.AppID); err != nil {
-		slog.Warn("domain check: route refresh failed", "domain", prev.Domain, "error", err)
+	if st.refreshes > 0 && now.Sub(st.lastRefresh) < refreshGaps[st.refreshes-1] {
+		return false, false
+	}
+	if c.refreshing[prev.AppID] {
+		return false, false // another domain of this app is refreshing it; try again on the next check
+	}
+	st.refreshes++
+	st.lastRefresh = now
+	c.refreshing[prev.AppID] = true
+	return true, false
+}
+
+// refresh redeploys the app's routes outside the request path and clears the app's in-flight flag.
+func (c *DomainChecker) refresh(appID, domainID string) {
+	defer func() {
+		c.mu.Lock()
+		c.refreshing[appID] = false
+		c.mu.Unlock()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	defer cancel()
+	if err := c.refresher.RefreshRoutes(ctx, appID); err != nil {
+		slog.Warn("domain check: route refresh failed", "app", appID, "domain_id", domainID, "error", err)
 	}
 }
 

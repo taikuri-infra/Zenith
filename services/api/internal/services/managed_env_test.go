@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
@@ -203,5 +204,32 @@ func TestMigrateManagedEnv_AmbiguousSameEngineSkipped(t *testing.T) {
 	v2, _ := vars.GetEnvVarsByEnvironment(context.Background(), appID, "")
 	if len(legacy) != 1 || len(v2) != 0 {
 		t.Fatalf("legacy=%+v v2=%+v", legacy, v2)
+	}
+}
+
+// failingSetVars is an env-v2 repository whose writes fail.
+type failingSetVars struct{ *memory.MemoryEnvVarRepository }
+
+func (failingSetVars) SetEnvVar(context.Context, *entities.AppEnvVar) error {
+	return errors.New("disk full")
+}
+
+func TestMigrateManagedEnv_CopyFailureKeepsLegacy(t *testing.T) {
+	_, vars, apps, appID := managedEnvFixture(t)
+	env := NewManagedEnv(failingSetVars{vars}, apps)
+	dbs := memory.NewMemoryDatabaseRepository()
+	readyDB(t, dbs, appID, entities.DatabaseEnginePostgres, "pg1")
+	_ = apps.SetEnvVars(context.Background(), appID, map[string]string{"DATABASE_URL": "enc:v1:abc"})
+
+	n, err := MigrateManagedEnv(context.Background(), dbs, apps, env)
+	if err != nil || n != 0 {
+		t.Fatalf("n=%d err=%v, want 0 and no error", n, err)
+	}
+	legacy, _ := apps.GetEnvVars(context.Background(), appID)
+	if len(legacy) != 1 || legacy[0].Key != "DATABASE_URL" || legacy[0].Value != "enc:v1:abc" {
+		t.Fatalf("legacy = %+v, want DATABASE_URL kept", legacy)
+	}
+	if v2, _ := vars.GetEnvVarsByEnvironment(context.Background(), appID, ""); len(v2) != 0 {
+		t.Fatalf("env-v2 = %+v, want empty", v2)
 	}
 }

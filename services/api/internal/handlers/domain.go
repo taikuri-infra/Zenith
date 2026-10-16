@@ -205,7 +205,8 @@ func toDomainInfo(d *entities.CustomDomain) dto.DomainInfo {
 	}
 }
 
-// Verify runs the DNS and certificate check for one domain now.
+// Verify runs the DNS and certificate check for one domain now and returns the stored result;
+// when the domain is verified the route refresh it triggers follows in the background.
 // POST /api/v1/apps/:appId/domains/:domainId/verify
 func (h *DomainHandler) Verify(c *fiber.Ctx) error {
 	if h.checker == nil {
@@ -219,6 +220,8 @@ func (h *DomainHandler) Verify(c *fiber.Ctx) error {
 	if domain.UserID != userID {
 		return fiber.NewError(fiber.StatusForbidden, "not your domain")
 	}
+	// A manual check refreshes routes at once and restarts the refresh backoff; the refresh runs in the background.
+	h.checker.ResetRefresh(domain.ID)
 	checked, err := h.checker.Check(c.Context(), domain)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, err.Error())

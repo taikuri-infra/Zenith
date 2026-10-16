@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -349,5 +350,45 @@ func TestDomainVerifyCheckerErrorIs502(t *testing.T) {
 	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains/"+d.ID+"/verify", nil), -1)
 	if resp.StatusCode != 502 {
 		t.Fatalf("status %d, want 502", resp.StatusCode)
+	}
+}
+
+type chanRefresher chan string
+
+func (r chanRefresher) RefreshRoutes(_ context.Context, appID string) error {
+	r <- appID
+	return nil
+}
+
+func TestDomainVerifyResetsRefreshSchedule(t *testing.T) {
+	fiberApp, handler, repo, appID := setupDomainTest()
+	checker := services.NewDomainChecker(repo, stubResolver{ips: map[string][]string{"zenith.example.com": {"1.2.3.4"}, "app.example.com": {"1.2.3.4"}}}, stubProber{valid: false}, "zenith.example.com")
+	refreshes := make(chanRefresher, 4)
+	checker.SetRefresher(refreshes)
+	handler.SetChecker(checker)
+	fiberApp.Post("/api/v1/apps/:appId/domains/:domainId/verify", injectUserID("user-1"), handler.Verify)
+	d, _ := repo.AddDomain(context.Background(), appID, "user-1", "app.example.com")
+	_ = repo.UpdateDomainCheck(context.Background(), d.ID, entities.DomainStatusVerified, false, "DNS ok; waiting for the certificate", time.Now())
+	d, _ = repo.GetDomain(context.Background(), d.ID)
+	if _, err := checker.Check(context.Background(), d); err != nil { // background round: seeded, no refresh
+		t.Fatal(err)
+	}
+	select {
+	case <-refreshes:
+		t.Fatal("first sight of a verified domain must not refresh")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	resp, _ := fiberApp.Test(httptest.NewRequest("POST", "/api/v1/apps/"+appID+"/domains/"+d.ID+"/verify", nil), -1)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	select {
+	case got := <-refreshes:
+		if got != appID {
+			t.Fatalf("refreshed %s, want %s", got, appID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Check now did not refresh routes")
 	}
 }
