@@ -116,7 +116,9 @@ All on the live install (`zenith.freezenith.com`), recorded in core-audit §8:
   - backoff: domains older than one hour are checked every 5 min, older than a day every 30 min; checking never stops until the domain is deleted;
   - every outcome writes `status`, `tls_ready`, `status_message`, `last_checked_at` through `UpdateDomainCheck`; errors are logged with the domain and never abort the loop.
 - **Check now:** `POST /apps/:id/domains/:domainId/verify` runs one check for that domain inline and returns the updated domain (owner-checked like the other domain routes).
-- **Web Domains page** (`src/app/networking/page.tsx`): the status badge shows `pending` / `verified` / `active`, the row shows `status_message`, and a "Check now" button calls verify. The message already contains the IP, so no extra endpoint is needed.
+- **Web:** the custom-domain UI lives on the app page's Domains tab (`src/app/apps/[name]/page.tsx`): each row shows the status badge (`pending` / `verified` / `active`), `status_message`, the last check time and a "Check now" button that calls verify. The Networking page (`src/app/networking/page.tsx`) lists app subdomains and the user's real custom domains from `GET /api/v1/domains` with the same status cell; its mock "Add Domain" modal and "Load Balancers" card, which were never backed by anything, are removed. The message already contains the IP, so no extra endpoint is needed.
+- **Routing:** every custom domain is routed by Traefik whatever its status (the deployer no longer filters on `active`/`verified`). Traefik requests an ACME certificate only when its configuration changes, so the checker refreshes the app's routes (a redeploy) when a domain enters `verified` and again at most every 10 minutes while it stays `verified`.
+- **Resolver errors:** only NXDOMAIN (or an empty answer) means "no record"; any other lookup error leaves the status and `tls_ready` unchanged and stores `DNS check failed: <err>`.
 - The DNS and TLS steps are behind two small interfaces (resolver, dialer) so tests inject fakes.
 
 ## 6. Managed-database env vars on env-v2 (F-26)
