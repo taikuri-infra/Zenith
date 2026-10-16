@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
 import { type AuditEntry } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
+import { SHOW_PLANS } from "@/lib/edition";
 import Link from "next/link";
 import { useState, useMemo, useCallback } from "react";
 import {
@@ -79,7 +80,7 @@ export default function AuditPage() {
   const [exporting, setExporting] = useState<"csv" | "json" | null>(null);
 
   const { data: planData, loading: planLoading } = useApi(
-    () => userPlan.get(),
+    () => (SHOW_PLANS ? userPlan.get() : Promise.resolve(null)),
     []
   );
 

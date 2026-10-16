@@ -8,6 +8,7 @@ import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
 import { type SSOConfig } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
+import { SHOW_PLANS } from "@/lib/edition";
 import Link from "next/link";
 import { useState } from "react";
 import { Shield, Plus, Trash2, Key, Lock } from "lucide-react";
@@ -40,7 +41,7 @@ export default function SSOPage() {
   } = useApi(() => sso.list(), []);
 
   const { data: planData, loading: planLoading } = useApi(
-    () => userPlan.get(),
+    () => (SHOW_PLANS ? userPlan.get() : Promise.resolve(null)),
     []
   );
 

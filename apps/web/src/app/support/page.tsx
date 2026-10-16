@@ -8,6 +8,7 @@ import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
 import { type SupportTicket } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
+import { SHOW_PLANS } from "@/lib/edition";
 import Link from "next/link";
 import { useState, useMemo } from "react";
 
@@ -69,7 +70,7 @@ export default function SupportPage() {
   } = useApi(() => support.list(), []);
 
   const { data: planData, loading: planLoading } = useApi(
-    () => userPlan.get(),
+    () => (SHOW_PLANS ? userPlan.get() : Promise.resolve(null)),
     []
   );
 

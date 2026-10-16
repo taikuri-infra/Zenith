@@ -11,6 +11,7 @@ import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type App, type DeployApp } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
+import { SHOW_PLANS } from "@/lib/edition";
 import { useToast } from "@/components/toast";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -49,7 +50,7 @@ export default function AppsPage() {
   } = useApi(() => appsDeploy.list(projectId || undefined), [projectId]);
 
   // User plan (for showing Zenith registry hint)
-  const { data: planData } = useApi(() => userPlan.get(), []);
+  const { data: planData } = useApi(() => (SHOW_PLANS ? userPlan.get() : Promise.resolve(null)), []);
   const tier = planData?.tier ?? "free";
   const isPro = tier !== "free";
 

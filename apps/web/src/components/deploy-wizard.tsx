@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { SHOW_PLANS, API_SERVICE_EXPOSURE } from "@/lib/edition";
+import { wizardPlanCopy } from "@/lib/wizard-copy";
 import { Modal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import { getApi } from "@/lib/get-api";
@@ -222,6 +223,7 @@ interface DeployWizardProps {
 export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
   const { toast } = useToast();
   const { appsDeploy, registry, storage, databases } = getApi();
+  const planCopy = wizardPlanCopy(isPro);
   const [step, setStep] = useState(0);
   const [state, setState] = useState<WizardState>(initialState);
   const [deploying, setDeploying] = useState(false);
@@ -617,10 +619,10 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
         </button>
       </div>
 
-      {!isPro && (
+      {planCopy.registryHint && (
         <p className="flex items-center gap-1.5 text-[11px] text-neutral-500">
           <Crown className="h-3 w-3 text-amber-400" />
-          Upgrade to Pro for Zenith&apos;s built-in registry with image browsing
+          {planCopy.registryHint}
         </p>
       )}
 
@@ -906,11 +908,11 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
             <div className="text-neutral-600">|</div>
             <div className="text-sm text-white">{res.ram}</div>
           </div>
-          {SHOW_PLANS && (
+          {planCopy.resourcesNote && (
             <p className="mt-1.5 text-[11px] text-neutral-500">
-              {isPro ? "Pro plan" : "Free plan"} per-app limit.
-              {!isPro && (
-                <span className="ml-1 text-amber-400">Upgrade to Pro for more resources.</span>
+              {planCopy.resourcesNote}
+              {planCopy.resourcesUpgrade && (
+                <span className="ml-1 text-amber-400">{planCopy.resourcesUpgrade}</span>
               )}
             </p>
           )}
@@ -1270,13 +1272,14 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
       ) : (
         <div className="rounded-lg border border-border bg-surface-100 px-4 py-3">
           <div className="flex items-center gap-2">
-            <Crown className="h-4 w-4 text-amber-400 shrink-0" />
+            {planCopy.s3Crown ? (
+              <Crown className="h-4 w-4 text-amber-400 shrink-0" />
+            ) : (
+              <HardDrive className="h-4 w-4 text-neutral-400 shrink-0" />
+            )}
             <p className="text-xs text-neutral-400">S3 Object Storage</p>
           </div>
-          <p className="mt-1 ml-6 text-[11px] text-neutral-600">
-            Upgrade to Pro to attach S3 buckets for file uploads, images, and static assets.
-            Access via any S3 SDK &mdash; credentials are injected automatically.
-          </p>
+          <p className="mt-1 ml-6 text-[11px] text-neutral-600">{planCopy.s3Hint}</p>
         </div>
       )}
     </div>
@@ -1343,7 +1346,9 @@ export function DeployWizard({ onClose, isPro, projectId }: DeployWizardProps) {
             <span className="text-neutral-400">Resources</span>
             <span className="text-white text-xs">
               {planRes.cpu}, {planRes.ram}
-              <span className="ml-1.5 text-neutral-500">({isPro ? "Pro" : "Free"} plan)</span>
+              {planCopy.reviewPlanLabel && (
+                <span className="ml-1.5 text-neutral-500">{planCopy.reviewPlanLabel}</span>
+              )}
             </span>
           </div>
         </div>
