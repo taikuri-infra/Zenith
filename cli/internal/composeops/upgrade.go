@@ -34,7 +34,7 @@ type UpgradeResult struct {
 	RollbackFailed   bool // rollback ran and failed
 }
 
-var targetRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
+var targetRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]*[0-9A-Za-z])?$`)
 
 // Upgrade moves a compose install to opt.Target, rolling back on failure.
 func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, log io.Writer) (*UpgradeResult, error) {

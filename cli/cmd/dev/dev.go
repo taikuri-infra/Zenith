@@ -43,11 +43,11 @@ type composeFile struct {
 }
 
 type composeService struct {
-	Image       string            `yaml:"image"`
-	Build       interface{}       `yaml:"build"`
-	Ports       []string          `yaml:"ports"`
-	Environment interface{}       `yaml:"environment"`
-	DependsOn   interface{}       `yaml:"depends_on"`
+	Image       string      `yaml:"image"`
+	Build       interface{} `yaml:"build"`
+	Ports       []string    `yaml:"ports"`
+	Environment interface{} `yaml:"environment"`
+	DependsOn   interface{} `yaml:"depends_on"`
 }
 
 // managedServiceInfo holds connection details for a managed service.
@@ -76,7 +76,7 @@ func runDev(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not logged in — run 'zen login' first")
 	}
 
-	client := api.NewClient(cfg.APIEndpoint, cfg.Token)
+	client := api.NewClientFromConfig(cfg)
 
 	// Step 1: Find docker-compose.yml
 	composePath := findComposeFile()
@@ -139,8 +139,8 @@ func runDev(cmd *cobra.Command, args []string) error {
 	// Step 4: Get dev info (environments + managed services)
 	var devInfo struct {
 		ProjectName     string               `json:"project_name"`
-		ManagedServices []managedServiceInfo  `json:"managed_services"`
-		Environments    []environmentInfo     `json:"environments"`
+		ManagedServices []managedServiceInfo `json:"managed_services"`
+		Environments    []environmentInfo    `json:"environments"`
 	}
 	if err := client.DoRaw("GET", fmt.Sprintf("/api/v1/projects/%s/dev-info", projectID), nil, &devInfo); err != nil {
 		return fmt.Errorf("failed to fetch dev info: %w", err)
@@ -154,7 +154,7 @@ func runDev(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	msResp := struct{ Items []managedServiceInfo }{ Items: devInfo.ManagedServices }
+	msResp := struct{ Items []managedServiceInfo }{Items: devInfo.ManagedServices}
 
 	if len(msResp.Items) == 0 {
 		fmt.Printf("%s No managed services found in this project\n", tui.Yellow("!"))
@@ -272,4 +272,3 @@ func addToGitignore(filename string) {
 	f.WriteString(filename + "\n")
 	fmt.Printf("%s Added %s to .gitignore\n", tui.Green("✓"), filename)
 }
-

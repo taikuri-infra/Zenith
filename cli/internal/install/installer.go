@@ -657,12 +657,12 @@ func createFirstCluster(cfg *Config) error {
 		adminEmail = "admin@" + cfg.Domain
 	}
 
-	token, err := apiClient.Login(adminEmail, cfg.AdminPassword)
+	ts, err := apiClient.LoginWithPassword(adminEmail, cfg.AdminPassword)
 	if err != nil {
 		return fmt.Errorf("login to Mission Control at %s: %w", mcURL, err)
 	}
 
-	cfg.AdminToken = token
+	cfg.AdminToken = ts.AccessToken
 	return nil
 }
 

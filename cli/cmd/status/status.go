@@ -2,6 +2,7 @@ package status
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,8 +15,7 @@ import (
 var Cmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show project status overview",
-	Long: `Display a rich overview of the current project including apps,
-databases, nodes, and cost estimates.
+	Long: `Show the server version, the current project's apps and databases.
 
 Example:
   zen status`,
@@ -34,53 +34,43 @@ type ResourceStatus struct {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(tui.ColorPrimary).
-		MarginBottom(1)
+	cfg, err := config.Load()
+	if err != nil || cfg.Token == "" {
+		fmt.Fprintln(cmd.OutOrStdout(), lipgloss.NewStyle().Foreground(tui.ColorError).Render("  Not logged in — run: zen login"))
+		return nil
+	}
+	return renderStatus(cmd.OutOrStdout(), cliapi.NewClientFromConfig(cfg), cfg)
+}
 
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(tui.ColorPrimary).
-		Padding(0, 1)
-
-	cellStyle := lipgloss.NewStyle().
-		Foreground(tui.ColorText).
-		Padding(0, 1)
-
-	sectionStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(tui.ColorText).
-		MarginTop(1)
-
+// renderStatus prints the overview. On a self-hosted server there is no plan, region or cost.
+func renderStatus(w io.Writer, client *cliapi.Client, cfg *config.Config) error {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).MarginBottom(1)
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).Padding(0, 1)
+	cellStyle := lipgloss.NewStyle().Foreground(tui.ColorText).Padding(0, 1)
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).MarginTop(1)
 	infoStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
 	valStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
 	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
 
-	// Load config and create API client
-	cfg, err := config.Load()
-	if err != nil || cfg.Token == "" {
-		fmt.Println(errStyle.Render("  Not logged in — run: zen login"))
+	info, err := client.ServerInfo()
+	if err != nil {
+		fmt.Fprintln(w, errStyle.Render("  Failed to reach the server: "+err.Error()))
 		return nil
 	}
+	standalone := info.Mode != "saas"
 
-	client := cliapi.NewClient(cfg.APIEndpoint, cfg.Token)
+	fmt.Fprintln(w, titleStyle.Render("  Zenith Status"))
+	fmt.Fprintf(w, "  %s %s (%s)\n", infoStyle.Render("Server: "), valStyle.Render(cfg.APIEndpoint), info.Version)
 
-	// Header
-	fmt.Println(titleStyle.Render("  Zenith Project Status"))
-
-	// Fetch projects
 	projects, err := client.ListProjects()
 	if err != nil {
-		fmt.Println(errStyle.Render("  Failed to fetch projects: " + err.Error()))
+		fmt.Fprintln(w, errStyle.Render("  Failed to fetch projects: "+err.Error()))
 		return nil
 	}
 	if len(projects) == 0 {
-		fmt.Println(infoStyle.Render("  No projects found. Create one at the dashboard."))
+		fmt.Fprintln(w, infoStyle.Render("  No projects found. Create one at the dashboard."))
 		return nil
 	}
-
-	// Select current project: prefer cfg.Project match by name or ID, else first project
 	current := projects[0]
 	for _, p := range projects {
 		if cfg.Project != "" && (p.ID == cfg.Project || p.Name == cfg.Project || p.DisplayName == cfg.Project) {
@@ -88,71 +78,53 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			break
 		}
 	}
-
 	displayName := current.DisplayName
 	if displayName == "" {
 		displayName = current.Name
 	}
-	region := current.Region
-	if region == "" {
-		region = cfg.Region
+	fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Project:"), valStyle.Render(displayName))
+	if !standalone {
+		region := current.Region
+		if region == "" {
+			region = cfg.Region
+		}
+		plan := current.Plan
+		if plan == "" {
+			plan = "free"
+		}
+		fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Region: "), valStyle.Render(region))
+		fmt.Fprintf(w, "  %s %s\n", infoStyle.Render("Plan:   "), valStyle.Render(plan))
 	}
-	plan := current.Plan
-	if plan == "" {
-		plan = "free"
-	}
 
-	fmt.Printf("  %s %s\n", infoStyle.Render("Project:"), valStyle.Render(displayName))
-	fmt.Printf("  %s %s\n", infoStyle.Render("Region: "), valStyle.Render(region))
-	fmt.Printf("  %s %s\n", infoStyle.Render("Plan:   "), valStyle.Render(plan))
-
-	// Apps section
-	fmt.Println()
-	fmt.Println(sectionStyle.Render("  Apps"))
-
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, sectionStyle.Render("  Apps"))
 	apps, err := client.ListApps(current.ID)
 	if err != nil {
-		fmt.Println("  " + errStyle.Render("Failed to fetch apps: "+err.Error()))
+		fmt.Fprintln(w, "  "+errStyle.Render("Failed to fetch apps: "+err.Error()))
 	} else {
-		appRows := make([][]string, 0, len(apps))
+		rows := make([][]string, 0, len(apps))
 		for _, a := range apps {
-			replicas := fmt.Sprintf("%d", a.Replicas)
-			if replicas == "0" {
-				replicas = "—"
-			}
-			appRows = append(appRows, []string{a.Name, a.Status, replicas, a.CPU, a.Memory})
+			rows = append(rows, []string{a.Name, a.Status, a.URL})
 		}
-		fmt.Println(renderTable(
-			[]string{"NAME", "STATUS", "REPLICAS", "CPU", "MEMORY"},
-			appRows,
-			headerStyle, cellStyle,
-		))
+		fmt.Fprint(w, renderTable([]string{"NAME", "STATUS", "URL"}, rows, headerStyle, cellStyle))
 	}
 
-	// Databases section
-	fmt.Println(sectionStyle.Render("  Databases"))
-
+	fmt.Fprintln(w, sectionStyle.Render("  Databases"))
 	dbs, err := client.ListDatabases(current.ID)
 	if err != nil {
-		fmt.Println("  " + errStyle.Render("Failed to fetch databases: "+err.Error()))
+		fmt.Fprintln(w, "  "+errStyle.Render("Failed to fetch databases: "+err.Error()))
 	} else {
-		dbRows := make([][]string, 0, len(dbs))
+		rows := make([][]string, 0, len(dbs))
 		for _, d := range dbs {
-			dbRows = append(dbRows, []string{d.Name, d.Engine, d.Storage, "—", d.Status})
+			rows = append(rows, []string{d.Name, d.Engine, d.Status})
 		}
-		fmt.Println(renderTable(
-			[]string{"NAME", "ENGINE", "STORAGE", "BACKUP", "STATUS"},
-			dbRows,
-			headerStyle, cellStyle,
-		))
+		fmt.Fprint(w, renderTable([]string{"NAME", "ENGINE", "STATUS"}, rows, headerStyle, cellStyle))
 	}
 
-	// Cost summary (placeholder — requires billing API)
-	fmt.Println(sectionStyle.Render("  Cost Estimate"))
-	fmt.Printf("  %s %s\n\n",
-		infoStyle.Render("Monthly:"),
-		lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).Render("€0.00"))
-
+	if !standalone {
+		fmt.Fprintln(w, sectionStyle.Render("  Cost Estimate"))
+		fmt.Fprintf(w, "  %s %s\n\n", infoStyle.Render("Monthly:"), lipgloss.NewStyle().Bold(true).Foreground(tui.ColorText).Render("€0.00"))
+	}
 	return nil
 }
 

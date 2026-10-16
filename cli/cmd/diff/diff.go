@@ -62,9 +62,9 @@ type FieldChange struct {
 
 // Styles for diff output
 var (
-	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#22c55e")) // green
-	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ef4444")) // red
-	changedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#f59e0b")) // amber
+	addedStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#22c55e")) // green
+	removedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#ef4444")) // red
+	changedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#f59e0b")) // amber
 	unchangedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280")) // gray
 )
 
@@ -93,7 +93,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		project = "default"
 	}
 
-	client := api.NewClient(cfg.APIEndpoint, cfg.Token)
+	client := api.NewClientFromConfig(cfg)
 
 	// Collect local manifests
 	var localManifests []*export.ZenithManifest

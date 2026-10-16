@@ -146,7 +146,7 @@ func runDeploySteps(appName, image string) error {
 		return fmt.Errorf("not logged in — run: zen login")
 	}
 
-	client := cliapi.NewClient(cfg.APIEndpoint, cfg.Token)
+	client := cliapi.NewClientFromConfig(cfg)
 
 	// Step 1: Trigger deploy
 	totalStart := time.Now()

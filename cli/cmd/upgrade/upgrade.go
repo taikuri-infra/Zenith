@@ -21,7 +21,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var versionRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
+var versionRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]*[0-9A-Za-z])?$`)
 
 func validateVersion(v string) error {
 	if !versionRe.MatchString(v) {
