@@ -127,6 +127,9 @@ if command -v openssl >/dev/null 2>&1; then
   check "leaf file carries the CA (chain)" test "$(grep -c 'BEGIN CERTIFICATE' "$certs/zenith.crt")" = 2
   check "CA is CN=Zenith Local CA, CA:TRUE" bash -c 'openssl x509 -in "$1" -noout -subject -ext basicConstraints | tr -d " " | grep -q "CN=ZenithLocalCA" && openssl x509 -in "$1" -noout -ext basicConstraints | grep -q "CA:TRUE"' _ "$certs/zenith-ca.crt"
   check "keys are 0600" test "$(stat -c %a "$certs/zenith.key" "$certs/zenith-ca.key" | sort -u)" = 600
+  check "certificates are 0644 (the api container reads the CA)" test "$(stat -c %a "$certs/zenith.crt" "$certs/zenith-ca.crt" | sort -u)" = 644
+  check "certs.yml is byte-identical to install.sh's (which matches the Go installer's)" \
+    cmp -s "$inst/traefik/dynamic/certs.yml" <(sed -n "/^  cat > traefik\/dynamic\/certs.yml <<'EOF'\$/,/^EOF\$/{//!p}" "$here/../scripts/install.sh")
   check "certs.yml sets the default certificate" grep -q 'defaultCertificate:' "$inst/traefik/dynamic/certs.yml"
   check "certs.yml points at /etc/traefik/certs" test "$(grep -c -e 'certFile: /etc/traefik/certs/zenith.crt' -e 'keyFile: /etc/traefik/certs/zenith.key' "$inst/traefik/dynamic/certs.yml")" = 4
   check "traefik.yml left alone" cmp -s "$inst/traefik/traefik.yml" "$tmp/traefik.yml.orig"
