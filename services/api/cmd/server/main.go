@@ -1354,7 +1354,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	domainHandler.SetDeployer(backend)
 	domainHandler.SetReservedDomain(cfg.BaseDomain)
 	if cfg.IsStandalone() && dockerDeployer != nil {
-		domainChecker := services.NewDomainChecker(domainRepo, net.DefaultResolver, &services.TraefikTLSProber{}, cfg.BaseDomain)
+		roots, rerr := services.CertPoolWithFile(cfg.TLSCAFile)
+		if rerr != nil {
+			slog.Warn("custom domains: using system roots only", "error", rerr)
+		}
+		domainChecker := services.NewDomainChecker(domainRepo, net.DefaultResolver, &services.TraefikTLSProber{Roots: roots}, cfg.BaseDomain)
 		domainHandler.SetChecker(domainChecker)
 		domainChecker.SetRefresher(domainHandler)
 		go func() {

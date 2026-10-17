@@ -42,6 +42,7 @@ type Config struct {
 
 	// Deploy
 	BaseDomain       string
+	TLSCAFile        string // ZENITH_TLS_CA_FILE: PEM CA to trust in addition to the system roots (self-signed installs)
 	AppNetwork       string // docker network app containers join (standalone/DockerDeployer)
 	GatewayDomain    string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
 	Registry         string // container registry host (e.g. "registry.stage.freezenith.com")
@@ -168,6 +169,7 @@ func Load() *Config {
 		EmailFrom:             getEnv("EMAIL_FROM", "Zenith <noreply@freezenith.com>"),
 		InternalSecret:        getEnv("INTERNAL_SECRET", ""),
 		BaseDomain:            getEnv("BASE_DOMAIN", "freezenith.com"),
+		TLSCAFile:             getEnv("ZENITH_TLS_CA_FILE", ""),
 		AppNetwork:            getEnv("ZENITH_APP_NETWORK", "zenith_default"),
 		GatewayDomain:         getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
 		Registry:              getEnv("REGISTRY", "registry.freezenith.com"),
