@@ -20,13 +20,20 @@ On a network that blocks `proxy.golang.org` or Docker Hub, put mirrors in `~/.ac
 
 ## Self-hosted runner (optional, much faster)
 
-With the repository variable `ZENITH_SELF_HOSTED` set to `true` (Settings → Secrets and variables → Actions → Variables), these jobs move to a runner labelled `self-hosted, linux, x64`; everything else stays on GitHub-hosted runners:
+Three repository variables (Settings → Secrets and variables → Actions → Variables) move jobs to a runner labelled `self-hosted, linux, x64`; everything else stays on GitHub-hosted runners. Measured on a 20-core box behind a slow international link (2026-10-17): Semgrep 24 s vs 90 s on GitHub, but `Run Tests` 6–23 min vs 6 min and the image builds 15–42 min vs 2–6 min, because the runs are dominated by downloads (Go modules, npm, apt, the setup-go cache). Switch on only what the box does faster.
+
+| Variable | Jobs |
+|---|---|
+| `ZENITH_SELF_HOSTED` | CI `test`, `security` |
+| `ZENITH_SELF_HOSTED_E2E` | E2E `amd64` (needs host→container networking and the `e2e` label) |
+| `ZENITH_SELF_HOSTED_IMAGES` | public images `build (amd64)` |
+
 
 | Job | Where | Why |
 |---|---|---|
 | CI `test`, `security` | self-hosted | Go/Node/Helm tests, Semgrep (container) |
 | E2E `amd64` | self-hosted + label `e2e`, only with `ZENITH_SELF_HOSTED_E2E=true` | privileged Docker-in-Docker and host→container networking (the suite reaches the servers by bridge IP; WSL2 boxes may need extra setup); give the `e2e` label to exactly one runner per machine (two E2E runs on one Docker daemon tear each other down) |
-| Public images `build (amd64)` | self-hosted | native amd64 build, pushed by digest |
+| Public images `build (amd64)` | self-hosted only with `ZENITH_SELF_HOSTED_IMAGES=true` | native amd64 build, pushed by digest; downloads Go modules and npm packages, so only worth it on a fast link |
 | E2E `arm64`, images `build (arm64)` | `ubuntu-24.04-arm` | native arm64 (free for public repos) |
 | `commitlint`, images `prepare`/`merge`, CLI release | `ubuntu-latest` | seconds; no benefit |
 
