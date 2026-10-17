@@ -10,8 +10,12 @@ Platform endpoints:
   Landing:    https://{{ . }}
 {{- end }}
   API:        https://{{ .Values.ingress.api.host }}
-  Demo MC:    https://{{ .Values.ingress.demoMc.host }}
-  Demo Web:   https://{{ .Values.ingress.demoWeb.host }}
+{{- with .Values.ingress.demoMc }}
+  Demo MC:    https://{{ .host }}
+{{- end }}
+{{- with .Values.ingress.demoWeb }}
+  Demo Web:   https://{{ .host }}
+{{- end }}
 
 {{- if .Values.tenants }}
 

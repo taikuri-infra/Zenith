@@ -383,6 +383,28 @@ func composeEnsureDocker(cfg *Config) error {
 	return nil
 }
 
+// restoreTrackedTraefikCommand: older `zen install` runs overwrote the tracked
+// traefik/traefik.yml, which makes `git pull --ff-only` refuse once upstream
+// changes it. Keep the generated content as traefik/traefik.local.yml (unless
+// that already exists — it is then the live config) and restore the tracked
+// file. The TLS step regenerates traefik.local.yml anyway. dir is shell-safe
+// (validateInstallDir).
+func restoreTrackedTraefikCommand(dir string) string {
+	yml, local := dir+"/traefik/traefik.yml", dir+"/traefik/traefik.local.yml"
+	return fmt.Sprintf(
+		"if ! git -C %s diff --quiet -- traefik/traefik.yml; then "+
+			"if [ -f %s ] && [ ! -e %s ]; then cp -p %s %s || exit 1; fi; "+
+			"git -C %s checkout -- traefik/traefik.yml || exit 1; fi",
+		dir, yml, local, yml, local, dir)
+}
+
+// fetchStackCommand clones the stack into dir, or updates an existing checkout.
+func fetchStackCommand(dir string) string {
+	return fmt.Sprintf(
+		"if [ -d %s/.git ]; then ( %s ) && git -C %s pull --ff-only; else git clone --depth 1 --branch %s %s %s; fi",
+		dir, restoreTrackedTraefikCommand(dir), dir, composeBranch, composeRepoURL, dir)
+}
+
 func composeFetchStack(cfg *Config) error {
 	if cfg.DryRun {
 		if cfg.AdminPassword == "" {
@@ -400,10 +422,7 @@ func composeFetchStack(cfg *Config) error {
 	if err := validateInstallDir(dir); err != nil {
 		return err
 	}
-	clone := fmt.Sprintf(
-		"if [ -d %s/.git ]; then git -C %s pull --ff-only; else git clone --depth 1 --branch %s %s %s; fi",
-		dir, dir, composeBranch, composeRepoURL, dir)
-	if out, err := r.Run(clone); err != nil {
+	if out, err := r.Run(fetchStackCommand(dir)); err != nil {
 		return fmt.Errorf("fetch stack: %w\n%s", err, out)
 	}
 
@@ -454,6 +473,10 @@ func buildComposeEnv(cfg *Config, adminEmail, dockerGID string) string {
 			b.WriteString("ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt\n")
 			b.WriteString("ZENITH_CERT_RESOLVER=\n")
 		}
+	}
+	// composeConfigureTLS writes traefik.local.yml exactly when needsTLS.
+	if needsTLS(cfg) {
+		b.WriteString("ZENITH_TRAEFIK_CONFIG=" + localTraefikConfig + "\n")
 	}
 	return b.String()
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -80,6 +81,14 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 			fmt.Fprintf(log, "  %d. back up to %s\n", n, backupDir)
 			n++
 		}
+		switch traefikMigrationNeeded(ctx, r, inst) {
+		case traefikMove:
+			fmt.Fprintf(log, "  %d. move the modified %s to %s and set %s\n", n, trackedTraefikConfig, localTraefikConfig, traefikConfigKey)
+			n++
+		case traefikRestore:
+			fmt.Fprintf(log, "  %d. restore the shipped %s (the live config is %s)\n", n, trackedTraefikConfig, localTraefikConfig)
+			n++
+		}
 		for _, s := range []string{
 			"git fetch --depth 1 origin tag " + tag + " and check out " + tag,
 			"refresh .env (installer env-only mode)",
@@ -103,6 +112,7 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 		fmt.Fprintf(log, "Backup written: %s\n", p)
 	}
 
+	var undoTraefik func() error // set when the traefik migration changed files
 	steps := []struct {
 		name string
 		fn   func() error
@@ -112,7 +122,15 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 			return err
 		}},
 		{"checkout " + tag, func() error {
-			_, err := r.Run(ctx, inst.Dir, nil, "git", "checkout", tag)
+			var err error
+			if undoTraefik, err = migrateTraefikConfig(ctx, r, inst, log); err != nil {
+				return err
+			}
+			if _, err = r.Run(ctx, inst.Dir, nil, "git", "checkout", tag); err != nil && undoTraefik != nil {
+				if rerr := undoTraefik(); rerr != nil {
+					return fmt.Errorf("%w (and restoring %s failed: %v)", err, trackedTraefikConfig, rerr)
+				}
+			}
 			return err
 		}},
 		{"refresh .env", func() error {
@@ -141,7 +159,7 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 				return res, fmt.Errorf("%s failed: %v — nothing changed", s.name, err)
 			}
 			fmt.Fprintf(log, "step %q failed: %v; rolling back to %s\n", s.name, err, from)
-			rbErr := rollback(context.WithoutCancel(ctx), r, inst, oldRef, from, health)
+			rbErr := rollback(context.WithoutCancel(ctx), r, inst, oldRef, from, undoTraefik, health)
 			msg := fmt.Sprintf("upgrade failed at %q: %v", s.name, err)
 			res.RolledBack = rbErr == nil
 			res.RollbackFailed = rbErr != nil
@@ -162,9 +180,14 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 	return res, nil
 }
 
-func rollback(ctx context.Context, r Runner, inst Install, oldRef, from string, health func(context.Context, string) error) error {
+func rollback(ctx context.Context, r Runner, inst Install, oldRef, from string, undoTraefik func() error, health func(context.Context, string) error) error {
 	if _, err := r.Run(ctx, inst.Dir, nil, "git", "checkout", oldRef); err != nil {
 		return fmt.Errorf("git checkout %s: %w", oldRef, err)
+	}
+	if undoTraefik != nil {
+		if err := undoTraefik(); err != nil {
+			return err
+		}
 	}
 	if from == "" {
 		if err := inst.EnvUnset("ZENITH_VERSION"); err != nil {
@@ -180,6 +203,115 @@ func rollback(ctx context.Context, r Runner, inst Install, oldRef, from string, 
 		return fmt.Errorf("old version unhealthy: %w", err)
 	}
 	return nil
+}
+
+const (
+	trackedTraefikConfig = "traefik/traefik.yml"
+	localTraefikConfig   = "traefik/traefik.local.yml"
+	traefikConfigKey     = "ZENITH_TRAEFIK_CONFIG"
+)
+
+type traefikAction int
+
+const (
+	traefikNone    traefikAction = iota
+	traefikMove                  // no key yet: move the modified traefik.yml to traefik.local.yml
+	traefikRestore               // traefik.local.yml is already live: just restore traefik.yml
+)
+
+// traefikMigrationNeeded reports what migrateTraefikConfig would do. Older
+// installers overwrote the tracked traefik/traefik.yml (install.sh self-signed
+// in v0.1.0-alpha.1, `zen install` in every TLS mode), which makes the release
+// checkout refuse once upstream changes the file. Read-only: runs `git diff`.
+func traefikMigrationNeeded(ctx context.Context, r Runner, inst Install) traefikAction {
+	act := traefikNone
+	switch key := inst.EnvGet(traefikConfigKey); {
+	case key == "":
+		act = traefikMove
+	case key == "/etc/"+localTraefikConfig:
+		if _, err := os.Stat(filepath.Join(inst.Dir, localTraefikConfig)); err == nil {
+			act = traefikRestore
+		}
+	}
+	if act == traefikNone {
+		return act
+	}
+	if _, err := os.Stat(filepath.Join(inst.Dir, trackedTraefikConfig)); err != nil {
+		return traefikNone
+	}
+	if _, err := r.Run(ctx, inst.Dir, nil, "git", "diff", "--quiet", "--", trackedTraefikConfig); err == nil {
+		return traefikNone // unmodified
+	}
+	return act
+}
+
+// migrateTraefikConfig restores a modified tracked traefik/traefik.yml so the
+// release checkout is not refused. Without ZENITH_TRAEFIK_CONFIG it first
+// keeps the content as traefik/traefik.local.yml and points the key at it;
+// with traefik.local.yml already live it only restores the tracked file. It
+// returns an undo func when it changed anything (nil otherwise); on error,
+// nothing is changed.
+func migrateTraefikConfig(ctx context.Context, r Runner, inst Install, log io.Writer) (func() error, error) {
+	act := traefikMigrationNeeded(ctx, r, inst)
+	if act == traefikNone {
+		return nil, nil
+	}
+	src := filepath.Join(inst.Dir, trackedTraefikConfig)
+	fi, err := os.Stat(src)
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return nil, err
+	}
+	checkout := func() error {
+		if _, err := r.Run(ctx, inst.Dir, nil, "git", "checkout", "--", trackedTraefikConfig); err != nil {
+			return fmt.Errorf("restore %s: %w", trackedTraefikConfig, err)
+		}
+		return nil
+	}
+	const hint = "edit " + localTraefikConfig + " from now on"
+	if act == traefikRestore {
+		if err := checkout(); err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(log, "Restored the shipped %s (the live config is %s); %s\n", trackedTraefikConfig, localTraefikConfig, hint)
+		return func() error { return os.WriteFile(src, b, fi.Mode().Perm()) }, nil
+	}
+	dst := filepath.Join(inst.Dir, localTraefikConfig)
+	if err := os.WriteFile(dst, b, fi.Mode().Perm()); err != nil {
+		return nil, err
+	}
+	// Key before checkout: if .env cannot be written, traefik.yml is untouched.
+	if err := inst.EnvSet(traefikConfigKey, "/etc/"+localTraefikConfig); err != nil {
+		os.Remove(dst)
+		return nil, err
+	}
+	if err := checkout(); err != nil {
+		os.Remove(dst)
+		_ = inst.EnvUnset(traefikConfigKey)
+		return nil, err
+	}
+	fmt.Fprintf(log, "Moved the modified %s to %s (%s set in .env); %s\n", trackedTraefikConfig, localTraefikConfig, traefikConfigKey, hint)
+	return func() error { return revertTraefikConfig(inst) }, nil
+}
+
+// revertTraefikConfig undoes migrateTraefikConfig for the old release,
+// whose compose file reads traefik.yml only.
+func revertTraefikConfig(inst Install) error {
+	src := filepath.Join(inst.Dir, localTraefikConfig)
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(inst.Dir, trackedTraefikConfig), b, 0o644); err != nil {
+		return err
+	}
+	if err := os.Remove(src); err != nil {
+		return err
+	}
+	return inst.EnvUnset(traefikConfigKey)
 }
 
 func httpHealth(ctx context.Context, want string, timeout time.Duration) error {
@@ -239,9 +371,15 @@ func checkOnce(ctx context.Context, want string) error {
 	return nil
 }
 
-// LatestRelease returns the newest non-draft release tag (prereleases included), without a leading v.
+// githubAPI is the GitHub API base URL; tests point it at an httptest server.
+var githubAPI = "https://api.github.com"
+
+var platformTag = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+// LatestRelease returns the newest non-draft platform release tag (vX.Y.Z, prereleases included),
+// without the leading v. The repo also publishes zen-v*, zenith-api-v* and zenith-web-v* releases.
 func LatestRelease(ctx context.Context, repo string) (string, error) {
-	resp, err := get(ctx, "https://api.github.com/repos/"+repo+"/releases?per_page=1")
+	resp, err := get(ctx, githubAPI+"/repos/"+repo+"/releases?per_page=30")
 	if err != nil {
 		return "", err
 	}
@@ -257,9 +395,9 @@ func LatestRelease(ctx context.Context, repo string) (string, error) {
 		return "", err
 	}
 	for _, rel := range rels {
-		if !rel.Draft && rel.Tag != "" {
+		if !rel.Draft && platformTag.MatchString(rel.Tag) {
 			return strings.TrimPrefix(rel.Tag, "v"), nil
 		}
 	}
-	return "", fmt.Errorf("no releases found for %s", repo)
+	return "", fmt.Errorf("no platform release found for %s", repo)
 }
