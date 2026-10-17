@@ -247,7 +247,7 @@ The user-facing dashboard where developers manage their apps, databases, storage
 | `/login` | Login/register form with OAuth (Google, GitHub) | API |
 | `/apps` | App list with search/filter, columns: name, status, replicas, CPU, memory, image, port, domain | API |
 | `/apps/[name]` | App detail (legacy CRD): deployment info, env vars, stats | API |
-| `/apps/[id]` | App detail (Phase 2): 6-tab UI — Overview (details + quick links), Deployments (table + rollback), Releases (image versions + one-click Deploy), Logs (SSE build log viewer), Secrets (add/reveal/delete encrypted secrets), Environment (add/delete/show-hide env vars) | API (appsDeploy) |
+| `/apps/[id]` | App detail: one page of cards, no tab bar — header (type, status, branch, Open, Logs link to `/logs?app=`), Source, Health (web), Recent Deployments (rollback + collapsible Releases with Deploy), Environment (env vars + secret store rows), Resources (databases, buckets), Domains (web) | API (appsDeploy) |
 | `/deploy` | Deploy Engine dashboard: card grid with status dots (running=green, building=amber pulse, failed=red), framework labels, branch display, URLs, "Deploy from Git" modal, delete with confirmation | API (appsDeploy) |
 | `/databases` | Database list with engine icons (P=Postgres blue, M=MySQL orange, M=Mongo green, R=Redis red) | API |
 | `/databases/[name]` | Database detail with connection string copy, engine/storage/port/created stats | API |

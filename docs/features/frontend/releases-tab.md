@@ -1,10 +1,10 @@
 # Releases Tab (Frontend Feature Doc)
 
 ## 1. Overview
-The Releases Tab is a panel within the app detail page (`/apps/[id]`) that displays versioned image builds registered by CI pipelines via `zenith-actions`. Users can one-click deploy any release version.
+The Releases list is a collapsible section of the Recent Deployments card on the app detail page (`/apps/[id]`; formerly a tab) that displays versioned image builds registered by CI pipelines via `zenith-actions`. Users can one-click deploy any release version.
 
 ## 2. UI/UX Flow
-1. User navigates to an app detail page and clicks the **Releases** tab (Tag icon)
+1. User navigates to an app detail page and opens **Releases (n)** under Recent Deployments
 2. A table lists all releases sorted by newest first
 3. The most recent release is highlighted with a "latest" badge
 4. Each row shows: image tag, git SHA (truncated to 8 chars), branch, commit message, date
@@ -17,7 +17,7 @@ The Releases Tab is a panel within the app detail page (`/apps/[id]`) that displ
 - **Deploy**: `POST /api/v1/apps/:appId/releases/:releaseId/deploy` → creates deployment record, triggers async pipeline with pre-built image (skips build, goes straight to K8s deploy)
 
 ## 4. Components
-- `ReleasesTab` — Main component, manages deploy state
+- `ReleasesSection` in `app/apps/[name]/deployments-card.tsx` — manages deploy state; a deploy refetches the deployments list
 - Uses shared: `PageWithTableSkeleton`, `ErrorState`, `EmptyState`
 
 ## 5. Services/API
