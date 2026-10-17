@@ -301,6 +301,4 @@ The spec's five success criteria, checked on the live install:
 - Stale tags `v0.1.0`, `v0.2.0`, `v0.5.0`, `v2.0.0-alpha.3` from February/March 2026 (no releases): the owner chose to move `v0.1.0` (deleted on origin on 2026-10-17 03:05 UTC, old target `e3efc05`, annotated object `56057aa`) and re-create it with the release; the other three stay for now (`v0.2.0` will collide with alpha.2 — move it then).
 
 ### 9.2 Still open
-- Self-signed installs overwrite the tracked `traefik/traefik.yml`; the next upstream change to that file will make `zen upgrade` stop at `git checkout` (safe, "nothing changed"). Mount the static config from a variable path before that change.
-
-**Result:** every roadmap exit criterion for the Compose edition is pinned by a named test that runs on every PR on both architectures; `v0.1.0` ("alpha.1 (Compose edition)") is published from `main` 5973d4a with amd64 + arm64 images and the live install runs it.
+- None from this sub-project. The `traefik/traefik.yml` overwrite by self-signed installs (noted at release time) was fixed right after: installers write `traefik/traefik.local.yml` and set `ZENITH_TRAEFIK_CONFIG`; `zen upgrade` migrates older installs before the checkout. `zen upgrade` without `--version` now ignores the `zen-v*` / `zenith-*-v*` releases. Stale tags `v0.2.0`, `v0.5.0`, `v2.0.0-alpha.3` remain on origin by choice.
