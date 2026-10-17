@@ -45,11 +45,15 @@ resolve_domain() {
   ZENITH_DOMAIN="${PUBLIC_IP}.sslip.io"
 }
 
-# In-place edit that works on both GNU and BSD/macOS sed.
+# In-place edit that works on both GNU and BSD/macOS sed. The value is stored
+# verbatim: \, & and | are escaped for the sed replacement; a newline cannot be
+# represented in .env and is refused.
 set_var() {
-  local key="$1" val="$2"
+  local key="$1" val="$2" esc
+  case "$val" in *$'\n'*) err "$key must not contain a newline"; exit 1;; esac
   if grep -qE "^${key}=" .env; then
-    sed -i.bak -E "s|^${key}=.*|${key}=${val}|" .env
+    esc="$(printf '%s' "$val" | sed -e 's/[\\&|]/\\&/g')"
+    sed -i.bak -E "s|^${key}=.*|${key}=${esc}|" .env
   else
     printf '%s=%s\n' "$key" "$val" >>.env
   fi
@@ -205,6 +209,10 @@ fi  # DRY_RUN
 CREDS_FILE=".zenith-credentials"
 if [ ! -f .env ]; then
   resolve_domain
+  # Refuse unrepresentable user-supplied values before any file is written.
+  for v in ADMIN_PASSWORD ADMIN_EMAIL; do
+    case "${!v:-}" in *$'\n'*) err "$v must not contain a newline"; exit 1;; esac
+  done
   log "Generating .env with strong, unique secrets..."
   cp .env.example .env
 
