@@ -17,6 +17,35 @@ On a network that blocks `proxy.golang.org` or Docker Hub, put mirrors in `~/.ac
 --env ZENITH_E2E_REGISTRY_MIRROR=https://mirror.gcr.io
 ```
 
+
+## Self-hosted runner (optional, much faster)
+
+With the repository variable `ZENITH_SELF_HOSTED` set to `true` (Settings → Secrets and variables → Actions → Variables), these jobs move to a runner labelled `self-hosted, linux, x64`; everything else stays on GitHub-hosted runners:
+
+| Job | Where | Why |
+|---|---|---|
+| CI `test`, `security` | self-hosted | Go/Node/Helm tests, Semgrep (container) |
+| E2E `amd64` | self-hosted | privileged Docker-in-Docker; needs Docker on the runner |
+| Public images `build (amd64)` | self-hosted | native amd64 build, pushed by digest |
+| E2E `arm64`, images `build (arm64)` | `ubuntu-24.04-arm` | native arm64 (free for public repos) |
+| `commitlint`, images `prepare`/`merge`, CLI release | `ubuntu-latest` | seconds; no benefit |
+
+**Fork safety:** the repository is public. Pull requests from forks never reach the self-hosted runner (`github.event.pull_request.head.repo.full_name == github.repository` guards every self-hosted `runs-on`); also set Settings → Actions → General → "Require approval for all outside collaborators".
+
+**Registering a runner** (Linux x64, e.g. an Ubuntu WSL2 box with Docker): Settings → Actions → Runners → New self-hosted runner → Linux → x64 and run the printed `curl`/`tar`/`./config.sh --url … --token …` commands in a directory such as `~/actions-runner` (as root, export `RUNNER_ALLOW_RUNASROOT=1` first). Then:
+
+```bash
+# per-runner environment (module/package mirrors on restricted networks)
+cat >> ~/actions-runner/.env <<'EOT'
+GOPROXY=https://goproxy.cn,direct
+GOSUMDB=sum.golang.google.cn
+ZENITH_E2E_REGISTRY_MIRROR=https://docker.arvancloud.ir
+EOT
+cd ~/actions-runner && sudo ./svc.sh install root && sudo ./svc.sh start   # systemd service
+```
+
+One runner takes one job at a time; register two or three (separate directories and names) so `test`, `security` and the E2E run in parallel. The E2E harness removes every `zenith-e2e-*` container on the runner's Docker daemon, so do not run `infra/e2e/run.sh` by hand on the same daemon while a job is active. The runner machine must stay up (on WSL2, keep a session open or `wsl --shutdown` ends it).
+
 ---
 
 ## Overview
