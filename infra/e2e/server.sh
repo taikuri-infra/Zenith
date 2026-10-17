@@ -85,7 +85,10 @@ cmd_new() {
   local name="${1:-}" c; c="$(cname "$name")"
   ensure_network; ensure_registry; ensure_image
   docker rm -fv "$c" >/dev/null 2>&1 || true
-  docker run -d --privileged --name "$c" --network "$NET" --hostname "$name" "$IMG" >/dev/null
+  # ZENITH_E2E_REGISTRY_MIRROR (optional): the entrypoint adds it to the server's daemon.json
+  # as a Docker Hub mirror, for hosts that cannot reach registry-1.docker.io directly.
+  docker run -d --privileged --name "$c" --network "$NET" --hostname "$name" \
+    -e "ZENITH_E2E_REGISTRY_MIRROR=${ZENITH_E2E_REGISTRY_MIRROR:-}" "$IMG" >/dev/null
   local deadline=$((SECONDS + 120))
   while [ "$SECONDS" -lt "$deadline" ]; do
     if docker exec "$c" docker info >/dev/null 2>&1; then log "server $name up at $(ip_of "$name")"; return 0; fi

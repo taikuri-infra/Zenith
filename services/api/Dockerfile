@@ -7,6 +7,11 @@ RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /src
 
+# Optional module proxy for restricted networks (empty = Go defaults); the E2E harness
+# passes the caller's GOPROXY/GOSUMDB through (infra/e2e/run.sh).
+ARG GOPROXY
+ARG GOSUMDB
+
 # Copy dependency files first for layer caching
 COPY services/api/go.mod services/api/go.sum ./
 RUN go mod download && go mod verify

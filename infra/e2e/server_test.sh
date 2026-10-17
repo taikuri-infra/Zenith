@@ -24,10 +24,10 @@ check "daemon.json is valid JSON" python3 -c 'import json,sys; json.load(open(sy
 check "daemon.json allows the in-job registry" python3 -c 'import json,sys; assert "zenith-e2e-registry:5000" in json.load(open(sys.argv[1]))["insecure-registries"]' "$here/daemon.json"
 
 echo "scripts"
-check "bash -n server.sh run.sh entrypoint.sh" bash -n "$here/server.sh" "$here/run.sh" "$here/entrypoint.sh"
+check "bash -n server.sh run.sh entrypoint.sh daemon-mirror.sh" bash -n "$here/server.sh" "$here/run.sh" "$here/entrypoint.sh daemon-mirror.sh"
 for f in server.sh run.sh entrypoint.sh; do check "$f is executable" test -x "$here/$f"; done
 if command -v shellcheck >/dev/null 2>&1; then
-  check "shellcheck clean" shellcheck -x "$here/server.sh" "$here/run.sh" "$here/entrypoint.sh" "$here/server_test.sh"
+  check "shellcheck clean" shellcheck -x "$here/server.sh" "$here/run.sh" "$here/entrypoint.sh" "$here/daemon-mirror.sh" "$here/server_test.sh"
 else
   echo "  skip shellcheck (not installed)"
 fi
@@ -143,6 +143,28 @@ else
 fi
 
 check "nothing called docker" test ! -e "$tmp/docker-calls"
+
+echo "registry mirror (daemon-mirror.sh, no docker)"
+m="$tmp/mirror"; mkdir -p "$m"
+cp "$here/daemon.json" "$m/d.json"
+check "mirror added to daemon.json" bash "$here/daemon-mirror.sh" "$m/d.json" https://mirror.example
+check "daemon.json still valid JSON" python3 -m json.tool "$m/d.json"
+check "insecure registry kept" grep -q 'zenith-e2e-registry:5000' "$m/d.json"
+check "mirror present" grep -q '"https://mirror.example"' "$m/d.json"
+bash "$here/daemon-mirror.sh" "$m/d.json" https://mirror.example
+check "adding the same mirror twice keeps one entry" test "$(grep -o 'https://mirror.example' "$m/d.json" | wc -l)" = 1
+bash "$here/daemon-mirror.sh" "$m/d.json" https://second.example
+check "a second mirror is appended" python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d['registry-mirrors']==['https://mirror.example','https://second.example'] else 1)" "$m/d.json"
+printf '{}' > "$m/e.json"; bash "$here/daemon-mirror.sh" "$m/e.json" https://mirror.example
+check "an empty {} config gets the key (valid JSON)" python3 -m json.tool "$m/e.json"
+check "a non-http mirror is refused" bash -c '! "$1" "$2" ftp://bad >/dev/null 2>&1' _ "$here/daemon-mirror.sh" "$m/d.json"
+check "entrypoint calls the mirror script when the variable is set" grep -q 'ZENITH_E2E_REGISTRY_MIRROR' "$here/entrypoint.sh"
+check "server.sh passes the mirror variable into the server" grep -q 'ZENITH_E2E_REGISTRY_MIRROR=' "$here/server.sh"
+check "Dockerfile.server ships the mirror script" grep -q 'daemon-mirror.sh' "$here/Dockerfile.server"
+check "run.sh passes GOPROXY/GOSUMDB/npm registry into image builds" grep -q 'GOPROXY GOSUMDB npm_config_registry COREPACK_NPM_REGISTRY' "$here/run.sh"
+check "api Dockerfile declares ARG GOPROXY" grep -q '^ARG GOPROXY' "$here/../../services/api/Dockerfile"
+check "probe Dockerfile declares ARG GOPROXY" grep -q '^ARG GOPROXY' "$here/probe/Dockerfile"
+check "web Dockerfile declares ARG npm_config_registry" grep -q '^ARG npm_config_registry' "$here/../../apps/web/Dockerfile"
 
 echo "reboot refuses a changed IP (scripted fake docker)"
 mkdir -p "$tmp/fake2"

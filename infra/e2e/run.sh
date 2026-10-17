@@ -6,6 +6,9 @@
 # Used by .github/workflows/e2e.yml and by act. `run.sh --plan` prints the sequence only.
 # Env: ZENITH_E2E_ARTIFACTS (default infra/e2e/artifacts), ZENITH_E2E_UPGRADE_FROM (tag),
 #      ZENITH_E2E_KEEP=1 (keep registry and network at the end).
+#      Restricted networks: GOPROXY/GOSUMDB/npm_config_registry/COREPACK_NPM_REGISTRY are
+#      passed into the image builds; ZENITH_E2E_REGISTRY_MIRROR (e.g. https://mirror.gcr.io)
+#      becomes the Docker Hub mirror of every E2E server's dockerd (server.sh new).
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; repo="$(cd "$here/../.." && pwd)"; S="$here/server.sh"
 export ZENITH_E2E_ARTIFACTS="${ZENITH_E2E_ARTIFACTS:-$here/artifacts}"
@@ -89,9 +92,23 @@ log "building zen and images for $CAND"
 (cd "$repo/cli" && CGO_ENABLED=0 go build -ldflags "-X github.com/dotechhq/zenith/cli/cmd/version.Version=$CAND" -o "$ZENITH_E2E_ARTIFACTS/zen" .)
 export ZENITH_E2E_ZEN="$ZENITH_E2E_ARTIFACTS/zen"
 images=("$REG/zenith-api:$CAND" "$REG/zenith-web:$CAND" "$REG/e2e-probe:$CAND")
-docker build -q -t "${images[0]}" --build-arg "VERSION=$CAND" -f "$repo/services/api/Dockerfile" "$repo" >/dev/null
-docker build -q -t "${images[1]}" --build-arg "VERSION=$CAND" --build-arg NEXT_PUBLIC_ZENITH_MODE=standalone -f "$repo/apps/web/Dockerfile" "$repo" >/dev/null
-docker build -q -t "${images[2]}" "$here/probe" >/dev/null
+# Restricted networks: the caller's module/package mirrors reach the image builds as
+# build args (the Dockerfiles declare them); unset ones are simply not passed.
+mirror_args=()
+for v in GOPROXY GOSUMDB npm_config_registry COREPACK_NPM_REGISTRY; do
+  if [ -n "${!v:-}" ]; then mirror_args+=(--build-arg "$v=${!v}"); fi
+done
+# build_image NAME TAG [docker build args...] — quiet on success, the log tail on failure.
+build_image() {
+  local name="$1" tag="$2" logf; shift 2; logf="$ZENITH_E2E_ARTIFACTS/build-$name.log"
+  log "building $tag (log: $logf)"
+  if ! docker build -t "$tag" "${mirror_args[@]}" "$@" > "$logf" 2>&1; then
+    log "build of $name FAILED; last lines of $logf:"; tail -n 40 "$logf"; return 1
+  fi
+}
+build_image zenith-api "${images[0]}" --build-arg "VERSION=$CAND" -f "$repo/services/api/Dockerfile" "$repo"
+build_image zenith-web "${images[1]}" --build-arg "VERSION=$CAND" --build-arg NEXT_PUBLIC_ZENITH_MODE=standalone -f "$repo/apps/web/Dockerfile" "$repo"
+build_image e2e-probe "${images[2]}" "$here/probe"
 
 # Push to the in-job registry. Fast path: the host daemon already trusts <registry ip>:5000.
 # Default: load the images into a throwaway server, whose dockerd resolves and trusts the

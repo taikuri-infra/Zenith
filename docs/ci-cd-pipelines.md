@@ -9,6 +9,14 @@ act <event> -W .github/workflows/<file>.yml -j <job-name> --container-architectu
 # Secrets are loaded from .secrets file automatically
 ```
 
+On a network that blocks `proxy.golang.org` or Docker Hub, put mirrors in `~/.actrc` (they reach the Go builds, the image builds and the E2E servers):
+
+```
+--env GOPROXY=https://goproxy.cn,direct
+--env GOSUMDB=sum.golang.google.cn
+--env ZENITH_E2E_REGISTRY_MIRROR=https://mirror.gcr.io
+```
+
 ---
 
 ## Overview
