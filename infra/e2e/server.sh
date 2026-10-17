@@ -49,7 +49,14 @@ self_container() {
 }
 
 ensure_network() {
-  docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
+  # A fixed outer subnet that cannot collide with the servers' inner Docker networks
+  # (daemon.json pins those to 10.200.0.0/16). With Docker's default pools the outer network
+  # can land on 172.19.0.0/16 — the same subnet a server's second compose network gets — and
+  # replies from the server to the host then go to the wrong bridge ("No route to host").
+  # Falls back to an automatic subnet if 10.199.0.0/24 is taken on this host.
+  docker network inspect "$NET" >/dev/null 2>&1 \
+    || docker network create --subnet 10.199.0.0/24 "$NET" >/dev/null 2>&1 \
+    || docker network create "$NET" >/dev/null
   # Under act the job itself is a container: join it to the network so container IPs (and
   # the registry name) are reachable from the suite. Ports are never published on the host.
   if [ -n "${ACT:-}" ]; then
