@@ -63,7 +63,7 @@ export default function AppDetailPage() {
           <SourceCard app={app} wide={!showHealth} />
           {showHealth && <HealthCard app={app} />}
           <DeploymentsCard app={app} />
-          <EnvironmentCard app={app} />
+          <EnvironmentCard key={app.id} app={app} />
           <ResourcesCard app={app} />
           {isWeb && <DomainsCard app={app} />}
         </div>
@@ -105,10 +105,12 @@ function AppHeader({ app }: { app: DeployApp }) {
           <StatusBadge status={app.status as "running" | "deploying" | "stopped" | "crashed"} />
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-4 text-xs text-neutral-500">
-          <span className="flex items-center gap-1">
-            <GitBranch className="h-3 w-3" />
-            {app.branch || "main"}
-          </span>
+          {app.repo_url && (
+            <span className="flex items-center gap-1">
+              <GitBranch className="h-3 w-3" />
+              {app.branch || "main"}
+            </span>
+          )}
           {isWeb && app.subdomain && (
             <span className="flex items-center gap-1">
               <Globe className="h-3 w-3" />

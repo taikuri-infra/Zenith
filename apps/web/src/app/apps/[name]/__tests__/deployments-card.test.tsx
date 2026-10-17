@@ -59,6 +59,31 @@ describe("DeploymentsCard", () => {
     await waitFor(() => expect(api.deployRelease).toHaveBeenCalledWith("app-123", "rel-1"));
   });
 
+  it("shows the empty state for deployments while releases are still available", async () => {
+    api.listDeployments.mockResolvedValue({ items: [] });
+    render(<DeploymentsCard app={app} />);
+    expect(await screen.findByText("No deployments yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Show releases/ }));
+    expect(await screen.findByText("ship it")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Deploy/ })).toBeEnabled();
+  });
+
+  it("refetches the deployments list after a release deploy and clears the timer on unmount", async () => {
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    const { unmount } = render(<DeploymentsCard app={app} />);
+    await screen.findByText("aaaaaaaa");
+    expect(api.listDeployments).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Show releases/ }));
+    await screen.findByText("ship it");
+    fireEvent.click(screen.getByRole("button", { name: /Deploy/ }));
+    await screen.findByText("Triggered");
+    await waitFor(() => expect(api.listDeployments).toHaveBeenCalledTimes(2));
+    clearSpy.mockClear();
+    unmount();
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  });
+
   it("shows an error state instead of throwing when the API fails", async () => {
     api.listDeployments.mockRejectedValue(new Error("boom"));
     render(<DeploymentsCard app={app} />);

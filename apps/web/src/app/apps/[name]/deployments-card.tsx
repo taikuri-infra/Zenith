@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronRight, GitBranch, RotateCcw, Rocket } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { PageWithTableSkeleton } from "@/components/loading-skeleton";
@@ -104,13 +104,21 @@ export function DeploymentsCard({ app }: { app: DeployApp }) {
           {showReleases ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           {releaseCount === null ? "Show releases" : `Releases (${releaseCount})`}
         </button>
-        {showReleases && <ReleasesSection appId={appId} onCount={setReleaseCount} />}
+        {showReleases && <ReleasesSection appId={appId} onCount={setReleaseCount} onDeployed={refetch} />}
       </div>
     </div>
   );
 }
 
-function ReleasesSection({ appId, onCount }: { appId: string; onCount: (n: number) => void }) {
+function ReleasesSection({
+  appId,
+  onCount,
+  onDeployed,
+}: {
+  appId: string;
+  onCount: (n: number) => void;
+  onDeployed: () => void;
+}) {
   const { toast } = useToast();
   const { data, loading, error, refetch } = useApi(async () => {
     const res = await getApi().appsDeploy.listReleases(appId);
@@ -119,6 +127,10 @@ function ReleasesSection({ appId, onCount }: { appId: string; onCount: (n: numbe
   }, [appId]);
   const [deployingId, setDeployingId] = useState<string | null>(null);
   const [deployedId, setDeployedId] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
 
   if (loading) return <div className="mt-3"><PageWithTableSkeleton cols={5} rows={3} /></div>;
   if (error) return <div className="mt-3"><ErrorState message={error} onRetry={refetch} /></div>;
@@ -141,7 +153,9 @@ function ReleasesSection({ appId, onCount }: { appId: string; onCount: (n: numbe
     try {
       await getApi().appsDeploy.deployRelease(appId, releaseId);
       setDeployedId(releaseId);
-      setTimeout(() => setDeployedId(null), 3000);
+      onDeployed();
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setDeployedId(null), 3000);
     } catch {
       toast("error", "Failed to deploy release");
     } finally {

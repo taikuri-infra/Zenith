@@ -38,4 +38,11 @@ describe("DomainsCard", () => {
     render(<DomainsCard app={app()} />);
     expect(await screen.findByText(/boom/)).toBeInTheDocument();
   });
+  it("retries listing after an error", async () => {
+    listDomains.mockRejectedValueOnce(new Error("boom"));
+    render(<DomainsCard app={app("web")} />);
+    fireEvent.click(await screen.findByRole("button", { name: /try again/i }));
+    expect(await screen.findByText("app.example.com")).toBeInTheDocument();
+    expect(listDomains).toHaveBeenCalledTimes(2);
+  });
 });
