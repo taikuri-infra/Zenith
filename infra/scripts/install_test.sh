@@ -179,7 +179,9 @@ echo "$out" | grep -q 'is not on this machine' && fail "NAT warning printed for 
 noipbin="$t/noipbin"; mkdir -p "$noipbin"
 for f in /usr/local/bin/* /usr/bin/* /bin/* /usr/sbin/* /sbin/*; do
   n="${f##*/}"; case "$n" in ip|hostname) continue;; esac
-  [ -e "$noipbin/$n" ] || ln -s "$f" "$noipbin/$n"
+  # -L, not -e: a dangling symlink in a PATH dir (seen with Docker Desktop's com.docker.cli)
+  # would otherwise be linked twice.
+  [ -L "$noipbin/$n" ] || ln -s "$f" "$noipbin/$n"
 done
 out="$(run_err "$t/natnotool" PATH="$noipbin" ZENITH_PUBLIC_IP=198.51.100.25)" || fail "no-ip/hostname run failed: $out"
 echo "$out" | grep -q 'is not on this machine' && fail "NAT warning printed although neither ip nor hostname exists: $out"
