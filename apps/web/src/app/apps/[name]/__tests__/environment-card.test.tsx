@@ -132,4 +132,43 @@ describe("EnvironmentCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
     expect(await screen.findByText("STRIPE_KEY")).toBeInTheDocument();
   });
+
+  it("sanitises secret-store keys to A-Z0-9_ and ignores a double submit", async () => {
+    let resolve!: (v: unknown) => void;
+    m.setSecret.mockReturnValue(new Promise((r) => { resolve = r; }));
+    render(<EnvironmentCard app={app} />);
+    await screen.findByText("STRIPE_KEY");
+    fireEvent.change(screen.getByPlaceholderText("DATABASE_URL"), { target: { value: "new-token" } });
+    fireEvent.change(screen.getByPlaceholderText("postgres://..."), { target: { value: "v1" } });
+    fireEvent.click(screen.getByTitle("Mark as secret"));
+    fireEvent.change(screen.getByLabelText("Store"), { target: { value: "store" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.keyDown(screen.getByPlaceholderText("postgres://..."), { key: "Enter" });
+    await waitFor(() => expect(m.setSecret).toHaveBeenCalledWith("app-1", "NEWTOKEN", "v1"));
+    expect(m.setSecret).toHaveBeenCalledTimes(1);
+    resolve({ key: "NEWTOKEN", status: "ok" });
+  });
+
+  it("deletes a secret-store entry after confirm", async () => {
+    m.deleteSecret.mockResolvedValue({ key: "STRIPE_KEY", status: "deleted" });
+    render(<EnvironmentCard app={app} />);
+    await screen.findByText("STRIPE_KEY");
+    fireEvent.click(within(rowOf("STRIPE_KEY")).getByTitle("Delete secret"));
+    expect(m.deleteSecret).not.toHaveBeenCalled();
+    fireEvent.click(within(rowOf("STRIPE_KEY")).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(m.deleteSecret).toHaveBeenCalledWith("app-1", "STRIPE_KEY"));
+    expect(m.envDelete).not.toHaveBeenCalled();
+  });
+
+  it("shows an error for env vars while secret-store rows stay", async () => {
+    m.envList.mockRejectedValue(new Error("env down"));
+    render(<EnvironmentCard app={app} />);
+    expect(await screen.findByText("env down")).toBeInTheDocument();
+    expect(await screen.findByText("STRIPE_KEY")).toBeInTheDocument();
+    expect(screen.getAllByText("secret store")).toHaveLength(2);
+    expect(screen.queryByText("DATABASE_URL")).not.toBeInTheDocument();
+    m.envList.mockResolvedValue({ items: envItems, total: 2 });
+    fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+    expect(await screen.findByText("DATABASE_URL")).toBeInTheDocument();
+  });
 });

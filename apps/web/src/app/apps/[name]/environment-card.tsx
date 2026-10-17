@@ -70,6 +70,7 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
   const [newValue, setNewValue] = useState("");
   const [newIsSecret, setNewIsSecret] = useState(false);
   const [secretTarget, setSecretTarget] = useState<SecretTarget>("env");
+  const [adding, setAdding] = useState(false);
   const [showValues, setShowValues] = useState(false);
 
   // Import .env
@@ -105,10 +106,16 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
   const markPending = () => setPendingRestart(true);
 
   const handleAdd = async () => {
-    const key = newKey.trim();
-    if (!key) return;
+    if (!newKey.trim()) return;
     if (toSecretStore) {
-      if (!newValue.trim()) return;
+      if (!newValue.trim() || adding) return;
+      // The secrets API puts the key in the URL path unencoded: keep it to [A-Z0-9_].
+      const key = newKey.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "");
+      if (!key) {
+        toast("error", "Secret keys may only contain A-Z, 0-9 and _");
+        return;
+      }
+      setAdding(true);
       try {
         await api.appsDeploy.setSecret(appId, key, newValue);
         setNewKey(""); setNewValue(""); setNewIsSecret(false); setSecretTarget("env");
@@ -118,9 +125,12 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
         refetchSecrets();
       } catch {
         toast("error", "Failed to set secret");
+      } finally {
+        setAdding(false);
       }
       return;
     }
+    const key = newKey.trim();
     try {
       await api.envVarsV2.set(appId, [{ key, value: newValue, is_secret: newIsSecret }], currentEnvId);
       setNewKey(""); setNewValue(""); setNewIsSecret(false); setSecretTarget("env");
@@ -219,10 +229,14 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
     }
   };
 
-  const handleCopy = (key: string, value: string) => {
-    navigator.clipboard?.writeText(value).catch(() => toast("error", "Failed to copy"));
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
+  const handleCopy = async (key: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch {
+      toast("error", "Failed to copy value");
+    }
   };
 
   const handleDeleteSecret = async (key: string) => {
@@ -247,7 +261,7 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
   const secretsPending = secretsLoading && !secretsData;
   const envRows = error ? [] : items;
   const secretRows = secretsError ? [] : secrets;
-  const addDisabled = !newKey.trim() || (toSecretStore && !newValue.trim());
+  const addDisabled = !newKey.trim() || (toSecretStore && (!newValue.trim() || adding));
 
   const table = (
     <div className="overflow-hidden rounded-lg border border-border">
@@ -626,7 +640,7 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
         </div>
         {toSecretStore && (
           <p className="text-xs text-neutral-600">
-            Secret-store values are encrypted with AES-256-GCM, shared by all environments, and never logged.
+            Secret-store values are encrypted with AES-256-GCM, shared by all environments, and never logged. Keys keep only A-Z, 0-9 and _.
           </p>
         )}
 
