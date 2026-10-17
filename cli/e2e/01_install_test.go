@@ -13,9 +13,9 @@ func TestInstall(t *testing.T) {
 		t.Fatalf("install took %ds (limit 900)", cfg.InstallSeconds)
 	}
 	logf(t, "install took %ds", cfg.InstallSeconds)
-	code, body := getURL(t, cfg.Endpoint+"/health")
+	code, body := getURL(t, cfg.Endpoint+"/api/v1/version")
 	if code != 200 {
-		t.Fatalf("/health %d %s", code, body)
+		t.Fatalf("/api/v1/version %d %s", code, body)
 	}
 	code, body = getURL(t, cfg.Endpoint+"/")
 	if code != 200 {

@@ -11,7 +11,7 @@
 #   server.sh new <name>                          start a fresh server (network + registry once)
 #   server.sh install <name> candidate            install this checkout as v<candidate version>
 #   server.sh install <name> release <tag>        install a released tag (e.g. v0.1.0)
-#   server.sh reboot <name>                       restart the server; 0 once /health answers again
+#   server.sh reboot <name>                       restart the server; 0 once /api/v1/version answers again
 #   server.sh exec <name> -- <cmd...>             run a command on the server, cwd /opt/zenith
 #   server.sh cp <name> <remote> <local>          copy a file out of the server
 #   server.sh push <name> <image...>              push host images to the registry via the server
@@ -114,16 +114,16 @@ recorded_ip() {
   if [ -s "$ART/$1.ip" ]; then cat "$ART/$1.ip"; else ip_of "$1"; fi
 }
 
-# Polls https://<recorded ip>.sslip.io/health through that IP (no public DNS needed) for at
+# Polls https://<recorded ip>.sslip.io/api/v1/version through that IP (no public DNS needed) for at
 # most $2 seconds. On timeout it collects the server's logs and fails.
 wait_health() {
   local name="$1" limit="$2" ip host deadline
   ip="$(recorded_ip "$name")"; host="$ip.sslip.io"; deadline=$((SECONDS + limit))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if curl -skf --max-time 3 --resolve "$host:443:$ip" "https://$host/health" >/dev/null 2>&1; then return 0; fi
+    if curl -skf --max-time 3 --resolve "$host:443:$ip" "https://$host/api/v1/version" >/dev/null 2>&1; then return 0; fi
     sleep 1
   done
-  log "$name: /health not answering after ${limit}s"; cmd_logs "$name"; return 1
+  log "$name: /api/v1/version not answering after ${limit}s"; cmd_logs "$name"; return 1
 }
 
 cmd_reboot() {
@@ -310,13 +310,13 @@ cmd_install() {
     tail -n 40 "$ART/$name-install.log" >&2 || true
     cmd_logs "$name"; return 1
   fi
-  # "Installed" means usable: the wall time includes waiting for /health.
+  # "Installed" means usable: the wall time includes waiting for /api/v1/version.
   wait_health "$name" "$HEALTH_TIMEOUT"
   local secs=$((SECONDS - start))
 
   if [ "$seed" = 1 ]; then
     # $tag's install.sh has no ZENITH_TLS_MODE: seed the self-signed CA + leaf the candidate
-    # installer writes, let Traefik pick them up, and wait for /health again.
+    # installer writes, let Traefik pick them up, and wait for /api/v1/version again.
     log "$tag predates ZENITH_TLS_MODE: seeding the self-signed CA for $domain"
     docker exec -w "$INSTALL_DIR" "$c" bash -c "set -euo pipefail; $(declare -f seed_selfsigned_tls); seed_selfsigned_tls \"\$1\"" _ "$domain"
     docker exec -w "$INSTALL_DIR" "$c" docker compose restart traefik >/dev/null
