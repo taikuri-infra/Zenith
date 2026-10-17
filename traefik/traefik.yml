@@ -1,8 +1,10 @@
 # Default Traefik static config for a manual `docker compose up`.
 #
-# `zen install --edition compose` OVERWRITES this file for the TLS mode you pick
-# (HTTP-01, DNS-01, or self-signed). If you run the stack by hand, set your
-# email below and make sure DNS points at this box on ports 80/443.
+# `zen install --edition compose` OVERWRITES this file for HTTP-01 or DNS-01.
+# Self-signed installs (both installers) leave it alone and write the git-ignored
+# traefik.selfsigned.yml instead, selected by ZENITH_TRAEFIK_CONFIG in .env.
+# If you run the stack by hand, set your email below and make sure DNS points
+# at this box on ports 80/443.
 entryPoints:
   web:
     address: ":80"
