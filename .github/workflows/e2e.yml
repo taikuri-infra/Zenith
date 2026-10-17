@@ -42,18 +42,21 @@ jobs:
     steps:
       - name: Skip arm64 under act
         if: ${{ env.ACT && matrix.arch != 'amd64' }}
-        run: echo "arm64 is only run on GitHub" && exit 0
+        run: echo "arm64 is only run on GitHub"
       - uses: actions/checkout@v4
+        if: ${{ !(env.ACT && matrix.arch != 'amd64') }}
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v5
+        if: ${{ !(env.ACT && matrix.arch != 'amd64') }}
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
       - name: Run the E2E suite on a fresh server
+        if: ${{ !(env.ACT && matrix.arch != 'amd64') }}
         run: bash infra/e2e/run.sh
       - name: Upload artifacts
-        if: always()
+        if: ${{ always() && !(env.ACT && matrix.arch != 'amd64') }}
         uses: actions/upload-artifact@v4
         with:
           name: e2e-${{ matrix.arch }}

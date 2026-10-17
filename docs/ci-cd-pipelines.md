@@ -225,7 +225,7 @@ Installs Zenith on a fresh Ubuntu server (Docker-in-Docker) inside the job and d
 |---|-----|-------------|-------------|
 | 1 | `e2e` | fresh-server install, deploy+db+domain+https, reboot, backup/restore, upgrade; amd64 + arm64 | `act pull_request -W .github/workflows/e2e.yml -j e2e --container-architecture linux/amd64 --privileged` |
 
-The job runs as a matrix on `ubuntu-latest` (amd64) and `ubuntu-24.04-arm` (arm64). Under `act` the arm64 leg exits early ("arm64 is only run on GitHub"); if act rejects the arm runner label, add `-P ubuntu-24.04-arm=catthehacker/ubuntu:act-latest` to the command. A full run takes about 25 minutes (timeout 60). Logs and state captured by the harness are uploaded from `infra/e2e/artifacts/**` as `e2e-amd64` / `e2e-arm64` (also on failure). `ci.yml` additionally runs `bash infra/e2e/server_test.sh` and `go vet -tags e2e ./e2e/` so the harness and suite stay healthy without a full run.
+The job runs as a matrix on `ubuntu-latest` (amd64) and `ubuntu-24.04-arm` (arm64). Under `act` all steps of the arm64 leg are skipped except a notice ("arm64 is only run on GitHub"); if act rejects the arm runner label, add `-P ubuntu-24.04-arm=catthehacker/ubuntu:act-latest` to the command. A full run takes about 25 minutes (timeout 60). Logs and state captured by the harness are uploaded from `infra/e2e/artifacts/**` as `e2e-amd64` / `e2e-arm64` (also on failure). `ci.yml` additionally runs `bash infra/e2e/server_test.sh` and `go vet -tags e2e ./e2e/` so the harness and suite stay healthy without a full run.
 
 ---
 
