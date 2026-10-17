@@ -1,60 +1,50 @@
-# Secrets Tab (Frontend Feature Doc)
+# Environment Card: Env Vars + Secret Store (Frontend Feature Doc)
 
 ## 1. Overview
-The Secrets Tab is a panel within the app detail page (`/apps/[id]`) that lets users manage encrypted key-value secrets for their deployed applications. Secrets are encrypted at rest using AES-256-GCM on the backend.
+The former Secrets tab is merged into the **Environment** card of the app detail page (`/apps/[id]`, one page of cards, no tab bar). The card shows the app's per-environment env vars and its secret-store entries in **one table**. Secret-store values are encrypted at rest with AES-256-GCM on the backend and shared by all environments.
 
 ## 2. UI/UX Flow
-1. User navigates to an app detail page and clicks the **Secrets** tab (KeyRound icon)
-2. Existing secrets are listed in a table showing only the key names (values are masked)
-3. User can **Reveal** a secret by clicking the unlock button — this calls the backend decrypt API
-4. Revealed values can be **Copied** to clipboard with a single click
-5. User can **Hide** the revealed value to re-mask it
-6. User can **Add** a new secret via the form at the top (key is auto-uppercased, only A-Z, 0-9, `_`)
-7. User can **Delete** a secret with the trash icon (no confirmation, instant delete)
+1. The Environment card (full width) has a Production / Staging toggle ("Live environment" badge on Production; Staging disabled when the project has no staging environment), **Import .env** and **Show/Hide values**
+2. The table lists env vars of the active environment (lock icon for `is_secret`, a read-only badge for variables injected by an attached database) followed by secret-store rows tagged `secret store`; a key present in both stores appears as two rows
+3. Env var rows: inline **Edit** (secrets must be re-entered) and **Delete** with confirm; managed rows are read-only
+4. Secret-store rows: **Reveal** fetches the value on demand (cached, so Hide/Reveal does not refetch), **Copy** (✓ feedback for 2s), **Delete** with confirm
+5. One **Add** form: Key, Value, Secret toggle; when Secret is on, a **Store** select picks "Env var (secret)" (default, `is_secret` env var) or "Secret store". Secret-store keys keep only A-Z, 0-9 and `_`; a double submit is ignored
+6. Any env var change (add, edit, delete, import) shows a banner with **Restart now** (`envVarsV2.apply`) and Dismiss
 
 ## 3. Data Flow
-- **List**: `GET /api/v1/apps/:appId/secrets` → returns secret keys + metadata, never values
-- **Reveal**: `GET /api/v1/apps/:appId/secrets/:key/value` → backend decrypts, returns plaintext
-- **Add/Update**: `POST /api/v1/apps/:appId/secrets` with `{ key, value }` → backend encrypts with AES-256-GCM
-- **Delete**: `DELETE /api/v1/apps/:appId/secrets/:key`
+- Env vars: `envVarsV2.list/set/delete/importDotEnv(appId, …, envId)`, `envVarsV2.apply(appId)`; staging env id from `environments.list(projectId)`
+- Secret store: `GET /api/v1/apps/:appId/secrets` (keys only), `GET …/secrets/:key/value` (decrypt), `POST …/secrets` (`{ key, value }`), `DELETE …/secrets/:key`
 
 ## 4. Components
-- `SecretsTab` — Main component, manages state for add form, reveal map, loading states
-- Uses shared: `PageWithTableSkeleton`, `ErrorState`, `EmptyState`
+- `EnvironmentCard` in `app/apps/[name]/environment-card.tsx`
+- Uses shared: `TableSkeleton`, `ErrorState`, `EmptyState`, `useToast`
 
 ## 5. Services/API
-- `appsDeploy.listSecrets(appId)` — list keys
-- `appsDeploy.getSecretValue(appId, key)` — decrypt and return value
-- `appsDeploy.setSecret(appId, key, value)` — encrypt and store
-- `appsDeploy.deleteSecret(appId, key)` — remove
+- `envVarsV2.*`, `environments.list`
+- `appsDeploy.listSecrets`, `getSecretValue`, `setSecret`, `deleteSecret`
 
 ## 6. Hooks
-- `useApi` — for listing secrets with loading/error states
+- `useApi` — env vars and secret store load (and fail) independently
 
 ## 7. State Logic
-- `revealedValues: Record<string, string>` — cache of decrypted values keyed by secret name
-- `revealingKey` / `deletingKey` — track which row is loading
-- `copiedKey` — track clipboard copy feedback (2s timeout)
+- `secretValues` (fetched values cache) and `shownSecrets` (visibility) per key
+- `copiedKey` with a timer held in a ref and cleared on unmount
+- `pendingRestart` drives the Restart-now banner
 
 ## 8. Edge Cases
-- Empty state when no secrets exist
-- Key input validation (uppercase, alphanumeric + underscore only)
-- Loading spinners during API calls (add, reveal, delete)
-- Dev mode: backend returns `nil` for SecretHandler when SECRETS_ENCRYPTION_KEY is empty
+- One store failing shows its own error (with Try Again) while the other store's rows stay
+- `listSecrets` returning **404** means the secret store is not configured on this install (backend has no `SECRETS_ENCRYPTION_KEY`): no error, no store rows, and the Add form offers no "Secret store" option
+- Empty state only when both stores are empty and neither failed
 
 ## 9. Security Considerations
-- Values are typed into `<input type="password">` to prevent shoulder-surfing during input
-- Decrypted values are only fetched on explicit "Reveal" click
-- Values are held in component state only (not persisted client-side)
-- Note about AES-256-GCM encryption is displayed to users
+- Values typed into a password input while Secret is on
+- Secret-store values only fetched on explicit Reveal, held in component state only
+- Keys are sanitised because the secrets API puts the key in the URL path
 
 ## 10. Testing Strategy
-- TypeScript type check via `npx tsc --noEmit`
-- Demo mode provides 3 mock secrets with mock decrypted values
-- Visual verification in demo mode
+- `app/apps/[name]/__tests__/environment-card.test.tsx` (merged table, reveal once, add to either store, per-store errors, 404 not configured, Restart now, copy timer cleanup)
+- `pnpm exec tsc --noEmit`, `pnpm lint`
 
 ## 11. Future Improvements
-- Confirmation dialog before delete
-- Toast notifications for success/error
-- Audit log of secret access (who revealed what, when)
+- Audit log of secret access
 - Secret rotation reminders
