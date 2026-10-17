@@ -275,3 +275,32 @@ The spec's five success criteria, checked on the live install:
 - A detached database's variable stays in the running container until the next deploy (the Environment tab no longer shows it).
 
 **Result:** the nine §5 findings assigned to 2c are fixed on the live install; the self-host dashboard, API surface and CLI carry no SaaS content; attached databases are visible in the Environment tab; custom domains report DNS and certificate state. All seven criteria were observed live. 2c is complete; next is sub-project 3 (E2E and release).
+
+## 9. alpha.1 — E2E
+
+- **Date / commit / images:** 2026-10-17 02:14–02:26 UTC on this host (amd64), branch `feat/alpha-3-e2e-release` at `d403f93` (`VERSION` `0.1.0`); GitHub `e2e.yml` on PR #34: amd64 https://github.com/taikuri-infra/Zenith/actions/runs/38995564776/job/117287241337, arm64 https://github.com/taikuri-infra/Zenith/actions/runs/38995564776/job/117287241463; release `v0.1.0` from `main` at `5973d4a`, images `ghcr.io/taikuri-infra/zenith-{api,web}:0.1.0` (linux/amd64, linux/arm64).
+- **Harness:** `infra/e2e/run.sh` — a privileged Docker-in-Docker Ubuntu 24.04 server per phase, the tag's own `install.sh` with `ZENITH_TLS_MODE=selfsigned`, the Go suite in `cli/e2e` driving the API and `zen` over strict TLS through the install CA. Candidate `0.1.0-e2e.d403f93`, previous release `v0.1.0-alpha.4`.
+- **Live install:** `zen upgrade --version 0.1.0` on `zenith.freezenith.com` (`/root/zenith-2a`, http01 install) at 03:21 UTC: backup taken, 6 steps in 17 s, `/api/v1/version` → `0.1.0` (`build_time` 2026-10-17T02:45:08Z), `zenith-api`/`zenith-web` on `ghcr.io/taikuri-infra/*:0.1.0`, Traefik untouched and error-free, `myapp` and `app2c` custom domains 200; `zen login` + `zen status` from the released CLI list all nine apps. A first attempt stopped at step 1 because the clone still carried the stale February `v0.1.0` tag ("would clobber existing tag — nothing changed"); the tag was deleted in the clone and the upgrade re-run.
+- **Spec:** docs/superpowers/specs/2026-10-17-alpha-3-e2e-release-design.md. Ledger: `.superpowers/sdd/2026-10-17-alpha-3-e2e-release/progress.md`.
+
+| # | Roadmap exit criterion | Test | Status | Evidence (local run 3) |
+|---|------------------------|------|--------|------------------------|
+| 1 | One-command install, dashboard reachable, under 15 min | `TestInstall` | works | install.sh on a fresh server in 29 s; `/api/v1/version` → `0.1.0-e2e.d403f93`, `standalone`; dashboard 200; sign-up refused; `zen login` ok |
+| 2 | Deploy an image app with a managed PostgreSQL and a custom domain over valid HTTPS | `TestDeployWithDatabaseAndDomain` | works | probe app running, `DATABASE_URL` injected, row written and read back; `myapp.<domain>` `active` with a certificate chaining to the install CA (26.4 s) |
+| 3 | Reboot: control plane, apps and databases back with data | `TestReboot` | works | `docker restart` of the server; version, app `/read` marker and database back in 7.3 s |
+| 4 | Backup on one server, restore on a fresh one | `TestBackup` + `TestBackupRestore` | works | archive `zenith-backup-0.1.0-e2e.d403f93-20261017T022345Z.tar.gz` restored on server C with server A's admin password; apps, database rows and the marker present (38.5 s) |
+| 5 | Upgrade from the previous release without data loss | `TestUpgrade` | works | v0.1.0-alpha.4 install (seeded CA) → `zen upgrade --version 0.1.0-e2e.d403f93`: backup taken, 6 steps, `before-upgrade` row still readable (37.5 s) |
+| 6 | Both architectures | `e2e.yml` matrix | works | amd64 7m20s, arm64 6m40s on PR #34 |
+| 7 | Self-signed installs work and the Go installer writes the same files | `install_test.sh`, `installsh_parity_test.go` | works | run 3 servers A and C are self-signed installs; parity test green in `ci.yml` |
+
+### 9.1 Findings fixed on the way
+- `/health` is not routed through Traefik (api router is `Host && PathPrefix(/api)`); readiness is `GET /api/v1/version`.
+- The API turned an empty `ZENITH_CERT_RESOLVER` back into `le` (Traefik logged `Router uses a nonexistent certificate resolver` for every app router on self-signed installs; run 2). Fixed: set-but-empty stays empty.
+- `zen install --tls-mode selfsigned` wrote the CA 0600 (unreadable by the api user); certificates are 0644 in both installers.
+- `install.sh`: `ADMIN_PASSWORD` with sed-special characters was corrupted; `$` and newlines are refused, everything else stored verbatim. A NAT box gets a warning when the resolved public IP is not on the machine.
+- Stale tags `v0.1.0`, `v0.2.0`, `v0.5.0`, `v2.0.0-alpha.3` from February/March 2026 (no releases): the owner chose to move `v0.1.0` (deleted on origin on 2026-10-17 03:05 UTC, old target `e3efc05`, annotated object `56057aa`) and re-create it with the release; the other three stay for now (`v0.2.0` will collide with alpha.2 — move it then).
+
+### 9.2 Still open
+- Self-signed installs overwrite the tracked `traefik/traefik.yml`; the next upstream change to that file will make `zen upgrade` stop at `git checkout` (safe, "nothing changed"). Mount the static config from a variable path before that change.
+
+**Result:** every roadmap exit criterion for the Compose edition is pinned by a named test that runs on every PR on both architectures; `v0.1.0` ("alpha.1 (Compose edition)") is published from `main` 5973d4a with amd64 + arm64 images and the live install runs it.
