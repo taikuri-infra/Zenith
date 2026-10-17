@@ -449,6 +449,11 @@ func buildComposeEnv(cfg *Config, adminEmail, dockerGID string) string {
 		if tlsMode(cfg) == TLSDNS01 {
 			fmt.Fprintf(&b, "CF_DNS_API_TOKEN=%s\n", cfg.CloudflareToken)
 		}
+		if tlsMode(cfg) == TLSSelfSigned {
+			b.WriteString("ZENITH_TLS_MODE=selfsigned\n")
+			b.WriteString("ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt\n")
+			b.WriteString("ZENITH_CERT_RESOLVER=\n")
+		}
 	}
 	return b.String()
 }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -27,7 +28,13 @@ type DomainHandler struct {
 	deployer   AppRedeployer
 	reserved   string                  // dashboard domain; it and its subdomains can't be custom domains
 	checker    *services.DomainChecker // nil = no DNS/TLS checks (SaaS)
+	subsOK     bool                    // standalone: subdomains of reserved are allowed
 }
+
+// SetSubdomainsAllowed lets subdomains of the reserved domain be custom
+// domains (single-admin standalone installs). The reserved domain itself and
+// hosts generated for apps stay refused.
+func (h *DomainHandler) SetSubdomainsAllowed(ok bool) { h.subsOK = ok }
 
 // SetChecker enables DNS and certificate checks: new domains start pending and /verify works.
 func (h *DomainHandler) SetChecker(c *services.DomainChecker) { h.checker = c }
@@ -74,9 +81,18 @@ func (h *DomainHandler) Add(c *fiber.Ctx) error {
 	if input.Domain == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "domain is required")
 	}
-	name, err := validate.CustomDomain(input.Domain, h.reserved)
+	name, err := validate.CustomDomain(input.Domain, h.reserved, h.subsOK)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	if h.subsOK && h.reserved != "" {
+		r := strings.ToLower(strings.TrimSpace(h.reserved))
+		if label, ok := strings.CutSuffix(name, "."+r); ok && !strings.Contains(label, ".") {
+			if owner, gerr := h.appRepo.GetAppBySubdomain(c.Context(), label); gerr == nil && owner != nil &&
+				strings.EqualFold(owner.Subdomain+"."+r, name) {
+				return fiber.NewError(fiber.StatusConflict, "that host belongs to an app")
+			}
+		}
 	}
 
 	domain, err := h.domainRepo.AddDomain(c.Context(), appID, userID, name)

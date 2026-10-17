@@ -11,7 +11,17 @@ run() { # $1 = workdir; remaining = env assignments
   mkdir -p "$dir"
   cp "$repo/.env.example" "$dir/.env.example"
   cp "$repo/VERSION" "$dir/VERSION"
+  [ -d "$dir/traefik" ] || cp -r "$repo/traefik" "$dir/traefik"
   (cd "$dir" && env "$@" ZENITH_DRY_RUN=1 ZENITH_PUBLIC_IP=203.0.113.7 bash "$here/install.sh" >/dev/null)
+}
+
+run_err() { # like run, but ZENITH_PUBLIC_IP comes from the caller; prints stderr
+  local dir="$1"; shift
+  mkdir -p "$dir"
+  cp "$repo/.env.example" "$dir/.env.example"
+  cp "$repo/VERSION" "$dir/VERSION"
+  [ -d "$dir/traefik" ] || cp -r "$repo/traefik" "$dir/traefik"
+  (cd "$dir" && env -u ZENITH_PUBLIC_IP -u ZENITH_DOMAIN "$@" ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1 >/dev/null)
 }
 
 t=$(mktemp -d)
@@ -54,5 +64,69 @@ if out="$(cd "$t/noip" && env -u ZENITH_PUBLIC_IP -u ZENITH_DOMAIN PATH="$stubs:
 fi
 echo "$out" | grep -q "Could not detect this server's public IP" || fail "missing IP error message"
 [ ! -e "$t/noip/.env" ] || fail ".env created despite IP failure"
+
+# --- self-signed mode renders certs, Traefik config and the three env keys ---
+(umask 077; run "$t/ss" ZENITH_TLS_MODE=selfsigned)   # strict umask: modes must not follow it
+env_ss="$t/ss/.env"
+grep -qE '^ZENITH_TLS_MODE=selfsigned$' "$env_ss" || fail "ZENITH_TLS_MODE missing"
+grep -qE '^ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt$' "$env_ss" || fail "ZENITH_TLS_CA_FILE missing"
+grep -qE '^ZENITH_CERT_RESOLVER=$' "$env_ss" || fail "ZENITH_CERT_RESOLVER must be empty in selfsigned mode"
+for f in traefik/certs/zenith.crt traefik/certs/zenith.key traefik/certs/zenith-ca.crt traefik/certs/zenith-ca.key traefik/dynamic/certs.yml traefik/traefik.yml; do
+  [ -s "$t/ss/$f" ] || fail "selfsigned: $f not written"
+done
+grep -q 'certResolver' "$t/ss/traefik/traefik.yml" && fail "selfsigned traefik.yml must not name a certResolver"
+grep -qE '^certificatesResolvers:' "$t/ss/traefik/traefik.yml" && fail "selfsigned traefik.yml must not define certificatesResolvers"
+# the api container (non-root) reads the CA: certificates 0644, keys 0600
+for f in zenith.crt zenith-ca.crt; do [ "$(stat -c %a "$t/ss/traefik/certs/$f")" = 644 ] || fail "selfsigned: $f mode $(stat -c %a "$t/ss/traefik/certs/$f"), want 644"; done
+for f in zenith.key zenith-ca.key; do [ "$(stat -c %a "$t/ss/traefik/certs/$f")" = 600 ] || fail "selfsigned: $f mode $(stat -c %a "$t/ss/traefik/certs/$f"), want 600"; done
+openssl x509 -in "$t/ss/traefik/certs/zenith.crt" -noout -ext subjectAltName | grep -q 'DNS:\*\.203.0.113.7.sslip.io' || fail "leaf lacks the wildcard SAN"
+openssl verify -CAfile "$t/ss/traefik/certs/zenith-ca.crt" "$t/ss/traefik/certs/zenith.crt" >/dev/null 2>&1 || fail "leaf does not verify against the CA"
+diff <(sed -n '/^tls:/,$p' "$t/ss/traefik/dynamic/certs.yml") - <<'EOF' || fail "certs.yml content differs from the Go installer's"
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/zenith.crt
+        keyFile: /etc/traefik/certs/zenith.key
+  certificates:
+    - certFile: /etc/traefik/certs/zenith.crt
+      keyFile: /etc/traefik/certs/zenith.key
+EOF
+
+# --- http01 (default) is untouched and image repo passes through ---
+run "$t/http" ZENITH_IMAGE_REPO=zenith-e2e-registry:5000
+grep -qE '^ZENITH_TLS_MODE=' "$t/http/.env" && fail "http01 must not write ZENITH_TLS_MODE"
+grep -qE '^ZENITH_IMAGE_REPO=zenith-e2e-registry:5000$' "$t/http/.env" || fail "ZENITH_IMAGE_REPO not written"
+[ -e "$t/http/traefik/dynamic/certs.yml" ] && fail "http01 must not write certs.yml"
+
+# --- selfsigned keys are added once and http01 stays untouched on re-run ---
+run "$t/ss" ZENITH_TLS_MODE=selfsigned
+[ "$(grep -c '^ZENITH_TLS_MODE=' "$env_ss")" = 1 ] || fail "ZENITH_TLS_MODE duplicated on re-run"
+cp "$t/http/.env" "$t/http/.env.before"; run "$t/http"; diff -q "$t/http/.env" "$t/http/.env.before" >/dev/null || fail "re-run changed an http01 .env"
+
+# --- ADMIN_PASSWORD from the environment is honoured ---
+run "$t/pw" ADMIN_PASSWORD=Fixed-Password-123
+grep -qE '^ADMIN_PASSWORD=Fixed-Password-123$' "$t/pw/.env" || fail "ADMIN_PASSWORD override ignored"
+
+# --- an address that is not on this machine (NAT) is warned about, not fatal ---
+out="$(run_err "$t/nat" ZENITH_PUBLIC_IP=198.51.100.23)" || fail "NAT warning must not be fatal"
+echo "$out" | grep -q 'address 198.51.100.23 is not on this machine (NAT?); set ZENITH_PUBLIC_IP or ZENITH_DOMAIN if the dashboard is unreachable' || fail "missing NAT warning: $out"
+grep -qx 'ZENITH_DOMAIN=198.51.100.23.sslip.io' "$t/nat/.env" || fail "NAT: domain not <ip>.sslip.io"
+out="$(run_err "$t/natdom" ZENITH_DOMAIN=zenith.example.com)" || fail "explicit domain run failed"
+echo "$out" | grep -q 'is not on this machine' && fail "NAT warning printed although ZENITH_DOMAIN is set: $out"
+# a local address (hostname -I stubbed to report it, no `ip`) is not warned about
+locstubs="$t/locstubs"; mkdir -p "$locstubs"
+printf '#!/bin/sh\necho 198.51.100.24 10.0.0.5\n' >"$locstubs/hostname"; printf '#!/bin/sh\nexit 1\n' >"$locstubs/ip"; chmod +x "$locstubs"/*
+out="$(run_err "$t/natloc" PATH="$locstubs:$PATH" ZENITH_PUBLIC_IP=198.51.100.24)" || fail "local-address run failed"
+echo "$out" | grep -q 'is not on this machine' && fail "NAT warning printed for a local address: $out"
+
+# --- set_var keeps sed-special characters verbatim and refuses a newline ---
+run "$t/pw2" 'ADMIN_PASSWORD=p&ss|w\x'
+[ "$(grep '^ADMIN_PASSWORD=' "$t/pw2/.env" | cut -d= -f2-)" = 'p&ss|w\x' ] || fail "ADMIN_PASSWORD with & | \\ not stored verbatim: $(grep '^ADMIN_PASSWORD=' "$t/pw2/.env")"
+if out="$(run "$t/pw3" "ADMIN_PASSWORD=$(printf 'a\nb')" 2>&1)"; then fail "a newline in a value must be rejected"; fi
+echo "$out" | grep -q 'must not contain a newline' || fail "missing newline error message: $out"
+if out="$(run "$t/pw4" 'ADMIN_PASSWORD=pa$$word' 2>&1)"; then fail "a \$ in ADMIN_PASSWORD must be rejected (compose interpolates it)"; fi
+echo "$out" | grep -q 'must not contain \$' || fail "missing \$ error message: $out"
+[ ! -e "$t/pw3/.env" ] || fail ".env created despite the newline in ADMIN_PASSWORD"
 
 echo "install_test: ok"

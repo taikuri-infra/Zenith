@@ -30,15 +30,19 @@ func Hostname(h string) bool {
 
 // CustomDomain normalizes (trim + lowercase) and validates a user-supplied
 // custom domain. reserved is the dashboard domain: it and every subdomain of
-// it (where generated app hosts live) are refused. Empty reserved disables
-// that check.
-func CustomDomain(domain, reserved string) (string, error) {
+// it (where generated app hosts live) are refused. With allowSubdomains (a
+// single-admin standalone install) only reserved itself is refused. Empty
+// reserved disables that check.
+func CustomDomain(domain, reserved string, allowSubdomains bool) (string, error) {
 	d := strings.ToLower(strings.TrimSpace(domain))
 	if !Hostname(d) {
 		return "", errors.New("invalid domain: use a hostname like app.example.com (letters, digits, hyphens and dots only)")
 	}
 	r := strings.ToLower(strings.TrimSpace(reserved))
-	if r != "" && (d == r || strings.HasSuffix(d, "."+r)) {
+	if r != "" && allowSubdomains && d == r {
+		return "", errors.New("invalid domain: " + r + " is reserved for Zenith")
+	}
+	if r != "" && !allowSubdomains && (d == r || strings.HasSuffix(d, "."+r)) {
 		return "", errors.New("invalid domain: " + r + " and its subdomains are reserved for Zenith")
 	}
 	return d, nil

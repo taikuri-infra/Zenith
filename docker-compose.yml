@@ -40,7 +40,7 @@ services:
   # replace the `image:` line with:
   #   build: { context: ., dockerfile: services/api/Dockerfile }
   api:
-    image: ghcr.io/taikuri-infra/zenith-api:${ZENITH_VERSION:-latest}
+    image: ${ZENITH_IMAGE_REPO:-ghcr.io/taikuri-infra}/zenith-api:${ZENITH_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -60,7 +60,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://${ZENITH_DOMAIN:-localhost}}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
-      ZENITH_CERT_RESOLVER: le
+      ZENITH_CERT_RESOLVER: ${ZENITH_CERT_RESOLVER-le}
+      ZENITH_TLS_CA_FILE: ${ZENITH_TLS_CA_FILE:-}
       # Apps are subdomains of this (whoami.<BASE_DOMAIN>). Defaults to the
       # dashboard domain; use "localhost" locally (apps get *.localhost; no DNS
       # or public certificate needed for local testing).
@@ -82,6 +83,8 @@ services:
       - "${DOCKER_GID:-999}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # Local CA written by install.sh in selfsigned mode (empty dir otherwise).
+      - ./traefik/certs:/etc/zenith/certs:ro
     # Routed by Traefik: <domain>/api/* -> this service. The loopback-only
     # published port is for local debugging.
     labels:
@@ -92,7 +95,7 @@ services:
       - "traefik.http.routers.zenith-api.tls=true"
       # Name the resolver: a router with its own tls section ignores the
       # entrypoint default, which left the dashboard on the default cert (F-12).
-      - "traefik.http.routers.zenith-api.tls.certresolver=le"
+      - "traefik.http.routers.zenith-api.tls.certresolver=${ZENITH_CERT_RESOLVER-le}"
       - "traefik.http.routers.zenith-api.priority=100"
       - "traefik.http.services.zenith-api.loadbalancer.server.port=8080"
 
@@ -101,7 +104,7 @@ services:
   # from source instead, replace `image:` with:
   #   build: { context: ., dockerfile: apps/web/Dockerfile }
   web:
-    image: ghcr.io/taikuri-infra/zenith-web:${ZENITH_VERSION:-latest}
+    image: ${ZENITH_IMAGE_REPO:-ghcr.io/taikuri-infra}/zenith-web:${ZENITH_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       - api
@@ -120,7 +123,7 @@ services:
       - "traefik.http.routers.zenith-web.rule=Host(`${ZENITH_DOMAIN:-localhost}`)"
       - "traefik.http.routers.zenith-web.entrypoints=websecure"
       - "traefik.http.routers.zenith-web.tls=true"
-      - "traefik.http.routers.zenith-web.tls.certresolver=le"
+      - "traefik.http.routers.zenith-web.tls.certresolver=${ZENITH_CERT_RESOLVER-le}"
       - "traefik.http.routers.zenith-web.priority=1"
       - "traefik.http.services.zenith-web.loadbalancer.server.port=3000"
 

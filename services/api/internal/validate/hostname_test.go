@@ -45,7 +45,7 @@ func TestCustomDomain(t *testing.T) {
 		}{long63 + "." + long63 + "." + long63 + "." + long63 + ".com", "", false}, // > 253
 	)
 	for _, c := range cases {
-		got, err := CustomDomain(c.in, reserved)
+		got, err := CustomDomain(c.in, reserved, false)
 		if c.ok && (err != nil || got != c.want) {
 			t.Errorf("CustomDomain(%q) = %q, %v; want %q", c.in, got, err, c.want)
 		}
@@ -56,7 +56,7 @@ func TestCustomDomain(t *testing.T) {
 }
 
 func TestCustomDomainNoReserved(t *testing.T) {
-	if _, err := CustomDomain("zenith.example.com", ""); err != nil {
+	if _, err := CustomDomain("zenith.example.com", "", false); err != nil {
 		t.Errorf("no reserved domain: unexpected error %v", err)
 	}
 }
@@ -64,5 +64,17 @@ func TestCustomDomainNoReserved(t *testing.T) {
 func TestHostname(t *testing.T) {
 	if !Hostname("a.example.com") || Hostname("x`) || PathPrefix(`/") || Hostname("A.example.com") {
 		t.Error("Hostname mismatch")
+	}
+}
+
+func TestCustomDomainAllowSubdomains(t *testing.T) {
+	if got, err := CustomDomain("shop.zenith.lan", "zenith.lan", true); err != nil || got != "shop.zenith.lan" {
+		t.Errorf("subdomain allowed: got %q, %v", got, err)
+	}
+	if _, err := CustomDomain("zenith.lan", "zenith.lan", true); err == nil {
+		t.Error("base domain must stay refused")
+	}
+	if _, err := CustomDomain("shop.zenith.lan", "zenith.lan", false); err == nil {
+		t.Error("saas rule must be unchanged")
 	}
 }

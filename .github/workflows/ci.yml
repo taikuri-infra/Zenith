@@ -25,6 +25,7 @@ jobs:
         run: |
           bash infra/scripts/install_test.sh
           bash infra/scripts/compose_networks_test.sh
+          bash infra/e2e/server_test.sh
 
       - name: Run API tests
         run: cd services/api && go test ./... -race -count=1
@@ -37,6 +38,9 @@ jobs:
 
       - name: Test zen CLI (cli/)
         run: cd cli && go test ./... -race -count=1
+
+      - name: Vet E2E suite (cli/e2e)
+        run: cd cli && go vet -tags e2e ./e2e/
 
       - name: Build zen CLI (cli/)
         run: cd cli && go build -o /dev/null .

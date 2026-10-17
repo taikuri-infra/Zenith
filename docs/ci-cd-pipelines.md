@@ -23,6 +23,7 @@ act <event> -W .github/workflows/<file>.yml -j <job-name> --container-architectu
 | 6 | Smoke Tests | `smoke-test.yml` | 4 | After Release or Build Images success + Cron (every 6h) | Yes |
 | 7 | Terraform | `terraform.yml` | 2 | Push to `main` + PR to `main` (infra/terraform/) | Yes (plan/apply) |
 | 8 | Promote to Production | `promote-to-prod.yml` | 3 | Never | Yes (version + components) |
+| 9 | E2E | `e2e.yml` | 1 (x2 arch) | PR (core paths) + push to `main` | Yes |
 
 **Composite Action** (for customers, not internal):
 
@@ -211,6 +212,20 @@ Manual-only pipeline for promoting tested staging images to production.
 | 3 | `deploy` | 2 | Update Helm `Chart.yaml` appVersion → git commit → git tag → push | `act workflow_dispatch -j deploy --input version=0.7.24` |
 
 **Protected by:** `production` GitHub environment (requires approval).
+
+---
+
+## 9. E2E (`e2e.yml`)
+
+Installs Zenith on a fresh Ubuntu server (Docker-in-Docker) inside the job and drives it through the API and the `zen` CLI: install, deploy + database + custom domain + HTTPS, reboot, backup/restore, upgrade from the previous release. The harness is `infra/e2e/run.sh`; the Go suite lives in `cli/e2e` (build tag `e2e`).
+
+**Trigger:** PR touching `services/api`, `cli`, `apps/web`, `docker-compose.yml`, `traefik`, `infra/scripts`, `infra/e2e`, `VERSION` or the workflow itself; push to `main`; manual.
+
+| # | Job | What It Does | act Command |
+|---|-----|-------------|-------------|
+| 1 | `e2e` | fresh-server install, deploy+db+domain+https, reboot, backup/restore, upgrade; amd64 + arm64 | `act pull_request -W .github/workflows/e2e.yml -j e2e --container-architecture linux/amd64 --privileged` |
+
+The job runs as a matrix on `ubuntu-latest` (amd64) and `ubuntu-24.04-arm` (arm64). Under `act` all steps of the arm64 leg are skipped except a notice ("arm64 is only run on GitHub"); if act rejects the arm runner label, add `-P ubuntu-24.04-arm=catthehacker/ubuntu:act-latest` to the command. A full run takes about 25 minutes (timeout 60). On GitHub, logs and state captured by the harness are uploaded from `infra/e2e/artifacts/**` as `e2e-amd64` / `e2e-arm64` (also on failure); under act the upload step is skipped and the artifacts stay in `infra/e2e/artifacts/` of the job workspace (add `--bind` to the act command to have them land in your checkout on the host). `ci.yml` additionally runs `bash infra/e2e/server_test.sh` and `go vet -tags e2e ./e2e/` so the harness and suite stay healthy without a full run.
 
 ---
 

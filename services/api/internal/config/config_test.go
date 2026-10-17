@@ -136,3 +136,31 @@ func TestLoad_StandaloneHasNoK8sObservabilityURLs(t *testing.T) {
 		t.Errorf("loki=%q prom=%q, want empty in standalone", cfg.LokiURL, cfg.PrometheusURL)
 	}
 }
+
+// An empty ZENITH_CERT_RESOLVER (self-signed installs) must stay empty; only an
+// unset one falls back to "le".
+func TestCertResolverEmptyStaysEmpty(t *testing.T) {
+	cases := []struct {
+		name string
+		set  bool
+		val  string
+		want string
+	}{
+		{"unset", false, "", "le"},
+		{"empty", true, "", ""},
+		{"explicit", true, "x", "x"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.set {
+				t.Setenv("ZENITH_CERT_RESOLVER", tc.val)
+			} else {
+				t.Setenv("ZENITH_CERT_RESOLVER", "")
+				os.Unsetenv("ZENITH_CERT_RESOLVER")
+			}
+			if got := Load().CertResolver; got != tc.want {
+				t.Errorf("CertResolver = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
