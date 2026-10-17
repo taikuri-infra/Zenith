@@ -170,20 +170,37 @@ apply_selfsigned() {
 
 # migrate_traefik_config — run in the checkout. Older installers overwrote the
 # tracked traefik/traefik.yml (this script for self-signed in v0.1.0-alpha.1,
-# `zen install` in every TLS mode); move a modified one to
-# traefik/traefik.local.yml, restore the tracked file and point
-# ZENITH_TRAEFIK_CONFIG at the moved one. No-op otherwise.
+# `zen install` in every TLS mode), which blocks git pull / zen upgrade's
+# checkout. Without ZENITH_TRAEFIK_CONFIG: keep a modified one as
+# traefik/traefik.local.yml, set the key, restore the tracked file. With the
+# key on an existing traefik.local.yml (already live): only restore it.
+# Never fatal; a failed checkout leaves everything as it was.
 migrate_traefik_config() {
-  [ -f .env ] || return 0
-  has_var ZENITH_TRAEFIK_CONFIG && return 0
-  [ -f traefik/traefik.yml ] || return 0
+  local hint="edit traefik/traefik.local.yml from now on" mode
+  [ -f .env ] && [ -f traefik/traefik.yml ] || return 0
+  if ! has_var ZENITH_TRAEFIK_CONFIG; then mode=move
+  elif grep -qx "ZENITH_TRAEFIK_CONFIG=$LOCAL_TRAEFIK_CONFIG" .env && [ -f traefik/traefik.local.yml ]; then mode=restore
+  else return 0; fi
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
   git diff --quiet -- traefik/traefik.yml && return 0
-  mv traefik/traefik.yml traefik/traefik.local.yml
-  git checkout -- traefik/traefik.yml
+  if [ "$mode" = restore ]; then
+    if git checkout -- traefik/traefik.yml; then
+      log "Restored the shipped traefik/traefik.yml (the live config is traefik/traefik.local.yml); $hint"
+    else
+      warn "Could not restore traefik/traefik.yml (git checkout failed); left as is"
+    fi
+    return 0
+  fi
+  cp -p traefik/traefik.yml traefik/traefik.local.yml
   set_var ZENITH_TRAEFIK_CONFIG "$LOCAL_TRAEFIK_CONFIG"
+  if ! git checkout -- traefik/traefik.yml; then
+    rm -f traefik/traefik.local.yml
+    sed -i.bak '/^ZENITH_TRAEFIK_CONFIG=/d' .env; rm -f .env.bak
+    warn "Could not restore traefik/traefik.yml (git checkout failed); left as is"
+    return 0
+  fi
   rm -f .env.bak
-  log "Moved the modified traefik/traefik.yml to traefik/traefik.local.yml and restored the shipped one"
+  log "Moved the modified traefik/traefik.yml to traefik/traefik.local.yml (ZENITH_TRAEFIK_CONFIG set in .env); $hint"
 }
 
 # ---- Docker ----------------------------------------------------------------

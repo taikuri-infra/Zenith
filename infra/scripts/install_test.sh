@@ -116,7 +116,7 @@ git -C "$mig" init -q && git -C "$mig" add traefik/traefik.yml && git -C "$mig" 
 cp "$t/ss/traefik/traefik.local.yml" "$mig/traefik/traefik.yml"; cp "$mig/traefik/traefik.yml" "$t/mig.old"
 grep -v '^ZENITH_TRAEFIK_CONFIG=' "$env_ss" >"$mig/.env"
 out="$(cd "$mig" && env -u ZENITH_TLS_MODE ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1)" || fail "migration re-run failed: $out"
-echo "$out" | grep -q 'traefik.local.yml' || fail "migration not logged: $out"
+echo "$out" | grep -q 'edit traefik/traefik.local.yml from now on$' || fail "migration not logged with the edit hint: $out"
 cmp -s "$mig/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "migration: traefik/traefik.yml not restored"
 cmp -s "$mig/traefik/traefik.local.yml" "$t/mig.old" || fail "migration: modified traefik.yml not moved to traefik.local.yml"
 grep -qx 'ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.local.yml' "$mig/.env" || fail "migration: ZENITH_TRAEFIK_CONFIG not set"
@@ -133,6 +133,26 @@ cmp -s "$mh/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "http01 mig
 cmp -s "$mh/traefik/traefik.local.yml" "$t/mighttp.old" || fail "http01 migration: modified traefik.yml not moved"
 grep -qx 'ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.local.yml' "$mh/.env" || fail "http01 migration: key not set"
 grep -qE '^ZENITH_TLS_MODE=' "$mh/.env" && fail "http01 migration must not write ZENITH_TLS_MODE"
+# key set and traefik.local.yml live, but the tracked file still modified: only restore it
+ml="$t/miglive"; mkdir -p "$ml"; cp -r "$repo/traefik" "$ml/traefik"
+git -C "$ml" init -q && git -C "$ml" add traefik/traefik.yml && git -C "$ml" -c user.name=t -c user.email=t@t commit -qm init
+printf 'generated\n' >"$ml/traefik/traefik.yml"; printf 'live\n' >"$ml/traefik/traefik.local.yml"
+cp "$t/http/.env" "$ml/.env"; echo 'ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.local.yml' >>"$ml/.env"; cp "$ml/.env" "$t/miglive.env"
+out="$(cd "$ml" && ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1)" || fail "live-local re-run failed: $out"
+cmp -s "$ml/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "live-local: tracked traefik.yml not restored"
+[ "$(cat "$ml/traefik/traefik.local.yml")" = live ] || fail "live-local: traefik.local.yml changed"
+diff -q "$ml/.env" "$t/miglive.env" >/dev/null || fail "live-local: .env changed"
+echo "$out" | grep -q 'edit traefik/traefik.local.yml from now on$' || fail "live-local: not logged: $out"
+# git checkout failing during the migration loses nothing
+mf="$t/migfail"; mkdir -p "$mf"; cp -r "$repo/traefik" "$mf/traefik"
+git -C "$mf" init -q && git -C "$mf" add traefik/traefik.yml && git -C "$mf" -c user.name=t -c user.email=t@t commit -qm init
+printf 'generated\n' >"$mf/traefik/traefik.yml"; cp "$t/http/.env" "$mf/.env"
+gitfail="$t/gitfail"; mkdir -p "$gitfail"; realgit="$(command -v git)"
+printf '#!/bin/sh\ncase "$1" in checkout) exit 1;; esac\nexec %s "$@"\n' "$realgit" >"$gitfail/git"; chmod +x "$gitfail/git"
+out="$(cd "$mf" && env PATH="$gitfail:$PATH" ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1)" || fail "re-run with failing checkout aborted: $out"
+[ "$(cat "$mf/traefik/traefik.yml")" = generated ] || fail "failing checkout: traefik.yml lost"
+[ -e "$mf/traefik/traefik.local.yml" ] && fail "failing checkout: traefik.local.yml left behind"
+grep -q '^ZENITH_TRAEFIK_CONFIG=' "$mf/.env" && fail "failing checkout: key left in .env"
 # an unmodified http01 checkout is left alone
 mu="$t/migclean"; mkdir -p "$mu"; cp -r "$repo/traefik" "$mu/traefik"
 git -C "$mu" init -q && git -C "$mu" add traefik/traefik.yml && git -C "$mu" -c user.name=t -c user.email=t@t commit -qm init
