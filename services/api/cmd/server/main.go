@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -1357,7 +1358,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	if cfg.IsStandalone() && dockerDeployer != nil {
 		roots, rerr := services.CertPoolWithFile(cfg.TLSCAFile)
 		if rerr != nil {
-			slog.Warn("custom domains: using system roots only", "error", rerr)
+			if cfg.TLSCAFile == "" || errors.Is(rerr, services.ErrSystemRootsUnavailable) {
+				slog.Warn("custom domains: system roots unavailable; TLS probes may fail", "error", rerr)
+			} else {
+				slog.Warn("custom domains: using system roots only", "error", rerr)
+			}
 		}
 		domainChecker := services.NewDomainChecker(domainRepo, net.DefaultResolver, &services.TraefikTLSProber{Roots: roots}, cfg.BaseDomain)
 		domainHandler.SetChecker(domainChecker)

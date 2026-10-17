@@ -63,3 +63,14 @@ func TestCertPool_GarbageFileFallsBackToSystem(t *testing.T) {
 		t.Fatalf("want system pool and an error, got pool=%v err=%v", pool, err)
 	}
 }
+
+func TestCertPool_EmptyPathMatchesSystemCertPool(t *testing.T) {
+	want, wantErr := x509.SystemCertPool()
+	got, err := CertPoolWithFile("")
+	if (err == nil) != (wantErr == nil) {
+		t.Fatalf("err=%v want %v", err, wantErr)
+	}
+	if (got == nil) != (want == nil) || (got != nil && !got.Equal(want)) {
+		t.Fatal("empty path must return exactly the system cert pool")
+	}
+}
