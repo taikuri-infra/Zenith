@@ -60,10 +60,18 @@ if [ "${1:-}" = "--plan" ]; then
   echo "candidate=$CAND previous=${PREV:-none}"
   echo "A: install candidate → TestInstall TestDeployWithDatabaseAndDomain TestReboot TestBackup"
   echo "C: install candidate + restore A's archive → TestBackupRestore"
-  echo "B: install ${PREV:-<none: skipped>} then upgrade to $CAND → TestUpgrade"
+  echo "B: install ${PREV:-<none: the run fails, no release tag older than $VERSION>} then upgrade to $CAND → TestUpgrade"
   exit 0
 fi
 [ "$#" -eq 0 ] || { echo "usage: run.sh [--plan]" >&2; exit 2; }
+# No previous release means a shallow or tag-less checkout (e2e.yml uses fetch-depth: 0):
+# fail before building anything rather than silently skipping the upgrade criterion.
+if [ -z "$PREV" ]; then
+  echo "run.sh: no release tag older than $VERSION in this checkout (shallow clone without tags?);" >&2
+  echo "        fetch tags (git fetch --tags) or set ZENITH_E2E_UPGRADE_FROM=v<previous release>" >&2
+  exit 1
+fi
+git -C "$repo" rev-parse -q --verify "refs/tags/$PREV" >/dev/null || { echo "run.sh: tag $PREV not found locally" >&2; exit 1; }
 
 mkdir -p "$ZENITH_E2E_ARTIFACTS"
 cleanup() {
@@ -126,7 +134,6 @@ docker cp -q "$BACKUP" "zenith-e2e-c:/opt/zenith/restore.tar.gz"
 gotest "$ZENITH_E2E_ARTIFACTS/c-restore.env" -run 'TestBackupRestore'
 "$S" logs c; "$S" rm c
 
-if [ -z "$PREV" ]; then log "no release tag older than $VERSION; skipping TestUpgrade"; exit 0; fi
 log "server B: install $PREV then upgrade to $CAND"
 "$S" new b; "$S" install b release "$PREV"
 gotest "$ZENITH_E2E_ARTIFACTS/b.env" -run 'TestUpgrade'

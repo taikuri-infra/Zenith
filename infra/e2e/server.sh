@@ -108,11 +108,17 @@ cmd_down() {
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 
-# Polls https://<ip>.sslip.io/health through the container IP (no public DNS needed) for at
+# The IP recorded at install time ($ART/<name>.ip); the install domain is <ip>.sslip.io.
+# Falls back to the current IP for a server that was never installed.
+recorded_ip() {
+  if [ -s "$ART/$1.ip" ]; then cat "$ART/$1.ip"; else ip_of "$1"; fi
+}
+
+# Polls https://<recorded ip>.sslip.io/health through that IP (no public DNS needed) for at
 # most $2 seconds. On timeout it collects the server's logs and fails.
 wait_health() {
   local name="$1" limit="$2" ip host deadline
-  ip="$(ip_of "$name")"; host="$ip.sslip.io"; deadline=$((SECONDS + limit))
+  ip="$(recorded_ip "$name")"; host="$ip.sslip.io"; deadline=$((SECONDS + limit))
   while [ "$SECONDS" -lt "$deadline" ]; do
     if curl -skf --max-time 3 --resolve "$host:443:$ip" "https://$host/health" >/dev/null 2>&1; then return 0; fi
     sleep 1
@@ -121,9 +127,17 @@ wait_health() {
 }
 
 cmd_reboot() {
-  local name="${1:-}"
+  local name="${1:-}" before after
+  before="$(recorded_ip "$name")"
   log "rebooting $name"
   docker restart -t 30 "$(cname "$name")" >/dev/null
+  # The install domain is <ip>.sslip.io: a server that comes back on another IP no longer
+  # matches its own domain, certificates or .env, so that is a failure, not a retry.
+  after="$(ip_of "$name")"
+  if [ "$after" != "$before" ]; then
+    log "$name came back on IP $after, but it was installed on $before (domain $before.sslip.io)"
+    cmd_logs "$name"; return 1
+  fi
   wait_health "$name" "$HEALTH_TIMEOUT"
   log "$name is back"
 }
@@ -176,6 +190,66 @@ cmd_push() {
 
 # ---- install ---------------------------------------------------------------------------
 
+# tag_candidate BARE — tags v<candidate> in the bare repo BARE at a commit on top of the
+# checkout's HEAD whose only change is VERSION=<candidate>, so the installer pins
+# ZENITH_VERSION=<candidate> (the tag the candidate images carry) and /version, backups and
+# `zen upgrade` all agree on it. Plumbing only: the checkout and its refs stay untouched.
+tag_candidate() {
+  local bare="$1" cand base blob tree commit idx
+  cand="$(candidate_version)"; base="$(git -C "$repo" rev-parse HEAD)"
+  # Make sure HEAD's commit is in the bare copy (a detached CI HEAD is not on any branch).
+  git -C "$repo" push -q --no-verify --force "$bare" "$base:refs/e2e/base"
+  idx="$(mktemp)"; rm -f "$idx"
+  blob="$(printf '%s\n' "$cand" | git -C "$bare" hash-object -w --stdin)"
+  GIT_INDEX_FILE="$idx" git -C "$bare" read-tree "$base"
+  GIT_INDEX_FILE="$idx" git -C "$bare" update-index --cacheinfo "100644,$blob,VERSION"
+  tree="$(GIT_INDEX_FILE="$idx" git -C "$bare" write-tree)"
+  rm -f "$idx"
+  commit="$(git -C "$bare" -c user.name=zenith-e2e -c user.email=e2e@zenith.local \
+    commit-tree "$tree" -p "$base" -m "e2e: VERSION=$cand")"
+  git -C "$bare" tag -f "v$cand" "$commit" >/dev/null
+  git -C "$bare" update-ref -d refs/e2e/base
+}
+
+# needs_tls_seed INSTALL_SH — true when that install.sh predates ZENITH_TLS_MODE (it cannot
+# write the self-signed CA itself, so the harness seeds it after the install).
+needs_tls_seed() { ! grep -q 'ZENITH_TLS_MODE' "$1"; }
+
+# seed_selfsigned_tls DOMAIN — run in the install directory. The same CA, leaf and file-provider
+# config install.sh writes for ZENITH_TLS_MODE=selfsigned (write_selfsigned_tls), except that
+# traefik/traefik.yml is left alone: its ACME resolver keeps failing and Traefik serves the
+# default certificate, which is this leaf. Shipped into the server with `declare -f`.
+seed_selfsigned_tls() {
+  local domain="$1" certs="traefik/certs"
+  mkdir -p "$certs" traefik/dynamic
+  if [ ! -s "$certs/zenith-ca.crt" ]; then
+    openssl ecparam -name prime256v1 -genkey -noout -out "$certs/zenith-ca.key"
+    openssl req -x509 -new -key "$certs/zenith-ca.key" -sha256 -days 3650 -subj "/CN=Zenith Local CA" \
+      -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" -out "$certs/zenith-ca.crt"
+  fi
+  if [ ! -s "$certs/zenith.crt" ]; then
+    openssl ecparam -name prime256v1 -genkey -noout -out "$certs/zenith.key"
+    openssl req -new -key "$certs/zenith.key" -subj "/CN=$domain" -out "$certs/zenith.csr"
+    printf 'subjectAltName=DNS:%s,DNS:*.%s\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' "$domain" "$domain" > "$certs/leaf.ext"
+    openssl x509 -req -in "$certs/zenith.csr" -CA "$certs/zenith-ca.crt" -CAkey "$certs/zenith-ca.key" -CAcreateserial \
+      -days 730 -sha256 -extfile "$certs/leaf.ext" -out "$certs/zenith.crt"
+    cat "$certs/zenith-ca.crt" >> "$certs/zenith.crt"
+    rm -f "$certs/zenith.csr" "$certs/leaf.ext" "$certs/zenith-ca.srl"
+    chmod 600 "$certs"/*.key
+  fi
+  cat > traefik/dynamic/certs.yml <<'EOF'
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/zenith.crt
+        keyFile: /etc/traefik/certs/zenith.key
+  certificates:
+    - certFile: /etc/traefik/certs/zenith.crt
+      keyFile: /etc/traefik/certs/zenith.key
+EOF
+}
+
 # cmd_install NAME candidate|release TAG — copies the repository into the server as a bare
 # repo at /src/zenith.git (always with the candidate tag v<candidate>, so `zen upgrade` to the
 # candidate can fetch it on a release install) and runs the chosen tag's install.sh inside.
@@ -196,10 +270,14 @@ cmd_install() {
   ip="$(ip_of "$name")"; domain="$ip.sslip.io"
   mkdir -p "$ART"
 
-  local work; work="$(mktemp -d)"
+  echo "$ip" > "$ART/$name.ip"
+  local work seed=0; work="$(mktemp -d)"
   git clone -q --bare "$repo" "$work/zenith.git"
-  # Push (not tag) so the checkout's own refs are untouched and a detached HEAD works too.
-  git -C "$repo" push -q --no-verify --force "$work/zenith.git" "HEAD:refs/tags/v$cand"
+  tag_candidate "$work/zenith.git"
+  if [ "$mode" = release ]; then
+    git -C "$work/zenith.git" show "$tag:infra/scripts/install.sh" > "$work/install.sh"
+    if needs_tls_seed "$work/install.sh"; then seed=1; fi
+  fi
   docker exec "$c" sh -c 'rm -rf /src/zenith.git && mkdir -p /src'
   docker cp -q "$work/zenith.git" "$c:/src/zenith.git"
   rm -rf "$work"
@@ -219,6 +297,8 @@ cmd_install() {
   local start=$SECONDS
   # The chosen tag's own install.sh, straight from the bare repo (the curl only fails fast
   # when the repo copy is missing). Bounded: a hung install fails instead of blocking the job.
+  # `timeout` kills only the docker exec client; install.sh may keep running inside the
+  # server, which is removed afterwards (run.sh cleanup / server.sh rm).
   # shellcheck disable=SC2016 # expanded by the server's bash, from the -e variables
   if ! timeout "${ZENITH_E2E_INSTALL_TIMEOUT:-1500}" docker exec "${args[@]}" "$c" bash -c '
       set -euo pipefail
@@ -234,23 +314,29 @@ cmd_install() {
   wait_health "$name" "$HEALTH_TIMEOUT"
   local secs=$((SECONDS - start))
 
+  if [ "$seed" = 1 ]; then
+    # $tag's install.sh has no ZENITH_TLS_MODE: seed the self-signed CA + leaf the candidate
+    # installer writes, let Traefik pick them up, and wait for /health again.
+    log "$tag predates ZENITH_TLS_MODE: seeding the self-signed CA for $domain"
+    docker exec -w "$INSTALL_DIR" "$c" bash -c "set -euo pipefail; $(declare -f seed_selfsigned_tls); seed_selfsigned_tls \"\$1\"" _ "$domain"
+    docker exec -w "$INSTALL_DIR" "$c" docker compose restart traefik >/dev/null
+    wait_health "$name" "$HEALTH_TIMEOUT"
+  fi
+
   if [ "$mode" = release ]; then
     # The released compose file ignores this; once `zen upgrade` checks out the candidate,
     # its compose file pulls the candidate images from the in-job registry.
     docker exec -w "$INSTALL_DIR" "$c" sh -c "grep -q '^ZENITH_IMAGE_REPO=' .env || echo 'ZENITH_IMAGE_REPO=$REG:5000' >> .env"
   fi
 
-  local ca_ok=1
   rm -f "$ART/$name-ca.crt"
   if ! docker cp -q "$c:$INSTALL_DIR/traefik/certs/zenith-ca.crt" "$ART/$name-ca.crt" 2>/dev/null; then
-    [ "$mode" = release ] || { log "no CA at $INSTALL_DIR/traefik/certs/zenith-ca.crt on $name"; cmd_logs "$name"; return 1; }
-    log "WARNING: $tag wrote no self-signed CA; ZENITH_E2E_CA_FILE is left empty"; ca_ok=0
+    log "no CA at $INSTALL_DIR/traefik/certs/zenith-ca.crt on $name"; cmd_logs "$name"; return 1
   fi
   local pw
   pw="$(docker exec -w "$INSTALL_DIR" "$c" sh -c "grep '^ADMIN_PASSWORD=' .env | tail -1 | cut -d= -f2-")"
   [ -n "$pw" ] || { log "no ADMIN_PASSWORD in $INSTALL_DIR/.env on $name"; return 1; }
   cmd_env "$name" "$domain" "$pw" "$secs" > "$ART/$name.env"
-  [ "$ca_ok" = 1 ] || sed -i 's/^ZENITH_E2E_CA_FILE=.*/ZENITH_E2E_CA_FILE=/' "$ART/$name.env"
   log "$name installed in ${secs}s at https://$domain (env: $ART/$name.env)"
 }
 
@@ -281,5 +367,9 @@ case "$cmd" in
   new|install|reboot|exec|cp|push|rm|down|logs|env) "cmd_$cmd" "$@" ;;
   ip) ip_of "${1:-}" ;;
   candidate-version) candidate_version ;;
+  # Internal, used by server_test.sh (no Docker): the pieces of `install`.
+  tag-candidate) tag_candidate "${1:?bare repo}" ;;
+  needs-tls-seed) needs_tls_seed "${1:?install.sh}" ;;
+  seed-tls) (cd "${1:?install dir}" && seed_selfsigned_tls "${2:?domain}") ;;
   *) sed -n '11,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac

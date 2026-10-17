@@ -71,6 +71,13 @@ check "plan prints three server lines" test "$(grep -cE '^[ABC]: ' <<< "$plan")"
 plan="$(ZENITH_E2E_UPGRADE_FROM=v9.9.9 "$here/run.sh" --plan)"
 check "ZENITH_E2E_UPGRADE_FROM overrides the previous tag" grep -q '^B: install v9.9.9 ' <<< "$plan"
 check "run.sh rejects unknown arguments" bash -c '"$1" --bogus >/dev/null 2>&1; test $? = 2' _ "$here/run.sh"
+git clone -q --no-tags "$here/../.." "$tmp/notags"
+cp "$here/run.sh" "$here/server.sh" "$tmp/notags/infra/e2e/"
+nt="$(cd "$tmp" && "$tmp/notags/infra/e2e/run.sh" 2>&1)" && ntrc=0 || ntrc=$?
+check "run.sh fails when the checkout has no older release tag" test "$ntrc" = 1
+check "... and says how to fix it" grep -q 'ZENITH_E2E_UPGRADE_FROM' <<< "$nt"
+check "... before building or calling docker" test ! -e "$tmp/docker-calls" -a ! -e "$tmp/notags/infra/e2e/artifacts/zen"
+check "a missing override tag fails too" bash -c 'ZENITH_E2E_UPGRADE_FROM=v9.9.9 "$1" >/dev/null 2>&1; test $? = 1' _ "$tmp/notags/infra/e2e/run.sh"
 eval "$(sed -n '/^semver_lt() {/,/^}/p' "$here/run.sh")"
 lt() { semver_lt "$1" "$2"; }
 nlt() { ! semver_lt "$1" "$2"; }
@@ -92,7 +99,60 @@ check "probe go.mod pins pgx like services/api" test \
   "$(grep -oE 'github.com/jackc/pgx/v5 v[^ ]+' "$here/probe/go.mod")" = \
   "$(grep -oE 'github.com/jackc/pgx/v5 v[^ ]+' "$here/../../services/api/go.mod")"
 
+echo "candidate tag (VERSION=<candidate> on top of HEAD)"
+git clone -q --bare "$here/../.." "$tmp/bare.git"
+"$here/server.sh" tag-candidate "$tmp/bare.git"
+check "VERSION at v<candidate> is the candidate version" test "$(git -C "$tmp/bare.git" show "v$cand:VERSION")" = "$cand"
+check "v<candidate> is a child of HEAD" test "$(git -C "$tmp/bare.git" rev-parse "v$cand^")" = "$(git -C "$here" rev-parse HEAD)"
+check "v<candidate> changes only VERSION" test "$(git -C "$tmp/bare.git" diff --name-only "v$cand^" "v$cand")" = VERSION
+check "the checkout got no candidate tag" test -z "$(git -C "$here" tag --list "v$cand")"
+check "no helper ref left in the bare copy" test -z "$(git -C "$tmp/bare.git" for-each-ref refs/e2e)"
+"$here/server.sh" tag-candidate "$tmp/bare.git"
+check "tagging twice is fine" test "$(git -C "$tmp/bare.git" show "v$cand:VERSION")" = "$cand"
+
+echo "self-signed seeding for release installs"
+printf '#!/usr/bin/env bash\necho old installer\n' > "$tmp/old-install.sh"
+printf '#!/usr/bin/env bash\nTLS_MODE="${ZENITH_TLS_MODE:-http01}"\n' > "$tmp/new-install.sh"
+check "install.sh without ZENITH_TLS_MODE needs seeding" "$here/server.sh" needs-tls-seed "$tmp/old-install.sh"
+check "install.sh with ZENITH_TLS_MODE does not" bash -c '! "$1" needs-tls-seed "$2"' _ "$here/server.sh" "$tmp/new-install.sh"
+if command -v openssl >/dev/null 2>&1; then
+  inst="$tmp/opt-zenith"; certs="$inst/traefik/certs"; mkdir -p "$inst/traefik"
+  printf 'certificatesResolvers:\n  le: {}\n' > "$inst/traefik/traefik.yml"; cp "$inst/traefik/traefik.yml" "$tmp/traefik.yml.orig"
+  "$here/server.sh" seed-tls "$inst" 1.2.3.4.sslip.io >/dev/null 2>&1
+  check "leaf verifies against the CA" bash -c 'openssl verify -CAfile "$1" "$2" >/dev/null 2>&1' _ "$certs/zenith-ca.crt" "$certs/zenith.crt"
+  sans="$(openssl x509 -in "$certs/zenith.crt" -noout -ext subjectAltName 2>/dev/null)"
+  check "leaf SAN has the domain" grep -q 'DNS:1.2.3.4.sslip.io' <<< "$sans"
+  check "leaf SAN has the wildcard" grep -q 'DNS:\*.1.2.3.4.sslip.io' <<< "$sans"
+  check "leaf is for serverAuth" bash -c 'openssl x509 -in "$1" -noout -ext extendedKeyUsage | grep -q "TLS Web Server Authentication"' _ "$certs/zenith.crt"
+  check "leaf file carries the CA (chain)" test "$(grep -c 'BEGIN CERTIFICATE' "$certs/zenith.crt")" = 2
+  check "CA is CN=Zenith Local CA, CA:TRUE" bash -c 'openssl x509 -in "$1" -noout -subject -ext basicConstraints | tr -d " " | grep -q "CN=ZenithLocalCA" && openssl x509 -in "$1" -noout -ext basicConstraints | grep -q "CA:TRUE"' _ "$certs/zenith-ca.crt"
+  check "keys are 0600" test "$(stat -c %a "$certs/zenith.key" "$certs/zenith-ca.key" | sort -u)" = 600
+  check "certs.yml sets the default certificate" grep -q 'defaultCertificate:' "$inst/traefik/dynamic/certs.yml"
+  check "certs.yml points at /etc/traefik/certs" test "$(grep -c -e 'certFile: /etc/traefik/certs/zenith.crt' -e 'keyFile: /etc/traefik/certs/zenith.key' "$inst/traefik/dynamic/certs.yml")" = 4
+  check "traefik.yml left alone" cmp -s "$inst/traefik/traefik.yml" "$tmp/traefik.yml.orig"
+  ca1="$(openssl x509 -in "$certs/zenith-ca.crt" -noout -fingerprint)"
+  "$here/server.sh" seed-tls "$inst" 1.2.3.4.sslip.io >/dev/null 2>&1
+  check "seeding again keeps the CA" test "$(openssl x509 -in "$certs/zenith-ca.crt" -noout -fingerprint)" = "$ca1"
+  check "server.sh ships the seeding with the same openssl commands as write_selfsigned_tls" \
+    grep -q 'basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign' "$here/server.sh"
+else
+  echo "  skip seeding checks (openssl not installed)"
+fi
+
 check "nothing called docker" test ! -e "$tmp/docker-calls"
+
+echo "reboot refuses a changed IP (scripted fake docker)"
+mkdir -p "$tmp/fake2"
+cat > "$tmp/fake2/docker" <<'EOF'
+#!/bin/sh
+case "$1" in inspect) echo "$FAKE_IP";; esac
+exit 0
+EOF
+chmod +x "$tmp/fake2/docker"
+mkdir -p "$tmp/art"; echo 10.9.0.2 > "$tmp/art/demo.ip"
+rb="$(PATH="$tmp/fake2:$PATH" FAKE_IP=10.9.0.7 timeout 20 "$here/server.sh" reboot demo 2>&1)" && rbrc=0 || rbrc=$?
+check "reboot on a new IP fails" test "$rbrc" != 0 -a "$rbrc" != 124
+check "the message names both IPs" bash -c 'grep -q 10.9.0.7 <<< "$1" && grep -q 10.9.0.2 <<< "$1"' _ "$rb"
 if [ -e "$tmp/docker-calls" ]; then cat "$tmp/docker-calls"; fi
 
 if [ "$fails" -gt 0 ]; then echo "e2e_harness_test: $fails failure(s)"; exit 1; fi

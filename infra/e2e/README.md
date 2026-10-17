@@ -25,12 +25,19 @@ the server through three hook commands.
 3. **Server C** — fresh candidate install, A's archive copied to `/opt/zenith/restore.tar.gz` →
    `TestBackupRestore` with A's admin credentials.
 4. **Server B** — the newest release tag older than `VERSION` (override with
-   `ZENITH_E2E_UPGRADE_FROM=v…`) → `TestUpgrade` to the candidate. Skipped when there is none.
+   `ZENITH_E2E_UPGRADE_FROM=v…`) → `TestUpgrade` to the candidate. When the checkout has no such
+   tag (a shallow clone without tags) `run.sh` fails before building anything. A release whose
+   `install.sh` predates `ZENITH_TLS_MODE` gets the same self-signed CA and leaf seeded into
+   `/opt/zenith/traefik` after its install (its `traefik.yml` is left alone), so the suite's TLS
+   stays strict on every server.
 5. Always collects logs into `artifacts/<name>/` and removes the servers, the registry and the
-   network (`ZENITH_E2E_KEEP=1` keeps the registry and network).
+   network (`ZENITH_E2E_KEEP=1` keeps the registry and network). Cleanup removes every
+   `zenith-e2e-*` container, so two runs must not share a Docker daemon.
 
-Each install copies the repository into the server as a bare repo at `/src/zenith.git` (with the
-tag `v<candidate>` added there, not in your checkout) and runs that tag's `install.sh` with
+Each install copies the repository into the server as a bare repo at `/src/zenith.git`, with
+the tag `v<candidate>` added there (not in your checkout) at a commit on top of `HEAD` whose only
+change is `VERSION=<candidate>`, so the installer pins `ZENITH_VERSION` to the tag the candidate
+images carry. It runs that tag's `install.sh` with
 `ZENITH_REPO_URL=/src/zenith.git ZENITH_BRANCH=<tag> ZENITH_DIR=/opt/zenith
 ZENITH_DOMAIN=<ip>.sslip.io ZENITH_PUBLIC_IP=<ip> ZENITH_TLS_MODE=selfsigned
 ADMIN_EMAIL=e2e@zenith.local` (and `ZENITH_IMAGE_REPO=zenith-e2e-registry:5000` for the
@@ -47,6 +54,10 @@ images, `sslip.io` DNS). About 25 minutes.
 bash infra/e2e/run.sh --plan     # print the sequence only
 bash infra/e2e/run.sh            # the whole run; output in infra/e2e/artifacts/
 ```
+
+`run.sh` always builds `zen` from this checkout into `artifacts/zen` and sets
+`ZENITH_E2E_ZEN` to it itself; a value already in your environment is ignored. Only when you
+drive `server.sh` directly (below) do you set `ZENITH_E2E_ZEN` yourself.
 
 Or drive one server yourself:
 
