@@ -20,7 +20,7 @@ On a network that blocks `proxy.golang.org` or Docker Hub, put mirrors in `~/.ac
 
 ## Self-hosted runner (optional, much faster)
 
-Three repository variables (Settings → Secrets and variables → Actions → Variables) move jobs to a runner labelled `self-hosted, linux, x64`; everything else stays on GitHub-hosted runners. Measured 2026-10-17 on two boxes, and neither beat GitHub: a 20-core WSL2 box behind a slow international link (Semgrep 24 s vs 90 s on GitHub, but `Run Tests` 6–23 min vs 5 min and the image builds 15–42 min vs 2–6 min — download-bound: Go modules, npm, apt, the setup-go cache), and the project's 8-vCPU DigitalOcean droplet while it was also running the live install, two other projects' runners and a lab VM (load average 40: `Run Tests` 26 min vs 5, Semgrep 8 min vs 1, E2E amd64 35 min vs 7 — CPU-bound). Switch a variable on only when the box has idle cores and a fast link; measure, then decide.
+Three repository variables (Settings → Secrets and variables → Actions → Variables) move jobs to a runner labelled `self-hosted, linux, x64`; everything else stays on GitHub-hosted runners. Measured 2026-10-17 on two boxes, and neither beat GitHub: a 20-core WSL2 box behind a slow international link (Semgrep 24 s vs 90 s on GitHub, but `Run Tests` 6–23 min vs 5 min and the image builds 15–42 min vs 2–6 min — download-bound: Go modules, npm, apt, the setup-go cache), and the project's 8-vCPU DigitalOcean droplet while it was also running the live install, two other projects' runners and a lab VM (load average 40: `Run Tests` 26 min vs 5, Semgrep 8 min vs 1, E2E amd64 38 min vs 7 — CPU-bound). Switch a variable on only when the box has idle cores and a fast link; measure, then decide.
 
 | Variable | Jobs |
 |---|---|
