@@ -22,6 +22,9 @@ beforeEach(() => {
     listAppBuckets: vi.fn().mockResolvedValue([bucket]),
     createAppDatabase: vi.fn().mockResolvedValue({}),
     listBackups: vi.fn().mockResolvedValue([]),
+    createAppBucket: vi.fn().mockResolvedValue({}),
+    deleteAppDatabase: vi.fn().mockResolvedValue({}),
+    createBackup: vi.fn().mockResolvedValue({}),
   });
 });
 
@@ -54,5 +57,39 @@ describe("ResourcesCard", () => {
     fireEvent.change(screen.getByLabelText("Engine"), { target: { value: "redis" } });
     fireEvent.click(screen.getByRole("button", { name: "Create database" }));
     await waitFor(() => expect(appsDeploy.createAppDatabase).toHaveBeenCalledWith("app-1", { engine: "redis" }));
+  });
+
+  it("creates a bucket with name and access", async () => {
+    render(<ResourcesCard app={app} />);
+    await screen.findByText("uploads");
+    fireEvent.click(screen.getByRole("button", { name: /add bucket/i }));
+    fireEvent.change(screen.getByLabelText("Bucket name"), { target: { value: "assets" } });
+    fireEvent.change(screen.getByLabelText("Access"), { target: { value: "public" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create bucket" }));
+    await waitFor(() => expect(appsDeploy.createAppBucket).toHaveBeenCalledWith("app-1", { name: "assets", access: "public" }));
+  });
+
+  it("deletes a database", async () => {
+    render(<ResourcesCard app={app} />);
+    await screen.findByText("web-pg");
+    fireEvent.click(screen.getByRole("button", { name: "Delete web-pg" }));
+    await waitFor(() => expect(appsDeploy.deleteAppDatabase).toHaveBeenCalledWith("app-1", "d1"));
+  });
+
+  it("creates a backup from the expanded row", async () => {
+    render(<ResourcesCard app={app} />);
+    await screen.findByText("web-pg");
+    fireEvent.click(screen.getByRole("button", { name: "Expand web-pg" }));
+    fireEvent.click(await screen.findByRole("button", { name: /create backup/i }));
+    await waitFor(() => expect(appsDeploy.createBackup).toHaveBeenCalledWith("app-1", "d1"));
+  });
+
+  it("shows an error, not the empty state, when backups fail", async () => {
+    appsDeploy.listBackups.mockRejectedValue(new Error("backups down"));
+    render(<ResourcesCard app={app} />);
+    await screen.findByText("web-pg");
+    fireEvent.click(screen.getByRole("button", { name: "Expand web-pg" }));
+    expect(await screen.findByText(/backups down/)).toBeInTheDocument();
+    expect(screen.queryByText("No backups yet.")).not.toBeInTheDocument();
   });
 });

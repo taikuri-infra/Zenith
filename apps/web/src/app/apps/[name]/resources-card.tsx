@@ -135,6 +135,7 @@ function DatabasesSection({ appId }: { appId: string }) {
 }
 
 function ConnectionDetails({ appId, db }: { appId: string; db: AppDatabase }) {
+  const { toast } = useToast();
   const [conn, setConn] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const fallback = `${db.engine}://${db.db_user}:***@${db.host}:${db.port}/${db.db_name}`;
@@ -148,11 +149,15 @@ function ConnectionDetails({ appId, db }: { appId: string; db: AppDatabase }) {
       setConn(fallback);
     }
   };
-  const copy = () => {
+  const copy = async () => {
     if (!conn) return;
-    navigator.clipboard?.writeText(conn);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(conn);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast("error", "Failed to copy connection string");
+    }
   };
 
   return (
@@ -181,7 +186,7 @@ function ConnectionDetails({ appId, db }: { appId: string; db: AppDatabase }) {
 
 function Backups({ appId, db }: { appId: string; db: AppDatabase }) {
   const { toast } = useToast();
-  const { data, loading, refetch } = useApi<DatabaseBackup[]>(() => {
+  const { data, loading, error, refetch } = useApi<DatabaseBackup[]>(() => {
     const { appsDeploy } = getApi();
     return appsDeploy.listBackups ? appsDeploy.listBackups(appId, db.id) : missing<DatabaseBackup>();
   }, [appId, db.id]);
@@ -216,6 +221,8 @@ function Backups({ appId, db }: { appId: string; db: AppDatabase }) {
       </div>
       {loading ? (
         <div className="text-xs text-neutral-500">Loading backups...</div>
+      ) : error ? (
+        <ErrorState message={error} onRetry={refetch} />
       ) : items.length === 0 ? (
         <div className="text-xs text-neutral-600">No backups yet.</div>
       ) : (
