@@ -30,6 +30,13 @@ detect_public_ip() {
   return 0
 }
 
+# True when ADDR is assigned to one of this machine's interfaces.
+ip_is_local() {
+  { ip -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 || true
+    hostname -I 2>/dev/null | tr ' ' '\n' || true
+  } | grep -qxF "$1"
+}
+
 # Ensure ZENITH_DOMAIN is set: explicit, else <public-ip>.sslip.io. Exits 1
 # (before any file is written) when no valid IP can be found.
 resolve_domain() {
@@ -41,6 +48,10 @@ resolve_domain() {
   fi
   if [ "$IP_SOURCE" = "local" ]; then
     warn "Public IP lookup failed; using local address $PUBLIC_IP. If it is private, Let's Encrypt cannot issue a certificate for it."
+  fi
+  # Behind NAT the public IP is the router's: <ip>.sslip.io then reaches the router, not us.
+  if [ "$IP_SOURCE" != "local" ] && ! ip_is_local "$PUBLIC_IP"; then
+    warn "address $PUBLIC_IP is not on this machine (NAT?); set ZENITH_PUBLIC_IP or ZENITH_DOMAIN if the dashboard is unreachable" >&2
   fi
   ZENITH_DOMAIN="${PUBLIC_IP}.sslip.io"
 }

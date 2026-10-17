@@ -15,6 +15,15 @@ run() { # $1 = workdir; remaining = env assignments
   (cd "$dir" && env "$@" ZENITH_DRY_RUN=1 ZENITH_PUBLIC_IP=203.0.113.7 bash "$here/install.sh" >/dev/null)
 }
 
+run_err() { # like run, but ZENITH_PUBLIC_IP comes from the caller; prints stderr
+  local dir="$1"; shift
+  mkdir -p "$dir"
+  cp "$repo/.env.example" "$dir/.env.example"
+  cp "$repo/VERSION" "$dir/VERSION"
+  [ -d "$dir/traefik" ] || cp -r "$repo/traefik" "$dir/traefik"
+  (cd "$dir" && env -u ZENITH_PUBLIC_IP -u ZENITH_DOMAIN "$@" ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1 >/dev/null)
+}
+
 t=$(mktemp -d)
 trap 'rm -rf "$t"' EXIT
 
@@ -98,6 +107,18 @@ cp "$t/http/.env" "$t/http/.env.before"; run "$t/http"; diff -q "$t/http/.env" "
 # --- ADMIN_PASSWORD from the environment is honoured ---
 run "$t/pw" ADMIN_PASSWORD=Fixed-Password-123
 grep -qE '^ADMIN_PASSWORD=Fixed-Password-123$' "$t/pw/.env" || fail "ADMIN_PASSWORD override ignored"
+
+# --- an address that is not on this machine (NAT) is warned about, not fatal ---
+out="$(run_err "$t/nat" ZENITH_PUBLIC_IP=198.51.100.23)" || fail "NAT warning must not be fatal"
+echo "$out" | grep -q 'address 198.51.100.23 is not on this machine (NAT?); set ZENITH_PUBLIC_IP or ZENITH_DOMAIN if the dashboard is unreachable' || fail "missing NAT warning: $out"
+grep -qx 'ZENITH_DOMAIN=198.51.100.23.sslip.io' "$t/nat/.env" || fail "NAT: domain not <ip>.sslip.io"
+out="$(run_err "$t/natdom" ZENITH_DOMAIN=zenith.example.com)" || fail "explicit domain run failed"
+echo "$out" | grep -q 'is not on this machine' && fail "NAT warning printed although ZENITH_DOMAIN is set: $out"
+# a local address (hostname -I stubbed to report it, no `ip`) is not warned about
+locstubs="$t/locstubs"; mkdir -p "$locstubs"
+printf '#!/bin/sh\necho 198.51.100.24 10.0.0.5\n' >"$locstubs/hostname"; printf '#!/bin/sh\nexit 1\n' >"$locstubs/ip"; chmod +x "$locstubs"/*
+out="$(run_err "$t/natloc" PATH="$locstubs:$PATH" ZENITH_PUBLIC_IP=198.51.100.24)" || fail "local-address run failed"
+echo "$out" | grep -q 'is not on this machine' && fail "NAT warning printed for a local address: $out"
 
 # --- set_var keeps sed-special characters verbatim and refuses a newline ---
 run "$t/pw2" 'ADMIN_PASSWORD=p&ss|w\x'
