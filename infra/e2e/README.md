@@ -66,7 +66,7 @@ cd cli && go build -o ../infra/e2e/artifacts/zen . && cd ..
 export ZENITH_E2E_ZEN=$PWD/infra/e2e/artifacts/zen
 bash infra/e2e/server.sh new a
 # (push candidate images first: see run.sh, or install a release instead)
-bash infra/e2e/server.sh install a release v0.1.0
+bash infra/e2e/server.sh install a release v0.1.0-alpha.4
 set -a; . infra/e2e/artifacts/a.env; set +a
 (cd cli && go test -tags e2e -count=1 -v ./e2e/ -run TestInstall)
 bash infra/e2e/server.sh exec a -- docker compose ps
