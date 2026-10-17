@@ -455,6 +455,10 @@ func buildComposeEnv(cfg *Config, adminEmail, dockerGID string) string {
 			b.WriteString("ZENITH_CERT_RESOLVER=\n")
 		}
 	}
+	// composeConfigureTLS writes traefik.local.yml exactly when needsTLS.
+	if needsTLS(cfg) {
+		b.WriteString("ZENITH_TRAEFIK_CONFIG=" + localTraefikConfig + "\n")
+	}
 	return b.String()
 }
 

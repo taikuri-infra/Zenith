@@ -281,3 +281,147 @@ func TestLatestReleaseHTTPError(t *testing.T) {
 		t.Fatal("want error")
 	}
 }
+
+// modifiedTraefikYML makes inst look like an install whose installer overwrote
+// the tracked traefik.yml (alpha.1 install.sh self-signed, or any older zen
+// install): mode in .env (unless empty), no ZENITH_TRAEFIK_CONFIG.
+func modifiedTraefikYML(t *testing.T, inst Install, mode string) string {
+	t.Helper()
+	if mode != "" {
+		if err := inst.EnvSet("ZENITH_TLS_MODE", mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(inst.Dir, "traefik"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "# Generated (" + mode + ").\nentryPoints: {}\n"
+	if err := os.WriteFile(filepath.Join(inst.Dir, "traefik", "traefik.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+func upgradeOK(t *testing.T, r *fakeRunner, inst Install, log *bytes.Buffer) {
+	t.Helper()
+	if _, err := Upgrade(context.Background(), r, inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", SkipBackup: true, Timeout: time.Second, Now: time.Now,
+		Health: func(context.Context, string) error { return nil },
+	}, log); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// selfsigned: alpha.1 install.sh; "" (http01): an older `zen install`, which
+// wrote traefik.yml in every mode.
+func TestUpgrade_MigratesModifiedTraefikYML(t *testing.T) {
+	for _, mode := range []string{"selfsigned", ""} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			inst := writeInstall(t)
+			cfg := modifiedTraefikYML(t, inst, mode)
+			r := upgradeRunner()
+			r.fail = map[string]bool{"git diff --quiet": true} // traefik.yml modified
+			var log bytes.Buffer
+			upgradeOK(t, r, inst, &log)
+			b, err := os.ReadFile(filepath.Join(inst.Dir, "traefik", "traefik.local.yml"))
+			if err != nil || string(b) != cfg {
+				t.Fatalf("traefik.local.yml = %q, %v; want the old traefik.yml", b, err)
+			}
+			if got := inst.EnvGet("ZENITH_TRAEFIK_CONFIG"); got != "/etc/traefik/traefik.local.yml" {
+				t.Fatalf("ZENITH_TRAEFIK_CONFIG = %q", got)
+			}
+			joined := strings.Join(r.cmds(), "\n")
+			last := -1
+			for _, step := range []string{"git diff --quiet -- traefik/traefik.yml", "git checkout -- traefik/traefik.yml", "git checkout v0.1.0-alpha.3"} {
+				i := strings.Index(joined, step)
+				if i < 0 || i < last {
+					t.Fatalf("step %q missing or out of order:\n%s", step, joined)
+				}
+				last = i
+			}
+			if n := strings.Count(log.String(), "traefik.local.yml"); n != 1 {
+				t.Fatalf("want one migration log line, log:\n%s", log.String())
+			}
+		})
+	}
+}
+
+func TestUpgrade_TraefikMigrationNoopWhenUnmodifiedOrAlreadyMigrated(t *testing.T) {
+	for name, setup := range map[string]func(Install, *fakeRunner){
+		"unmodified http01":     func(Install, *fakeRunner) {},
+		"unmodified selfsigned": func(i Install, _ *fakeRunner) { _ = i.EnvSet("ZENITH_TLS_MODE", "selfsigned") },
+		"already migrated": func(i Install, r *fakeRunner) {
+			r.fail = map[string]bool{"git diff --quiet": true}
+			_ = i.EnvSet("ZENITH_TRAEFIK_CONFIG", "/x.yml")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			inst := writeInstall(t)
+			r := upgradeRunner()
+			setup(inst, r)
+			before := inst.EnvGet("ZENITH_TRAEFIK_CONFIG")
+			upgradeOK(t, r, inst, &bytes.Buffer{})
+			for _, c := range r.cmds() {
+				if c == "git checkout -- traefik/traefik.yml" {
+					t.Fatalf("ran %q", c)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(inst.Dir, "traefik", "traefik.local.yml")); err == nil {
+				t.Fatal("traefik.local.yml written")
+			}
+			if inst.EnvGet("ZENITH_TRAEFIK_CONFIG") != before {
+				t.Fatal("ZENITH_TRAEFIK_CONFIG changed")
+			}
+		})
+	}
+}
+
+// Rolling back to a release whose compose ignores ZENITH_TRAEFIK_CONFIG puts
+// the old config back in traefik.yml.
+func TestUpgrade_RollbackRevertsTraefikMigration(t *testing.T) {
+	inst := writeInstall(t)
+	cfg := modifiedTraefikYML(t, inst, "selfsigned")
+	r := upgradeRunner()
+	r.fail = map[string]bool{"git diff --quiet": true}
+	res, err := Upgrade(context.Background(), r, inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", SkipBackup: true, Timeout: time.Second, Now: time.Now,
+		Health: func(_ context.Context, want string) error {
+			if want == "0.1.0-alpha.3" {
+				return errors.New("never healthy")
+			}
+			return nil
+		},
+	}, &bytes.Buffer{})
+	if err == nil || res == nil || !res.RolledBack {
+		t.Fatalf("want rollback, res=%+v err=%v", res, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(inst.Dir, "traefik", "traefik.yml")); string(b) != cfg {
+		t.Fatalf("traefik.yml after rollback = %q", b)
+	}
+	if _, err := os.Stat(filepath.Join(inst.Dir, "traefik", "traefik.local.yml")); err == nil {
+		t.Fatal("traefik.local.yml left behind after rollback")
+	}
+	if inst.EnvGet("ZENITH_TRAEFIK_CONFIG") != "" {
+		t.Fatal("ZENITH_TRAEFIK_CONFIG left in .env after rollback")
+	}
+}
+
+func TestUpgrade_CheckoutFailureRevertsTraefikMigration(t *testing.T) {
+	inst := writeInstall(t)
+	cfg := modifiedTraefikYML(t, inst, "")
+	r := upgradeRunner()
+	r.fail = map[string]bool{"git diff --quiet": true, "git checkout v": true}
+	_, err := Upgrade(context.Background(), r, inst, UpgradeOptions{
+		Target: "0.1.0-alpha.3", SkipBackup: true, Now: time.Now,
+		Health: func(context.Context, string) error { return nil },
+	}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "nothing changed") {
+		t.Fatalf("err = %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(inst.Dir, "traefik", "traefik.yml")); string(b) != cfg {
+		t.Fatalf("traefik.yml = %q", b)
+	}
+	if inst.EnvGet("ZENITH_TRAEFIK_CONFIG") != "" {
+		t.Fatal("ZENITH_TRAEFIK_CONFIG left in .env")
+	}
+}
