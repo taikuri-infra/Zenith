@@ -1353,6 +1353,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(backend)
 	domainHandler.SetReservedDomain(cfg.BaseDomain)
+	domainHandler.SetSubdomainsAllowed(cfg.IsStandalone())
 	if cfg.IsStandalone() && dockerDeployer != nil {
 		roots, rerr := services.CertPoolWithFile(cfg.TLSCAFile)
 		if rerr != nil {
