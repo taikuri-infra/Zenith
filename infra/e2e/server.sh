@@ -126,7 +126,11 @@ wait_health() {
     if curl -skf --max-time 3 --resolve "$host:443:$ip" "https://$host/api/v1/version" >/dev/null 2>&1; then return 0; fi
     sleep 1
   done
-  log "$name: /api/v1/version not answering after ${limit}s"; cmd_logs "$name"; return 1
+  log "$name: /api/v1/version not answering after ${limit}s; last attempt:"
+  # One verbose attempt so the reason (proxy, route, TLS, 502) lands in the job log.
+  curl -skv --max-time 5 --resolve "$host:443:$ip" "https://$host/api/v1/version" 2>&1 | grep -E -i 'proxy|connect|refused|route|timed out|ssl|tls|< HTTP' | head -n 8 | sed 's/^/    /' || true
+  env | grep -i -E '^(https?|no)_proxy=' | sed 's/^/    env: /' || true
+  cmd_logs "$name"; return 1
 }
 
 cmd_reboot() {

@@ -37,7 +37,9 @@ jobs:
     # amd64 moves to the owner's self-hosted runner when the repository variable
     # ZENITH_SELF_HOSTED is "true" and the code comes from this repository (never for fork
     # PRs); arm64 always runs on GitHub's native arm runner. Under act, vars is empty.
-    runs-on: ${{ (matrix.arch == 'amd64' && vars.ZENITH_SELF_HOSTED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","linux","x64"]') || matrix.runner }}
+    # The extra "e2e" label pins the job to ONE runner per machine: two E2E runs on the same
+    # Docker daemon would tear each other's servers down (shared network and names).
+    runs-on: ${{ (matrix.arch == 'amd64' && vars.ZENITH_SELF_HOSTED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","linux","x64","e2e"]') || matrix.runner }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
