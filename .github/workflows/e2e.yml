@@ -1,0 +1,61 @@
+name: E2E
+
+# Installs Zenith on a fresh Ubuntu server (Docker-in-Docker) inside the job and
+# drives it through the API and the zen CLI: install, deploy + database + custom
+# domain + HTTPS, reboot, backup/restore, upgrade from the previous release.
+# Runs locally with: act pull_request -W .github/workflows/e2e.yml -j e2e --container-architecture linux/amd64 --privileged
+
+on:
+  pull_request:
+    paths:
+      - 'services/api/**'
+      - 'cli/**'
+      - 'apps/web/**'
+      - 'docker-compose.yml'
+      - 'traefik/**'
+      - 'infra/scripts/**'
+      - 'infra/e2e/**'
+      - 'VERSION'
+      - '.github/workflows/e2e.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    steps:
+      - name: Skip arm64 under act
+        if: ${{ env.ACT && matrix.arch != 'amd64' }}
+        run: echo "arm64 is only run on GitHub" && exit 0
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - name: Run the E2E suite on a fresh server
+        run: bash infra/e2e/run.sh
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ matrix.arch }}
+          path: infra/e2e/artifacts/**
+          if-no-files-found: ignore
