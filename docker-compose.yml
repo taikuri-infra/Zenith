@@ -131,9 +131,11 @@ services:
   # (the only public ports). ZENITH_DOMAIN is set in .env by the installer.
   #
   # The static config lives in ./traefik/traefik.yml, which install.sh
-  # uses as shipped (HTTP-01); `zen install` may overwrite it for the chosen
-  # TLS mode (HTTP-01, DNS-01, or self-signed). The repo ships a default HTTP-01 traefik.yml so a manual `docker compose up`
-  # still works — edit the email in it, or run `zen install`.
+  # uses as shipped (HTTP-01); `zen install` may overwrite it for HTTP-01 or
+  # DNS-01. Self-signed installs leave it alone: both installers write the
+  # git-ignored ./traefik/traefik.selfsigned.yml and set ZENITH_TRAEFIK_CONFIG
+  # in .env to select it. The repo ships a default HTTP-01 traefik.yml so a
+  # manual `docker compose up` still works — edit the email in it, or run `zen install`.
   # DNS-01 reads CF_DNS_API_TOKEN (set in .env by the installer) for the
   # Cloudflare challenge.
   #
@@ -148,6 +150,8 @@ services:
     # tags default to API 1.24, which Docker 25+ daemons reject outright.
     image: traefik:v3.7.8
     restart: unless-stopped
+    # The image's entrypoint prepends `traefik` when the first arg starts with `-`.
+    command: ["--configFile=${ZENITH_TRAEFIK_CONFIG:-/etc/traefik/traefik.yml}"]
     depends_on:
       - web
       - api
@@ -160,7 +164,7 @@ services:
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Static config (traefik.yml), file-provider dynamic config, and any
+      # Static config (traefik.yml / traefik.selfsigned.yml), file-provider dynamic config, and any
       # self-signed certs. Read-only: Traefik writes acme.json to /letsencrypt.
       - ./traefik:/etc/traefik:ro
       - traefik_letsencrypt:/letsencrypt

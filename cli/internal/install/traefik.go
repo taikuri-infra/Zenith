@@ -19,7 +19,23 @@ func tlsMode(cfg *Config) string {
 	}
 }
 
-// generateTraefikStaticConfig renders /etc/traefik/traefik.yml for the given mode.
+// traefikStaticConfigFile is the static config path (relative to the checkout)
+// for mode. Self-signed uses the git-ignored traefik.selfsigned.yml, selected by
+// ZENITH_TRAEFIK_CONFIG in .env, so the tracked traefik.yml stays as shipped and
+// `zen upgrade`'s git checkout is never blocked by it.
+func traefikStaticConfigFile(mode string) string {
+	if mode == TLSSelfSigned {
+		return "traefik/traefik.selfsigned.yml"
+	}
+	return "traefik/traefik.yml"
+}
+
+// selfSignedTraefikConfig is ZENITH_TRAEFIK_CONFIG for self-signed installs: the
+// container path of traefikStaticConfigFile(TLSSelfSigned).
+const selfSignedTraefikConfig = "/etc/traefik/traefik.selfsigned.yml"
+
+// generateTraefikStaticConfig renders the Traefik static config for the given
+// mode (written to traefikStaticConfigFile(mode)).
 //
 // The certificate resolver is attached to the websecure *entrypoint* rather than
 // to individual routers, so no router (dashboard, API, or a deployed user app)
@@ -122,12 +138,18 @@ func composeConfigureTLS(cfg *Config) error {
 	if err := validateInstallDir(dir); err != nil {
 		return err
 	}
+	return composeWriteTLS(cfg, r, dir)
+}
+
+// composeWriteTLS writes the static config (and, self-signed, the certs) into
+// the checkout at dir through r.
+func composeWriteTLS(cfg *Config, r runner, dir string) error {
 	if out, err := r.Run(fmt.Sprintf("mkdir -p %s/traefik/dynamic %s/traefik/certs", dir, dir)); err != nil {
 		return fmt.Errorf("prepare traefik dir: %w\n%s", err, out)
 	}
 
 	mode := tlsMode(cfg)
-	if err := writeFileB64(r, dir+"/traefik/traefik.yml", generateTraefikStaticConfig(mode, acmeEmail(cfg))); err != nil {
+	if err := writeFileB64(r, dir+"/"+traefikStaticConfigFile(mode), generateTraefikStaticConfig(mode, acmeEmail(cfg))); err != nil {
 		return err
 	}
 

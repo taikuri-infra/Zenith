@@ -71,11 +71,14 @@ env_ss="$t/ss/.env"
 grep -qE '^ZENITH_TLS_MODE=selfsigned$' "$env_ss" || fail "ZENITH_TLS_MODE missing"
 grep -qE '^ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt$' "$env_ss" || fail "ZENITH_TLS_CA_FILE missing"
 grep -qE '^ZENITH_CERT_RESOLVER=$' "$env_ss" || fail "ZENITH_CERT_RESOLVER must be empty in selfsigned mode"
-for f in traefik/certs/zenith.crt traefik/certs/zenith.key traefik/certs/zenith-ca.crt traefik/certs/zenith-ca.key traefik/dynamic/certs.yml traefik/traefik.yml; do
+grep -qE '^ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.selfsigned.yml$' "$env_ss" || fail "ZENITH_TRAEFIK_CONFIG missing"
+for f in traefik/certs/zenith.crt traefik/certs/zenith.key traefik/certs/zenith-ca.crt traefik/certs/zenith-ca.key traefik/dynamic/certs.yml traefik/traefik.selfsigned.yml; do
   [ -s "$t/ss/$f" ] || fail "selfsigned: $f not written"
 done
-grep -q 'certResolver' "$t/ss/traefik/traefik.yml" && fail "selfsigned traefik.yml must not name a certResolver"
-grep -qE '^certificatesResolvers:' "$t/ss/traefik/traefik.yml" && fail "selfsigned traefik.yml must not define certificatesResolvers"
+# the tracked traefik.yml is never written (zen upgrade's git checkout must stay clean)
+cmp -s "$t/ss/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "selfsigned: tracked traefik/traefik.yml was modified"
+grep -q 'certResolver' "$t/ss/traefik/traefik.selfsigned.yml" && fail "traefik.selfsigned.yml must not name a certResolver"
+grep -qE '^certificatesResolvers:' "$t/ss/traefik/traefik.selfsigned.yml" && fail "traefik.selfsigned.yml must not define certificatesResolvers"
 # the api container (non-root) reads the CA: certificates 0644, keys 0600
 for f in zenith.crt zenith-ca.crt; do [ "$(stat -c %a "$t/ss/traefik/certs/$f")" = 644 ] || fail "selfsigned: $f mode $(stat -c %a "$t/ss/traefik/certs/$f"), want 644"; done
 for f in zenith.key zenith-ca.key; do [ "$(stat -c %a "$t/ss/traefik/certs/$f")" = 600 ] || fail "selfsigned: $f mode $(stat -c %a "$t/ss/traefik/certs/$f"), want 600"; done
@@ -98,11 +101,28 @@ run "$t/http" ZENITH_IMAGE_REPO=zenith-e2e-registry:5000
 grep -qE '^ZENITH_TLS_MODE=' "$t/http/.env" && fail "http01 must not write ZENITH_TLS_MODE"
 grep -qE '^ZENITH_IMAGE_REPO=zenith-e2e-registry:5000$' "$t/http/.env" || fail "ZENITH_IMAGE_REPO not written"
 [ -e "$t/http/traefik/dynamic/certs.yml" ] && fail "http01 must not write certs.yml"
+[ -e "$t/http/traefik/traefik.selfsigned.yml" ] && fail "http01 must not write traefik.selfsigned.yml"
+grep -qE '^ZENITH_TRAEFIK_CONFIG=' "$t/http/.env" && fail "http01 must not write ZENITH_TRAEFIK_CONFIG"
+cmp -s "$t/http/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "http01: tracked traefik/traefik.yml was modified"
 
 # --- selfsigned keys are added once and http01 stays untouched on re-run ---
 run "$t/ss" ZENITH_TLS_MODE=selfsigned
 [ "$(grep -c '^ZENITH_TLS_MODE=' "$env_ss")" = 1 ] || fail "ZENITH_TLS_MODE duplicated on re-run"
 cp "$t/http/.env" "$t/http/.env.before"; run "$t/http"; diff -q "$t/http/.env" "$t/http/.env.before" >/dev/null || fail "re-run changed an http01 .env"
+
+# --- an alpha.1 self-signed install (traefik.yml overwritten, no ZENITH_TRAEFIK_CONFIG) is migrated on re-run ---
+mig="$t/mig"; mkdir -p "$mig"; cp -r "$repo/traefik" "$mig/traefik"
+git -C "$mig" init -q && git -C "$mig" add traefik/traefik.yml && git -C "$mig" -c user.name=t -c user.email=t@t commit -qm init
+cp "$t/ss/traefik/traefik.selfsigned.yml" "$mig/traefik/traefik.yml"; cp "$mig/traefik/traefik.yml" "$t/mig.old"
+grep -v '^ZENITH_TRAEFIK_CONFIG=' "$env_ss" >"$mig/.env"
+out="$(cd "$mig" && env -u ZENITH_TLS_MODE ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1)" || fail "migration re-run failed: $out"
+echo "$out" | grep -q 'traefik.selfsigned.yml' || fail "migration not logged: $out"
+cmp -s "$mig/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "migration: traefik/traefik.yml not restored"
+cmp -s "$mig/traefik/traefik.selfsigned.yml" "$t/mig.old" || fail "migration: modified traefik.yml not moved to traefik.selfsigned.yml"
+grep -qx 'ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.selfsigned.yml' "$mig/.env" || fail "migration: ZENITH_TRAEFIK_CONFIG not set"
+[ "$(grep -c '^ZENITH_TRAEFIK_CONFIG=' "$mig/.env")" = 1 ] || fail "migration: key duplicated"
+(cd "$mig" && ZENITH_DRY_RUN=1 bash "$here/install.sh" >/dev/null) || fail "second re-run after migration failed"
+[ "$(grep -c '^ZENITH_TRAEFIK_CONFIG=' "$mig/.env")" = 1 ] || fail "migration: key duplicated on second re-run"
 
 # --- ADMIN_PASSWORD from the environment is honoured ---
 run "$t/pw" ADMIN_PASSWORD=Fixed-Password-123
@@ -119,6 +139,14 @@ locstubs="$t/locstubs"; mkdir -p "$locstubs"
 printf '#!/bin/sh\necho 198.51.100.24 10.0.0.5\n' >"$locstubs/hostname"; printf '#!/bin/sh\nexit 1\n' >"$locstubs/ip"; chmod +x "$locstubs"/*
 out="$(run_err "$t/natloc" PATH="$locstubs:$PATH" ZENITH_PUBLIC_IP=198.51.100.24)" || fail "local-address run failed"
 echo "$out" | grep -q 'is not on this machine' && fail "NAT warning printed for a local address: $out"
+# neither `ip` nor `hostname` exists: cannot tell, so no warning
+noipbin="$t/noipbin"; mkdir -p "$noipbin"
+for f in /usr/local/bin/* /usr/bin/* /bin/* /usr/sbin/* /sbin/*; do
+  n="${f##*/}"; case "$n" in ip|hostname) continue;; esac
+  [ -e "$noipbin/$n" ] || ln -s "$f" "$noipbin/$n"
+done
+out="$(run_err "$t/natnotool" PATH="$noipbin" ZENITH_PUBLIC_IP=198.51.100.25)" || fail "no-ip/hostname run failed: $out"
+echo "$out" | grep -q 'is not on this machine' && fail "NAT warning printed although neither ip nor hostname exists: $out"
 
 # --- set_var keeps sed-special characters verbatim and refuses a newline ---
 run "$t/pw2" 'ADMIN_PASSWORD=p&ss|w\x'

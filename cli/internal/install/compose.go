@@ -453,6 +453,7 @@ func buildComposeEnv(cfg *Config, adminEmail, dockerGID string) string {
 			b.WriteString("ZENITH_TLS_MODE=selfsigned\n")
 			b.WriteString("ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt\n")
 			b.WriteString("ZENITH_CERT_RESOLVER=\n")
+			b.WriteString("ZENITH_TRAEFIK_CONFIG=" + selfSignedTraefikConfig + "\n")
 		}
 	}
 	return b.String()

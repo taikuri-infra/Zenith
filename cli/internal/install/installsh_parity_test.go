@@ -50,11 +50,15 @@ func TestInstallShSelfSignedTraefikConfigMatchesGo(t *testing.T) {
 	}
 	cmd := exec.Command("bash", script)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	// Hermetic: only PATH, HOME and the test's own variables (an inherited
+	// ZENITH_* from the developer's shell must not change the result).
+	cmd.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + t.TempDir(),
 		"ZENITH_DRY_RUN=1",
 		"ZENITH_PUBLIC_IP=203.0.113.7",
 		"ZENITH_TLS_MODE=selfsigned",
-	)
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("install.sh dry run: %v\n%s", err, out)
 	}
@@ -69,9 +73,9 @@ func TestInstallShSelfSignedTraefikConfigMatchesGo(t *testing.T) {
 	if got, want := read("traefik/dynamic/certs.yml"), generateTraefikCertsConfig(); got != want {
 		t.Errorf("certs.yml differs from the Go installer's\n--- install.sh\n%s\n--- zen install\n%s", got, want)
 	}
-	got := stripLeadingComments(read("traefik/traefik.yml"))
+	got := stripLeadingComments(read("traefik/traefik.selfsigned.yml"))
 	want := stripLeadingComments(generateTraefikStaticConfig(TLSSelfSigned, ""))
 	if got != want {
-		t.Errorf("traefik.yml differs from the Go installer's (leading comments stripped)\n--- install.sh\n%s\n--- zen install\n%s", got, want)
+		t.Errorf("traefik.selfsigned.yml differs from the Go installer's (leading comments stripped)\n--- install.sh\n%s\n--- zen install\n%s", got, want)
 	}
 }
