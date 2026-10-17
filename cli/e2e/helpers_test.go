@@ -369,11 +369,11 @@ func serverExec(t *testing.T, timeout time.Duration, args ...string) (string, er
 	return runCmd(t, timeout, nil, append(append([]string{}, cfg.ServerExec...), args...)...)
 }
 
-// waitHealth waits for GET <endpoint>/health 200.
+// waitHealth waits for GET <endpoint>/api/v1/version 200.
 func waitHealth(t *testing.T, timeout time.Duration) {
 	t.Helper()
-	waitFor(t, "/health", timeout, func() (bool, string) {
-		code, body := getURL(t, cfg.Endpoint+"/health")
+	waitFor(t, "/api/v1/version", timeout, func() (bool, string) {
+		code, body := getURL(t, cfg.Endpoint+"/api/v1/version")
 		return code == http.StatusOK, fmt.Sprintf("%d %s", code, body)
 	})
 }

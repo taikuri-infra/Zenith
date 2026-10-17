@@ -41,8 +41,8 @@ images carry. It runs that tag's `install.sh` with
 `ZENITH_REPO_URL=/src/zenith.git ZENITH_BRANCH=<tag> ZENITH_DIR=/opt/zenith
 ZENITH_DOMAIN=<ip>.sslip.io ZENITH_PUBLIC_IP=<ip> ZENITH_TLS_MODE=selfsigned
 ADMIN_EMAIL=e2e@zenith.local` (and `ZENITH_IMAGE_REPO=zenith-e2e-registry:5000` for the
-candidate). The install time includes waiting for `/health`; every wait is bounded (300 s for
-`/health`, `ZENITH_E2E_INSTALL_TIMEOUT` default 1500 s for `install.sh`), and a stuck server's
+candidate). The install time includes waiting for `/api/v1/version`; every wait is bounded (300 s for
+`/api/v1/version`, `ZENITH_E2E_INSTALL_TIMEOUT` default 1500 s for `install.sh`), and a stuck server's
 logs are collected before the command fails.
 
 ## Running it by hand
@@ -87,5 +87,5 @@ reachable; no ports are published on the host.
 whitespace (so the checkout path must not contain spaces):
 
 - `ZENITH_E2E_SERVER_EXEC` = `server.sh exec <name> --`; the suite appends the command words; cwd `/opt/zenith`.
-- `ZENITH_E2E_REBOOT_CMD` = `server.sh reboot <name>`; exits 0 only once `/health` answers again.
+- `ZENITH_E2E_REBOOT_CMD` = `server.sh reboot <name>`; exits 0 only once `/api/v1/version` answers again.
 - `ZENITH_E2E_COPY_FROM_SERVER` = `server.sh cp <name>`; the suite appends `<remote> <local>`.
