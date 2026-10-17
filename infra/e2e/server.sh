@@ -265,7 +265,7 @@ cmd_install() {
              git -C "$repo" rev-parse -q --verify "refs/tags/$tag" >/dev/null || die "no local tag $tag";;
     *) die "usage: server.sh install <name> candidate|release <tag>";;
   esac
-  [ -n "${ZENITH_E2E_ZEN:-}" ] && [ -x "${ZENITH_E2E_ZEN:-}" ] || die "ZENITH_E2E_ZEN must point to the candidate zen binary"
+  if [ -z "${ZENITH_E2E_ZEN:-}" ] || [ ! -x "${ZENITH_E2E_ZEN:-}" ]; then die "ZENITH_E2E_ZEN must point to the candidate zen binary"; fi
   ZENITH_E2E_ZEN="$(cd "$(dirname "$ZENITH_E2E_ZEN")" && pwd)/$(basename "$ZENITH_E2E_ZEN")"
   export ZENITH_E2E_ZEN
   cand="$(candidate_version)"
@@ -283,6 +283,8 @@ cmd_install() {
   fi
   docker exec "$c" sh -c 'rm -rf /src/zenith.git && mkdir -p /src'
   docker cp -q "$work/zenith.git" "$c:/src/zenith.git"
+  # docker cp keeps the host uid (1001 on GitHub runners); git refuses a repo owned by someone else.
+  docker exec "$c" chown -R 0:0 /src/zenith.git
   rm -rf "$work"
   docker cp -q "$ZENITH_E2E_ZEN" "$c:/usr/local/bin/zen"
   docker exec "$c" chmod 0755 /usr/local/bin/zen

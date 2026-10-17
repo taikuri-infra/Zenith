@@ -72,7 +72,7 @@ func main() {
 		json.NewEncoder(w).Encode(out)
 	})
 	log.Printf("e2e-probe listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	log.Fatal(http.ListenAndServe(":"+port, nil)) // nosemgrep: go.lang.security.audit.net.use-tls.use-tls -- plain HTTP behind Traefik, which terminates TLS
 }
 
 func withDB(ctx context.Context, fn func(*sql.DB) error) error {

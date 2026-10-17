@@ -98,7 +98,7 @@ docker build -q -t "${images[2]}" "$here/probe" >/dev/null
 # registry name (daemon.json), and push from there (see server.sh push).
 "$S" new pusher   # also creates the network and the registry
 REGIP="$(docker inspect -f '{{with index .NetworkSettings.Networks "zenith-e2e"}}{{.IPAddress}}{{end}}' zenith-e2e-registry)"
-if docker info --format '{{json .RegistryConfig.IndexConfigs}}' 2>/dev/null | grep -qF "\"$REGIP:5000\""; then
+if grep -qF "\"$REGIP:5000\"" <<<"$(docker info --format '{{json .RegistryConfig.IndexConfigs}}' 2>/dev/null || true)"; then
   log "pushing directly to $REGIP:5000"
   for img in "${images[@]}"; do d="$REGIP:5000/${img#"$REG"/}"; docker tag "$img" "$d"; docker push -q "$d" >/dev/null; done
 else

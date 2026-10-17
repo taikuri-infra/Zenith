@@ -9,4 +9,5 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /probe .
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /probe /probe
 EXPOSE 8080
+USER nonroot:nonroot
 ENTRYPOINT ["/probe"]

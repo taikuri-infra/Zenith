@@ -313,7 +313,7 @@ func runCmd(t *testing.T, timeout time.Duration, env []string, argv ...string) (
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- argv comes from the suite itself
 	if env != nil {
 		cmd.Env = env
 	}
