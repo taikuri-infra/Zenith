@@ -11,7 +11,10 @@ jobs:
   # =========================================================================
   test:
     name: Run Tests
-    runs-on: ubuntu-latest
+    # Runs on the owner's self-hosted runner when the repository variable ZENITH_SELF_HOSTED
+    # is "true" and the code comes from this repository (never for fork PRs); otherwise on
+    # GitHub-hosted ubuntu-latest. See docs/ci-cd-pipelines.md "Self-hosted runner".
+    runs-on: ${{ fromJSON((vars.ZENITH_SELF_HOSTED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -83,7 +86,7 @@ jobs:
   # =========================================================================
   security:
     name: Semgrep SAST
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON((vars.ZENITH_SELF_HOSTED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64"]' || '"ubuntu-latest"') }}
     container:
       image: semgrep/semgrep
     steps:

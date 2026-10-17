@@ -8,6 +8,11 @@ name: Build & Push Public Self-Host Images
 #
 # Dormant by design: runs only on manual dispatch or a published release —
 # committing this file does not push anything.
+#
+# Each architecture is built natively (amd64 on ubuntu-latest or the owner's
+# self-hosted runner, arm64 on GitHub's arm runner) and pushed by digest; a final
+# job merges the two digests into one multi-arch tag. No QEMU emulation: the
+# arm64 web build took 15–60 min emulated and takes ~3 min natively.
 
 on:
   workflow_dispatch:
@@ -27,21 +32,13 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  build:
+  prepare:
+    name: Resolve tag
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: zenith-api
-            dockerfile: services/api/Dockerfile
-            build_args: ""
-          - image: zenith-web
-            dockerfile: apps/web/Dockerfile
-            # Self-host defaults; the web entrypoint.sh overrides NEXT_PUBLIC_*
-            # at runtime, so these are only fallbacks.
-            build_args: |
-              NEXT_PUBLIC_ZENITH_MODE=standalone
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      latest: ${{ steps.tag.outputs.latest }}
+      owner: ${{ steps.owner.outputs.owner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -82,9 +79,34 @@ jobs:
         id: owner
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU
-        # Enables building the linux/arm64 variant on amd64 runners (emulated).
-        uses: docker/setup-qemu-action@v3
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.arch }})
+    needs: prepare
+    # amd64 on the owner's self-hosted runner when ZENITH_SELF_HOSTED is "true" (release and
+    # dispatch events only run from this repository, so no fork guard is needed here);
+    # arm64 always on GitHub's native arm runner.
+    runs-on: ${{ (matrix.arch == 'amd64' && vars.ZENITH_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64"]') || matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [zenith-api, zenith-web]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - image: zenith-api
+            dockerfile: services/api/Dockerfile
+            build_args: ""
+          - image: zenith-web
+            dockerfile: apps/web/Dockerfile
+            # Self-host defaults; the web entrypoint.sh overrides NEXT_PUBLIC_*
+            # at runtime, so these are only fallbacks.
+            build_args: |
+              NEXT_PUBLIC_ZENITH_MODE=standalone
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -96,22 +118,77 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push ${{ matrix.image }}
+      - name: Build & push ${{ matrix.image }} (${{ matrix.arch }}) by digest
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.arch }}
           build-args: |
-            VERSION=${{ steps.tag.outputs.tag }}
+            VERSION=${{ needs.prepare.outputs.tag }}
             BUILD_TIME=${{ github.event.repository.updated_at }}
             ${{ matrix.build_args }}
           labels: |
-            org.opencontainers.image.version=${{ steps.tag.outputs.tag }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.tag }}
             org.opencontainers.image.revision=${{ github.sha }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.owner }}/${{ matrix.image }}:${{ steps.tag.outputs.tag }}
-            ${{ steps.tag.outputs.latest == 'true' && format('{0}/{1}/{2}:latest', env.REGISTRY, steps.owner.outputs.owner, matrix.image) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Untagged push: the merge job attaches the tags to the manifest list.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          touch "${{ runner.temp }}/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge ${{ matrix.image }} manifest
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [zenith-api, zenith-web]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create the multi-arch tag
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner }}/${{ matrix.image }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          LATEST: ${{ needs.prepare.outputs.latest }}
+        run: |
+          set -eu
+          n=$(ls | wc -l)
+          if [ "$n" != 2 ]; then echo "expected 2 digests (amd64, arm64), got $n" >&2; exit 1; fi
+          tags=(-t "$IMAGE:$TAG")
+          if [ "$LATEST" = "true" ]; then tags+=(-t "$IMAGE:latest"); fi
+          # shellcheck disable=SC2046
+          docker buildx imagetools create "${tags[@]}" $(printf "$IMAGE@sha256:%s " *)
+
+      - name: Inspect
+        run: docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner }}/${{ matrix.image }}:${{ needs.prepare.outputs.tag }}
