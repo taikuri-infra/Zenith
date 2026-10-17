@@ -82,10 +82,12 @@ jobs:
   build:
     name: Build ${{ matrix.image }} (${{ matrix.arch }})
     needs: prepare
-    # amd64 on the owner's self-hosted runner when ZENITH_SELF_HOSTED is "true" (release and
-    # dispatch events only run from this repository, so no fork guard is needed here);
-    # arm64 always on GitHub's native arm runner.
-    runs-on: ${{ (matrix.arch == 'amd64' && vars.ZENITH_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64"]') || matrix.runner }}
+    # amd64 on the owner's self-hosted runner only when ZENITH_SELF_HOSTED_IMAGES is "true"
+    # (its own switch: image builds download Go modules and npm packages, which was 7–20x
+    # slower on the owner's network than on GitHub); release and dispatch events only run
+    # from this repository, so no fork guard is needed here. arm64 always on GitHub's native
+    # arm runner.
+    runs-on: ${{ (matrix.arch == 'amd64' && vars.ZENITH_SELF_HOSTED_IMAGES == 'true') && fromJSON('["self-hosted","linux","x64"]') || matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
