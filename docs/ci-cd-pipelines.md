@@ -25,7 +25,7 @@ With the repository variable `ZENITH_SELF_HOSTED` set to `true` (Settings → Se
 | Job | Where | Why |
 |---|---|---|
 | CI `test`, `security` | self-hosted | Go/Node/Helm tests, Semgrep (container) |
-| E2E `amd64` | self-hosted + label `e2e` | privileged Docker-in-Docker; give the `e2e` label to exactly one runner per machine (two E2E runs on one Docker daemon tear each other down) |
+| E2E `amd64` | self-hosted + label `e2e`, only with `ZENITH_SELF_HOSTED_E2E=true` | privileged Docker-in-Docker and host→container networking (the suite reaches the servers by bridge IP; WSL2 boxes may need extra setup); give the `e2e` label to exactly one runner per machine (two E2E runs on one Docker daemon tear each other down) |
 | Public images `build (amd64)` | self-hosted | native amd64 build, pushed by digest |
 | E2E `arm64`, images `build (arm64)` | `ubuntu-24.04-arm` | native arm64 (free for public repos) |
 | `commitlint`, images `prepare`/`merge`, CLI release | `ubuntu-latest` | seconds; no benefit |
