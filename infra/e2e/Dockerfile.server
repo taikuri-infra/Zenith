@@ -1,0 +1,22 @@
+FROM ubuntu:24.04
+# infra/e2e/Dockerfile.server — a "fresh Ubuntu server" for the E2E suite: Ubuntu 24.04
+# with Docker CE, running dockerd as PID 1 (privileged). Nothing Zenith-specific is baked in;
+# install.sh runs inside exactly as a user would run it.
+ENV DEBIAN_FRONTEND=noninteractive
+# Base packages first (changes rarely), then Docker CE from the official apt repo for this
+# image's architecture (amd64 or arm64), so both layers stay cached between runs.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl git openssl gnupg iproute2 iptables procps \
+ && rm -rf /var/lib/apt/lists/*
+RUN install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+ && chmod a+r /etc/apt/keyrings/docker.asc \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin \
+ && rm -rf /var/lib/apt/lists/*
+COPY daemon.json /etc/docker/daemon.json
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/zenith-e2e-entrypoint
+VOLUME /var/lib/docker
+# entrypoint.sh makes cgroup v2 nestable, then execs dockerd --host=unix:///var/run/docker.sock.
+ENTRYPOINT ["/usr/local/bin/zenith-e2e-entrypoint"]

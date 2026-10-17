@@ -36,3 +36,6 @@ freezenith-strategy.md
 
 # Maintainer-local Makefile overrides (real registry/SSH host/IPs)
 Makefile.local
+
+# E2E harness output (logs, env files, CA, zen binary)
+infra/e2e/artifacts/
