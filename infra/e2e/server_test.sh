@@ -21,6 +21,8 @@ check "Dockerfile.server starts with FROM ubuntu:24.04" test "$(head -1 "$here/D
 check "Dockerfile.server installs docker-ce and the compose plugin" grep -qE 'install .*docker-ce .*docker-compose-plugin' "$here/Dockerfile.server"
 check "Docker apt arch comes from dpkg (amd64 + arm64)" grep -qF 'arch=$(dpkg --print-architecture)' "$here/Dockerfile.server"
 check "daemon.json is valid JSON" python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$here/daemon.json"
+check "daemon.json pins the inner address pool away from the outer network" python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('default-address-pools')==[{'base':'10.200.0.0/16','size':24}] else 1)" "$here/daemon.json"
+check "server.sh creates the outer network on 10.199.0.0/24" grep -q -- '--subnet 10.199.0.0/24' "$here/server.sh"
 check "daemon.json allows the in-job registry" python3 -c 'import json,sys; assert "zenith-e2e-registry:5000" in json.load(open(sys.argv[1]))["insecure-registries"]' "$here/daemon.json"
 
 echo "scripts"

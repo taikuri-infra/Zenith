@@ -25,7 +25,7 @@ With the repository variable `ZENITH_SELF_HOSTED` set to `true` (Settings → Se
 | Job | Where | Why |
 |---|---|---|
 | CI `test`, `security` | self-hosted | Go/Node/Helm tests, Semgrep (container) |
-| E2E `amd64` | self-hosted | privileged Docker-in-Docker; needs Docker on the runner |
+| E2E `amd64` | self-hosted + label `e2e`, only with `ZENITH_SELF_HOSTED_E2E=true` | privileged Docker-in-Docker and host→container networking (the suite reaches the servers by bridge IP; WSL2 boxes may need extra setup); give the `e2e` label to exactly one runner per machine (two E2E runs on one Docker daemon tear each other down) |
 | Public images `build (amd64)` | self-hosted | native amd64 build, pushed by digest |
 | E2E `arm64`, images `build (arm64)` | `ubuntu-24.04-arm` | native arm64 (free for public repos) |
 | `commitlint`, images `prepare`/`merge`, CLI release | `ubuntu-latest` | seconds; no benefit |
@@ -44,7 +44,7 @@ EOT
 cd ~/actions-runner && sudo ./svc.sh install root && sudo ./svc.sh start   # systemd service
 ```
 
-One runner takes one job at a time; register two or three (separate directories and names) so `test`, `security` and the E2E run in parallel. The E2E harness removes every `zenith-e2e-*` container on the runner's Docker daemon, so do not run `infra/e2e/run.sh` by hand on the same daemon while a job is active. The runner machine must stay up (on WSL2, keep a session open or `wsl --shutdown` ends it).
+One runner takes one job at a time; register two or three (separate directories and names) so `test`, `security` and the E2E run in parallel, and add the label `e2e` to one of them (`./config.sh … --labels self-hosted,linux,x64,e2e`, or Settings → Runners → the runner → labels) so E2E jobs never run concurrently on the same Docker daemon. The E2E harness removes every `zenith-e2e-*` container on the runner's Docker daemon, so do not run `infra/e2e/run.sh` by hand on the same daemon while a job is active. The runner machine must stay up (on WSL2, keep a session open or `wsl --shutdown` ends it).
 
 ---
 

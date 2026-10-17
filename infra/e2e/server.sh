@@ -49,7 +49,14 @@ self_container() {
 }
 
 ensure_network() {
-  docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
+  # A fixed outer subnet that cannot collide with the servers' inner Docker networks
+  # (daemon.json pins those to 10.200.0.0/16). With Docker's default pools the outer network
+  # can land on 172.19.0.0/16 — the same subnet a server's second compose network gets — and
+  # replies from the server to the host then go to the wrong bridge ("No route to host").
+  # Falls back to an automatic subnet if 10.199.0.0/24 is taken on this host.
+  docker network inspect "$NET" >/dev/null 2>&1 \
+    || docker network create --subnet 10.199.0.0/24 "$NET" >/dev/null 2>&1 \
+    || docker network create "$NET" >/dev/null
   # Under act the job itself is a container: join it to the network so container IPs (and
   # the registry name) are reachable from the suite. Ports are never published on the host.
   if [ -n "${ACT:-}" ]; then
@@ -126,7 +133,11 @@ wait_health() {
     if curl -skf --max-time 3 --resolve "$host:443:$ip" "https://$host/api/v1/version" >/dev/null 2>&1; then return 0; fi
     sleep 1
   done
-  log "$name: /api/v1/version not answering after ${limit}s"; cmd_logs "$name"; return 1
+  log "$name: /api/v1/version not answering after ${limit}s; last attempt:"
+  # One verbose attempt so the reason (proxy, route, TLS, 502) lands in the job log.
+  curl -skv --max-time 5 --resolve "$host:443:$ip" "https://$host/api/v1/version" 2>&1 | grep -E -i 'proxy|connect|refused|route|timed out|ssl|tls|< HTTP' | head -n 8 | sed 's/^/    /' || true
+  env | grep -i -E '^(https?|no)_proxy=' | sed 's/^/    env: /' || true
+  cmd_logs "$name"; return 1
 }
 
 cmd_reboot() {
