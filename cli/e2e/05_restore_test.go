@@ -23,10 +23,10 @@ func TestBackupRestore(t *testing.T) {
 	if cfg.ExpectAdminEmail == "" {
 		t.Fatal("ZENITH_E2E_EXPECT_ADMIN_EMAIL is required for a restore run (the backed-up server's admin)")
 	}
-	email, password := cfg.ExpectAdminEmail, cfg.ExpectAdminPassword
-	if password == "" {
-		password = cfg.AdminPassword
+	if cfg.ExpectAdminPassword == "" {
+		t.Fatal("ZENITH_E2E_EXPECT_ADMIN_PASSWORD is required for a restore run (the backed-up server's admin)")
 	}
+	email, password := cfg.ExpectAdminEmail, cfg.ExpectAdminPassword
 	resetAPI()
 	c := apiLogin(t, email, password, healthWait)
 
