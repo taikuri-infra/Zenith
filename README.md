@@ -6,29 +6,25 @@ Zenith is a self-hosted platform-as-a-service that gives you Heroku-like simplic
 
 ## Quick Start
 
-**Prerequisites:** a Linux server (or any Docker host). The installer sets up Docker
-and Docker Compose automatically if they're missing. The stack pulls prebuilt images —
-there is no build step — so it runs comfortably in about 2 GB of RAM. Object storage
-runs locally via RustFS, so no external S3 account is required.
+On a fresh Linux server (Docker and Compose are installed for you if missing; about 2 GB of RAM is enough):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/taikuri-infra/Zenith/main/infra/scripts/install.sh | bash
 ```
 
 The installer fetches the stack, generates strong secrets, starts everything, and
-prints your dashboard URL and admin password.
+prints your dashboard URL and the admin credentials. Open the URL and log in.
 
-Or manually:
+For a LAN or offline server with no public DNS, use a self-signed certificate:
 
 ```bash
-git clone https://github.com/taikuri-infra/Zenith.git
-cd Zenith
-cp .env.example .env
-# Edit .env — set JWT_SECRET (min 32 chars) and admin credentials
-docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/taikuri-infra/Zenith/main/infra/scripts/install.sh | ZENITH_TLS_MODE=selfsigned bash
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and log in with your admin credentials.
+Get the `zen` CLI from the [releases page](https://github.com/taikuri-infra/Zenith/releases),
+then `zen login` against your dashboard URL to deploy from your terminal.
+
+What works today, and what does not yet, is tracked in [docs/alpha/core-audit.md](docs/alpha/core-audit.md).
 
 ## Features
 
