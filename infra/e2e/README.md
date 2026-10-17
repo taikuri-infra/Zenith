@@ -45,6 +45,20 @@ candidate). The install time includes waiting for `/api/v1/version`; every wait 
 `/api/v1/version`, `ZENITH_E2E_INSTALL_TIMEOUT` default 1500 s for `install.sh`), and a stuck server's
 logs are collected before the command fails.
 
+## Restricted networks
+
+Hosts that cannot reach `proxy.golang.org`, `registry.npmjs.org` or Docker Hub directly can
+hand their mirrors to the run; nothing else changes:
+
+| Variable | Used by |
+|---|---|
+| `GOPROXY`, `GOSUMDB` | the `zen` build and, as build args, the `zenith-api` and `e2e-probe` image builds |
+| `npm_config_registry`, `COREPACK_NPM_REGISTRY` | the `zenith-web` image build (pnpm and corepack) |
+| `ZENITH_E2E_REGISTRY_MIRROR` | every E2E server's dockerd (`registry-mirrors` in its `daemon.json`), so `postgres`, `traefik` and friends come from the mirror |
+
+Example (`~/.actrc` or the shell): `GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn ZENITH_E2E_REGISTRY_MIRROR=https://mirror.gcr.io bash infra/e2e/run.sh`.
+The image builds write their output to `artifacts/build-<image>.log`; a failed build prints the last 40 lines.
+
 ## Running it by hand
 
 Needs Docker (privileged containers), Go, git with tags, curl, and internet (Docker CE apt repo,

@@ -11,6 +11,10 @@ if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
   until xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs 2>/dev/null; do :; done
   sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers > /sys/fs/cgroup/cgroup.subtree_control
 fi
+# Optional Docker Hub mirror for the inner dockerd (restricted networks).
+if [ -n "${ZENITH_E2E_REGISTRY_MIRROR:-}" ]; then
+  /usr/local/bin/zenith-e2e-daemon-mirror /etc/docker/daemon.json "$ZENITH_E2E_REGISTRY_MIRROR"
+fi
 # A restarted container ("reboot") can leave a stale pid file behind.
 rm -f /var/run/docker.pid /run/docker/containerd/containerd.pid
 exec dockerd --host=unix:///var/run/docker.sock "$@"

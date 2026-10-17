@@ -1,5 +1,9 @@
 # ---- Base ----
 FROM node:20-alpine AS base
+# Optional npm registry for restricted networks (empty = registry.npmjs.org); the E2E
+# harness passes the caller's npm_config_registry through (infra/e2e/run.sh).
+ARG npm_config_registry
+ARG COREPACK_NPM_REGISTRY
 RUN corepack enable && corepack prepare pnpm@10.29.3 --activate
 RUN apk add --no-cache libc6-compat
 
@@ -15,6 +19,7 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/ui/package.json ./packages/ui/
 
 # Install dependencies with frozen lockfile for reproducible builds
+ARG npm_config_registry
 RUN pnpm install --frozen-lockfile
 
 # ---- Builder ----
