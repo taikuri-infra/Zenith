@@ -73,9 +73,9 @@ func TestInstallShSelfSignedTraefikConfigMatchesGo(t *testing.T) {
 	if got, want := read("traefik/dynamic/certs.yml"), generateTraefikCertsConfig(); got != want {
 		t.Errorf("certs.yml differs from the Go installer's\n--- install.sh\n%s\n--- zen install\n%s", got, want)
 	}
-	got := stripLeadingComments(read("traefik/traefik.selfsigned.yml"))
+	got := stripLeadingComments(read("traefik/traefik.local.yml"))
 	want := stripLeadingComments(generateTraefikStaticConfig(TLSSelfSigned, ""))
 	if got != want {
-		t.Errorf("traefik.selfsigned.yml differs from the Go installer's (leading comments stripped)\n--- install.sh\n%s\n--- zen install\n%s", got, want)
+		t.Errorf("traefik.local.yml differs from the Go installer's (leading comments stripped)\n--- install.sh\n%s\n--- zen install\n%s", got, want)
 	}
 }

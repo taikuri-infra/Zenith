@@ -24,8 +24,8 @@ package-lock.json
 # Helm dependencies (downloaded via helm dep up)
 **/charts/*.tgz
 
-# Self-signed Traefik static config, written by the installers (ZENITH_TRAEFIK_CONFIG)
-traefik/traefik.selfsigned.yml
+# Generated Traefik static config, written by the installers (ZENITH_TRAEFIK_CONFIG)
+traefik/traefik.local.yml
 
 # Go binary
 services/api/server

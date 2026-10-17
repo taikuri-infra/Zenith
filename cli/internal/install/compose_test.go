@@ -153,14 +153,14 @@ func TestBuildComposeEnv(t *testing.T) {
 	cfg.Domain = "app.example.com"
 	env = buildComposeEnv(cfg, "admin@example.com", "991")
 	// ACME_EMAIL is no longer an env var — Traefik reads it from the generated
-	// traefik.yml. The domain-derived URL vars remain.
+	// traefik.local.yml. The domain-derived URL vars remain.
 	for _, s := range []string{"ZENITH_DOMAIN=app.example.com", "https://app.example.com"} {
 		if !strings.Contains(env, s) {
 			t.Errorf("env with domain missing %q\n%s", s, env)
 		}
 	}
 	if strings.Contains(env, "ACME_EMAIL=") {
-		t.Error("ACME_EMAIL should no longer be written to .env (it lives in traefik.yml)")
+		t.Error("ACME_EMAIL should no longer be written to .env (it lives in traefik.local.yml)")
 	}
 }
 
@@ -197,15 +197,36 @@ func TestValidateInstallDir(t *testing.T) {
 func TestBuildComposeEnv_SelfSignedWritesTLSKeys(t *testing.T) {
 	cfg := &Config{Domain: "zenith.lan", AdminPassword: "pw", TLSMode: TLSSelfSigned}
 	env := buildComposeEnv(cfg, "admin@zenith.lan", "999")
-	for _, want := range []string{"ZENITH_TLS_MODE=selfsigned\n", "ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt\n", "ZENITH_CERT_RESOLVER=\n", "ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.selfsigned.yml\n"} {
+	for _, want := range []string{"ZENITH_TLS_MODE=selfsigned\n", "ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt\n", "ZENITH_CERT_RESOLVER=\n", "ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.local.yml\n"} {
 		if !strings.Contains(env, want) {
 			t.Errorf("missing %q in:\n%s", want, env)
 		}
 	}
 	plain := buildComposeEnv(&Config{Domain: "zenith.example.com", AdminPassword: "pw"}, "a@b.c", "999")
-	for _, no := range []string{"ZENITH_TLS_MODE", "ZENITH_TLS_CA_FILE", "ZENITH_CERT_RESOLVER", "ZENITH_TRAEFIK_CONFIG"} {
+	for _, no := range []string{"ZENITH_TLS_MODE", "ZENITH_TLS_CA_FILE", "ZENITH_CERT_RESOLVER"} {
 		if strings.Contains(plain, no) {
 			t.Errorf("http01 env must not contain %s", no)
+		}
+	}
+}
+
+// Every install that configures TLS points Traefik at the generated
+// traefik.local.yml; a localhost install (no TLS step) keeps the shipped file.
+func TestBuildComposeEnv_TraefikConfigKey(t *testing.T) {
+	const key = "ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.local.yml\n"
+	for _, cfg := range []*Config{
+		{Domain: "zenith.example.com", TLSMode: TLSHTTP01},
+		{Domain: "zenith.example.com", TLSMode: TLSDNS01},
+		{Domain: "zenith.lan", TLSMode: TLSSelfSigned},
+		{Domain: "x.apps.freezenith.com", FreeSubdomain: true},
+	} {
+		if env := buildComposeEnv(cfg, "a@b.c", "999"); strings.Count(env, key) != 1 {
+			t.Errorf("%+v: want %q once in:\n%s", cfg, key, env)
+		}
+	}
+	for _, d := range []string{"", "localhost"} {
+		if env := buildComposeEnv(&Config{Domain: d}, "a@b.c", "999"); strings.Contains(env, "ZENITH_TRAEFIK_CONFIG") {
+			t.Errorf("domain %q must not set ZENITH_TRAEFIK_CONFIG:\n%s", d, env)
 		}
 	}
 }

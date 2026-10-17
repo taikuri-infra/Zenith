@@ -81,8 +81,8 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 			fmt.Fprintf(log, "  %d. back up to %s\n", n, backupDir)
 			n++
 		}
-		if needsSelfSignedMigration(inst) {
-			fmt.Fprintf(log, "  %d. if modified, move %s to %s and set %s\n", n, trackedTraefikConfig, selfSignedTraefikConfig, traefikConfigKey)
+		if needsTraefikMigration(inst) {
+			fmt.Fprintf(log, "  %d. if modified, move %s to %s and set %s\n", n, trackedTraefikConfig, localTraefikConfig, traefikConfigKey)
 			n++
 		}
 		for _, s := range []string{
@@ -119,11 +119,11 @@ func Upgrade(ctx context.Context, r Runner, inst Install, opt UpgradeOptions, lo
 		}},
 		{"checkout " + tag, func() error {
 			var err error
-			if migrated, err = migrateSelfSignedTraefik(ctx, r, inst, log); err != nil {
+			if migrated, err = migrateTraefikConfig(ctx, r, inst, log); err != nil {
 				return err
 			}
 			if _, err = r.Run(ctx, inst.Dir, nil, "git", "checkout", tag); err != nil && migrated {
-				if rerr := revertSelfSignedTraefik(inst); rerr != nil {
+				if rerr := revertTraefikConfig(inst); rerr != nil {
 					return fmt.Errorf("%w (and restoring %s failed: %v)", err, trackedTraefikConfig, rerr)
 				}
 			}
@@ -181,7 +181,7 @@ func rollback(ctx context.Context, r Runner, inst Install, oldRef, from string, 
 		return fmt.Errorf("git checkout %s: %w", oldRef, err)
 	}
 	if migrated {
-		if err := revertSelfSignedTraefik(inst); err != nil {
+		if err := revertTraefikConfig(inst); err != nil {
 			return err
 		}
 	}
@@ -202,23 +202,24 @@ func rollback(ctx context.Context, r Runner, inst Install, oldRef, from string, 
 }
 
 const (
-	trackedTraefikConfig    = "traefik/traefik.yml"
-	selfSignedTraefikConfig = "traefik/traefik.selfsigned.yml"
-	traefikConfigKey        = "ZENITH_TRAEFIK_CONFIG"
+	trackedTraefikConfig = "traefik/traefik.yml"
+	localTraefikConfig   = "traefik/traefik.local.yml"
+	traefikConfigKey     = "ZENITH_TRAEFIK_CONFIG"
 )
 
-// needsSelfSignedMigration: a self-signed install made before ZENITH_TRAEFIK_CONFIG
-// existed (v0.1.0-alpha.1), whose installer overwrote the tracked traefik.yml.
-func needsSelfSignedMigration(inst Install) bool {
-	return inst.EnvGet("ZENITH_TLS_MODE") == "selfsigned" && inst.EnvGet(traefikConfigKey) == ""
+// needsTraefikMigration: an install made before ZENITH_TRAEFIK_CONFIG existed,
+// whose installer may have overwritten the tracked traefik.yml (install.sh
+// self-signed in v0.1.0-alpha.1, or `zen install` in any TLS mode).
+func needsTraefikMigration(inst Install) bool {
+	return inst.EnvGet(traefikConfigKey) == ""
 }
 
-// migrateSelfSignedTraefik moves a modified traefik/traefik.yml of such an
-// install to traefik/traefik.selfsigned.yml, restores the tracked file (so the
+// migrateTraefikConfig moves a modified traefik/traefik.yml of such an
+// install to traefik/traefik.local.yml, restores the tracked file (so the
 // release checkout is not refused) and points ZENITH_TRAEFIK_CONFIG at the
 // moved file. Reports whether it changed anything.
-func migrateSelfSignedTraefik(ctx context.Context, r Runner, inst Install, log io.Writer) (bool, error) {
-	if !needsSelfSignedMigration(inst) {
+func migrateTraefikConfig(ctx context.Context, r Runner, inst Install, log io.Writer) (bool, error) {
+	if !needsTraefikMigration(inst) {
 		return false, nil
 	}
 	if _, err := r.Run(ctx, inst.Dir, nil, "git", "diff", "--quiet", "--", trackedTraefikConfig); err == nil {
@@ -236,7 +237,7 @@ func migrateSelfSignedTraefik(ctx context.Context, r Runner, inst Install, log i
 	if err != nil {
 		return false, err
 	}
-	dst := filepath.Join(inst.Dir, selfSignedTraefikConfig)
+	dst := filepath.Join(inst.Dir, localTraefikConfig)
 	if err := os.WriteFile(dst, b, fi.Mode().Perm()); err != nil {
 		return false, err
 	}
@@ -244,17 +245,17 @@ func migrateSelfSignedTraefik(ctx context.Context, r Runner, inst Install, log i
 		os.Remove(dst)
 		return false, fmt.Errorf("restore %s: %w", trackedTraefikConfig, err)
 	}
-	if err := inst.EnvSet(traefikConfigKey, "/etc/"+selfSignedTraefikConfig); err != nil {
+	if err := inst.EnvSet(traefikConfigKey, "/etc/"+localTraefikConfig); err != nil {
 		return true, err
 	}
-	fmt.Fprintf(log, "Moved the self-signed %s to %s (%s set in .env)\n", trackedTraefikConfig, selfSignedTraefikConfig, traefikConfigKey)
+	fmt.Fprintf(log, "Moved the modified %s to %s (%s set in .env)\n", trackedTraefikConfig, localTraefikConfig, traefikConfigKey)
 	return true, nil
 }
 
-// revertSelfSignedTraefik undoes migrateSelfSignedTraefik for the old release,
+// revertTraefikConfig undoes migrateTraefikConfig for the old release,
 // whose compose file reads traefik.yml only.
-func revertSelfSignedTraefik(inst Install) error {
-	src := filepath.Join(inst.Dir, selfSignedTraefikConfig)
+func revertTraefikConfig(inst Install) error {
+	src := filepath.Join(inst.Dir, localTraefikConfig)
 	b, err := os.ReadFile(src)
 	if err != nil {
 		return err

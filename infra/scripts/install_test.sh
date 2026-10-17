@@ -71,14 +71,14 @@ env_ss="$t/ss/.env"
 grep -qE '^ZENITH_TLS_MODE=selfsigned$' "$env_ss" || fail "ZENITH_TLS_MODE missing"
 grep -qE '^ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt$' "$env_ss" || fail "ZENITH_TLS_CA_FILE missing"
 grep -qE '^ZENITH_CERT_RESOLVER=$' "$env_ss" || fail "ZENITH_CERT_RESOLVER must be empty in selfsigned mode"
-grep -qE '^ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.selfsigned.yml$' "$env_ss" || fail "ZENITH_TRAEFIK_CONFIG missing"
-for f in traefik/certs/zenith.crt traefik/certs/zenith.key traefik/certs/zenith-ca.crt traefik/certs/zenith-ca.key traefik/dynamic/certs.yml traefik/traefik.selfsigned.yml; do
+grep -qE '^ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.local.yml$' "$env_ss" || fail "ZENITH_TRAEFIK_CONFIG missing"
+for f in traefik/certs/zenith.crt traefik/certs/zenith.key traefik/certs/zenith-ca.crt traefik/certs/zenith-ca.key traefik/dynamic/certs.yml traefik/traefik.local.yml; do
   [ -s "$t/ss/$f" ] || fail "selfsigned: $f not written"
 done
 # the tracked traefik.yml is never written (zen upgrade's git checkout must stay clean)
 cmp -s "$t/ss/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "selfsigned: tracked traefik/traefik.yml was modified"
-grep -q 'certResolver' "$t/ss/traefik/traefik.selfsigned.yml" && fail "traefik.selfsigned.yml must not name a certResolver"
-grep -qE '^certificatesResolvers:' "$t/ss/traefik/traefik.selfsigned.yml" && fail "traefik.selfsigned.yml must not define certificatesResolvers"
+grep -q 'certResolver' "$t/ss/traefik/traefik.local.yml" && fail "traefik.local.yml must not name a certResolver"
+grep -qE '^certificatesResolvers:' "$t/ss/traefik/traefik.local.yml" && fail "traefik.local.yml must not define certificatesResolvers"
 # the api container (non-root) reads the CA: certificates 0644, keys 0600
 for f in zenith.crt zenith-ca.crt; do [ "$(stat -c %a "$t/ss/traefik/certs/$f")" = 644 ] || fail "selfsigned: $f mode $(stat -c %a "$t/ss/traefik/certs/$f"), want 644"; done
 for f in zenith.key zenith-ca.key; do [ "$(stat -c %a "$t/ss/traefik/certs/$f")" = 600 ] || fail "selfsigned: $f mode $(stat -c %a "$t/ss/traefik/certs/$f"), want 600"; done
@@ -101,7 +101,7 @@ run "$t/http" ZENITH_IMAGE_REPO=zenith-e2e-registry:5000
 grep -qE '^ZENITH_TLS_MODE=' "$t/http/.env" && fail "http01 must not write ZENITH_TLS_MODE"
 grep -qE '^ZENITH_IMAGE_REPO=zenith-e2e-registry:5000$' "$t/http/.env" || fail "ZENITH_IMAGE_REPO not written"
 [ -e "$t/http/traefik/dynamic/certs.yml" ] && fail "http01 must not write certs.yml"
-[ -e "$t/http/traefik/traefik.selfsigned.yml" ] && fail "http01 must not write traefik.selfsigned.yml"
+[ -e "$t/http/traefik/traefik.local.yml" ] && fail "http01 must not write traefik.local.yml"
 grep -qE '^ZENITH_TRAEFIK_CONFIG=' "$t/http/.env" && fail "http01 must not write ZENITH_TRAEFIK_CONFIG"
 cmp -s "$t/http/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "http01: tracked traefik/traefik.yml was modified"
 
@@ -113,16 +113,32 @@ cp "$t/http/.env" "$t/http/.env.before"; run "$t/http"; diff -q "$t/http/.env" "
 # --- an alpha.1 self-signed install (traefik.yml overwritten, no ZENITH_TRAEFIK_CONFIG) is migrated on re-run ---
 mig="$t/mig"; mkdir -p "$mig"; cp -r "$repo/traefik" "$mig/traefik"
 git -C "$mig" init -q && git -C "$mig" add traefik/traefik.yml && git -C "$mig" -c user.name=t -c user.email=t@t commit -qm init
-cp "$t/ss/traefik/traefik.selfsigned.yml" "$mig/traefik/traefik.yml"; cp "$mig/traefik/traefik.yml" "$t/mig.old"
+cp "$t/ss/traefik/traefik.local.yml" "$mig/traefik/traefik.yml"; cp "$mig/traefik/traefik.yml" "$t/mig.old"
 grep -v '^ZENITH_TRAEFIK_CONFIG=' "$env_ss" >"$mig/.env"
 out="$(cd "$mig" && env -u ZENITH_TLS_MODE ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1)" || fail "migration re-run failed: $out"
-echo "$out" | grep -q 'traefik.selfsigned.yml' || fail "migration not logged: $out"
+echo "$out" | grep -q 'traefik.local.yml' || fail "migration not logged: $out"
 cmp -s "$mig/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "migration: traefik/traefik.yml not restored"
-cmp -s "$mig/traefik/traefik.selfsigned.yml" "$t/mig.old" || fail "migration: modified traefik.yml not moved to traefik.selfsigned.yml"
-grep -qx 'ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.selfsigned.yml' "$mig/.env" || fail "migration: ZENITH_TRAEFIK_CONFIG not set"
+cmp -s "$mig/traefik/traefik.local.yml" "$t/mig.old" || fail "migration: modified traefik.yml not moved to traefik.local.yml"
+grep -qx 'ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.local.yml' "$mig/.env" || fail "migration: ZENITH_TRAEFIK_CONFIG not set"
 [ "$(grep -c '^ZENITH_TRAEFIK_CONFIG=' "$mig/.env")" = 1 ] || fail "migration: key duplicated"
 (cd "$mig" && ZENITH_DRY_RUN=1 bash "$here/install.sh" >/dev/null) || fail "second re-run after migration failed"
 [ "$(grep -c '^ZENITH_TRAEFIK_CONFIG=' "$mig/.env")" = 1 ] || fail "migration: key duplicated on second re-run"
+# --- an http01 install whose traefik.yml an older `zen install` overwrote is migrated too ---
+mh="$t/mighttp"; mkdir -p "$mh"; cp -r "$repo/traefik" "$mh/traefik"
+git -C "$mh" init -q && git -C "$mh" add traefik/traefik.yml && git -C "$mh" -c user.name=t -c user.email=t@t commit -qm init
+printf '# Generated by `zen install --edition compose`.\ncertificatesResolvers:\n  le: {}\n' >"$mh/traefik/traefik.yml"; cp "$mh/traefik/traefik.yml" "$t/mighttp.old"
+cp "$t/http/.env" "$mh/.env"
+out="$(cd "$mh" && ZENITH_DRY_RUN=1 bash "$here/install.sh" 2>&1)" || fail "http01 migration re-run failed: $out"
+cmp -s "$mh/traefik/traefik.yml" "$repo/traefik/traefik.yml" || fail "http01 migration: traefik/traefik.yml not restored"
+cmp -s "$mh/traefik/traefik.local.yml" "$t/mighttp.old" || fail "http01 migration: modified traefik.yml not moved"
+grep -qx 'ZENITH_TRAEFIK_CONFIG=/etc/traefik/traefik.local.yml' "$mh/.env" || fail "http01 migration: key not set"
+grep -qE '^ZENITH_TLS_MODE=' "$mh/.env" && fail "http01 migration must not write ZENITH_TLS_MODE"
+# an unmodified http01 checkout is left alone
+mu="$t/migclean"; mkdir -p "$mu"; cp -r "$repo/traefik" "$mu/traefik"
+git -C "$mu" init -q && git -C "$mu" add traefik/traefik.yml && git -C "$mu" -c user.name=t -c user.email=t@t commit -qm init
+cp "$t/http/.env" "$mu/.env"; (cd "$mu" && ZENITH_DRY_RUN=1 bash "$here/install.sh" >/dev/null) || fail "clean http01 re-run failed"
+diff -q "$mu/.env" "$t/http/.env" >/dev/null || fail "clean http01 re-run changed .env"
+[ -e "$mu/traefik/traefik.local.yml" ] && fail "clean http01 re-run wrote traefik.local.yml"
 
 # --- ADMIN_PASSWORD from the environment is honoured ---
 run "$t/pw" ADMIN_PASSWORD=Fixed-Password-123

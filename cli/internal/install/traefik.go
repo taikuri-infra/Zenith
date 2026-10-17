@@ -19,23 +19,19 @@ func tlsMode(cfg *Config) string {
 	}
 }
 
-// traefikStaticConfigFile is the static config path (relative to the checkout)
-// for mode. Self-signed uses the git-ignored traefik.selfsigned.yml, selected by
-// ZENITH_TRAEFIK_CONFIG in .env, so the tracked traefik.yml stays as shipped and
-// `zen upgrade`'s git checkout is never blocked by it.
-func traefikStaticConfigFile(mode string) string {
-	if mode == TLSSelfSigned {
-		return "traefik/traefik.selfsigned.yml"
-	}
-	return "traefik/traefik.yml"
-}
+// traefikStaticConfigFile is where the installer writes the generated static
+// config (relative to the checkout), for every TLS mode: the git-ignored
+// traefik.local.yml, selected by ZENITH_TRAEFIK_CONFIG in .env. The tracked
+// traefik.yml stays as shipped, so `zen upgrade`'s git checkout is never
+// blocked by it.
+const traefikStaticConfigFile = "traefik/traefik.local.yml"
 
-// selfSignedTraefikConfig is ZENITH_TRAEFIK_CONFIG for self-signed installs: the
-// container path of traefikStaticConfigFile(TLSSelfSigned).
-const selfSignedTraefikConfig = "/etc/traefik/traefik.selfsigned.yml"
+// localTraefikConfig is ZENITH_TRAEFIK_CONFIG: the container path of
+// traefikStaticConfigFile.
+const localTraefikConfig = "/etc/traefik/traefik.local.yml"
 
 // generateTraefikStaticConfig renders the Traefik static config for the given
-// mode (written to traefikStaticConfigFile(mode)).
+// mode (written to traefikStaticConfigFile).
 //
 // The certificate resolver is attached to the websecure *entrypoint* rather than
 // to individual routers, so no router (dashboard, API, or a deployed user app)
@@ -149,7 +145,7 @@ func composeWriteTLS(cfg *Config, r runner, dir string) error {
 	}
 
 	mode := tlsMode(cfg)
-	if err := writeFileB64(r, dir+"/"+traefikStaticConfigFile(mode), generateTraefikStaticConfig(mode, acmeEmail(cfg))); err != nil {
+	if err := writeFileB64(r, dir+"/"+traefikStaticConfigFile, generateTraefikStaticConfig(mode, acmeEmail(cfg))); err != nil {
 		return err
 	}
 
