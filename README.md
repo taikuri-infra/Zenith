@@ -21,6 +21,14 @@ For a LAN or offline server with no public DNS, use a self-signed certificate:
 curl -fsSL https://raw.githubusercontent.com/taikuri-infra/Zenith/main/infra/scripts/install.sh | ZENITH_TLS_MODE=selfsigned bash
 ```
 
+The dashboard name defaults to `<public-ip>.sslip.io`, which behind NAT is your router's
+address: pin it by putting `ZENITH_PUBLIC_IP=<lan-ip>` (e.g. `ZENITH_PUBLIC_IP=192.168.1.10`)
+or `ZENITH_DOMAIN=<name>` next to `ZENITH_TLS_MODE=selfsigned` in the command.
+
+The installer prints where the local CA is (`<install-dir>/traefik/certs/zenith-ca.crt`). Trust it on Linux with
+`sudo cp <ca> /usr/local/share/ca-certificates/zenith-ca.crt && sudo update-ca-certificates`;
+for `zen` and `curl` alone, set `SSL_CERT_FILE=<ca>`.
+
 Get the `zen` CLI from the [releases page](https://github.com/taikuri-infra/Zenith/releases),
 then `zen login` against your dashboard URL to deploy from your terminal.
 

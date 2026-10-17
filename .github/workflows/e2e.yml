@@ -4,6 +4,8 @@ name: E2E
 # drives it through the API and the zen CLI: install, deploy + database + custom
 # domain + HTTPS, reboot, backup/restore, upgrade from the previous release.
 # Runs locally with: act pull_request -W .github/workflows/e2e.yml -j e2e --container-architecture linux/amd64 --privileged
+# Under act the artifact upload is skipped; the artifacts stay in infra/e2e/artifacts/ of the job
+# workspace (add --bind to the act command to have them land in your checkout on the host).
 
 on:
   pull_request:
@@ -23,7 +25,8 @@ on:
 
 concurrency:
   group: e2e-${{ github.ref }}
-  cancel-in-progress: true
+  # PRs: a new push supersedes the old run. main: every push is checked to the end.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -56,7 +59,7 @@ jobs:
         if: ${{ !(env.ACT && matrix.arch != 'amd64') }}
         run: bash infra/e2e/run.sh
       - name: Upload artifacts
-        if: ${{ always() && !(env.ACT && matrix.arch != 'amd64') }}
+        if: ${{ always() && !env.ACT }}
         uses: actions/upload-artifact@v4
         with:
           name: e2e-${{ matrix.arch }}

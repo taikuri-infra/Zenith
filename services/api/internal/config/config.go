@@ -153,7 +153,7 @@ func Load() *Config {
 		CORSOrigins:           getEnv("CORS_ORIGINS", corsDefault),
 		LogLevel:              getEnv("LOG_LEVEL", "info"),
 		KubeConfig:            getEnv("KUBECONFIG", ""),
-		CertResolver:          getEnv("ZENITH_CERT_RESOLVER", "le"),
+		CertResolver:          getEnvSet("ZENITH_CERT_RESOLVER", "le"),
 		K8sMode:               getEnv("K8S_MODE", "memory"),
 		InCluster:             getEnvBool("IN_CLUSTER", false),
 		JWTSecret:             getEnv("JWT_SECRET", ""),
@@ -230,6 +230,15 @@ func Load() *Config {
 
 func getEnv(key, fallback string) string {
 	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return fallback
+}
+
+// getEnvSet is getEnv where a set-but-empty value stays empty; only an unset
+// key falls back. Self-signed installs set ZENITH_CERT_RESOLVER= on purpose.
+func getEnvSet(key, fallback string) string {
+	if val, ok := os.LookupEnv(key); ok {
 		return val
 	}
 	return fallback

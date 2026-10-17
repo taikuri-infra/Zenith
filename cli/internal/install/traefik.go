@@ -174,6 +174,12 @@ func writeSelfSignedCerts(cfg *Config, r runner, dir string) error {
 			return err
 		}
 	}
+	// writeFileB64 writes under umask 077; the api container (non-root user
+	// zenith) must read the CA to trust custom-domain checks, so the
+	// certificates are world-readable. The keys stay 0600.
+	if out, err := r.Run(fmt.Sprintf("chmod 644 %s/zenith.crt %s/zenith-ca.crt", certs, certs)); err != nil {
+		return fmt.Errorf("chmod certificates: %w\n%s", err, out)
+	}
 	// Hand the CA back to the operator locally, regardless of local/SSH target.
 	cfg.CACertPEM = string(caCert)
 	return nil

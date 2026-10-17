@@ -30,6 +30,13 @@ detect_public_ip() {
   return 0
 }
 
+# True when ADDR is assigned to one of this machine's interfaces.
+ip_is_local() {
+  { ip -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 || true
+    hostname -I 2>/dev/null | tr ' ' '\n' || true
+  } | grep -qxF "$1"
+}
+
 # Ensure ZENITH_DOMAIN is set: explicit, else <public-ip>.sslip.io. Exits 1
 # (before any file is written) when no valid IP can be found.
 resolve_domain() {
@@ -42,14 +49,22 @@ resolve_domain() {
   if [ "$IP_SOURCE" = "local" ]; then
     warn "Public IP lookup failed; using local address $PUBLIC_IP. If it is private, Let's Encrypt cannot issue a certificate for it."
   fi
+  # Behind NAT the public IP is the router's: <ip>.sslip.io then reaches the router, not us.
+  if [ "$IP_SOURCE" != "local" ] && ! ip_is_local "$PUBLIC_IP"; then
+    warn "address $PUBLIC_IP is not on this machine (NAT?); set ZENITH_PUBLIC_IP or ZENITH_DOMAIN if the dashboard is unreachable" >&2
+  fi
   ZENITH_DOMAIN="${PUBLIC_IP}.sslip.io"
 }
 
-# In-place edit that works on both GNU and BSD/macOS sed.
+# In-place edit that works on both GNU and BSD/macOS sed. The value is stored
+# verbatim: \, & and | are escaped for the sed replacement; a newline cannot be
+# represented in .env and is refused.
 set_var() {
-  local key="$1" val="$2"
+  local key="$1" val="$2" esc
+  case "$val" in *$'\n'*) err "$key must not contain a newline"; exit 1;; esac
   if grep -qE "^${key}=" .env; then
-    sed -i.bak -E "s|^${key}=.*|${key}=${val}|" .env
+    esc="$(printf '%s' "$val" | sed -e 's/[\\&|]/\\&/g')"
+    sed -i.bak -E "s|^${key}=.*|${key}=${esc}|" .env
   else
     printf '%s=%s\n' "$key" "$val" >>.env
   fi
@@ -98,8 +113,11 @@ write_selfsigned_tls() {
       -days 730 -sha256 -extfile "$certs/leaf.ext" -out "$certs/zenith.crt"
     cat "$certs/zenith-ca.crt" >> "$certs/zenith.crt"   # chain, as the Go installer writes it
     rm -f "$certs/zenith.csr" "$certs/leaf.ext" "$certs/zenith-ca.srl"
-    chmod 600 "$certs"/*.key
   fi
+  # Keys owner-only; certificates world-readable (the api container runs as a
+  # non-root user and reads zenith-ca.crt), whatever the host umask is.
+  chmod 600 "$certs"/*.key
+  chmod 644 "$certs"/*.crt
   cat > traefik/dynamic/certs.yml <<'EOF'
 tls:
   stores:
@@ -202,6 +220,12 @@ fi  # DRY_RUN
 CREDS_FILE=".zenith-credentials"
 if [ ! -f .env ]; then
   resolve_domain
+  # Refuse unrepresentable user-supplied values before any file is written.
+  for v in ADMIN_PASSWORD ADMIN_EMAIL; do
+    case "${!v:-}" in *$'\n'*) err "$v must not contain a newline"; exit 1;; esac
+  done
+  # docker compose interpolates $ in .env values, so the API would see a different password.
+  case "${ADMIN_PASSWORD:-}" in *'$'*) err "ADMIN_PASSWORD must not contain \$ (docker compose interpolates it)"; exit 1;; esac
   log "Generating .env with strong, unique secrets..."
   cp .env.example .env
 
@@ -282,7 +306,10 @@ else
   printf '  Admin credentials are unchanged (see your existing .env / %s).\n\n' "$CREDS_FILE"
 fi
 if [ "$TLS_MODE" = "selfsigned" ]; then
-  printf '  TLS: self-signed. Trust the CA on your machine: %s/traefik/certs/zenith-ca.crt\n' "$(pwd)"
+  ca="$(pwd)/traefik/certs/zenith-ca.crt"
+  printf '  TLS: self-signed. Trust the CA on your machine: %s\n' "$ca"
+  printf '    Linux:     sudo cp %s /usr/local/share/ca-certificates/zenith-ca.crt && sudo update-ca-certificates\n' "$ca"
+  printf '    zen/curl:  SSL_CERT_FILE=%s\n' "$ca"
 fi
 printf '  If you use your own domain, point it and *.<domain> (A records) at this server.\n'
 printf '\033[32m============================================\033[0m\n'
