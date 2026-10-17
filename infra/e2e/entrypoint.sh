@@ -9,7 +9,12 @@ if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
   mkdir -p /sys/fs/cgroup/init
   # Retry: processes can appear between the read and the write.
   until xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs 2>/dev/null; do :; done
-  sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers > /sys/fs/cgroup/cgroup.subtree_control
+  # Best effort, like the official docker:dind entrypoint: on some hosts (seen on a WSL2
+  # runner) the write returns EBUSY; dockerd still starts, only nested cgroup limits are
+  # unavailable, which the E2E servers never use.
+  if ! sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null; then
+    echo "zenith-e2e-entrypoint: could not enable cgroup controllers for nested containers (continuing)" >&2
+  fi
 fi
 # Optional Docker Hub mirror for the inner dockerd (restricted networks).
 if [ -n "${ZENITH_E2E_REGISTRY_MIRROR:-}" ]; then
