@@ -11,6 +11,7 @@ run() { # $1 = workdir; remaining = env assignments
   mkdir -p "$dir"
   cp "$repo/.env.example" "$dir/.env.example"
   cp "$repo/VERSION" "$dir/VERSION"
+  [ -d "$dir/traefik" ] || cp -r "$repo/traefik" "$dir/traefik"
   (cd "$dir" && env "$@" ZENITH_DRY_RUN=1 ZENITH_PUBLIC_IP=203.0.113.7 bash "$here/install.sh" >/dev/null)
 }
 
@@ -54,5 +55,45 @@ if out="$(cd "$t/noip" && env -u ZENITH_PUBLIC_IP -u ZENITH_DOMAIN PATH="$stubs:
 fi
 echo "$out" | grep -q "Could not detect this server's public IP" || fail "missing IP error message"
 [ ! -e "$t/noip/.env" ] || fail ".env created despite IP failure"
+
+# --- self-signed mode renders certs, Traefik config and the three env keys ---
+run "$t/ss" ZENITH_TLS_MODE=selfsigned
+env_ss="$t/ss/.env"
+grep -qE '^ZENITH_TLS_MODE=selfsigned$' "$env_ss" || fail "ZENITH_TLS_MODE missing"
+grep -qE '^ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt$' "$env_ss" || fail "ZENITH_TLS_CA_FILE missing"
+grep -qE '^ZENITH_CERT_RESOLVER=$' "$env_ss" || fail "ZENITH_CERT_RESOLVER must be empty in selfsigned mode"
+for f in traefik/certs/zenith.crt traefik/certs/zenith.key traefik/certs/zenith-ca.crt traefik/certs/zenith-ca.key traefik/dynamic/certs.yml traefik/traefik.yml; do
+  [ -s "$t/ss/$f" ] || fail "selfsigned: $f not written"
+done
+grep -q 'certResolver' "$t/ss/traefik/traefik.yml" && fail "selfsigned traefik.yml must not name a certResolver"
+grep -qE '^certificatesResolvers:' "$t/ss/traefik/traefik.yml" && fail "selfsigned traefik.yml must not define certificatesResolvers"
+openssl x509 -in "$t/ss/traefik/certs/zenith.crt" -noout -ext subjectAltName | grep -q 'DNS:\*\.203.0.113.7.sslip.io' || fail "leaf lacks the wildcard SAN"
+openssl verify -CAfile "$t/ss/traefik/certs/zenith-ca.crt" "$t/ss/traefik/certs/zenith.crt" >/dev/null 2>&1 || fail "leaf does not verify against the CA"
+diff <(sed -n '/^tls:/,$p' "$t/ss/traefik/dynamic/certs.yml") - <<'EOF' || fail "certs.yml content differs from the Go installer's"
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/zenith.crt
+        keyFile: /etc/traefik/certs/zenith.key
+  certificates:
+    - certFile: /etc/traefik/certs/zenith.crt
+      keyFile: /etc/traefik/certs/zenith.key
+EOF
+
+# --- http01 (default) is untouched and image repo passes through ---
+run "$t/http" ZENITH_IMAGE_REPO=zenith-e2e-registry:5000
+grep -qE '^ZENITH_TLS_MODE=' "$t/http/.env" && fail "http01 must not write ZENITH_TLS_MODE"
+grep -qE '^ZENITH_IMAGE_REPO=zenith-e2e-registry:5000$' "$t/http/.env" || fail "ZENITH_IMAGE_REPO not written"
+[ -e "$t/http/traefik/dynamic/certs.yml" ] && fail "http01 must not write certs.yml"
+
+# --- selfsigned keys are added once and http01 stays untouched on re-run ---
+run "$t/ss" ZENITH_TLS_MODE=selfsigned
+[ "$(grep -c '^ZENITH_TLS_MODE=' "$env_ss")" = 1 ] || fail "ZENITH_TLS_MODE duplicated on re-run"
+cp "$t/http/.env" "$t/http/.env.before"; run "$t/http"; diff -q "$t/http/.env" "$t/http/.env.before" >/dev/null || fail "re-run changed an http01 .env"
+
+# --- ADMIN_PASSWORD from the environment is honoured ---
+run "$t/pw" ADMIN_PASSWORD=Fixed-Password-123
+grep -qE '^ADMIN_PASSWORD=Fixed-Password-123$' "$t/pw/.env" || fail "ADMIN_PASSWORD override ignored"
 
 echo "install_test: ok"
