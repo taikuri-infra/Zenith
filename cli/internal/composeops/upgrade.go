@@ -239,9 +239,15 @@ func checkOnce(ctx context.Context, want string) error {
 	return nil
 }
 
-// LatestRelease returns the newest non-draft release tag (prereleases included), without a leading v.
+// githubAPI is the GitHub API base URL; tests point it at an httptest server.
+var githubAPI = "https://api.github.com"
+
+var platformTag = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+// LatestRelease returns the newest non-draft platform release tag (vX.Y.Z, prereleases included),
+// without the leading v. The repo also publishes zen-v*, zenith-api-v* and zenith-web-v* releases.
 func LatestRelease(ctx context.Context, repo string) (string, error) {
-	resp, err := get(ctx, "https://api.github.com/repos/"+repo+"/releases?per_page=1")
+	resp, err := get(ctx, githubAPI+"/repos/"+repo+"/releases?per_page=30")
 	if err != nil {
 		return "", err
 	}
@@ -257,9 +263,9 @@ func LatestRelease(ctx context.Context, repo string) (string, error) {
 		return "", err
 	}
 	for _, rel := range rels {
-		if !rel.Draft && rel.Tag != "" {
+		if !rel.Draft && platformTag.MatchString(rel.Tag) {
 			return strings.TrimPrefix(rel.Tag, "v"), nil
 		}
 	}
-	return "", fmt.Errorf("no releases found for %s", repo)
+	return "", fmt.Errorf("no platform release found for %s", repo)
 }

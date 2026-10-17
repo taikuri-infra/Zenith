@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -227,5 +229,55 @@ func TestTargetReAcceptsDashInPrerelease(t *testing.T) {
 		if targetRe.MatchString(bad) {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+func latestFrom(t *testing.T, status int, body string) (string, error) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/o/r/releases" || r.URL.Query().Get("per_page") != "30" {
+			t.Errorf("unexpected request %s", r.URL.String())
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	old := githubAPI
+	githubAPI = srv.URL
+	defer func() { githubAPI = old }()
+	return LatestRelease(context.Background(), "o/r")
+}
+
+func TestLatestReleaseSkipsNonPlatformTags(t *testing.T) {
+	got, err := latestFrom(t, 200, `[{"tag_name":"zen-v0.1.2"},{"tag_name":"v0.1.0"},{"tag_name":"v0.1.0-alpha.4"}]`)
+	if err != nil || got != "0.1.0" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestLatestReleaseKeepsPrereleases(t *testing.T) {
+	got, err := latestFrom(t, 200, `[{"tag_name":"zenith-api-v0.2.0"},{"tag_name":"v0.1.0-alpha.4"}]`)
+	if err != nil || got != "0.1.0-alpha.4" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestLatestReleaseSkipsDrafts(t *testing.T) {
+	got, err := latestFrom(t, 200, `[{"tag_name":"v0.2.0","draft":true},{"tag_name":"v0.1.0"}]`)
+	if err != nil || got != "0.1.0" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestLatestReleaseNoPlatformRelease(t *testing.T) {
+	_, err := latestFrom(t, 200, `[{"tag_name":"zen-v0.1.2"},{"tag_name":"zenith-web-v0.1.0"}]`)
+	if err == nil || !strings.Contains(err.Error(), "no platform release found for o/r") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLatestReleaseHTTPError(t *testing.T) {
+	if _, err := latestFrom(t, 500, `oops`); err == nil {
+		t.Fatal("want error")
 	}
 }

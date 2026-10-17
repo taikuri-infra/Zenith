@@ -328,16 +328,26 @@ cmd_install() {
     wait_health "$name" "$HEALTH_TIMEOUT"
   fi
 
+  rm -f "$ART/$name-ca.crt"
+  if ! docker cp -q "$c:$INSTALL_DIR/traefik/certs/zenith-ca.crt" "$ART/$name-ca.crt" 2>/dev/null; then
+    log "no CA at $INSTALL_DIR/traefik/certs/zenith-ca.crt on $name"; cmd_logs "$name"; return 1
+  fi
+
+  if [ "$seed" = 1 ]; then
+    # wait_health is insecure (-k): a Traefik still serving its default certificate passes it.
+    # Verify the seeded chain really is what is served.
+    ip="$(recorded_ip "$name")"
+    if ! curl -sf --max-time 10 --cacert "$ART/$name-ca.crt" --resolve "$domain:443:$ip" "https://$domain/api/v1/version" >/dev/null 2>&1; then
+      log "$name: Traefik is not serving the seeded certificate (verification against $ART/$name-ca.crt failed)"; cmd_logs "$name"; return 1
+    fi
+  fi
+
   if [ "$mode" = release ]; then
     # The released compose file ignores this; once `zen upgrade` checks out the candidate,
     # its compose file pulls the candidate images from the in-job registry.
     docker exec -w "$INSTALL_DIR" "$c" sh -c "grep -q '^ZENITH_IMAGE_REPO=' .env || echo 'ZENITH_IMAGE_REPO=$REG:5000' >> .env"
   fi
 
-  rm -f "$ART/$name-ca.crt"
-  if ! docker cp -q "$c:$INSTALL_DIR/traefik/certs/zenith-ca.crt" "$ART/$name-ca.crt" 2>/dev/null; then
-    log "no CA at $INSTALL_DIR/traefik/certs/zenith-ca.crt on $name"; cmd_logs "$name"; return 1
-  fi
   local pw
   pw="$(docker exec -w "$INSTALL_DIR" "$c" sh -c "grep '^ADMIN_PASSWORD=' .env | tail -1 | cut -d= -f2-")"
   [ -n "$pw" ] || { log "no ADMIN_PASSWORD in $INSTALL_DIR/.env on $name"; return 1; }
