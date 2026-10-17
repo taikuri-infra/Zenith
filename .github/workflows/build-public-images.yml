@@ -118,6 +118,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Mirror build args (restricted networks)
+        # A self-hosted runner behind a blocked Go proxy / npm registry sets GOPROXY,
+        # GOSUMDB, npm_config_registry or COREPACK_NPM_REGISTRY in its .env; the
+        # Dockerfiles declare them as ARGs. Unset ones are not passed.
+        id: mirrors
+        run: |
+          {
+            echo 'args<<EOT'
+            for v in GOPROXY GOSUMDB npm_config_registry COREPACK_NPM_REGISTRY; do
+              if [ -n "${!v:-}" ]; then echo "$v=${!v}"; fi
+            done
+            echo 'EOT'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build & push ${{ matrix.image }} (${{ matrix.arch }}) by digest
         id: build
         uses: docker/build-push-action@v5
@@ -129,6 +143,7 @@ jobs:
             VERSION=${{ needs.prepare.outputs.tag }}
             BUILD_TIME=${{ github.event.repository.updated_at }}
             ${{ matrix.build_args }}
+            ${{ steps.mirrors.outputs.args }}
           labels: |
             org.opencontainers.image.version=${{ needs.prepare.outputs.tag }}
             org.opencontainers.image.revision=${{ github.sha }}
