@@ -57,7 +57,7 @@ echo "$out" | grep -q "Could not detect this server's public IP" || fail "missin
 [ ! -e "$t/noip/.env" ] || fail ".env created despite IP failure"
 
 # --- self-signed mode renders certs, Traefik config and the three env keys ---
-run "$t/ss" ZENITH_TLS_MODE=selfsigned
+(umask 077; run "$t/ss" ZENITH_TLS_MODE=selfsigned)   # strict umask: modes must not follow it
 env_ss="$t/ss/.env"
 grep -qE '^ZENITH_TLS_MODE=selfsigned$' "$env_ss" || fail "ZENITH_TLS_MODE missing"
 grep -qE '^ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt$' "$env_ss" || fail "ZENITH_TLS_CA_FILE missing"
@@ -67,6 +67,9 @@ for f in traefik/certs/zenith.crt traefik/certs/zenith.key traefik/certs/zenith-
 done
 grep -q 'certResolver' "$t/ss/traefik/traefik.yml" && fail "selfsigned traefik.yml must not name a certResolver"
 grep -qE '^certificatesResolvers:' "$t/ss/traefik/traefik.yml" && fail "selfsigned traefik.yml must not define certificatesResolvers"
+# the api container (non-root) reads the CA: certificates 0644, keys 0600
+for f in zenith.crt zenith-ca.crt; do [ "$(stat -c %a "$t/ss/traefik/certs/$f")" = 644 ] || fail "selfsigned: $f mode $(stat -c %a "$t/ss/traefik/certs/$f"), want 644"; done
+for f in zenith.key zenith-ca.key; do [ "$(stat -c %a "$t/ss/traefik/certs/$f")" = 600 ] || fail "selfsigned: $f mode $(stat -c %a "$t/ss/traefik/certs/$f"), want 600"; done
 openssl x509 -in "$t/ss/traefik/certs/zenith.crt" -noout -ext subjectAltName | grep -q 'DNS:\*\.203.0.113.7.sslip.io' || fail "leaf lacks the wildcard SAN"
 openssl verify -CAfile "$t/ss/traefik/certs/zenith-ca.crt" "$t/ss/traefik/certs/zenith.crt" >/dev/null 2>&1 || fail "leaf does not verify against the CA"
 diff <(sed -n '/^tls:/,$p' "$t/ss/traefik/dynamic/certs.yml") - <<'EOF' || fail "certs.yml content differs from the Go installer's"

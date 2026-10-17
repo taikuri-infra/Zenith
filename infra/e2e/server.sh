@@ -235,8 +235,11 @@ seed_selfsigned_tls() {
       -days 730 -sha256 -extfile "$certs/leaf.ext" -out "$certs/zenith.crt"
     cat "$certs/zenith-ca.crt" >> "$certs/zenith.crt"
     rm -f "$certs/zenith.csr" "$certs/leaf.ext" "$certs/zenith-ca.srl"
-    chmod 600 "$certs"/*.key
   fi
+  # Keys owner-only; certificates world-readable (the api container runs as a
+  # non-root user and reads zenith-ca.crt), whatever the host umask is.
+  chmod 600 "$certs"/*.key
+  chmod 644 "$certs"/*.crt
   cat > traefik/dynamic/certs.yml <<'EOF'
 tls:
   stores:
