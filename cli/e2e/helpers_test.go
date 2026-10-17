@@ -618,7 +618,8 @@ func deployProbe(t *testing.T, c *cliapi.Client, marker string) *state {
 
 	// The CLI path: redeploy the same image with zen deploy.
 	zenLogin(t)
-	if out, err := zen(t, "deploy", "--image", cfg.ProbeImage, "--name", probeAppName); err != nil {
+	// zen deploy exits 0 when its own 3-minute wait runs out, so its output is checked too.
+	if out, err := zen(t, "deploy", "--image", cfg.ProbeImage, "--name", probeAppName); err != nil || !strings.Contains(out, "Deployed successfully") {
 		t.Fatalf("zen deploy: %v\n%s", err, out)
 	}
 	app = waitAppRunning(t, c, byID, appRunningWait)
