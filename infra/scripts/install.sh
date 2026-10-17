@@ -304,7 +304,10 @@ else
   printf '  Admin credentials are unchanged (see your existing .env / %s).\n\n' "$CREDS_FILE"
 fi
 if [ "$TLS_MODE" = "selfsigned" ]; then
-  printf '  TLS: self-signed. Trust the CA on your machine: %s/traefik/certs/zenith-ca.crt\n' "$(pwd)"
+  ca="$(pwd)/traefik/certs/zenith-ca.crt"
+  printf '  TLS: self-signed. Trust the CA on your machine: %s\n' "$ca"
+  printf '    Linux:     sudo cp %s /usr/local/share/ca-certificates/zenith-ca.crt && sudo update-ca-certificates\n' "$ca"
+  printf '    zen/curl:  SSL_CERT_FILE=%s\n' "$ca"
 fi
 printf '  If you use your own domain, point it and *.<domain> (A records) at this server.\n'
 printf '\033[32m============================================\033[0m\n'
