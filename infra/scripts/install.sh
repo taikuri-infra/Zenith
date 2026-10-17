@@ -224,6 +224,8 @@ if [ ! -f .env ]; then
   for v in ADMIN_PASSWORD ADMIN_EMAIL; do
     case "${!v:-}" in *$'\n'*) err "$v must not contain a newline"; exit 1;; esac
   done
+  # docker compose interpolates $ in .env values, so the API would see a different password.
+  case "${ADMIN_PASSWORD:-}" in *'$'*) err "ADMIN_PASSWORD must not contain \$ (docker compose interpolates it)"; exit 1;; esac
   log "Generating .env with strong, unique secrets..."
   cp .env.example .env
 

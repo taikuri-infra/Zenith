@@ -125,6 +125,8 @@ run "$t/pw2" 'ADMIN_PASSWORD=p&ss|w\x'
 [ "$(grep '^ADMIN_PASSWORD=' "$t/pw2/.env" | cut -d= -f2-)" = 'p&ss|w\x' ] || fail "ADMIN_PASSWORD with & | \\ not stored verbatim: $(grep '^ADMIN_PASSWORD=' "$t/pw2/.env")"
 if out="$(run "$t/pw3" "ADMIN_PASSWORD=$(printf 'a\nb')" 2>&1)"; then fail "a newline in a value must be rejected"; fi
 echo "$out" | grep -q 'must not contain a newline' || fail "missing newline error message: $out"
+if out="$(run "$t/pw4" 'ADMIN_PASSWORD=pa$$word' 2>&1)"; then fail "a \$ in ADMIN_PASSWORD must be rejected (compose interpolates it)"; fi
+echo "$out" | grep -q 'must not contain \$' || fail "missing \$ error message: $out"
 [ ! -e "$t/pw3/.env" ] || fail ".env created despite the newline in ADMIN_PASSWORD"
 
 echo "install_test: ok"
