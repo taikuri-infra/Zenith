@@ -193,3 +193,19 @@ func TestValidateInstallDir(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildComposeEnv_SelfSignedWritesTLSKeys(t *testing.T) {
+	cfg := &Config{Domain: "zenith.lan", AdminPassword: "pw", TLSMode: TLSSelfSigned}
+	env := buildComposeEnv(cfg, "admin@zenith.lan", "999")
+	for _, want := range []string{"ZENITH_TLS_MODE=selfsigned\n", "ZENITH_TLS_CA_FILE=/etc/zenith/certs/zenith-ca.crt\n", "ZENITH_CERT_RESOLVER=\n"} {
+		if !strings.Contains(env, want) {
+			t.Errorf("missing %q in:\n%s", want, env)
+		}
+	}
+	plain := buildComposeEnv(&Config{Domain: "zenith.example.com", AdminPassword: "pw"}, "a@b.c", "999")
+	for _, no := range []string{"ZENITH_TLS_MODE", "ZENITH_TLS_CA_FILE", "ZENITH_CERT_RESOLVER"} {
+		if strings.Contains(plain, no) {
+			t.Errorf("http01 env must not contain %s", no)
+		}
+	}
+}

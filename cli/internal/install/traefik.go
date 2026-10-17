@@ -151,6 +151,7 @@ func acmeEmail(cfg *Config) string {
 // writeSelfSignedCerts generates a local CA + leaf for cfg.Domain, installs them
 // for Traefik, and fetches the CA certificate back to the operator's machine so
 // they can import it into their trust store.
+// install.sh (ZENITH_TLS_MODE=selfsigned) writes the same files with openssl; keep the two in step.
 func writeSelfSignedCerts(cfg *Config, r runner, dir string) error {
 	caCert, caKey, err := tlscert.GenerateCA()
 	if err != nil {
