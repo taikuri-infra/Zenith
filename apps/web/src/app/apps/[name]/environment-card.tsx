@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -13,13 +13,13 @@ import {
   Unlock,
   Upload,
 } from "lucide-react";
-import type { AppEnvVar, DeployApp, Secret } from "@/lib/api";
+import { ApiError, type AppEnvVar, type DeployApp, type Secret } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import { useApi } from "@/hooks/use-api";
 import { useToast } from "@/components/toast";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
-import { PageWithTableSkeleton } from "@/components/loading-skeleton";
+import { TableSkeleton } from "@/components/loading-skeleton";
 import { isManagedEnv, managedEnvLabel } from "@/lib/env-source";
 
 type SecretTarget = "env" | "store";
@@ -29,7 +29,8 @@ type SecretTarget = "env" | "store";
  * inline edit, delete, Import .env, Show/Hide values, managed badge,
  * Restart-now banner) plus the app's secret-store entries in the same
  * table, tagged "secret store" (reveal on demand, copy, delete).
- * The two stores load and fail independently.
+ * The two stores load and fail independently; a 404 from the secret store
+ * means "not configured" (no error, no store rows, no store option).
  */
 export function EnvironmentCard({ app }: { app: DeployApp }) {
   const appId = app.id;
@@ -63,7 +64,16 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
     loading: secretsLoading,
     error: secretsError,
     refetch: refetchSecrets,
-  } = useApi(() => api.appsDeploy.listSecrets(appId), [appId]);
+  } = useApi(async () => {
+    try {
+      const res = await api.appsDeploy.listSecrets(appId);
+      return { secrets: res?.secrets ?? [], notConfigured: false };
+    } catch (err) {
+      // 404: no secret store on this install. Not an error; the card just hides it.
+      if (err instanceof ApiError && err.status === 404) return { secrets: [] as Secret[], notConfigured: true };
+      throw err;
+    }
+  }, [appId]);
 
   // Add new var
   const [newKey, setNewKey] = useState("");
@@ -98,10 +108,15 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
   const [confirmSecretKey, setConfirmSecretKey] = useState<string | null>(null);
   const [deletingSecretKey, setDeletingSecretKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+  }, []);
 
   const items: AppEnvVar[] = envData?.items || [];
   const secrets: Secret[] = secretsData?.secrets || [];
-  const toSecretStore = newIsSecret && secretTarget === "store";
+  const storeAvailable = !secretsData?.notConfigured;
+  const toSecretStore = storeAvailable && newIsSecret && secretTarget === "store";
 
   const markPending = () => setPendingRestart(true);
 
@@ -233,7 +248,8 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 2000);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopiedKey(null), 2000);
     } catch {
       toast("error", "Failed to copy value");
     }
@@ -264,7 +280,7 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
   const addDisabled = !newKey.trim() || (toSecretStore && (!newValue.trim() || adding));
 
   const table = (
-    <div className="overflow-hidden rounded-lg border border-border">
+    <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-border bg-surface-100">
@@ -447,7 +463,7 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
 
   let list: React.ReactNode;
   if (envPending || secretsPending) {
-    list = <PageWithTableSkeleton cols={3} rows={3} />;
+    list = <TableSkeleton cols={3} rows={3} />;
   } else if (envRows.length === 0 && secretRows.length === 0) {
     list = error || secretsError ? null : (
       <EmptyState
@@ -462,7 +478,7 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
   }
 
   return (
-    <div className="md:col-span-2 rounded-lg border border-border bg-surface-100 p-5">
+    <section className="md:col-span-2 rounded-lg border border-border bg-surface-100 p-5">
       <h2 className="mb-4 text-sm font-medium text-white">Environment</h2>
       <div className="space-y-4">
         {/* Pending restart banner */}
@@ -615,7 +631,7 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
               {newIsSecret ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
             </button>
           </div>
-          {newIsSecret && (
+          {newIsSecret && storeAvailable && (
             <div>
               <label htmlFor={`env-store-${appId}`} className="mb-1 block text-xs font-medium text-neutral-400">Store</label>
               <select
@@ -654,6 +670,6 @@ export function EnvironmentCard({ app }: { app: DeployApp }) {
           <p className="text-xs text-neutral-500">Variables from an attached database are read-only; detach the database to remove them.</p>
         )}
       </div>
-    </div>
+    </section>
   );
 }

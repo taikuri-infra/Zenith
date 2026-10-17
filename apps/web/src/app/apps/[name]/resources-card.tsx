@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2, Download, RotateCw, Eye, EyeOff, Copy, Check } from "lucide-react";
 import type { DeployApp, AppDatabase, AppBucket, DatabaseBackup } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
@@ -7,6 +7,7 @@ import { useApi } from "@/hooks/use-api";
 import { useToast } from "@/components/toast";
 import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
+import { TableSkeleton } from "@/components/loading-skeleton";
 
 const inputCls =
   "rounded-md border border-border bg-surface-200 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none";
@@ -75,7 +76,7 @@ function DatabasesSection({ appId }: { appId: string }) {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500">Databases</h3>
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Databases</p>
         <button onClick={() => setShowAdd(true)} className={primaryBtn}>
           <Plus className="mr-1 inline h-3.5 w-3.5" />
           Add database
@@ -96,7 +97,7 @@ function DatabasesSection({ appId }: { appId: string }) {
         </div>
       )}
       {loading ? (
-        <div className="text-xs text-neutral-500">Loading databases...</div>
+        <TableSkeleton cols={4} rows={2} />
       ) : error ? (
         <ErrorState message={error} onRetry={refetch} />
       ) : items.length === 0 ? (
@@ -138,6 +139,10 @@ function ConnectionDetails({ appId, db }: { appId: string; db: AppDatabase }) {
   const { toast } = useToast();
   const [conn, setConn] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+  }, []);
   const fallback = `${db.engine}://${db.db_user}:***@${db.host}:${db.port}/${db.db_name}`;
 
   const reveal = async () => {
@@ -154,7 +159,8 @@ function ConnectionDetails({ appId, db }: { appId: string; db: AppDatabase }) {
     try {
       await navigator.clipboard.writeText(conn);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       toast("error", "Failed to copy connection string");
     }
@@ -220,7 +226,7 @@ function Backups({ appId, db }: { appId: string; db: AppDatabase }) {
         </button>
       </div>
       {loading ? (
-        <div className="text-xs text-neutral-500">Loading backups...</div>
+        <TableSkeleton cols={4} rows={2} />
       ) : error ? (
         <ErrorState message={error} onRetry={refetch} />
       ) : items.length === 0 ? (
@@ -309,7 +315,7 @@ function BucketsSection({ appId }: { appId: string }) {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500">Buckets</h3>
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Buckets</p>
         <button onClick={() => setShowAdd(true)} className={primaryBtn}>
           <Plus className="mr-1 inline h-3.5 w-3.5" />
           Add bucket
@@ -339,7 +345,7 @@ function BucketsSection({ appId }: { appId: string }) {
         </div>
       )}
       {loading ? (
-        <div className="text-xs text-neutral-500">Loading buckets...</div>
+        <TableSkeleton cols={4} rows={2} />
       ) : error ? (
         <ErrorState message={error} onRetry={refetch} />
       ) : items.length === 0 ? (

@@ -1,13 +1,15 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, GitBranch, RotateCcw, Rocket } from "lucide-react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronRight, FileText, GitBranch, RotateCcw, Rocket } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
-import { PageWithTableSkeleton } from "@/components/loading-skeleton";
+import { TableSkeleton } from "@/components/loading-skeleton";
+import { BuildLogViewer } from "@/components/build-log-viewer";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 import { useApi } from "@/hooks/use-api";
 import { useDeployEvents } from "@/hooks/use-deploy-events";
+import { useDeployLogs } from "@/hooks/use-deploy-logs";
 import type { DeployApp, Deployment, Release } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 
@@ -22,6 +24,8 @@ export function DeploymentsCard({ app }: { app: DeployApp }) {
   );
   const [showReleases, setShowReleases] = useState(false);
   const [releaseCount, setReleaseCount] = useState<number | null>(null);
+  // Only one deployment's build log is open at a time.
+  const [logId, setLogId] = useState<string | null>(null);
 
   const handleDeployEvent = useCallback(
     (event: { app_id: string }) => {
@@ -43,10 +47,10 @@ export function DeploymentsCard({ app }: { app: DeployApp }) {
   const items = data?.items || [];
 
   return (
-    <div className="rounded-lg border border-border bg-surface-100 p-5 md:col-span-2">
-      <h3 className="mb-4 text-sm font-medium text-white">Recent Deployments</h3>
+    <section className="rounded-lg border border-border bg-surface-100 p-5 md:col-span-2">
+      <h2 className="mb-4 text-sm font-medium text-white">Recent Deployments</h2>
       {loading ? (
-        <PageWithTableSkeleton cols={5} rows={3} />
+        <TableSkeleton cols={5} rows={3} />
       ) : error ? (
         <ErrorState message={error} onRetry={refetch} />
       ) : items.length === 0 ? (
@@ -65,30 +69,50 @@ export function DeploymentsCard({ app }: { app: DeployApp }) {
             </thead>
             <tbody>
               {items.map((d: Deployment) => (
-                <tr key={d.id} className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">{d.id.slice(0, 8)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <StatusBadge status={d.status as "running" | "deploying" | "stopped" | "crashed"} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-400">
-                    {d.git_sha?.slice(0, 8) || "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-neutral-400">
-                    {new Date(d.created_at).toLocaleString()}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {d.status !== "active" && (
-                      <button
-                        onClick={() => handleRollback(d.id)}
-                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-neutral-400 hover:bg-surface-300 hover:text-white transition-colors"
-                        title="Rollback to this deployment"
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                        Rollback
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={d.id}>
+                  <tr className="border-b border-border last:border-0 hover:bg-surface-200 transition-colors">
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-300">{d.id.slice(0, 8)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <StatusBadge status={d.status as "running" | "deploying" | "stopped" | "crashed"} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-400">
+                      {d.git_sha?.slice(0, 8) || "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-neutral-400">
+                      {new Date(d.created_at).toLocaleString()}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setLogId((cur) => (cur === d.id ? null : d.id))}
+                          aria-expanded={logId === d.id}
+                          className="flex items-center gap-1 rounded px-2 py-1 text-xs text-neutral-400 hover:bg-surface-300 hover:text-white transition-colors"
+                          title={logId === d.id ? "Hide build log" : "Show build log"}
+                        >
+                          <FileText className="h-3 w-3" />
+                          Build log
+                        </button>
+                        {d.status !== "active" && (
+                          <button
+                            onClick={() => handleRollback(d.id)}
+                            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-neutral-400 hover:bg-surface-300 hover:text-white transition-colors"
+                            title="Rollback to this deployment"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Rollback
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {logId === d.id && (
+                    <tr className="border-b border-border last:border-0">
+                      <td colSpan={5} className="p-3">
+                        <DeploymentLog appId={appId} deploymentId={d.id} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -106,8 +130,14 @@ export function DeploymentsCard({ app }: { app: DeployApp }) {
         </button>
         {showReleases && <ReleasesSection appId={appId} onCount={setReleaseCount} onDeployed={refetch} />}
       </div>
-    </div>
+    </section>
   );
+}
+
+// Own component so useDeployLogs runs only for the expanded row (stable hook order).
+function DeploymentLog({ appId, deploymentId }: { appId: string; deploymentId: string }) {
+  const { entries, streaming } = useDeployLogs(appId, deploymentId);
+  return <BuildLogViewer entries={entries} streaming={streaming} />;
 }
 
 function ReleasesSection({
@@ -132,7 +162,7 @@ function ReleasesSection({
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
-  if (loading) return <div className="mt-3"><PageWithTableSkeleton cols={5} rows={3} /></div>;
+  if (loading) return <div className="mt-3"><TableSkeleton cols={6} rows={3} /></div>;
   if (error) return <div className="mt-3"><ErrorState message={error} onRetry={refetch} /></div>;
 
   const releases = data?.releases || [];

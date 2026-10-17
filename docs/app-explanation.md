@@ -246,8 +246,7 @@ The user-facing dashboard where developers manage their apps, databases, storage
 | `/` | Project overview: 5-col stat cards (Legacy Apps, Deploy Engine running/building, Databases, Region, Status), deploy engine card grid with status dots + framework + branch, legacy apps table, databases list | API (useApi + appsDeploy) |
 | `/login` | Login/register form with OAuth (Google, GitHub) | API |
 | `/apps` | App list with search/filter, columns: name, status, replicas, CPU, memory, image, port, domain | API |
-| `/apps/[name]` | App detail (legacy CRD): deployment info, env vars, stats | API |
-| `/apps/[id]` | App detail: one page of cards, no tab bar — header (type, status, branch, Open, Logs link to `/logs?app=`), Source, Health (web), Recent Deployments (rollback + collapsible Releases with Deploy), Environment (env vars + secret store rows), Resources (databases, buckets), Domains (web) | API (appsDeploy) |
+| `/apps/[id]` | App detail: one page of cards, no tab bar — header (type, status, branch, Open, Logs link to `/logs?app=`), Source + Domains (web) side by side, then full width Recent Deployments (rollback, per-row Build log, collapsible Releases with Deploy), Environment (env vars + secret store rows), Resources (databases, buckets) | API (appsDeploy) |
 | `/deploy` | Deploy Engine dashboard: card grid with status dots (running=green, building=amber pulse, failed=red), framework labels, branch display, URLs, "Deploy from Git" modal, delete with confirmation | API (appsDeploy) |
 | `/databases` | Database list with engine icons (P=Postgres blue, M=MySQL orange, M=Mongo green, R=Redis red) | API |
 | `/databases/[name]` | Database detail with connection string copy, engine/storage/port/created stats | API |
@@ -824,7 +823,7 @@ Each CRD follows the same lifecycle: User action -> API creates CRD -> Operator 
 - ✅ **Phase 3: Build Log Streaming** (2026-02-21)
   - SSE routes registered: `GET /apps/:id/deployments/:did/logs` + `/logs/history`
   - Fixed fasthttp `bufio.Writer` API bug in `logs.go`
-  - Frontend: `useDeployLogs` hook + `BuildLogViewer` terminal component + Logs tab in app detail page
+  - Frontend: `useDeployLogs` hook + `BuildLogViewer` terminal component, shown per deployment row ("Build log") in the Recent Deployments card of the app detail page
 
 - ✅ **Phase 4: Kaniko Build Execution** (2026-02-21)
   - `k8s.Client` interface extended with `JobObject` + 4 Job methods (`CreateJob`, `GetJob`, `DeleteJob`, `GetPodLogs`)

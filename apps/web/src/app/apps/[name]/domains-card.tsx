@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Globe, Plus, Trash2 } from "lucide-react";
 import { SHOW_PLANS, customDomainInstruction } from "@/lib/edition";
-import { PageWithTableSkeleton } from "@/components/loading-skeleton";
+import { TableSkeleton } from "@/components/loading-skeleton";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
@@ -75,7 +75,7 @@ function DomainsBody({ appId }: { appId: string }) {
     <section className="rounded-lg border border-border bg-surface-100 p-5">
       <h2 className="mb-4 text-sm font-medium text-white">Domains</h2>
       {loading ? (
-        <PageWithTableSkeleton cols={4} rows={2} />
+        <TableSkeleton cols={4} rows={2} />
       ) : error ? (
         <ErrorState message={error} onRetry={refetch} />
       ) : (
@@ -100,7 +100,7 @@ function DomainsBody({ appId }: { appId: string }) {
 
           {showAdd && (
             <div className="rounded-lg border border-border bg-surface-100 p-4">
-              <h3 className="mb-2 text-sm font-medium text-neutral-400">Add Custom Domain</h3>
+              <p className="mb-2 text-sm font-medium text-neutral-400">Add Custom Domain</p>
               <p className="mb-3 text-xs text-neutral-600">
                 {SHOW_PLANS ? (
                   <>First, add a CNAME record: <code className="text-neutral-400">your-domain.com → {appId}.freezenith.com</code></>
@@ -149,7 +149,7 @@ function DomainsBody({ appId }: { appId: string }) {
               description="Add a custom domain to serve your app from your own URL."
             />
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border">
+            <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-surface-100">

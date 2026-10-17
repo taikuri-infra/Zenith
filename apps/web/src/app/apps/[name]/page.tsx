@@ -14,7 +14,6 @@ import { type DeployApp, type PodStatus, monitoring } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import { getDiagnosticHint } from "./diagnostics";
 import { SourceCard } from "./source-card";
-import { HealthCard } from "./health-card";
 import { DeploymentsCard } from "./deployments-card";
 import { EnvironmentCard } from "./environment-card";
 import { ResourcesCard } from "./resources-card";
@@ -52,7 +51,6 @@ export default function AppDetailPage() {
   }
 
   const isWeb = (app.app_type ?? "web") === "web";
-  const showHealth = isWeb && !!app.health_status;
 
   return (
     <Shell>
@@ -60,12 +58,12 @@ export default function AppDetailPage() {
         <AppHeader app={app} />
         <AppBanners app={app} />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <SourceCard app={app} wide={!showHealth} />
-          {showHealth && <HealthCard app={app} />}
+          {/* Row 1: Source + Domains (web); Source alone, full width, otherwise. */}
+          <SourceCard app={app} wide={!isWeb} />
+          {isWeb && <DomainsCard app={app} />}
           <DeploymentsCard app={app} />
           <EnvironmentCard key={app.id} app={app} />
           <ResourcesCard app={app} />
-          {isWeb && <DomainsCard app={app} />}
         </div>
       </div>
     </Shell>

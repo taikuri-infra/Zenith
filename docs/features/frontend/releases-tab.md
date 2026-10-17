@@ -4,7 +4,7 @@
 The Releases list is a collapsible section of the Recent Deployments card on the app detail page (`/apps/[id]`; formerly a tab) that displays versioned image builds registered by CI pipelines via `zenith-actions`. Users can one-click deploy any release version.
 
 ## 2. UI/UX Flow
-1. User navigates to an app detail page and opens **Releases (n)** under Recent Deployments
+1. User navigates to an app detail page and clicks **Show releases** under Recent Deployments; releases load lazily on first open and the toggle then reads **Releases (n)** (click again to collapse)
 2. A table lists all releases sorted by newest first
 3. The most recent release is highlighted with a "latest" badge
 4. Each row shows: image tag, git SHA (truncated to 8 chars), branch, commit message, date
@@ -18,7 +18,7 @@ The Releases list is a collapsible section of the Recent Deployments card on the
 
 ## 4. Components
 - `ReleasesSection` in `app/apps/[name]/deployments-card.tsx` — manages deploy state; a deploy refetches the deployments list
-- Uses shared: `PageWithTableSkeleton`, `ErrorState`, `EmptyState`
+- Uses shared: `TableSkeleton`, `ErrorState`, `EmptyState`
 
 ## 5. Services/API
 - `appsDeploy.listReleases(appId)` — list all releases
@@ -29,7 +29,8 @@ The Releases list is a collapsible section of the Recent Deployments card on the
 
 ## 7. State Logic
 - `deployingId` — tracks which release is currently being deployed (shows spinner)
-- `deployedId` — tracks which release was just deployed (shows ✓ Triggered for 3s)
+- `deployedId` — tracks which release was just deployed (shows ✓ Triggered for 3s; the timer is cleared on unmount)
+- `showReleases` / `releaseCount` (in `DeploymentsCard`) — collapsed by default; the label switches from "Show releases" to "Releases (n)" once the list has loaded
 
 ## 8. Edge Cases
 - Empty state when no releases exist (directs user to set up `zenith-actions`)
@@ -47,6 +48,6 @@ The Releases list is a collapsible section of the Recent Deployments card on the
 
 ## 11. Future Improvements
 - Deployment status polling after triggering deploy
-- Live SSE log streaming for the triggered deployment
+- Auto-open the build log of the triggered deployment (build logs are available per row in Recent Deployments)
 - Release diff view (compare two releases)
 - Release notes / changelog auto-generation from commit messages

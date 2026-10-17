@@ -5,6 +5,8 @@ import type { DeployApp } from "@/lib/api";
 vi.mock("@/lib/runtime-env", () => ({ IS_STANDALONE: true, API_BASE_URL: "", DEMO_MODE: false }));
 vi.mock("@/components/toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock("@/hooks/use-deploy-events", () => ({ useDeployEvents: () => ({}) }));
+const useDeployLogs = vi.hoisted(() => vi.fn());
+vi.mock("@/hooks/use-deploy-logs", () => ({ useDeployLogs }));
 
 const api = {
   listDeployments: vi.fn(),
@@ -34,6 +36,29 @@ describe("DeploymentsCard", () => {
       releases: [{ id: "rel-1", app_id: "app-123", image: "reg/web:v9", git_sha: "1234567890", branch: "main", message: "ship it", created_at: "2026-01-02T00:00:00Z" }],
     });
     api.deployRelease.mockResolvedValue({});
+    // jsdom has no scrollIntoView (BuildLogViewer auto-scrolls).
+    Element.prototype.scrollIntoView = vi.fn();
+    useDeployLogs.mockImplementation((_a: string, depId: string) => ({
+      entries: [{ timestamp: "2026-01-01T00:00:00Z", level: "build", message: `log line for ${depId}` }],
+      streaming: false,
+    }));
+  });
+
+  it("expands one deployment row at a time to show its build log", async () => {
+    render(<DeploymentsCard app={app} />);
+    await screen.findByText("aaaaaaaa");
+    expect(useDeployLogs).not.toHaveBeenCalled();
+    const toggles = screen.getAllByRole("button", { name: /Build log/ });
+    expect(toggles).toHaveLength(2);
+    fireEvent.click(toggles[0]);
+    expect(await screen.findByText(/log line for aaaaaaaa-1/)).toBeInTheDocument();
+    expect(useDeployLogs).toHaveBeenCalledWith("app-123", "aaaaaaaa-1");
+    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(toggles[1]);
+    expect(await screen.findByText(/log line for bbbbbbbb-2/)).toBeInTheDocument();
+    expect(screen.queryByText(/log line for aaaaaaaa-1/)).not.toBeInTheDocument();
+    fireEvent.click(toggles[1]);
+    expect(screen.queryByText(/log line for bbbbbbbb-2/)).not.toBeInTheDocument();
   });
 
   it("renders deployments, rollback only on non-active row, and calls rollback", async () => {

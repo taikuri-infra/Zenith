@@ -16,12 +16,6 @@ const webApp: DeployApp = {
   url: "https://whoami.example.com",
   app_type: "web",
   health_check: { path: "/healthz", interval_seconds: 10, timeout_seconds: 3 },
-  health_status: {
-    status: "healthy",
-    uptime_percent: 99.9,
-    last_check: "2026-10-17T10:00:00Z",
-    response_time_ms: 42,
-  },
   created_at: "2026-10-01T00:00:00Z",
   updated_at: "2026-10-01T00:00:00Z",
 };
@@ -85,9 +79,19 @@ describe("AppDetailPage (cards)", () => {
     expect(screen.getByRole("link", { name: /Logs/ })).toHaveAttribute("href", "/logs?app=app-123");
     expect(screen.getByRole("link", { name: /Open/ })).toHaveAttribute("href", "https://whoami.example.com");
 
-    for (const name of ["Source", "Health", "Recent Deployments", "Environment", "Resources", "Domains"]) {
-      expect(screen.getByRole("heading", { name })).toBeInTheDocument();
+    const cards = ["Source", "Domains", "Recent Deployments", "Environment", "Resources"];
+    const headings = cards.map((name) => screen.getByRole("heading", { level: 2, name }));
+    // Card order: Source + Domains share row 1, then the full-width cards.
+    const sections = headings.map((h) => h.closest("section") as HTMLElement);
+    sections.forEach((s) => expect(s).not.toBeNull());
+    for (let i = 1; i < sections.length; i++) {
+      expect(sections[i - 1].compareDocumentPosition(sections[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
+    expect(sections[0]).not.toHaveClass("md:col-span-2");
+    expect(sections[1]).not.toHaveClass("md:col-span-2");
+    for (const s of sections.slice(2)) expect(s).toHaveClass("md:col-span-2");
+    expect(screen.queryByRole("heading", { name: "Health" })).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("heading", { level: 3 })).toHaveLength(0);
     await waitFor(() => expect(appsDeploy.listDeployments).toHaveBeenCalledWith("app-123"));
     await waitFor(() => expect(envVarsV2.list).toHaveBeenCalled());
     expect(appsDeploy.listSecrets).toHaveBeenCalledWith("app-123");
@@ -109,11 +113,11 @@ describe("AppDetailPage (cards)", () => {
       url: "",
       subdomain: "",
       command: "node worker.js",
-      health_status: undefined,
     });
     render(<AppDetailPage />);
     expect(await screen.findByRole("heading", { level: 1, name: "whoami" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
+    const source = screen.getByRole("heading", { level: 2, name: "Source" }).closest("section");
+    expect(source).toHaveClass("md:col-span-2");
     expect(screen.getByText("node worker.js")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Health" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Domains" })).not.toBeInTheDocument();
@@ -129,7 +133,6 @@ describe("AppDetailPage (cards)", () => {
       url: "",
       subdomain: "",
       cron_schedule: "*/5 * * * *",
-      health_status: undefined,
     });
     render(<AppDetailPage />);
     expect(await screen.findByRole("heading", { level: 1, name: "whoami" })).toBeInTheDocument();

@@ -1,26 +1,19 @@
 "use client";
 import { GitBranch, Package } from "lucide-react";
 import type { DeployApp } from "@/lib/api";
-import { getApi } from "@/lib/get-api";
-import { useApi } from "@/hooks/use-api";
 
 type Row = { label: string; value: React.ReactNode; mono?: boolean };
 
 /**
  * Where the app comes from and how it runs: repository + branch (or image),
- * framework, port, command, schedule, subdomain, custom domain count.
+ * framework, port, command, schedule, subdomain. Makes no API call of its own
+ * (the custom-domain count lives in the Domains card).
  * Replaces the legacy "App Details" and "Quick Links" cards.
  */
 export function SourceCard({ app, wide = false }: { app: DeployApp; wide?: boolean }) {
   const appType = app.app_type ?? "web";
   const isWeb = appType === "web";
-  const isImage = !app.repo_url;
-
-  const { appsDeploy } = getApi();
-  const { data: domains } = useApi(
-    () => (isWeb ? appsDeploy.listDomains(app.id) : Promise.resolve([])),
-    [app.id, isWeb],
-  );
+  const isImage = app.deploy_source === "image" || !app.repo_url;
 
   const rows: Row[] = [
     isImage
@@ -28,8 +21,12 @@ export function SourceCard({ app, wide = false }: { app: DeployApp; wide?: boole
           label: "Image",
           value: (
             <span className="flex items-center gap-1.5 text-neutral-400">
-              <Package className="h-3.5 w-3.5" />
-              deployed from an image
+              <Package className="h-3.5 w-3.5 shrink-0" />
+              {app.image_url ? (
+                <span className="truncate font-mono text-neutral-200">{app.image_url}</span>
+              ) : (
+                "deployed from an image"
+              )}
             </span>
           ),
         }
@@ -57,12 +54,11 @@ export function SourceCard({ app, wide = false }: { app: DeployApp; wide?: boole
       ? [{ label: "Schedule", value: app.cron_schedule, mono: true }]
       : []),
     ...(isWeb && app.subdomain ? [{ label: "Subdomain", value: app.subdomain, mono: true }] : []),
-    ...(isWeb && domains ? [{ label: "Custom domains", value: String(domains.length) }] : []),
   ];
 
   return (
-    <div className={`rounded-lg border border-border bg-surface-100 p-5${wide ? " md:col-span-2" : ""}`}>
-      <h3 className="mb-4 text-sm font-medium text-white">Source</h3>
+    <section className={`rounded-lg border border-border bg-surface-100 p-5${wide ? " md:col-span-2" : ""}`}>
+      <h2 className="mb-4 text-sm font-medium text-white">Source</h2>
       <dl className="space-y-3">
         {rows.map((r) => (
           <div key={r.label} className="flex justify-between gap-4 text-sm">
@@ -73,6 +69,6 @@ export function SourceCard({ app, wide = false }: { app: DeployApp; wide?: boole
           </div>
         ))}
       </dl>
-    </div>
+    </section>
   );
 }

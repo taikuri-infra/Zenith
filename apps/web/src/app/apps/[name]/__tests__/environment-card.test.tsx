@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import type { DeployApp } from "@/lib/api";
+import { ApiError, type DeployApp } from "@/lib/api";
 
 const m = vi.hoisted(() => ({
   envList: vi.fn(),
@@ -170,5 +170,44 @@ describe("EnvironmentCard", () => {
     m.envList.mockResolvedValue({ items: envItems, total: 2 });
     fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
     expect(await screen.findByText("DATABASE_URL")).toBeInTheDocument();
+  });
+
+  it("treats a 404 from the secret store as not configured", async () => {
+    m.listSecrets.mockRejectedValue(new ApiError(404, "Not Found"));
+    render(<EnvironmentCard app={app} />);
+    expect(await screen.findByText("DATABASE_URL")).toBeInTheDocument();
+    expect(screen.queryByText(/Error 404/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try Again" })).not.toBeInTheDocument();
+    expect(screen.queryByText("secret store")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Mark as secret"));
+    expect(screen.queryByRole("option", { name: "Secret store" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Store")).not.toBeInTheDocument();
+  });
+
+  it("offers Restart now after adding an env var and applies on click", async () => {
+    m.envApply.mockResolvedValue({});
+    render(<EnvironmentCard app={app} />);
+    await screen.findByText("STRIPE_KEY");
+    expect(screen.queryByRole("button", { name: "Restart now" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("DATABASE_URL"), { target: { value: "FOO" } });
+    fireEvent.change(screen.getByPlaceholderText("postgres://..."), { target: { value: "bar" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restart now" }));
+    await waitFor(() => expect(m.envApply).toHaveBeenCalledWith("app-1"));
+  });
+
+  it("clears the copy-feedback timer on unmount", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: vi.fn().mockResolvedValue(undefined) }, configurable: true });
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    const { unmount } = render(<EnvironmentCard app={app} />);
+    await screen.findByText("STRIPE_KEY");
+    fireEvent.click(within(rowOf("STRIPE_KEY")).getByRole("button", { name: /reveal/i }));
+    await screen.findByText("sk_live_123");
+    fireEvent.click(screen.getByRole("button", { name: "Copy value" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("sk_live_123"));
+    clearSpy.mockClear();
+    unmount();
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
   });
 });

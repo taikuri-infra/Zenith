@@ -92,4 +92,28 @@ describe("ResourcesCard", () => {
     expect(await screen.findByText(/backups down/)).toBeInTheDocument();
     expect(screen.queryByText("No backups yet.")).not.toBeInTheDocument();
   });
+
+  it("clears the copy-feedback timer on unmount", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: vi.fn().mockResolvedValue(undefined) }, configurable: true });
+    appsDeploy.getAppDatabase = vi.fn().mockResolvedValue({ connection_string: "postgres://u:p@h:5432/n" });
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    const { unmount } = render(<ResourcesCard app={app} />);
+    await screen.findByText("web-pg");
+    fireEvent.click(screen.getByRole("button", { name: "Expand web-pg" }));
+    fireEvent.click(await screen.findByRole("button", { name: /show connection string/i }));
+    await screen.findByText("postgres://u:p@h:5432/n");
+    fireEvent.click(screen.getByTitle("Copy"));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    clearSpy.mockClear();
+    unmount();
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  });
+
+  it("uses labels, not headings, for its sub-sections", async () => {
+    render(<ResourcesCard app={app} />);
+    await screen.findByText("web-pg");
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2, name: "Resources" })).toBeInTheDocument();
+  });
 });

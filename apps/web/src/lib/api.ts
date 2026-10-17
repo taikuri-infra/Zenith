@@ -668,6 +668,8 @@ export interface DeployApp {
   auto_gateway_id?: string;
   health_check?: HealthCheckConfig;
   health_status?: HealthCheckStatus;
+  deploy_source?: "git" | "image";
+  image_url?: string;
   created_at: string;
   updated_at: string;
 }

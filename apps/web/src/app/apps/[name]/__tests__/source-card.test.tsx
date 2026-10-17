@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { DeployApp } from "@/lib/api";
 
+const listDomains = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 vi.mock("@/lib/get-api", () => ({
   getApi: () => ({
-    appsDeploy: { listDomains: vi.fn().mockResolvedValue([]) },
+    appsDeploy: { listDomains },
   }),
 }));
 
@@ -41,6 +42,30 @@ describe("SourceCard", () => {
     expect(screen.getByText("Image")).toBeInTheDocument();
     expect(screen.getByText("deployed from an image")).toBeInTheDocument();
     expect(screen.queryByText("Repository")).not.toBeInTheDocument();
+  });
+
+  it("shows image_url for an image app when the API returns it", () => {
+    render(
+      <SourceCard
+        app={{ ...base, repo_url: "", deploy_source: "image", image_url: "ghcr.io/acme/whoami:1.2.3" }}
+      />,
+    );
+    expect(screen.getByText("Image")).toBeInTheDocument();
+    expect(screen.getByText("ghcr.io/acme/whoami:1.2.3")).toBeInTheDocument();
+    expect(screen.queryByText("deployed from an image")).not.toBeInTheDocument();
+    expect(screen.queryByText("Branch")).not.toBeInTheDocument();
+  });
+
+  it("treats deploy_source image as an image app even with a repo_url", () => {
+    render(<SourceCard app={{ ...base, deploy_source: "image" }} />);
+    expect(screen.getByText("deployed from an image")).toBeInTheDocument();
+    expect(screen.queryByText("Repository")).not.toBeInTheDocument();
+  });
+
+  it("makes no API call and shows no custom domain count", () => {
+    render(<SourceCard app={base} />);
+    expect(listDomains).not.toHaveBeenCalled();
+    expect(screen.queryByText("Custom domains")).not.toBeInTheDocument();
   });
 
   it("shows the schedule for a cron app", () => {
