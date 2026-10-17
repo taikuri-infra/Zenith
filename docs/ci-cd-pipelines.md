@@ -20,7 +20,7 @@ On a network that blocks `proxy.golang.org` or Docker Hub, put mirrors in `~/.ac
 
 ## Self-hosted runner (optional, much faster)
 
-Three repository variables (Settings → Secrets and variables → Actions → Variables) move jobs to a runner labelled `self-hosted, linux, x64`; everything else stays on GitHub-hosted runners. Measured on a 20-core box behind a slow international link (2026-10-17): Semgrep 24 s vs 90 s on GitHub, but `Run Tests` 6–23 min vs 6 min and the image builds 15–42 min vs 2–6 min, because the runs are dominated by downloads (Go modules, npm, apt, the setup-go cache). Switch on only what the box does faster.
+Three repository variables (Settings → Secrets and variables → Actions → Variables) move jobs to a runner labelled `self-hosted, linux, x64`; everything else stays on GitHub-hosted runners. Measured 2026-10-17 on two boxes, and neither beat GitHub: a 20-core WSL2 box behind a slow international link (Semgrep 24 s vs 90 s on GitHub, but `Run Tests` 6–23 min vs 5 min and the image builds 15–42 min vs 2–6 min — download-bound: Go modules, npm, apt, the setup-go cache), and the project's 8-vCPU DigitalOcean droplet while it was also running the live install, two other projects' runners and a lab VM (load average 40: `Run Tests` 26 min vs 5, Semgrep 8 min vs 1, E2E amd64 35 min vs 7 — CPU-bound). Switch a variable on only when the box has idle cores and a fast link; measure, then decide.
 
 | Variable | Jobs |
 |---|---|
@@ -38,6 +38,8 @@ Three repository variables (Settings → Secrets and variables → Actions → V
 | `commitlint`, images `prepare`/`merge`, CLI release | `ubuntu-latest` | seconds; no benefit |
 
 **Fork safety:** the repository is public. Pull requests from forks never reach the self-hosted runner (`github.event.pull_request.head.repo.full_name == github.repository` guards every self-hosted `runs-on`); also set Settings → Actions → General → "Require approval for all outside collaborators".
+
+**Registered runners (2026-10-17):** `zenith-do-ams3` (label `e2e`) and `zenith-do-ams3-2` run as systemd services (`actions.runner.taikuri-infra-Zenith.*`, directories `/opt/actions-runner-zenith` and `/opt/actions-runner-zenith-2`) on the DigitalOcean droplet that also serves zenith.freezenith.com; the owner's WSL runners `wsl-1`/`wsl-2` stay registered without the `e2e` label. All three variables are `false` after the measurement above — flip them when the droplet is idle. Notes for that host: a drop-in (`50-memory.conf`) caps each runner's process tree at `MemoryHigh=5G`/`MemoryMax=7G` (containers the jobs start run under dockerd, outside the cap); the E2E harness shares the daemon with the live install but removes only `zenith-e2e-*` containers and the `zenith-e2e` network and publishes no host ports — still, never run `infra/e2e/run.sh` by hand there; keep at least 15 GB free on `/` (an E2E run needs about 8 GB transiently; `run.sh` untags its images afterwards and the workflow prunes dangling images and caps the build cache at 2 GB on self-hosted runners).
 
 **Registering a runner** (Linux x64, e.g. an Ubuntu WSL2 box with Docker): Settings → Actions → Runners → New self-hosted runner → Linux → x64 and run the printed `curl`/`tar`/`./config.sh --url … --token …` commands in a directory such as `~/actions-runner` (as root, export `RUNNER_ALLOW_RUNASROOT=1` first). Then:
 

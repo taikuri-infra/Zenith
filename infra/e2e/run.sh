@@ -83,7 +83,12 @@ cleanup() {
     if docker inspect "zenith-e2e-$s" >/dev/null 2>&1; then "$S" logs "$s" || true; "$S" rm "$s"; fi
   done
   "$S" rm pusher
-  if [ "${ZENITH_E2E_KEEP:-0}" != 1 ]; then "$S" down; fi
+  if [ "${ZENITH_E2E_KEEP:-0}" != 1 ]; then
+    "$S" down
+    # Persistent runners keep their Docker daemon between runs: untag this run's images so
+    # they do not pile up (the build cache, not the tags, is what keeps the next run fast).
+    docker image rm -f "${images[@]:-}" >/dev/null 2>&1 || true
+  fi
   if [ "$rc" = 0 ]; then log "E2E passed for $CAND"; else log "E2E FAILED for $CAND (rc=$rc); artifacts: $ZENITH_E2E_ARTIFACTS"; fi
 }
 trap cleanup EXIT

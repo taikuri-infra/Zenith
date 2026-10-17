@@ -65,6 +65,11 @@ jobs:
       - name: Run the E2E suite on a fresh server
         if: ${{ !(env.ACT && matrix.arch != 'amd64') }}
         run: bash infra/e2e/run.sh
+      - name: Reclaim Docker space (persistent runners)
+        if: ${{ always() && runner.environment == 'self-hosted' }}
+        run: |
+          docker image prune -f >/dev/null
+          docker builder prune -f --keep-storage 2GB >/dev/null
       - name: Upload artifacts
         if: ${{ always() && !env.ACT }}
         uses: actions/upload-artifact@v4
