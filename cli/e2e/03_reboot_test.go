@@ -8,7 +8,7 @@ import (
 
 // TestReboot: after a server reboot the app, its data, the database and the domain come back on their own.
 func TestReboot(t *testing.T) {
-	st := loadState(t)
+	st := requireDeployState(t)
 	if len(cfg.RebootCmd) == 0 {
 		t.Fatal("ZENITH_E2E_REBOOT_CMD is not set")
 	}

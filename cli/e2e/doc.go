@@ -7,6 +7,12 @@
 //
 //	go test -tags e2e -count=1 -timeout 40m ./e2e/ -run 'TestInstall|TestDeployWithDatabaseAndDomain|TestReboot|TestBackup$'
 //
+// Run order is part of the contract: go test runs tests in source order with files
+// taken alphabetically, so the files are numbered in the order the tests must run:
+// 01 TestInstall, 02 TestDeployWithDatabaseAndDomain (writes <artifacts>/state.json),
+// 03 TestReboot and 04 TestBackup (both need that state), 05 TestBackupRestore
+// (restore run on another server), 06 TestUpgrade (its own server).
+//
 // Only the configuration parsing is built without the tag, so a plain
 // go test ./... covers it.
 package e2e

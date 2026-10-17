@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -58,6 +60,10 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	flag.Parse()
+	if f := flag.Lookup("test.list"); f != nil && f.Value.String() != "" {
+		os.Exit(m.Run()) // -list only prints names; it needs no server
+	}
 	c, err := Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "e2e: bad configuration:", err)
@@ -119,7 +125,9 @@ func tail(s string, n int) string {
 }
 
 // sslipIP returns the IPv4 an sslip.io name resolves to ("1.2.3.4.sslip.io" or "x.1.2.3.4.sslip.io"), or "".
-// Dialing it directly gives the same answer public DNS would, without depending on DNS in the job.
+// The suite's own HTTP client dials that IP directly (the answer public DNS would give), so its requests to
+// dotted sslip.io names do not need DNS. Only those: the zen binary, the hooks, and the dashed form
+// (1-2-3-4.sslip.io) still resolve through DNS.
 func sslipIP(host string) string {
 	h := strings.TrimSuffix(strings.ToLower(host), ".")
 	if !strings.HasSuffix(h, ".sslip.io") {
@@ -384,6 +392,16 @@ type state struct {
 	DomainID string `json:"domain_id,omitempty"`
 }
 
+// requireDeployState loads state.json and fails unless TestDeployWithDatabaseAndDomain left the app and its database.
+func requireDeployState(t *testing.T) *state {
+	t.Helper()
+	st := loadState(t)
+	if st.AppID == "" || st.AppURL == "" || st.DBID == "" || st.Marker == "" {
+		t.Fatalf("state %s lacks the probe app or its database: %+v", statePath(), *st)
+	}
+	return st
+}
+
 func statePath() string { return filepath.Join(cfg.Artifacts, "state.json") }
 
 func saveState(t *testing.T, st *state) {
@@ -587,10 +605,22 @@ func zenStatus(t *testing.T, want ...string) {
 		t.Fatalf("zen status: %v\n%s", err, out)
 	}
 	for _, w := range want {
-		if !strings.Contains(out, w) {
-			t.Fatalf("zen status does not list %q:\n%s", w, out)
+		if !hasRow(out, w) {
+			t.Fatalf("zen status has no table row named %q:\n%s", w, out)
 		}
 	}
+}
+
+var ansi = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+
+// hasRow reports whether a line of a zen table starts with the cell name (NAME is the first column).
+func hasRow(out, name string) bool {
+	for _, line := range strings.Split(ansi.ReplaceAllString(out, ""), "\n") {
+		if f := strings.Fields(line); len(f) > 0 && f[0] == name {
+			return true
+		}
+	}
+	return false
 }
 
 // --- the deploy flow shared by TestDeployWithDatabaseAndDomain and TestUpgrade --
