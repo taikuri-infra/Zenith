@@ -242,7 +242,7 @@ func latestFrom(t *testing.T, status int, body string) (string, error) {
 			t.Errorf("unexpected request %s", r.URL.String())
 		}
 		w.WriteHeader(status)
-		_, _ = w.Write([]byte(body))
+		_, _ = w.Write([]byte(body)) // nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- httptest fake with a test-controlled body
 	}))
 	defer srv.Close()
 	old := githubAPI
