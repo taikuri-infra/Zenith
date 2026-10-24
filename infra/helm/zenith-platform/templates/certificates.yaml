@@ -9,8 +9,8 @@ metadata:
 spec:
   secretName: {{ .Values.certificate.secretName }}
   issuerRef:
-    name: {{ .Values.certManager.issuer }}
-    kind: {{ .Values.certManager.issuerKind }}
+    name: {{ .Values.certificate.issuer | default .Values.certManager.issuer }}
+    kind: {{ .Values.certificate.issuerKind | default .Values.certManager.issuerKind }}
   dnsNames:
     {{- range .Values.certificate.domains }}
     - {{ . | quote }}
