@@ -531,13 +531,15 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	logHub := deploy.NewLogHub(500)
 	eventHub := deploy.NewEventHub(50)
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
-	// Select the compute backend: Docker containers on the host for standalone
-	// self-host, Kubernetes for saas/cloud. The DockerDeployer's env repos are
-	// wired later, alongside the k8s deployer's setters.
+	// Select the compute backend: Kubernetes whenever a real cluster client is
+	// configured (K8S_MODE=real, the self-host k3s install and saas). The Docker
+	// deployer remains only for a standalone host without a cluster. The
+	// DockerDeployer's env repos are wired later, alongside the k8s deployer's
+	// setters.
 	var backend deploy.Backend = deployer
 	var dockerDeployer *deploy.DockerDeployer
 	var dockerDeployerCli *dockerclient.Client
-	if cfg.Mode != "saas" {
+	if cfg.Mode != "saas" && cfg.K8sMode != "real" {
 		if dockerCli, derr := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation()); derr != nil {
 			slog.Warn("docker client unavailable — app deploys will be simulated", "error", derr)
 		} else {

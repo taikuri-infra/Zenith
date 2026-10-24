@@ -1,0 +1,40 @@
+{{- if .Values.tls.issuer.create }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.tls.issuerName }}
+spec:
+  acme:
+    server: {{ .Values.tls.issuer.server }}
+    email: {{ required "tls.issuer.email is required" .Values.tls.issuer.email }}
+    privateKeySecretRef:
+      name: {{ .Values.tls.issuerName }}-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: {{ .Values.ingressClassName }}
+---
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zenith
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.tls.issuerName }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingressClassName }}
+  tls:
+    - hosts: [{{ .Values.domain | quote }}]
+      secretName: zenith-tls
+  rules:
+    - host: {{ .Values.domain | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: {service: {name: zenith-api, port: {number: 8080}}}
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: zenith-web, port: {number: 3000}}}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: zenith-selfhost
+description: Minimal Zenith install for a k3s/Kubernetes cluster (API, web, Postgres via CloudNativePG, S3 storage)
+type: application
+version: 0.1.0
+appVersion: "0.1.2"
