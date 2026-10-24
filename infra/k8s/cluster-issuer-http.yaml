@@ -1,0 +1,17 @@
+# HTTP-01 issuer for plain (non-wildcard) hostnames. Needs no DNS API token, so
+# it keeps working when the Cloudflare token used by letsencrypt-prod (DNS-01)
+# is missing or expired. Wildcard certificates still need letsencrypt-prod.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-http
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: babak@dotech.fi
+    privateKeySecretRef:
+      name: letsencrypt-http-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik

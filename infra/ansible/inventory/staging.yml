@@ -36,5 +36,3 @@ all:
       - cloud.stage.freezenith.com
       - embermind-ms.stage.freezenith.com
       - embermind.stage.freezenith.com
-      - grafana.stage.freezenith.com
-      - prometheus.stage.freezenith.com

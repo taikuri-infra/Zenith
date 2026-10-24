@@ -22,7 +22,7 @@ prodIngress:
     - freezenith.com
     - www.freezenith.com
   tlsSecret: freezenith-tls
-  issuer: letsencrypt-prod
+  issuer: letsencrypt-http
 
 resources:
   requests:
