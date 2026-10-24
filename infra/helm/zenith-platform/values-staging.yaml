@@ -60,4 +60,5 @@ appCertificates:
 keycloak:
   enabled: true
   host: auth.stage.freezenith.com
+  issuer: letsencrypt-http
 
