@@ -36,6 +36,9 @@ certManager:
 
 certificate:
   secretName: staging-tls
+  # Plain hostnames, so the HTTP-01 issuer (no DNS API token) is enough.
+  # Wildcards (appCertificates below) stay on certManager.issuer (DNS-01).
+  issuer: letsencrypt-http
   domains:
     - stage.freezenith.com
     - api.stage.freezenith.com
@@ -44,7 +47,6 @@ certificate:
     - cloud.stage.freezenith.com
     - embermind-ms.stage.freezenith.com
     - embermind.stage.freezenith.com
-    - gw.stage.freezenith.com
 
 # Certificates in zenith-apps namespace for customer app routing
 appCertificates:
