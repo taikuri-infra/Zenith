@@ -932,6 +932,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		}
 		dbHandlerV2.SetRedeployer(backend)
 		slog.Info("database runtime: Docker containers")
+	} else if cfg.Mode != "saas" && cfg.K8sMode == "real" {
+		// Self-host on Kubernetes: operator-backed databases (CloudNativePG).
+		dbRuntime := services.NewDBRuntimeService(dbRepo, deploy.NewK8sDBBackend(k8sClient, "zenith-apps"), envCrypto)
+		dbHandlerV2.SetRuntime(dbRuntime)
+		dbHandlerV2.SetRedeployer(backend)
+		slog.Info("database runtime: Kubernetes operators (CloudNativePG)")
 	}
 	appByID.Post("/databases", handlers.CheckLimit(planRepo, "databases", func(c *fiber.Ctx, userID string) (int, error) {
 		return dbRepo.CountDatabasesByUser(c.Context(), userID)

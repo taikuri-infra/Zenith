@@ -62,7 +62,15 @@ install_helm() {
   command -v helm >/dev/null && return
   log "Installing Helm"
   if [ "$DRY_RUN" = 1 ]; then echo "[dry-run] install helm"; return; fi
-  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  local ver="${HELM_VERSION:-v3.17.1}" arch tmp
+  case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) err "Unsupported CPU: $(uname -m)"; exit 1 ;; esac
+  tmp="$(mktemp -d)"
+  curl -fsSL -o "$tmp/helm.tgz" "https://get.helm.sh/helm-${ver}-linux-${arch}.tar.gz"
+  curl -fsSL -o "$tmp/helm.sha256" "https://get.helm.sh/helm-${ver}-linux-${arch}.tar.gz.sha256sum"
+  (cd "$tmp" && echo "$(awk '{print $1}' helm.sha256)  helm.tgz" | sha256sum -c -) || { err "Helm checksum mismatch"; exit 1; }
+  tar -xzf "$tmp/helm.tgz" -C "$tmp"
+  install -m 0755 "$tmp/linux-${arch}/helm" /usr/local/bin/helm
+  rm -rf "$tmp"
 }
 
 install_operators() {
