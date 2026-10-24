@@ -1,29 +1,19 @@
 /**
- * Sidebar visibility rules for the self-hosted edition.
+ * Sidebar visibility rules.
  *
- * - saasOnly items: shown only in saas mode.
- * - labs items: non-core features, hidden in standalone unless ZENITH_LABS is on.
- * - everything else is core and always shown.
+ * Zenith is self-hosted: every feature is available. The only items hidden in
+ * standalone are the ones that exist solely for a hosted cloud (billing, paid
+ * support, the cloud's own node pool).
  */
 
 export interface NavVisibility {
-  saasOnly?: boolean;
-  labs?: boolean;
+  cloudOnly?: boolean;
 }
 
 export interface NavContext {
   standalone: boolean;
-  labs: boolean;
-}
-
-export function parseLabsFlag(raw: string | undefined): boolean {
-  const v = (raw ?? "").trim().toLowerCase();
-  return v === "true" || v === "1" || v === "yes";
 }
 
 export function isNavItemVisible(item: NavVisibility, ctx: NavContext): boolean {
-  if (!ctx.standalone) return true;
-  if (item.saasOnly) return false;
-  if (item.labs) return ctx.labs;
-  return true;
+  return !(ctx.standalone && item.cloudOnly);
 }

@@ -8,7 +8,7 @@ import { Modal } from "@/components/modal";
 import { useApi } from "@/hooks/use-api";
 import { type SSOConfig } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
-import { SHOW_PLANS } from "@/lib/edition";
+import { SHOW_PLANS, FALLBACK_TIER } from "@/lib/edition";
 import Link from "next/link";
 import { useState } from "react";
 import { Shield, Plus, Trash2, Key, Lock } from "lucide-react";
@@ -64,7 +64,7 @@ export default function SSOPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const tier = planData?.tier ?? "free";
+  const tier = planData?.tier ?? FALLBACK_TIER;
   const isAllowed = tier === "team" || tier === "business" || tier === "enterprise";
   const configList: SSOConfig[] = configs?.items ?? [];
 

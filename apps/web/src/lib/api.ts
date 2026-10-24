@@ -670,6 +670,8 @@ export interface DeployApp {
   health_status?: HealthCheckStatus;
   deploy_source?: "git" | "image";
   image_url?: string;
+  replicas?: number;
+  health_check_path?: string;
   created_at: string;
   updated_at: string;
 }
@@ -701,6 +703,7 @@ export interface Deployment {
   id: string;
   app_id: string;
   git_sha: string;
+  image_tag?: string;
   status: string;
   build_log: string;
   deploy_log: string;

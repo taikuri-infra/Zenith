@@ -115,7 +115,7 @@ export default function SSHSessionsPage() {
             <h1 className="text-lg font-semibold text-white">SSH Sessions</h1>
           </div>
           <p className="mt-1 text-sm text-neutral-500">
-            Audit trail of all pod terminal sessions (Business+ only)
+            Audit trail of all pod terminal sessions
           </p>
         </div>
 

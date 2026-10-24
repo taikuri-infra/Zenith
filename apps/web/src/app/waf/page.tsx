@@ -231,7 +231,7 @@ export default function WAFPage() {
               <h1 className="text-lg font-semibold text-white">WAF Rules</h1>
             </div>
             <p className="mt-1 text-sm text-neutral-500">
-              Web Application Firewall configuration per app (Business+ only)
+              Web Application Firewall configuration per app
             </p>
           </div>
           {!demo && effectiveAppId && (

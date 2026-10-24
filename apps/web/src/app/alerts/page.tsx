@@ -130,7 +130,7 @@ export default function AlertsPage() {
               <Bell className="h-5 w-5 text-accent-400" />
               <h1 className="text-lg font-semibold text-white">Alerts & Custom Metrics</h1>
             </div>
-            <p className="mt-1 text-sm text-neutral-500">Custom alerting rules and Prometheus recording rules (Business+ only)</p>
+            <p className="mt-1 text-sm text-neutral-500">Custom alerting rules and Prometheus recording rules</p>
           </div>
           {!demo && effectiveAppId && (
             <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 rounded-lg bg-accent-500 px-3 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors">

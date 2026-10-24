@@ -114,7 +114,6 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
       NEXT_PUBLIC_ZENITH_MODE: standalone
-      NEXT_PUBLIC_ZENITH_LABS: ${ZENITH_LABS:-false}
     # Routed by Traefik: <domain>/ -> dashboard.
     # Lower priority than the API router so /api/* wins.
     labels:
