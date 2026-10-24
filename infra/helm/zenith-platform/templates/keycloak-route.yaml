@@ -10,8 +10,8 @@ metadata:
 spec:
   secretName: keycloak-tls
   issuerRef:
-    name: {{ .Values.certManager.issuer }}
-    kind: {{ .Values.certManager.issuerKind }}
+    name: {{ .Values.keycloak.issuer | default .Values.certManager.issuer }}
+    kind: {{ .Values.keycloak.issuerKind | default .Values.certManager.issuerKind }}
   dnsNames:
     - {{ .Values.keycloak.host }}
 ---
