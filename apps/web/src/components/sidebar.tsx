@@ -27,7 +27,6 @@ import {
   ShieldCheck,
   FileText,
   Lock,
-  Package,
   Terminal,
   ShieldAlert,
   Wifi,
@@ -108,7 +107,7 @@ const navSections: NavSection[] = [
 ];
 
 const bottomNav: NavItem[] = [
-  { name: "Marketplace", href: "/marketplace", icon: Package },
+  // Marketplace is hidden until its design is settled; the page and API stay.
   { name: "Support", href: "/support", icon: LifeBuoy, cloudOnly: true },
   { name: "Docs", href: "/docs", icon: BookOpen },
   { name: "Billing", href: "/billing", icon: CreditCard, cloudOnly: true },
