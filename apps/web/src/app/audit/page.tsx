@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
 import { type AuditEntry } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
-import { SHOW_PLANS } from "@/lib/edition";
+import { SHOW_PLANS, FALLBACK_TIER } from "@/lib/edition";
 import Link from "next/link";
 import { useState, useMemo, useCallback } from "react";
 import {
@@ -100,7 +100,7 @@ export default function AuditPage() {
     [page, actionFilter, search]
   );
 
-  const tier = planData?.tier ?? "free";
+  const tier = planData?.tier ?? FALLBACK_TIER;
   const isAllowed = tier === "business" || tier === "enterprise";
 
   const entries: AuditEntry[] = useMemo(

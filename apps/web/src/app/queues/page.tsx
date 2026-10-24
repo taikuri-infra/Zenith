@@ -11,7 +11,7 @@ import { useApi } from "@/hooks/use-api";
 import { useToast } from "@/components/toast";
 import { useProject } from "@/hooks/use-project";
 import { getApi, isDemoMode } from "@/lib/get-api";
-import { SHOW_PLANS } from "@/lib/edition";
+import { SHOW_PLANS, FALLBACK_TIER } from "@/lib/edition";
 import { AppDatabase } from "@/lib/api";
 import Link from "next/link";
 
@@ -79,7 +79,7 @@ export default function QueuesPage() {
 
   const { data: planData } = useApi(() => (SHOW_PLANS ? userPlan.get() : Promise.resolve(null)), []);
 
-  const tier = planData?.tier ?? "free";
+  const tier = planData?.tier ?? FALLBACK_TIER;
   const kafkaAllowed = tier === "business" || tier === "enterprise";
 
   const queues: AppDatabase[] = (dbList || []).filter((d) => d.engine === "rabbitmq");

@@ -9,7 +9,7 @@ import { useApi } from "@/hooks/use-api";
 import { useProject } from "@/hooks/use-project";
 import { type StorageBucketV2 } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
-import { SHOW_PLANS } from "@/lib/edition";
+import { SHOW_PLANS, FALLBACK_TIER } from "@/lib/edition";
 import Link from "next/link";
 import { useState, useMemo } from "react";
 
@@ -48,7 +48,7 @@ export default function StoragePage() {
 
   const buckets: StorageBucketV2[] = bucketList ?? [];
   const maxBuckets = planData?.limits?.max_buckets ?? 0;
-  const tier = planData?.tier ?? "free";
+  const tier = planData?.tier ?? FALLBACK_TIER;
   const isFree = tier === "free";
 
   const filtered = useMemo(() => {

@@ -212,7 +212,7 @@ export default function FirewallPage() {
               </h1>
             </div>
             <p className="mt-1 text-sm text-neutral-500">
-              Cilium-based network firewall rules per app (Business+ only)
+              Cilium-based network firewall rules per app
             </p>
           </div>
           {!demo && effectiveAppId && (

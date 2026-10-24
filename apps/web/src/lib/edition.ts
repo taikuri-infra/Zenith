@@ -5,6 +5,12 @@ import type { AppExposure } from "@/lib/api";
 export const SHOW_PLANS = !IS_STANDALONE;
 
 /**
+ * Tier assumed when the plan API is not reachable. Self-host has no plans and
+ * no limits, so nothing may be gated behind an upgrade there.
+ */
+export const FALLBACK_TIER = IS_STANDALONE ? "enterprise" : "free";
+
+/**
  * Exposure for the deploy wizard's "API service" category. SaaS puts it behind
  * the JWT gateway; self-host has no gateway and treats "protected" as private
  * (no public route), so API services there are public.

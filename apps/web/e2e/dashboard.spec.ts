@@ -4,9 +4,9 @@ test.describe("Dashboard", () => {
   test("loads and shows main content", async ({ page }) => {
     await page.goto("/");
 
-    // The project overview heading or "Project overview" subtitle should appear
+    // The summary cards are always rendered once the project data has loaded
     await expect(
-      page.getByText("Project overview")
+      page.getByText("Services health")
     ).toBeVisible({ timeout: 15_000 });
   });
 

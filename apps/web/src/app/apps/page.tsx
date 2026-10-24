@@ -13,16 +13,19 @@ import { type App, type DeployApp } from "@/lib/api";
 import { getApi } from "@/lib/get-api";
 import { SHOW_PLANS } from "@/lib/edition";
 import { useToast } from "@/components/toast";
+import { ProgressBar } from "@/components/progress-bar";
+import { useAppMetrics } from "@/hooks/use-app-metrics";
+import {
+  appTypeLabel, formatMemory, formatPercent, frameworkLabel, sourceKind, sourceLabel, statusTone, timeAgo, toneDot, toneText,
+} from "@/lib/app-view";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Rocket,
   Box,
   ExternalLink,
-  Clock,
-  Container,
-  Globe,
-  Cog,
+  GitBranch,
+  Search,
   Trash2,
   AlertTriangle,
 } from "lucide-react";
@@ -60,8 +63,26 @@ export default function AppsPage() {
   const [deleteTarget, setDeleteTarget] = useState<DeployApp | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
-  const deployApps: DeployApp[] = deployData?.items ?? [];
+  const deployApps: DeployApp[] = useMemo(() => deployData?.items ?? [], [deployData]);
+  const metrics = useAppMetrics(deployApps);
+  const visibleApps = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return deployApps.filter((a) => {
+      if (statusFilter && a.status !== statusFilter) return false;
+      if (!q) return true;
+      return [a.name, a.subdomain, a.image_url, a.repo_url].some((v) => (v ?? "").toLowerCase().includes(q));
+    });
+  }, [deployApps, query, statusFilter]);
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    deployApps.forEach((a) => {
+      counts[a.status] = (counts[a.status] ?? 0) + 1;
+    });
+    return counts;
+  }, [deployApps]);
 
   const handleDeleteApp = async () => {
     if (!deleteTarget || deleteConfirm !== deleteTarget.name) return;
@@ -104,27 +125,6 @@ export default function AppsPage() {
     );
   }
 
-  const runningCount = appList.filter((a) => a.status === "running").length;
-  const stoppedCount = appList.length - runningCount;
-
-  const statusColor = (status: string) => {
-    switch (status) {
-      case "running":
-        return "text-emerald-400";
-      case "building":
-      case "deploying":
-        return "text-amber-400";
-      case "failed":
-        return "text-red-400";
-      case "sleeping":
-        return "text-indigo-400";
-      case "stopped":
-        return "text-neutral-500";
-      default:
-        return "text-neutral-400";
-    }
-  };
-
   return (
     <Shell>
       <div className="space-y-6">
@@ -133,8 +133,7 @@ export default function AppsPage() {
             <h1 className="text-lg font-semibold text-white">Apps</h1>
             <p className="text-sm text-neutral-500">
               {appList.length + deployApps.length} app{appList.length + deployApps.length !== 1 ? "s" : ""}
-              {runningCount > 0 ? `, ${runningCount} running` : ""}
-              {stoppedCount > 0 ? `, ${stoppedCount} stopped` : ""}
+              {(statusCounts.running ?? 0) > 0 ? `, ${statusCounts.running} running` : ""}
             </p>
           </div>
           <button
@@ -155,36 +154,41 @@ export default function AppsPage() {
           />
         )}
 
-        {/* Search / filter bar */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <svg
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+        {/* Status summary + search / filter bar */}
+        {deployApps.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setStatusFilter("")}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                statusFilter === "" ? "border-accent-500/50 bg-accent-500/10 text-accent-400" : "border-border text-neutral-400 hover:text-white"
+              }`}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+              All {deployApps.length}
+            </button>
+            {Object.entries(statusCounts).map(([status, count]) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(statusFilter === status ? "" : status)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
+                  statusFilter === status ? "border-accent-500/50 bg-accent-500/10 text-white" : "border-border text-neutral-400 hover:text-white"
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${toneDot[statusTone(status)]}`} />
+                {status} {count}
+              </button>
+            ))}
+            <div className="relative ml-auto w-full sm:w-72">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name, image or repo…"
+                className="w-full rounded-lg border border-border bg-surface-100 py-1.5 pl-9 pr-3 text-sm text-white placeholder:text-neutral-500 focus:border-accent-500 focus:outline-none"
               />
-            </svg>
-            <input
-              type="text"
-              placeholder="Filter apps..."
-              className="w-full rounded-lg border border-border bg-surface-100 py-1.5 pl-9 pr-3 text-sm text-white placeholder:text-neutral-500 focus:border-accent-500 focus:outline-none"
-            />
+            </div>
           </div>
-          <select className="rounded-lg border border-border bg-surface-100 px-3 py-1.5 text-sm text-neutral-400 focus:border-accent-500 focus:outline-none">
-            <option value="">All statuses</option>
-            <option value="running">Running</option>
-            <option value="stopped">Stopped</option>
-            <option value="deploying">Deploying</option>
-            <option value="failed">Failed</option>
-          </select>
-        </div>
+        )}
 
         {/* ── CRD Apps Table ── */}
         {appList.length === 0 && deployApps.length === 0 ? (
@@ -274,117 +278,98 @@ export default function AppsPage() {
 
         {/* ── Deploy Engine Apps ── */}
         {deployApps.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2.5 mb-4">
-              <Rocket className="h-5 w-5 text-accent-400" />
-              <h2 className="text-base font-semibold text-white">Deployed Apps</h2>
-              <span className="text-xs text-neutral-500">
-                {deployApps.length} app{deployApps.length !== 1 ? "s" : ""}
-              </span>
+          <div className="overflow-hidden rounded-xl border border-border bg-surface-100">
+            <div className="hidden grid-cols-[1.4fr_1.2fr_1.2fr_1fr_auto] gap-4 border-b border-border px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-neutral-500 lg:grid">
+              <span>Application</span>
+              <span>Source</span>
+              <span>Address</span>
+              <span>Resources</span>
+              <span className="w-8" />
             </div>
+            {visibleApps.length === 0 ? (
+              <p className="px-4 py-10 text-center text-sm text-neutral-500">No apps match your filters.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {visibleApps.map((app) => {
+                  const m = metrics[app.id];
+                  const tone = statusTone(app.status);
+                  const fw = frameworkLabel(app.framework);
+                  const isWeb = (app.app_type ?? "web") === "web";
+                  return (
+                    <li key={app.id} className="group grid grid-cols-1 items-center gap-3 px-4 py-3.5 transition-colors hover:bg-surface-200 lg:grid-cols-[1.4fr_1.2fr_1.2fr_1fr_auto] lg:gap-4">
+                      <Link href={`/apps/${app.id}`} className="flex min-w-0 items-center gap-3">
+                        <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${toneDot[tone]}`} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-white transition-colors group-hover:text-accent-400">{app.name}</span>
+                            <span className="rounded border border-border px-1.5 text-[10px] text-neutral-400">{appTypeLabel(app.app_type)}</span>
+                            {fw && <span className="rounded border border-border px-1.5 text-[10px] text-neutral-400">{fw}</span>}
+                          </div>
+                          <p className="text-[11px] text-neutral-500">
+                            <span className={toneText[tone]}>{app.status}</span> · updated {timeAgo(app.updated_at)}
+                            {app.status === "sleeping" && " · wakes on request (~3s)"}
+                          </p>
+                        </div>
+                      </Link>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {deployApps.map((app) => (
-                <div
-                  key={app.id}
-                  className="group relative rounded-xl border border-border bg-surface-100 p-5 transition-all hover:border-accent-500/40 hover:shadow-lg hover:shadow-accent-500/5"
-                >
-                  {/* Status dot */}
-                  <div className="absolute right-4 top-4">
-                    <span
-                      className={`inline-block h-2.5 w-2.5 rounded-full ${
-                        app.status === "running"
-                          ? "bg-emerald-400 shadow-sm shadow-emerald-400/50"
-                          : app.status === "sleeping"
-                            ? "bg-indigo-400 animate-pulse"
-                            : app.status === "building" || app.status === "deploying"
-                              ? "bg-amber-400 animate-pulse"
-                              : app.status === "failed"
-                                ? "bg-red-400"
-                                : "bg-neutral-600"
-                      }`}
-                    />
-                  </div>
-
-                  <Link href={`/apps/${app.id}`} className="block">
-                    <div className="flex items-center gap-2">
-                      {(app.app_type ?? "web") === "web" && <Globe className="h-4 w-4 text-blue-400" />}
-                      {app.app_type === "worker" && <Cog className="h-4 w-4 text-amber-400" />}
-                      {app.app_type === "cron" && <Clock className="h-4 w-4 text-purple-400" />}
-                      <h3 className="text-base font-semibold text-white group-hover:text-accent-400 transition-colors">
-                        {app.name}
-                      </h3>
-                    </div>
-                  </Link>
-
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center gap-2 text-xs text-neutral-400">
-                      <Box className="h-3.5 w-3.5" />
-                      <span>{app.framework || "—"}</span>
-                    </div>
-                    {(app.app_type ?? "web") === "web" && (
-                      <div className="flex items-center gap-2 text-xs text-neutral-400">
-                        <Container className="h-3.5 w-3.5" />
-                        <span className="font-mono text-neutral-500">{app.port}</span>
+                      <div className="flex min-w-0 items-center gap-1.5 text-xs text-neutral-400">
+                        {sourceKind(app) === "git" ? <GitBranch className="h-3.5 w-3.5 flex-shrink-0" /> : <Box className="h-3.5 w-3.5 flex-shrink-0" />}
+                        <span className="truncate font-mono">{sourceLabel(app)}</span>
                       </div>
-                    )}
-                    {app.app_type === "cron" && app.cron_schedule && (
-                      <div className="flex items-center gap-2 text-xs text-neutral-400">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span className="font-mono text-neutral-500">{app.cron_schedule}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 text-xs">
-                      <Clock className="h-3.5 w-3.5 text-neutral-500" />
-                      <span className={statusColor(app.status)}>
-                        {app.status}
-                      </span>
-                    </div>
-                    {app.status === "sleeping" && (
-                      <p className="text-[11px] text-indigo-400/70">
-                        Wakes on request (~3s)
-                      </p>
-                    )}
-                  </div>
 
-                  {/* Footer */}
-                  <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
-                    <div>
-                      {(app.app_type ?? "web") === "web" ? (
-                        app.url ? (
-                          <a
-                            href={app.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 transition-colors"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            {app.subdomain}
-                          </a>
+                      <div className="min-w-0 text-xs">
+                        {isWeb ? (
+                          app.url ? (
+                            <a
+                              href={app.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-accent-400 transition-colors hover:text-accent-300"
+                            >
+                              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate">{app.url.replace(/^https?:\/\//, "")}</span>
+                            </a>
+                          ) : (
+                            <span className="text-neutral-600">No URL yet</span>
+                          )
+                        ) : app.app_type === "cron" ? (
+                          <span className="font-mono text-neutral-400">{app.cron_schedule || "—"}</span>
                         ) : (
-                          <span className="text-xs text-neutral-600">No URL yet</span>
-                        )
-                      ) : app.app_type === "cron" ? (
-                        <span className="text-xs text-neutral-500">Schedule: {app.cron_schedule}</span>
-                      ) : (
-                        <span className="text-xs text-neutral-500">Background process</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setDeleteTarget(app);
-                        setDeleteConfirm("");
-                      }}
-                      className="rounded p-1 text-neutral-600 hover:bg-red-500/10 hover:text-red-400 transition-colors"
-                      title="Delete app"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                          <span className="text-neutral-500">Background process</span>
+                        )}
+                        {isWeb && <p className="mt-0.5 text-[11px] text-neutral-600">port {app.port}</p>}
+                      </div>
+
+                      <div className="min-w-0">
+                        {m ? (
+                          <div className="space-y-1">
+                            <ProgressBar percent={m.cpu_percent} size="sm" label={`CPU ${formatPercent(m.cpu_percent)}`} />
+                            <p className="text-[11px] text-neutral-500">
+                              {formatMemory(m.memory_mb)} RAM · {m.pod_count} replica{m.pod_count === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-neutral-600">
+                            {app.replicas ? `${app.replicas} replica${app.replicas === 1 ? "" : "s"}` : "—"}
+                          </p>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setDeleteTarget(app);
+                          setDeleteConfirm("");
+                        }}
+                        className="w-8 rounded p-1.5 text-neutral-600 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                        title="Delete app"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         )}
       </div>

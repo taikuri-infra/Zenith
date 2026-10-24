@@ -44,14 +44,12 @@ interface NavItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  saasOnly?: boolean;
-  labs?: boolean;
+  cloudOnly?: boolean;
 }
 
 interface NavSection {
   label: string;
   items: NavItem[];
-  saasOnly?: boolean;
 }
 
 const navSections: NavSection[] = [
@@ -66,62 +64,61 @@ const navSections: NavSection[] = [
     items: [
       { name: "Apps", href: "/apps", icon: Boxes },
       { name: "Databases", href: "/databases", icon: Database },
-      { name: "Storage", href: "/storage", icon: HardDrive, labs: true },
-      { name: "Queues", href: "/queues", icon: ListOrdered, labs: true },
+      { name: "Storage", href: "/storage", icon: HardDrive },
+      { name: "Queues", href: "/queues", icon: ListOrdered },
     ],
   },
   {
     label: "NETWORKING",
     items: [
-      { name: "API Gateway", href: "/gateway", icon: Network, saasOnly: true },
+      { name: "API Gateway", href: "/gateway", icon: Network },
       { name: "Domains", href: "/networking", icon: Globe },
     ],
   },
   {
     label: "SECURITY",
     items: [
-      { name: "Auth", href: "/auth", icon: Shield, labs: true },
-      { name: "IAM", href: "/iam", icon: KeyRound, labs: true },
-      { name: "SSO", href: "/sso", icon: Lock, saasOnly: true },
-      { name: "Compliance", href: "/compliance", icon: ShieldCheck, saasOnly: true },
-      { name: "Audit Log", href: "/audit", icon: FileText, saasOnly: true },
-      { name: "SSH Sessions", href: "/ssh-sessions", icon: Terminal, saasOnly: true },
-      { name: "WAF Rules", href: "/waf", icon: ShieldAlert, saasOnly: true },
-      { name: "Firewall", href: "/firewall", icon: Wifi, saasOnly: true },
+      { name: "Auth", href: "/auth", icon: Shield },
+      { name: "IAM", href: "/iam", icon: KeyRound },
+      { name: "SSO", href: "/sso", icon: Lock },
+      { name: "Compliance", href: "/compliance", icon: ShieldCheck },
+      { name: "Audit Log", href: "/audit", icon: FileText },
+      { name: "SSH Sessions", href: "/ssh-sessions", icon: Terminal },
+      { name: "WAF Rules", href: "/waf", icon: ShieldAlert },
+      { name: "Firewall", href: "/firewall", icon: Wifi },
     ],
   },
   {
     label: "OBSERVABILITY",
     items: [
       { name: "Logs", href: "/logs", icon: ScrollText },
-      { name: "Activity", href: "/activity", icon: History, labs: true },
-      { name: "Monitoring", href: "/monitoring", icon: Activity, labs: true },
-      { name: "Alerts", href: "/alerts", icon: Bell, saasOnly: true },
-      { name: "Registry", href: "/registry", icon: Container, labs: true },
-      { name: "CI/CD", href: "/ci", icon: GitBranch, labs: true },
+      { name: "Activity", href: "/activity", icon: History },
+      { name: "Monitoring", href: "/monitoring", icon: Activity },
+      { name: "Alerts", href: "/alerts", icon: Bell },
+      { name: "Registry", href: "/registry", icon: Container },
+      { name: "CI/CD", href: "/ci", icon: GitBranch },
     ],
   },
   {
     label: "INFRASTRUCTURE",
-    saasOnly: true,
     items: [
-      { name: "Planets", href: "/planets", icon: Server, saasOnly: true },
+      { name: "Planets", href: "/planets", icon: Server, cloudOnly: true },
     ],
   },
 ];
 
 const bottomNav: NavItem[] = [
-  { name: "Marketplace", href: "/marketplace", icon: Package, saasOnly: true },
-  { name: "Support", href: "/support", icon: LifeBuoy, saasOnly: true },
+  { name: "Marketplace", href: "/marketplace", icon: Package },
+  { name: "Support", href: "/support", icon: LifeBuoy, cloudOnly: true },
   { name: "Docs", href: "/docs", icon: BookOpen },
-  { name: "Billing", href: "/billing", icon: CreditCard, saasOnly: true },
+  { name: "Billing", href: "/billing", icon: CreditCard, cloudOnly: true },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const navCtx = useNavContext();
-  const visible = (i: { saasOnly?: boolean; labs?: boolean }) => isNavItemVisible(i, navCtx);
+  const visible = (i: { cloudOnly?: boolean }) => isNavItemVisible(i, navCtx);
   const { currentProject, projects, setCurrentProject, createProject, deleteProject } = useProjectContext();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -282,12 +279,11 @@ export function Sidebar() {
       {/* Main nav with sections */}
       <nav className="flex-1 overflow-y-auto px-3 py-3">
         {navSections
-          .filter((s) => visible(s))
           .map((section, sectionIdx) => {
             const items = section.items.filter(visible);
             if (items.length === 0) return null;
             return (
-              <div key={section.label} className={sectionIdx > 0 ? "mt-4" : ""}>
+              <div key={section.label} className={sectionIdx > 0 ? "mt-3" : ""}>
                 <div className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-600">
                   {section.label}
                 </div>
@@ -296,7 +292,7 @@ export function Sidebar() {
                     <Link
                       key={item.name}
                       href={item.href}
-                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors ${
+                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
                         isActive(item.href)
                           ? "bg-accent-500/15 text-accent-400 font-medium"
                           : "text-neutral-400 hover:bg-surface-300 hover:text-white"
@@ -320,7 +316,7 @@ export function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors ${
+              className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
                 isActive(item.href)
                   ? "bg-accent-500/15 text-accent-400 font-medium"
                   : "text-neutral-400 hover:bg-surface-300 hover:text-white"
