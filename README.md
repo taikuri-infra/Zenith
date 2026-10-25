@@ -1,42 +1,32 @@
 # Zenith
 
-**Open-source PaaS. Deploy any Docker image or Compose stack on your own server.**
+**Open-source PaaS for Kubernetes. Deploy any container image on your own server.**
 
-Zenith is a self-hosted platform-as-a-service that gives you Heroku-like simplicity on your own infrastructure. Point it at a container image — or drop in your existing `docker-compose.yml` unchanged — and get a running app, with databases, object storage, auth, and automatic HTTPS built in.
+Zenith is a self-hosted platform-as-a-service that gives you Heroku-like simplicity on your own infrastructure. Point it at a container image and get a running app, with databases, object storage and automatic HTTPS built in. It runs on k3s (or any Kubernetes) and manages databases through Kubernetes operators.
 
 ## Quick Start
 
-On a fresh Linux server (Docker and Compose are installed for you if missing; about 2 GB of RAM is enough):
+On a fresh Linux server (root, ports 80 and 443 free, about 4 GB of RAM):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taikuri-infra/Zenith/main/infra/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/taikuri-infra/Zenith/main/infra/scripts/install-k3s.sh | sudo bash
 ```
 
-The installer fetches the stack, generates strong secrets, starts everything, and
-prints your dashboard URL and the admin credentials. Open the URL and log in.
+The installer sets up k3s, cert-manager, the database operators (CloudNativePG, mariadb-operator,
+redis-operator) and Zenith, then prints your dashboard URL and the admin credentials. Open the URL and log in.
+Set `ZENITH_DOMAIN=zenith.example.com` and `ZENITH_EMAIL=you@example.com` to serve it on your own domain
+(the name must resolve to the server); without them it uses `<public-ip>.sslip.io`.
 
-For a LAN or offline server with no public DNS, use a self-signed certificate:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/taikuri-infra/Zenith/main/infra/scripts/install.sh | ZENITH_TLS_MODE=selfsigned bash
-```
-
-The dashboard name defaults to `<public-ip>.sslip.io`, which behind NAT is your router's
-address: pin it by putting `ZENITH_PUBLIC_IP=<lan-ip>` (e.g. `ZENITH_PUBLIC_IP=192.168.1.10`)
-or `ZENITH_DOMAIN=<name>` next to `ZENITH_TLS_MODE=selfsigned` in the command.
-
-The installer prints where the local CA is (`<install-dir>/traefik/certs/zenith-ca.crt`). Trust it on Linux with
-`sudo cp <ca> /usr/local/share/ca-certificates/zenith-ca.crt && sudo update-ca-certificates`;
-for `zen` and `curl` alone, set `SSL_CERT_FILE=<ca>`.
-
-Get the `zen` CLI from the [releases page](https://github.com/taikuri-infra/Zenith/releases),
-then `zen login` against your dashboard URL to deploy from your terminal.
+Get the `zen` CLI from the [releases page](https://github.com/taikuri-infra/Zenith/releases):
+`zen login` against your dashboard URL to deploy from your terminal, `zen backup` and `zen backup restore`
+to protect your data, `zen upgrade` to move to a new release. To add capacity, join more k3s nodes
+with the token in `/var/lib/rancher/k3s/server/node-token`.
 
 What works today, and what does not yet, is tracked in [docs/alpha/core-audit.md](docs/alpha/core-audit.md).
 
 ## Features
 
-- **App Deployment** — Deploy any Docker image, or import an existing Docker Compose stack unchanged.
+- **App Deployment** — Deploy any container image, or import an existing Docker Compose file as a set of apps.
 - **Databases** — Managed PostgreSQL, MySQL, and Redis per app.
 - **Object Storage** — S3-compatible storage buckets.
 - **Built-in Auth** — Per-app user authentication out of the box.
@@ -70,7 +60,7 @@ What works today, and what does not yet, is tracked in [docs/alpha/core-audit.md
 - **API** — Go server (Fiber framework). Handles auth, app management, deployments, databases, and all platform operations.
 - **Dashboard** — Next.js web UI. Full management interface for apps, databases, domains, settings, and monitoring.
 - **PostgreSQL** — Persistent storage for users, apps, deployments, and platform state. Falls back to in-memory stores when no database is configured.
-- **RustFS** — Self-hosted, S3-compatible object storage for app buckets and backups. Runs locally in the same Compose stack, so no external cloud storage account is required.
+- **RustFS** — Self-hosted, S3-compatible object storage for app buckets and backups. Runs inside the cluster, so no external cloud storage account is required.
 
 ## Configuration
 

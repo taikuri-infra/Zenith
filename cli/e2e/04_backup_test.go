@@ -26,10 +26,10 @@ func archivePath(out string) string {
 	return found
 }
 
-// TestBackup (server A): zen backup writes an archive on the server and the hook copies it into the artifacts.
+// TestBackup (server A): zen backup writes an archive and the hook copies it into the artifacts.
 func TestBackup(t *testing.T) {
 	requireDeployState(t) // never archive an install without the probe app and its row
-	out, err := serverExec(t, backupWait, "zen", "backup", "--dir", "/opt/zenith")
+	out, err := serverExec(t, backupWait, "zen", "backup", "--out", filepath.Join(cfg.Artifacts, "server-backups"))
 	if err != nil {
 		t.Fatalf("zen backup: %v\n%s", err, tail(out, 3000))
 	}

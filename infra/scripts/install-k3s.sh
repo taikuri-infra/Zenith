@@ -12,6 +12,7 @@ set -euo pipefail
 #      ZENITH_VERSION (image tag, default latest), ZENITH_ADMIN_EMAIL, ZENITH_ADMIN_PASSWORD,
 #      ZENITH_REPO_URL / ZENITH_BRANCH, ZENITH_CHART (local chart path, skips git),
 #      ZENITH_TLS_ISSUER (use this existing cert-manager ClusterIssuer instead of Let's Encrypt),
+#      ZENITH_APP_CERTS=true|false (a certificate per app host; default off for sslip.io/nip.io domains),
 #      ZENITH_PULL_POLICY (image pull policy, e.g. Never for pre-loaded images),
 #      ZENITH_DRY_RUN=1 (print the plan, change nothing).
 
@@ -43,11 +44,14 @@ resolve_domain() {
 
 preflight() {
   [ "$DRY_RUN" = 1 ] && return 0
-  [ "$(id -u)" = 0 ] || { err "Run as root (sudo)."; exit 1; }
   for c in curl openssl; do command -v "$c" >/dev/null || { err "$c is required."; exit 1; }; done
-  if ss -ltn 2>/dev/null | grep -qE ':(80|443) ' && ! command -v k3s >/dev/null; then
-    err "Ports 80/443 are in use; free them before installing (k3s Traefik needs both)."
-    exit 1
+  # Installing k3s needs root and free ports; an existing cluster needs neither.
+  if ! { command -v kubectl >/dev/null && kubectl get nodes >/dev/null 2>&1; }; then
+    [ "$(id -u)" = 0 ] || { err "Run as root (sudo): k3s is not installed yet."; exit 1; }
+    if ss -ltn 2>/dev/null | grep -qE ':(80|443) '; then
+      err "Ports 80/443 are in use; free them before installing (k3s Traefik needs both)."
+      exit 1
+    fi
   fi
 }
 
@@ -119,6 +123,13 @@ install_zenith() {
   local extra=()
   if [ -n "${ZENITH_TLS_ISSUER:-}" ]; then
     extra+=(--set "tls.issuerName=$ZENITH_TLS_ISSUER" --set tls.issuer.create=false)
+  fi
+  if [ -n "${ZENITH_APP_CERTS:-}" ]; then
+    extra+=(--set "tls.appCerts=$ZENITH_APP_CERTS")
+  else
+    case "$ZENITH_DOMAIN" in
+      *.sslip.io|*.nip.io) extra+=(--set tls.appCerts=false) ;;
+    esac
   fi
   if [ -n "${ZENITH_PULL_POLICY:-}" ]; then extra+=(--set "images.pullPolicy=$ZENITH_PULL_POLICY"); fi
   run helm upgrade --install zenith "$CHART" -n "$NS" --wait --timeout 10m \

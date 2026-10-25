@@ -111,7 +111,7 @@ func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVar
 	}
 
 	// Generate Certificate CRD when custom domains are present
-	if len(customDomains) > 0 {
+	if hasAppCert(customDomains) {
 		res.Certificate = generateCertificate(app, namespace, labels, baseDomain, customDomains)
 	}
 
@@ -350,7 +350,7 @@ func generateIngressRoute(app *entities.App, namespace string, labels map[string
 
 	isStaging := len(staging) > 0 && staging[0]
 	tls := map[string]interface{}{}
-	if len(customDomains) > 0 {
+	if hasAppCert(customDomains) {
 		tls["secretName"] = app.Subdomain + "-custom-tls"
 	} else if isStaging {
 		// Staging apps use a separate wildcard cert for *.dev.apps.{baseDomain}
@@ -402,7 +402,7 @@ func generateIngressRouteViaApisix(app *entities.App, namespace string, labels m
 	matchRule := buildHostMatchRule(app.Subdomain+"."+baseDomain, customDomains)
 
 	tls := map[string]interface{}{}
-	if len(customDomains) > 0 {
+	if hasAppCert(customDomains) {
 		tls["secretName"] = app.Subdomain + "-custom-tls"
 	}
 
@@ -439,7 +439,7 @@ func generateIngressRouteViaApisixWithColdStart(app *entities.App, namespace str
 	matchRule := buildHostMatchRule(app.Subdomain+"."+baseDomain, customDomains)
 
 	tls := map[string]interface{}{}
-	if len(customDomains) > 0 {
+	if hasAppCert(customDomains) {
 		tls["secretName"] = app.Subdomain + "-custom-tls"
 	}
 
@@ -484,6 +484,15 @@ func buildHostMatchRule(primaryHost string, customDomains []string) string {
 	}
 	return strings.Join(hosts, " || ")
 }
+
+// appCerts issues a certificate for every app's own host, not only for
+// custom domains. Off by default: it costs one ACME order per app.
+var appCerts bool
+
+// SetAppCerts turns per-app certificates on or off.
+func SetAppCerts(on bool) { appCerts = on }
+
+func hasAppCert(customDomains []string) bool { return appCerts || len(customDomains) > 0 }
 
 // certIssuer is the cert-manager ClusterIssuer that signs custom-domain
 // certificates. The self-host chart sets it from tls.issuerName.
@@ -590,6 +599,23 @@ func generateNetworkPolicy(app *entities.App, namespace string, labels map[strin
 					"ports": []map[string]interface{}{
 						{"protocol": "UDP", "port": 53},
 						{"protocol": "TCP", "port": 53},
+					},
+				},
+				{
+					// Managed databases (PostgreSQL, MySQL, Redis) run in this namespace.
+					"to": []map[string]interface{}{
+						{
+							"namespaceSelector": map[string]interface{}{
+								"matchLabels": map[string]string{
+									"kubernetes.io/metadata.name": namespace,
+								},
+							},
+						},
+					},
+					"ports": []map[string]interface{}{
+						{"protocol": "TCP", "port": 5432},
+						{"protocol": "TCP", "port": 3306},
+						{"protocol": "TCP", "port": 6379},
 					},
 				},
 				{

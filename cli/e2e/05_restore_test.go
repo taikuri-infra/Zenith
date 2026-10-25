@@ -13,7 +13,7 @@ func TestBackupRestore(t *testing.T) {
 	if cfg.BackupFile == "" {
 		t.Skip("ZENITH_E2E_BACKUP_FILE not set: not a restore run")
 	}
-	out, err := serverExec(t, restoreWait, "zen", "backup", "restore", cfg.BackupFile, "--yes", "--dir", "/opt/zenith")
+	out, err := serverExec(t, restoreWait, "zen", "backup", "restore", cfg.BackupFile, "--yes")
 	if err != nil {
 		t.Fatalf("zen backup restore: %v\n%s", err, tail(out, 3000))
 	}

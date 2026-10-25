@@ -274,3 +274,20 @@ func TestNewLogHub_NegativeMaxHistory(t *testing.T) {
 		t.Errorf("Expected default maxHistory 500, got %d", hub.maxHistory)
 	}
 }
+
+func TestAppCerts_IssuesCertificateWithoutCustomDomains(t *testing.T) {
+	defer SetAppCerts(false)
+	app := &entities.App{ID: "a1", Name: "plain", Subdomain: "plain"}
+	if res := GenerateK8sResources(app, "img:1", "example.com", nil, nil, entities.PlanTier("free"), nil); res.Certificate != nil {
+		t.Fatal("no certificate expected while per-app certificates are off")
+	}
+	SetAppCerts(true)
+	res := GenerateK8sResources(app, "img:1", "example.com", nil, nil, entities.PlanTier("free"), nil)
+	if res.Certificate == nil {
+		t.Fatal("certificate expected when per-app certificates are on")
+	}
+	tls := res.IngressRoute["spec"].(map[string]interface{})["tls"].(map[string]interface{})
+	if tls["secretName"] != "plain-custom-tls" {
+		t.Fatalf("tls = %v", tls)
+	}
+}

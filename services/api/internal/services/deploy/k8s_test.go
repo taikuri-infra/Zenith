@@ -178,3 +178,28 @@ func containsStr(s, sub string) bool {
 	}
 	return false
 }
+
+func TestNetworkPolicy_AllowsManagedDatabasePorts(t *testing.T) {
+	np := generateNetworkPolicy(&entities.App{Subdomain: "web"}, "zenith-apps", nil, false)
+	egress := np["spec"].(map[string]interface{})["egress"].([]map[string]interface{})
+	found := map[int]bool{}
+	for _, rule := range egress {
+		ns := ""
+		if to, ok := rule["to"].([]map[string]interface{}); ok && len(to) > 0 {
+			if sel, ok := to[0]["namespaceSelector"].(map[string]interface{}); ok {
+				ns = sel["matchLabels"].(map[string]string)["kubernetes.io/metadata.name"]
+			}
+		}
+		if ns != "zenith-apps" {
+			continue
+		}
+		for _, p := range rule["ports"].([]map[string]interface{}) {
+			found[p["port"].(int)] = true
+		}
+	}
+	for _, port := range []int{5432, 3306, 6379} {
+		if !found[port] {
+			t.Errorf("egress to the apps namespace on %d is not allowed", port)
+		}
+	}
+}
