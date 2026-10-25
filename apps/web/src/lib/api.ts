@@ -850,7 +850,7 @@ export const storageBuckets = {
     ),
   get: (id: string) =>
     apiFetch<StorageBucketV2>(`/api/v1/storage-buckets/${id}`),
-  create: (data: { name: string; access?: string }) =>
+  create: (data: { name: string; access?: string; project_id?: string }) =>
     apiFetch<StorageBucketV2>("/api/v1/storage-buckets", {
       method: "POST",
       body: JSON.stringify(data),

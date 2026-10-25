@@ -441,6 +441,9 @@ func (c *RealClient) CreateLimitRange(ctx context.Context, namespace, name strin
 func pluralizeKind(kind string) string {
 	lower := strings.ToLower(kind)
 	// Handle irregular plurals
+	if lower == "redis" {
+		return lower
+	}
 	if strings.HasSuffix(lower, "policy") {
 		return strings.TrimSuffix(lower, "y") + "ies"
 	}

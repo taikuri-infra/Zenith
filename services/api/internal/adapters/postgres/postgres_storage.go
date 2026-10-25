@@ -42,6 +42,17 @@ func (r *PostgresStorageRepository) CreateBucket(ctx context.Context, appID, use
 		access = entities.BucketAccessPrivate
 	}
 
+	// Resolve project_id: use input, fall back to the user's first project.
+	projectID := input.ProjectID
+	if projectID == "" {
+		_ = r.pool.QueryRow(ctx,
+			`SELECT id FROM projects WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1`, userID,
+		).Scan(&projectID)
+	}
+	if projectID == "" {
+		return nil, fmt.Errorf("project_id is required: no project found for user")
+	}
+
 	id := uuid.New().String()
 	now := time.Now()
 	s3Prefix := fmt.Sprintf("u/%s/%s/", userID, input.Name)
@@ -57,7 +68,7 @@ func (r *PostgresStorageRepository) CreateBucket(ctx context.Context, appID, use
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO user_buckets (id, app_id, user_id, project_id, name, s3_prefix, s3_bucket_name, access, region, size_mb, max_size_mb, objects, status, endpoint, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-		id, appID, userID, "", input.Name, s3Prefix, s3BucketName, string(access), "fsn1", 0, 1024, 0, string(entities.BucketStatusActive), endpoint, now, now,
+		id, appID, userID, projectID, input.Name, s3Prefix, s3BucketName, string(access), "local", 0, 1024, 0, string(entities.BucketStatusActive), endpoint, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_user_buckets_user_name") {
@@ -70,11 +81,12 @@ func (r *PostgresStorageRepository) CreateBucket(ctx context.Context, appID, use
 		ID:           id,
 		AppID:        appID,
 		UserID:       userID,
+		ProjectID:    projectID,
 		Name:         input.Name,
 		S3Prefix:     s3Prefix,
 		S3BucketName: s3BucketName,
 		Access:       access,
-		Region:       "fsn1",
+		Region:       "local",
 		SizeMB:       0,
 		MaxSizeMB:    1024,
 		Objects:      0,

@@ -245,13 +245,11 @@ func (h *StorageObjectHandler) DownloadObject(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	defer body.Close()
+	// fasthttp streams the body after this handler returns and closes it when
+	// done; closing it here would cut the response off.
 
 	if contentType != "" {
 		c.Set("Content-Type", contentType)
-	}
-	if size > 0 {
-		c.Set("Content-Length", fmt.Sprintf("%d", size))
 	}
 	parts := strings.Split(key, "/")
 	filename := parts[len(parts)-1]

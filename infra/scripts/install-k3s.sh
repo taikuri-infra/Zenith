@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/taikuri-infra/Zenith/main/infra/scripts/install-k3s.sh | sudo ZENITH_DOMAIN=zenith.example.com bash
 #
-# Installs k3s (if missing), Helm, cert-manager and CloudNativePG, then the
+# Installs k3s (if missing), Helm, cert-manager and the database operators (CloudNativePG, mariadb-operator, redis-operator), then the
 # zenith-selfhost chart. Safe to re-run: existing secrets are kept.
 #
 # Env: ZENITH_DOMAIN (default <public-ip>.sslip.io), ZENITH_EMAIL (Let's Encrypt),
@@ -74,13 +74,18 @@ install_helm() {
 }
 
 install_operators() {
-  log "Installing cert-manager and CloudNativePG"
+  log "Installing cert-manager and the database operators"
   run helm repo add jetstack https://charts.jetstack.io --force-update
   run helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update
+  run helm repo add mariadb-operator https://helm.mariadb.com/mariadb-operator --force-update
+  run helm repo add ot-helm https://ot-container-kit.github.io/helm-charts/ --force-update
   run helm repo update
   run helm upgrade --install cert-manager jetstack/cert-manager -n cert-manager --create-namespace \
     --set crds.enabled=true --wait --timeout 8m
   run helm upgrade --install cnpg cnpg/cloudnative-pg -n cnpg-system --create-namespace --wait --timeout 8m
+  run helm upgrade --install mariadb-operator mariadb-operator/mariadb-operator -n mariadb-operator --create-namespace \
+    --set crds.enabled=true --set webhook.cert.certManager.enabled=true --wait --timeout 8m
+  run helm upgrade --install redis-operator ot-helm/redis-operator -n redis-operator --create-namespace --wait --timeout 8m
 }
 
 ensure_secrets() {

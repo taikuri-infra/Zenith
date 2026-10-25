@@ -45,15 +45,78 @@ func TestK8sDBBackend_ProvisionIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestK8sDBBackend_OnlyPostgres(t *testing.T) {
+func TestK8sDBBackend_EngineSupport(t *testing.T) {
 	b := NewK8sDBBackend(k8sclient.NewMemoryClient(), "zenith-apps")
-	if !b.SupportsEngine(entities.DatabaseEnginePostgres) || b.SupportsEngine(entities.DatabaseEngineRedis) {
-		t.Fatal("engine support wrong")
+	for _, e := range []entities.DatabaseEngine{entities.DatabaseEnginePostgres, entities.DatabaseEngineMySQL, entities.DatabaseEngineRedis} {
+		if !b.SupportsEngine(e) {
+			t.Fatalf("%s should be supported", e)
+		}
 	}
 	db := testDB()
-	db.Engine = entities.DatabaseEngineRedis
+	db.Engine = entities.DatabaseEngineMongoDB
+	if b.SupportsEngine(db.Engine) {
+		t.Fatal("mongodb has no operator yet")
+	}
 	if _, _, err := b.Provision(context.Background(), db, "pw"); err == nil {
-		t.Fatal("expected error for redis")
+		t.Fatal("expected error for unsupported engine")
+	}
+}
+
+func TestK8sDBBackend_ProvisionMySQL(t *testing.T) {
+	c := k8sclient.NewMemoryClient()
+	b := NewK8sDBBackend(c, "zenith-apps")
+	db := testDB()
+	db.Engine = entities.DatabaseEngineMySQL
+
+	host, port, err := b.Provision(context.Background(), db, "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port != 3306 || host != k8sDBName(db)+".zenith-apps.svc.cluster.local" {
+		t.Fatalf("host/port = %s:%d", host, port)
+	}
+	if _, err := c.GetCRDWithVersion(context.Background(), mariadbAPIVersion, "MariaDB", "zenith-apps", k8sDBName(db)); err != nil {
+		t.Fatalf("MariaDB not created: %v", err)
+	}
+	sec, _ := c.GetSecret(context.Background(), "zenith-apps", k8sDBName(db)+"-auth")
+	if string(sec["password"]) != "pw" || len(sec["root-password"]) == 0 {
+		t.Fatalf("secret wrong: %v", sec)
+	}
+}
+
+func TestK8sDBBackend_ProvisionRedis(t *testing.T) {
+	c := k8sclient.NewMemoryClient()
+	b := NewK8sDBBackend(c, "zenith-apps")
+	db := testDB()
+	db.Engine = entities.DatabaseEngineRedis
+
+	host, port, err := b.Provision(context.Background(), db, "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port != 6379 || host != k8sDBName(db)+".zenith-apps.svc.cluster.local" {
+		t.Fatalf("host/port = %s:%d", host, port)
+	}
+	if _, err := c.GetCRDWithVersion(context.Background(), redisAPIVersion, "Redis", "zenith-apps", k8sDBName(db)); err != nil {
+		t.Fatalf("Redis not created: %v", err)
+	}
+	if err := b.Delete(context.Background(), db, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.GetCRDWithVersion(context.Background(), redisAPIVersion, "Redis", "zenith-apps", k8sDBName(db)); err == nil {
+		t.Fatal("Redis should be gone")
+	}
+}
+
+func TestReadinessParsers(t *testing.T) {
+	if !mariadbReady([]byte(`{"conditions":[{"type":"Ready","status":"True"}]}`)) {
+		t.Fatal("ready MariaDB not detected")
+	}
+	if mariadbReady([]byte(`{"conditions":[{"type":"Ready","status":"False"}]}`)) || mariadbReady(nil) {
+		t.Fatal("unready MariaDB reported ready")
+	}
+	if !statefulSetReady([]byte(`{"readyReplicas":1}`)) || statefulSetReady([]byte(`{}`)) {
+		t.Fatal("statefulset readiness wrong")
 	}
 }
 
