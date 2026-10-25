@@ -24,6 +24,7 @@ spec:
             - {name: ZENITH_MODE, value: standalone}
             - {name: K8S_MODE, value: real}
             - {name: ENVIRONMENT, value: production}
+            - {name: ZENITH_TLS_ISSUER, value: {{ .Values.tls.issuerName | quote }}}
             - {name: BASE_DOMAIN, value: {{ required "domain is required" .Values.domain | quote }}}
             - {name: CORS_ORIGINS, value: {{ printf "https://%s" .Values.domain | quote }}}
             - name: DB_URI

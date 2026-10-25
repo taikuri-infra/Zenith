@@ -485,6 +485,17 @@ func buildHostMatchRule(primaryHost string, customDomains []string) string {
 	return strings.Join(hosts, " || ")
 }
 
+// certIssuer is the cert-manager ClusterIssuer that signs custom-domain
+// certificates. The self-host chart sets it from tls.issuerName.
+var certIssuer = "letsencrypt-prod"
+
+// SetCertIssuer overrides the ClusterIssuer used for custom-domain certificates.
+func SetCertIssuer(name string) {
+	if name != "" {
+		certIssuer = name
+	}
+}
+
 // generateCertificate creates a cert-manager Certificate CRD for custom domains.
 func generateCertificate(app *entities.App, namespace string, labels map[string]string, baseDomain string, customDomains []string) map[string]interface{} {
 	dnsNames := make([]string, 0, len(customDomains)+1)
@@ -502,7 +513,7 @@ func generateCertificate(app *entities.App, namespace string, labels map[string]
 		"spec": map[string]interface{}{
 			"secretName": app.Subdomain + "-custom-tls",
 			"issuerRef": map[string]interface{}{
-				"name": "letsencrypt-prod",
+				"name": certIssuer,
 				"kind": "ClusterIssuer",
 			},
 			"dnsNames": dnsNames,

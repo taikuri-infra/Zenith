@@ -20,6 +20,7 @@ type Config struct {
 	K8sMode      string // K8S_MODE: "memory" (default) or "real"
 	KubeConfig   string
 	CertResolver string
+	TLSIssuer    string // cert-manager ClusterIssuer for custom-domain certificates
 	InCluster    bool
 
 	// Auth
@@ -153,6 +154,7 @@ func Load() *Config {
 		LogLevel:              getEnv("LOG_LEVEL", "info"),
 		KubeConfig:            getEnv("KUBECONFIG", ""),
 		CertResolver:          getEnvSet("ZENITH_CERT_RESOLVER", "le"),
+		TLSIssuer:             getEnv("ZENITH_TLS_ISSUER", ""),
 		K8sMode:               getEnv("K8S_MODE", "memory"),
 		InCluster:             getEnvBool("IN_CLUSTER", false),
 		JWTSecret:             getEnv("JWT_SECRET", ""),

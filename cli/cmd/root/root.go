@@ -26,8 +26,8 @@ var rootCmd = &cobra.Command{
 	Short: "Zenith - open-source self-hosted PaaS",
 	Long: `Zenith is a free, open-source PaaS you run on your own server.
 
-Install on a fresh Ubuntu box:
-  zen install --edition compose --domain zenith.example.com
+Install on a fresh Linux server (runs k3s, Kubernetes operators and Zenith):
+  sudo zen install --domain zenith.example.com
 
 Then log in, deploy and operate it:
   zen login --endpoint https://zenith.example.com

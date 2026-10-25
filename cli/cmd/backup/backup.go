@@ -1,242 +1,88 @@
-// Package backup provides the `zen backup` command for triggering and monitoring
-// CNPG (CloudNativePG) database backups on the remote Zenith server.
+// Package backup implements `zen backup` and `zen backup restore`.
 package backup
 
 import (
 	"bufio"
-	"encoding/base64"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/dotechhq/zenith/cli/internal/composeops"
-	"github.com/dotechhq/zenith/cli/internal/installstate"
-	"github.com/dotechhq/zenith/cli/internal/sshclient"
-	"github.com/dotechhq/zenith/cli/internal/tui"
+	"github.com/dotechhq/zenith/cli/internal/k8sops"
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagReason string
-	flagDomain string
-	flagDir    string
-	flagOut    string
-	flagYes    bool
+	flagKubeconfig, flagOut string
+	flagYes                 bool
 )
 
-// Cmd is the `zen backup` top-level command. Subcommands are registered below.
+// Cmd is the `zen backup` command.
 var Cmd = &cobra.Command{
 	Use:   "backup",
-	Short: "Back up Zenith (Compose: whole platform; Helm: zen backup create)",
-	Long: `Back up a Zenith installation.
+	Short: "Back up Zenith: platform database, object storage, managed databases and secrets",
+	Long: `Write one archive with the platform database, object storage, every managed
+database and the zenith-secrets Secret (it holds the encryption keys).
 
-On a Docker Compose install (run on the server, in the install directory) this
-writes one archive with the platform database, object storage, every managed
-database and the install's .env. Without a Compose install, use
-"zen backup create" for the CNPG database backup.
+Run it where kubectl reaches the cluster (on a k3s server it works as root).
+Copy the archive off the server: it lives on the same disk as the data.
 
 Examples:
   zen backup
   zen backup --out /mnt/backups
-  zen backup create --reason "before upgrade"`,
+  zen backup restore zenith-backup-0.2.0-20261025T120000Z.tar.gz --yes`,
 	Args: cobra.NoArgs,
-	RunE: runComposeBackup,
-}
-
-func runComposeBackup(cmd *cobra.Command, args []string) error {
-	inst, ok := composeops.Detect(flagDir)
-	if !ok {
-		if flagDir != "" {
-			return fmt.Errorf("no Compose install found in %s", flagDir)
-		}
-		return cmd.Help()
-	}
-	out := flagOut
-	if out == "" {
-		out = filepath.Join(inst.Dir, "backups")
-	}
-	path, err := composeops.Backup(cmd.Context(), composeops.ExecRunner{}, inst, out, time.Now())
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(cmd.OutOrStdout(), path)
-	fmt.Fprintln(cmd.OutOrStdout(), "This archive contains your secrets (SECRETS_ENCRYPTION_KEY).")
-	fmt.Fprintln(cmd.OutOrStdout(), "Copy it off this server: it is on the same disk as the data.")
-	return nil
-}
-
-var createCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Trigger an immediate CNPG database backup",
-	Long: `Annotate the zenith-postgres cluster to trigger an immediate CloudNativePG backup,
-then wait until the backup completes.
-
-Examples:
-  zen backup create
-  zen backup create --reason "before upgrade"
-  zen backup create --domain mycompany.com`,
-	RunE: runBackupCreate,
-}
-
-func init() {
-	Cmd.Flags().StringVar(&flagDir, "dir", "", "Compose install directory (default: auto-detect)")
-	Cmd.Flags().StringVar(&flagOut, "out", "", "Directory for the archive (default: <install>/backups)")
-	createCmd.Flags().StringVar(&flagReason, "reason", "", "Human-readable reason for this backup (informational only)")
-	createCmd.Flags().StringVar(&flagDomain, "domain", "", "Domain of the Zenith installation to back up (uses saved state if omitted)")
-	Cmd.AddCommand(createCmd)
-	restoreCmd.Flags().BoolVar(&flagYes, "yes", false, "Skip the confirmation prompt")
-	restoreCmd.Flags().StringVar(&flagDir, "dir", "", "Compose install directory (default: auto-detect)")
-	Cmd.AddCommand(restoreCmd)
-}
-
-func runBackupCreate(cmd *cobra.Command, args []string) error {
-	muted := lipgloss.NewStyle().Foreground(tui.ColorMuted).PaddingLeft(2)
-	successStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess).Bold(true).PaddingLeft(2)
-	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError).PaddingLeft(2)
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2)
-
-	fmt.Println()
-	fmt.Println(headerStyle.Render("Zenith Backup"))
-	if flagReason != "" {
-		fmt.Println(muted.Render("Reason: " + sanitizeReason(flagReason)))
-	}
-	fmt.Println()
-
-	// Load install state to get server IP and SSH key
-	if !installstate.Exists() {
-		return fmt.Errorf("no Zenith installation state found — run 'zen install' first")
-	}
-	state, err := installstate.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load installation state: %w", err)
-	}
-
-	if state.ServerIP == "" {
-		return fmt.Errorf("server IP is not set in installation state — cannot connect via SSH")
-	}
-
-	fmt.Println(muted.Render(fmt.Sprintf("Connecting to %s...", state.ServerIP)))
-
-	// Build SSH config from saved state.
-	sshCfg := sshclient.Config{
-		Host:    state.ServerIP,
-		User:    "root",
-		Timeout: 15 * time.Second,
-	}
-	if state.ServerHostKey != "" {
-		if decoded, err := base64.StdEncoding.DecodeString(state.ServerHostKey); err == nil {
-			sshCfg.KnownHostKey = decoded
-		}
-	}
-	if state.SSHKeyPath != "" {
-		if keyData, readErr := os.ReadFile(state.SSHKeyPath); readErr == nil {
-			sshCfg.PrivateKey = keyData
-		}
-	}
-
-	cli, err := sshclient.DialWithRetry(sshCfg, 3, 5*time.Second)
-	if err != nil {
-		return fmt.Errorf("SSH connection failed: %w", err)
-	}
-	defer cli.Close()
-
-	fmt.Println(muted.Render("Connected. Triggering immediate backup..."))
-
-	// Trigger CNPG immediate backup via annotation.
-	// KUBECONFIG prefix is required on k3s hosts where the default path differs.
-	annotateCmd := `KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl annotate cluster.postgresql.cnpg.io/zenith-postgres -n zenith-system backup.cnpg.io/immediate="true" --overwrite 2>&1`
-	out, err := cli.Run(annotateCmd)
-	if err != nil {
-		fmt.Println(errStyle.Render("Failed to annotate cluster: " + out))
-		return fmt.Errorf("annotate failed: %w", err)
-	}
-	fmt.Println(muted.Render("Backup triggered. Waiting for completion (up to 5 minutes)..."))
-
-	// Poll for backup completion — up to 5 minutes
-	const (
-		pollInterval  = 5 * time.Second
-		backupTimeout = 5 * time.Minute
-	)
-	deadline := time.Now().Add(backupTimeout)
-	pollCmd := `KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get backup -n zenith-system --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].status.phase}' 2>/dev/null`
-
-	for time.Now().Before(deadline) {
-		phase, pollErr := cli.Run(pollCmd)
-		if pollErr == nil {
-			phase = strings.TrimSpace(strings.Trim(phase, "'"))
-		}
-
-		if phase != "" {
-			switch strings.ToLower(phase) {
-			case "completed":
-				fmt.Println()
-				fmt.Println(successStyle.Render("Backup completed successfully!"))
-				fmt.Println()
-				return nil
-			case "failed":
-				fmt.Println()
-				fmt.Println(errStyle.Render("Backup failed (CNPG reported phase=failed)."))
-				fmt.Println()
-				return fmt.Errorf("backup phase=failed")
-			default:
-				// In-progress phases: running, pending, etc.
-				fmt.Printf("\r%s", muted.Render(fmt.Sprintf("  Backup phase: %-12s (waiting...)", phase)))
-			}
-		}
-
-		time.Sleep(pollInterval)
-	}
-
-	return fmt.Errorf("timed out waiting for backup to complete after %s", backupTimeout)
-}
-
-// sanitizeReason strips control characters and limits length to prevent terminal injection
-// when displaying the --reason flag value in output.
-func sanitizeReason(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if r >= 32 && r != 127 { // printable ASCII and beyond, no DEL
-			b.WriteRune(r)
-		}
-	}
-	result := b.String()
-	if len(result) > 200 {
-		result = result[:200]
-	}
-	return result
+	RunE: runBackup,
 }
 
 var restoreCmd = &cobra.Command{
 	Use:   "restore <archive>",
-	Short: "Restore a Compose install from a zen backup archive",
-	Long: `Rebuild a Docker Compose install (fresh or existing) from an archive written by
-"zen backup". This replaces all data of the install: the platform database,
-object storage and every managed database.
-
-Examples:
-  zen backup restore zenith-backup-0.1.0-alpha.2-20261013T120000Z.tar.gz
-  zen backup restore backup.tar.gz --yes --dir /opt/zenith`,
+	Short: "Restore Zenith from a zen backup archive",
+	Long: `Replace the platform database, object storage, managed databases and secrets
+of this installation with the contents of an archive written by "zen backup".
+The API is stopped while the data is replaced.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runComposeRestore,
+	RunE: runRestore,
 }
 
-func runComposeRestore(cmd *cobra.Command, args []string) error {
-	inst, ok := composeops.Detect(flagDir)
+func init() {
+	Cmd.Flags().StringVar(&flagKubeconfig, "kubeconfig", "", "Kubeconfig of the cluster (default: $KUBECONFIG or k3s)")
+	Cmd.Flags().StringVar(&flagOut, "out", "zenith-backups", "Directory for the archive")
+	restoreCmd.Flags().BoolVar(&flagYes, "yes", false, "Skip the confirmation prompt")
+	restoreCmd.Flags().StringVar(&flagKubeconfig, "kubeconfig", "", "Kubeconfig of the cluster (default: $KUBECONFIG or k3s)")
+	Cmd.AddCommand(restoreCmd)
+}
+
+func runBackup(cmd *cobra.Command, _ []string) error {
+	runner := k8sops.ExecRunner{}
+	inst, ok := k8sops.Detect(cmd.Context(), runner, flagKubeconfig)
 	if !ok {
-		return fmt.Errorf("no Compose install found (use --dir)")
+		return fmt.Errorf("no Zenith installation found (use --kubeconfig)")
+	}
+	path, err := k8sops.Backup(cmd.Context(), runner, inst, flagOut, time.Now())
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), path)
+	fmt.Fprintln(cmd.OutOrStdout(), "This archive contains your secrets (the encryption keys).")
+	fmt.Fprintln(cmd.OutOrStdout(), "Copy it off this server: it is on the same disk as the data.")
+	return nil
+}
+
+func runRestore(cmd *cobra.Command, args []string) error {
+	runner := k8sops.ExecRunner{}
+	inst, ok := k8sops.Detect(cmd.Context(), runner, flagKubeconfig)
+	if !ok {
+		return fmt.Errorf("no Zenith installation found (use --kubeconfig)")
 	}
 	out := cmd.OutOrStdout()
 	if !flagYes {
-		fmt.Fprintf(out, "This replaces all data of the install in %s. Type 'restore' to continue: ", inst.Dir)
+		fmt.Fprintf(out, "This replaces all data of the installation in namespace %s. Type 'restore' to continue: ", inst.Namespace)
 		line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 		if strings.TrimSpace(line) != "restore" {
 			return fmt.Errorf("aborted")
 		}
 	}
-	m, err := composeops.Restore(cmd.Context(), composeops.ExecRunner{}, inst, args[0], composeops.RestoreOptions{})
+	m, err := k8sops.Restore(cmd.Context(), runner, inst, args[0], k8sops.RestoreOptions{})
 	if m == nil {
 		return err // nothing restored; cobra prints the (already descriptive) error once
 	}

@@ -530,6 +530,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	logHub := deploy.NewLogHub(500)
 	eventHub := deploy.NewEventHub(50)
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
+	deploy.SetCertIssuer(cfg.TLSIssuer)
 	// Zenith runs on Kubernetes only: the Deployer is the one compute backend.
 	var backend deploy.Backend = deployer
 	pipeline := deploy.NewPipeline(backend, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)

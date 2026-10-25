@@ -11,6 +11,8 @@ set -euo pipefail
 # Env: ZENITH_DOMAIN (default <public-ip>.sslip.io), ZENITH_EMAIL (Let's Encrypt),
 #      ZENITH_VERSION (image tag, default latest), ZENITH_ADMIN_EMAIL, ZENITH_ADMIN_PASSWORD,
 #      ZENITH_REPO_URL / ZENITH_BRANCH, ZENITH_CHART (local chart path, skips git),
+#      ZENITH_TLS_ISSUER (use this existing cert-manager ClusterIssuer instead of Let's Encrypt),
+#      ZENITH_PULL_POLICY (image pull policy, e.g. Never for pre-loaded images),
 #      ZENITH_DRY_RUN=1 (print the plan, change nothing).
 
 REPO_URL="${ZENITH_REPO_URL:-https://github.com/taikuri-infra/Zenith.git}"
@@ -50,7 +52,7 @@ preflight() {
 }
 
 install_k3s() {
-  if command -v k3s >/dev/null && kubectl get nodes >/dev/null 2>&1; then log "k3s already running"; return; fi
+  if command -v kubectl >/dev/null && kubectl get nodes >/dev/null 2>&1; then log "Kubernetes cluster already reachable; not installing k3s"; return; fi
   log "Installing k3s"
   if [ "$DRY_RUN" = 1 ]; then echo "[dry-run] curl -sfL https://get.k3s.io | sh -"; return; fi
   curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 0644" sh -
@@ -114,11 +116,17 @@ fetch_chart() {
 
 install_zenith() {
   log "Installing Zenith ($VERSION) at https://$ZENITH_DOMAIN"
+  local extra=()
+  if [ -n "${ZENITH_TLS_ISSUER:-}" ]; then
+    extra+=(--set "tls.issuerName=$ZENITH_TLS_ISSUER" --set tls.issuer.create=false)
+  fi
+  if [ -n "${ZENITH_PULL_POLICY:-}" ]; then extra+=(--set "images.pullPolicy=$ZENITH_PULL_POLICY"); fi
   run helm upgrade --install zenith "$CHART" -n "$NS" --wait --timeout 10m \
     --set domain="$ZENITH_DOMAIN" \
     --set tls.issuer.email="${ZENITH_EMAIL:-admin@${ZENITH_DOMAIN}}" \
     --set images.api="$IMAGE_REPO/zenith-api:$VERSION" \
-    --set images.web="$IMAGE_REPO/zenith-web:$VERSION"
+    --set images.web="$IMAGE_REPO/zenith-web:$VERSION" \
+    "${extra[@]}"
 }
 
 main() {

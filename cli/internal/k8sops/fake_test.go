@@ -1,4 +1,4 @@
-package composeops
+package k8sops
 
 import (
 	"bytes"
