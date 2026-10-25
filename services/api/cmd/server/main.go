@@ -895,8 +895,15 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 	if cfg.Mode != "saas" && cfg.K8sMode == "real" {
 		// Self-host on Kubernetes: operator-backed databases (CloudNativePG, mariadb-operator, redis-operator).
-		dbRuntime := services.NewDBRuntimeService(dbRepo, deploy.NewK8sDBBackend(k8sClient, "zenith-apps"), envCrypto)
+		k8sDBBackend := deploy.NewK8sDBBackend(k8sClient, "zenith-apps")
+		dbRuntime := services.NewDBRuntimeService(dbRepo, k8sDBBackend, envCrypto)
 		dbHandlerV2.SetRuntime(dbRuntime)
+		// After a restore or a manual delete, recreate what the database says should exist.
+		reconciler := deploy.NewReconciler(appRepo, dbRepo, deployer, k8sDBBackend, dbRuntime)
+		go func() {
+			time.Sleep(10 * time.Second)
+			reconciler.Run(context.Background())
+		}()
 		dbHandlerV2.SetRedeployer(backend)
 		slog.Info("database runtime: Kubernetes operators")
 	}
