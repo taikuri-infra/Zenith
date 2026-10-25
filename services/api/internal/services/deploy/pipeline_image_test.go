@@ -69,16 +69,6 @@ func TestPipeline_KeepsBackendSleepingStatus(t *testing.T) {
 	}
 }
 
-func TestDockerDeployer_MarkRunning(t *testing.T) {
-	repo := memory.NewMemoryAppRepository()
-	app, _ := repo.CreateApp(context.Background(), &dto.CreateAppInput{UserID: "u1", Name: "web", DeploySource: entities.DeploySourceImage, ImageURL: "nginx:1"})
-	(&DockerDeployer{appRepo: repo}).markRunning(context.Background(), app)
-	a, _ := repo.GetApp(context.Background(), app.ID)
-	if a.Status != entities.AppStatusRunning {
-		t.Errorf("app status = %q, want running", a.Status)
-	}
-}
-
 func TestPipeline_FailureMarksAppFailed(t *testing.T) {
 	repo, app, dep := runDeploy(t, errors.New("pull denied"))
 	a, _ := repo.GetApp(context.Background(), app.ID)

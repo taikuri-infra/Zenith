@@ -52,7 +52,7 @@ func (h *DatabaseHandlerV2) clearInjectedEnv(ctx context.Context, appID, key, db
 	_ = h.appRepo.DeleteEnvVar(ctx, appID, key)
 }
 
-// SetRuntime makes the handler provision real instances (Docker in standalone).
+// SetRuntime makes the handler provision real instances (operators on Kubernetes).
 func (h *DatabaseHandlerV2) SetRuntime(rt *services.DBRuntimeService) { h.rt = rt }
 
 // SetRedeployer makes attaching a database redeploy the app's current image.

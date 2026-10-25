@@ -7,7 +7,6 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.41.12
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.10
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3
-	github.com/docker/docker v28.5.2+incompatible
 	github.com/exaring/otelpgx v0.10.0
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/gofiber/websocket/v2 v2.2.1
@@ -42,6 +41,8 @@ require (
 	k8s.io/kubectl v0.35.1
 )
 
+require github.com/docker/docker v28.5.2+incompatible // indirect
+
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
@@ -70,7 +71,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/go-connections v0.6.0
+	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
