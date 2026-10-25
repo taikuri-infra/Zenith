@@ -42,3 +42,6 @@ Makefile.local
 
 # E2E harness output (logs, env files, CA, zen binary)
 infra/e2e/artifacts/
+
+# zen backup default output
+zenith-backups/

@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -14,7 +15,8 @@ func TestUpgrade(t *testing.T) {
 	}
 	st := requireDeployState(t)
 
-	out, err := serverExec(t, upgradeWait, "zen", "upgrade", "--version", cfg.CandidateVersion, "--force")
+	out, err := serverExec(t, upgradeWait, "zen", "upgrade", "--version", cfg.CandidateVersion, "--force",
+		"--backup-dir", filepath.Join(cfg.Artifacts, "upgrade-backups"))
 	if err != nil {
 		t.Fatalf("zen upgrade: %v\n%s", err, tail(out, 3000))
 	}
