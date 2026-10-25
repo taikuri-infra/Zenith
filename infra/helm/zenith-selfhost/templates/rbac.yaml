@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zenith-api
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: zenith-api
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, secrets, configmaps, resourcequotas, limitranges, persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, replicasets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [traefik.io, traefik.containo.us]
+    resources: ["*"]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [cert-manager.io]
+    resources: [certificates]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: ["*"]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [zenith.dev]
+    resources: ["*"]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zenith-api
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: zenith-api
+subjects:
+  - kind: ServiceAccount
+    name: zenith-api
+    namespace: {{ .Release.Namespace }}

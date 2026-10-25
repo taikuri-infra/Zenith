@@ -1,0 +1,46 @@
+# Minimal self-host install. Required: domain. Secrets live in the Secret
+# named by secrets.existingSecret (created by the installer).
+domain: ""
+
+images:
+  api: ghcr.io/taikuri-infra/zenith-api:latest
+  web: ghcr.io/taikuri-infra/zenith-web:latest
+  storage: rustfs/rustfs:latest
+  pullPolicy: IfNotPresent
+
+secrets:
+  # keys: jwt-secret, admin-email, admin-password, secrets-encryption-key,
+  # s3-access-key, s3-secret-key
+  existingSecret: zenith-secrets
+
+# Namespace user apps are deployed into (the deployer's default).
+appsNamespace: zenith-apps
+
+postgres:
+  instances: 1
+  storage: 5Gi
+  image: ghcr.io/cloudnative-pg/postgresql:16.6
+
+storage:
+  size: 10Gi
+  platformBucket: zenith-platform-storage
+
+tls:
+  # cert-manager ClusterIssuer used for the Zenith host. The chart creates an
+  # HTTP-01 issuer with this name when issuer.create is true.
+  issuerName: letsencrypt-http
+  issuer:
+    create: true
+    email: ""
+    server: https://acme-v02.api.letsencrypt.org/directory
+
+ingressClassName: traefik
+
+api:
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+web:
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 384Mi}

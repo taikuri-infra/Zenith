@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zenith-storage
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+spec:
+  serviceName: zenith-storage
+  replicas: 1
+  selector:
+    matchLabels: {app: zenith-storage}
+  template:
+    metadata:
+      labels: {app: zenith-storage}
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: rustfs
+          image: {{ .Values.images.storage }}
+          imagePullPolicy: IfNotPresent
+          args: ["/data"]
+          env:
+            - {name: RUSTFS_ADDRESS, value: ":9000"}
+            - {name: RUSTFS_CONSOLE_ENABLE, value: "true"}
+            - {name: RUSTFS_CONSOLE_ADDRESS, value: ":9001"}
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: {{ .Values.secrets.existingSecret }}, key: s3-access-key}}
+            - name: RUSTFS_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: {{ .Values.secrets.existingSecret }}, key: s3-secret-key}}
+          ports:
+            - {name: s3, containerPort: 9000}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: {{ .Values.storage.size }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenith-storage
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+spec:
+  selector: {app: zenith-storage}
+  ports:
+    - {name: s3, port: 9000, targetPort: 9000}

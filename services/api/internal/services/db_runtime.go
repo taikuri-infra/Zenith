@@ -23,6 +23,12 @@ type DBBackend interface {
 	Delete(ctx context.Context, db *entities.UserDatabase, purge bool) error
 }
 
+// EngineSupporter is an optional DBBackend capability: which engines it can run.
+// Backends without it fall back to SupportedEngine (the Docker set).
+type EngineSupporter interface {
+	SupportsEngine(e entities.DatabaseEngine) bool
+}
+
 // HostPorter is an optional DBBackend capability: the host-side port for SSH access.
 type HostPorter interface {
 	HostPort(ctx context.Context, db *entities.UserDatabase) (int, error)
@@ -65,7 +71,11 @@ func (s *DBRuntimeService) Create(ctx context.Context, appID, userID string, in 
 	if in.Engine == "" {
 		in.Engine = entities.DatabaseEnginePostgres
 	}
-	if !SupportedEngine(in.Engine) {
+	supported := SupportedEngine(in.Engine)
+	if es, ok := s.backend.(EngineSupporter); ok {
+		supported = es.SupportsEngine(in.Engine)
+	}
+	if !supported {
 		return nil, fmt.Errorf("engine %s is not available on this install", in.Engine)
 	}
 	db, err := s.repo.CreateDatabase(ctx, appID, userID, in)

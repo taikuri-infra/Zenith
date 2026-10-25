@@ -1,0 +1,15 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: zenith-postgres
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.postgres.instances }}
+  imageName: {{ .Values.postgres.image }}
+  bootstrap:
+    initdb:
+      database: zenith
+      owner: zenith
+  storage:
+    size: {{ .Values.postgres.storage }}
