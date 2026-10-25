@@ -187,8 +187,9 @@ type DatabaseInfo struct {
 
 // CreateBucketInput is the request body for creating a storage bucket.
 type CreateBucketInput struct {
-	Name   string                 `json:"name"   validate:"required"`
-	Access entities.BucketAccess  `json:"access"`
+	Name      string                `json:"name"   validate:"required"`
+	Access    entities.BucketAccess `json:"access"`
+	ProjectID string                `json:"project_id,omitempty"`
 }
 
 // BucketInfo is the response for a provisioned bucket.

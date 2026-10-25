@@ -3,6 +3,8 @@ package deploy
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -18,11 +20,19 @@ var (
 	_ services.EngineSupporter = (*K8sDBBackend)(nil)
 )
 
-const cnpgAPIVersion = "postgresql.cnpg.io/v1"
+const (
+	cnpgAPIVersion    = "postgresql.cnpg.io/v1"
+	mariadbAPIVersion = "k8s.mariadb.com/v1alpha1"
+	redisAPIVersion   = "redis.redis.opstreelabs.in/v1beta2"
+	redisImage        = "quay.io/opstree/redis:v7.0.15"
+)
 
-// K8sDBBackend runs managed databases through Kubernetes operators. PostgreSQL
-// uses CloudNativePG: one Cluster per database, credentials from a Secret the
-// backend owns, in-cluster access through the operator's <name>-rw Service.
+// K8sDBBackend runs managed databases through Kubernetes operators:
+//   - PostgreSQL: CloudNativePG, one Cluster per database (<name>-rw Service)
+//   - MySQL: mariadb-operator, one MariaDB per database (MySQL wire protocol)
+//   - Redis: OpsTree redis-operator, one Redis per database
+//
+// Credentials live in a Secret the backend owns; access is in-cluster.
 type K8sDBBackend struct {
 	client    k8sclient.Client
 	namespace string
@@ -33,13 +43,27 @@ func NewK8sDBBackend(c k8sclient.Client, namespace string) *K8sDBBackend {
 	return &K8sDBBackend{client: c, namespace: namespace, pollEvery: 3 * time.Second}
 }
 
-// SupportsEngine: only operator-backed engines are offered. MySQL and Redis
-// join when their operators are wired in.
+// SupportsEngine: the engines that have an operator behind them.
 func (b *K8sDBBackend) SupportsEngine(e entities.DatabaseEngine) bool {
-	return e == entities.DatabaseEnginePostgres
+	switch e {
+	case entities.DatabaseEnginePostgres, entities.DatabaseEngineMySQL, entities.DatabaseEngineRedis:
+		return true
+	}
+	return false
 }
 
 func k8sDBName(db *entities.UserDatabase) string { return "db-" + dbShortID(db) }
+
+// dbKind is the operator custom resource (apiVersion, kind) for an engine.
+func dbKind(e entities.DatabaseEngine) (string, string) {
+	switch e {
+	case entities.DatabaseEngineMySQL:
+		return mariadbAPIVersion, "MariaDB"
+	case entities.DatabaseEngineRedis:
+		return redisAPIVersion, "Redis"
+	}
+	return cnpgAPIVersion, "Cluster"
+}
 
 func (b *K8sDBBackend) Provision(ctx context.Context, db *entities.UserDatabase, pw string) (string, int, error) {
 	if !b.SupportsEngine(db.Engine) {
@@ -49,34 +73,73 @@ func (b *K8sDBBackend) Provision(ctx context.Context, db *entities.UserDatabase,
 	secret := name + "-auth"
 	labels := map[string]string{"zenith.dev/db-id": db.ID, "zenith.dev/engine": string(db.Engine)}
 
-	// Idempotent: replace credentials and the Cluster if a previous attempt left them.
+	data := map[string][]byte{"username": []byte(db.DBUser), "password": []byte(pw)}
+	if db.Engine == entities.DatabaseEngineMySQL {
+		// The operator wants a root password too; it is never shown to users.
+		data["root-password"] = []byte(randomHex(16))
+	}
+	// Idempotent: replace credentials and the resource if a previous attempt left them.
 	_ = b.client.DeleteSecret(ctx, b.namespace, secret)
-	if err := b.client.CreateSecret(ctx, b.namespace, secret, map[string][]byte{
-		"username": []byte(db.DBUser),
-		"password": []byte(pw),
-	}, labels); err != nil {
+	if err := b.client.CreateSecret(ctx, b.namespace, secret, data, labels); err != nil {
 		return "", 0, fmt.Errorf("create secret %s: %w", secret, err)
 	}
 
-	spec, _ := json.Marshal(map[string]any{
+	apiVersion, kind := dbKind(db.Engine)
+	spec, host, port := b.spec(db, name, secret)
+	specJSON, _ := json.Marshal(spec)
+	_ = b.client.DeleteCRDWithVersion(ctx, apiVersion, kind, b.namespace, name)
+	if err := b.client.CreateCRD(ctx, &k8sclient.CRDObject{
+		APIVersion: apiVersion,
+		Kind:       kind,
+		Metadata:   k8sclient.ObjectMeta{Name: name, Namespace: b.namespace, Labels: labels},
+		Spec:       specJSON,
+	}); err != nil {
+		return "", 0, fmt.Errorf("create %s %s: %w", kind, name, err)
+	}
+	return host, port, nil
+}
+
+// spec builds the operator resource spec and the in-cluster address.
+func (b *K8sDBBackend) spec(db *entities.UserDatabase, name, secret string) (map[string]any, string, int) {
+	size := dbStorage(db)
+	switch db.Engine {
+	case entities.DatabaseEngineMySQL:
+		return map[string]any{
+			"rootPasswordSecretKeyRef": map[string]any{"name": secret, "key": "root-password"},
+			"database":                 db.DBName,
+			"username":                 db.DBUser,
+			"passwordSecretKeyRef":     map[string]any{"name": secret, "key": "password"},
+			"storage":                  map[string]any{"size": size},
+			"replicas":                 1,
+		}, fmt.Sprintf("%s.%s.svc.cluster.local", name, b.namespace), 3306
+	case entities.DatabaseEngineRedis:
+		return map[string]any{
+			"kubernetesConfig": map[string]any{
+				"image":           redisImage,
+				"imagePullPolicy": "IfNotPresent",
+				"redisSecret":     map[string]any{"name": secret, "key": "password"},
+			},
+			"storage": map[string]any{"volumeClaimTemplate": map[string]any{"spec": map[string]any{
+				"accessModes": []string{"ReadWriteOnce"},
+				"resources":   map[string]any{"requests": map[string]any{"storage": size}},
+			}}},
+		}, fmt.Sprintf("%s.%s.svc.cluster.local", name, b.namespace), 6379
+	}
+	return map[string]any{
 		"instances": 1,
-		"storage":   map[string]any{"size": dbStorage(db)},
+		"storage":   map[string]any{"size": size},
 		"bootstrap": map[string]any{"initdb": map[string]any{
 			"database": db.DBName,
 			"owner":    db.DBUser,
 			"secret":   map[string]any{"name": secret},
 		}},
-	})
-	_ = b.client.DeleteCRDWithVersion(ctx, cnpgAPIVersion, "Cluster", b.namespace, name)
-	if err := b.client.CreateCRD(ctx, &k8sclient.CRDObject{
-		APIVersion: cnpgAPIVersion,
-		Kind:       "Cluster",
-		Metadata:   k8sclient.ObjectMeta{Name: name, Namespace: b.namespace, Labels: labels},
-		Spec:       spec,
-	}); err != nil {
-		return "", 0, fmt.Errorf("create cluster %s: %w", name, err)
-	}
-	return fmt.Sprintf("%s-rw.%s.svc.cluster.local", name, b.namespace), 5432, nil
+	}, fmt.Sprintf("%s-rw.%s.svc.cluster.local", name, b.namespace), 5432
+}
+
+func randomHex(n int) string {
+	buf := make([]byte, n)
+	_, _ = rand.Read(buf)
+	return hex.EncodeToString(buf)
 }
 
 func dbStorage(db *entities.UserDatabase) string {
@@ -86,14 +149,13 @@ func dbStorage(db *entities.UserDatabase) string {
 	return "1Gi"
 }
 
-// WaitReady polls the Cluster until an instance is ready or ctx ends.
+// WaitReady polls until the engine is serving or ctx ends.
 func (b *K8sDBBackend) WaitReady(ctx context.Context, db *entities.UserDatabase) error {
 	name := k8sDBName(db)
 	t := time.NewTicker(b.pollEvery)
 	defer t.Stop()
 	for {
-		obj, err := b.client.GetCRDWithVersion(ctx, cnpgAPIVersion, "Cluster", b.namespace, name)
-		if err == nil && clusterReady(obj.Status) {
+		if b.ready(ctx, db, name) {
 			return nil
 		}
 		select {
@@ -102,6 +164,48 @@ func (b *K8sDBBackend) WaitReady(ctx context.Context, db *entities.UserDatabase)
 		case <-t.C:
 		}
 	}
+}
+
+func (b *K8sDBBackend) ready(ctx context.Context, db *entities.UserDatabase, name string) bool {
+	if db.Engine == entities.DatabaseEngineRedis {
+		// The Redis resource has no status; its StatefulSet carries readiness.
+		obj, err := b.client.GetCRDWithVersion(ctx, "apps/v1", "StatefulSet", b.namespace, name)
+		return err == nil && statefulSetReady(obj.Status)
+	}
+	apiVersion, kind := dbKind(db.Engine)
+	obj, err := b.client.GetCRDWithVersion(ctx, apiVersion, kind, b.namespace, name)
+	if err != nil {
+		return false
+	}
+	if db.Engine == entities.DatabaseEngineMySQL {
+		return mariadbReady(obj.Status)
+	}
+	return clusterReady(obj.Status)
+}
+
+func statefulSetReady(status []byte) bool {
+	var st struct {
+		ReadyReplicas int `json:"readyReplicas"`
+	}
+	return len(status) > 0 && json.Unmarshal(status, &st) == nil && st.ReadyReplicas >= 1
+}
+
+func mariadbReady(status []byte) bool {
+	var st struct {
+		Conditions []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+	}
+	if len(status) == 0 || json.Unmarshal(status, &st) != nil {
+		return false
+	}
+	for _, c := range st.Conditions {
+		if c.Type == "Ready" && c.Status == "True" {
+			return true
+		}
+	}
+	return false
 }
 
 func clusterReady(status []byte) bool {
@@ -118,11 +222,16 @@ func clusterReady(status []byte) bool {
 	return st.ReadyInstances >= 1 || strings.Contains(strings.ToLower(st.Phase), "healthy")
 }
 
-// Delete removes the Cluster (the operator drops its volumes) and the credentials.
+// Delete removes the operator resource (the operator drops its volumes) and the credentials.
 func (b *K8sDBBackend) Delete(ctx context.Context, db *entities.UserDatabase, _ bool) error {
 	name := k8sDBName(db)
-	err := b.client.DeleteCRDWithVersion(ctx, cnpgAPIVersion, "Cluster", b.namespace, name)
+	apiVersion, kind := dbKind(db.Engine)
+	err := b.client.DeleteCRDWithVersion(ctx, apiVersion, kind, b.namespace, name)
 	_ = b.client.DeleteSecret(ctx, b.namespace, name+"-auth")
+	if db.Engine == entities.DatabaseEngineMySQL {
+		// mariadb-operator keeps its data volume after the resource is gone.
+		_ = b.client.DeleteCRDWithVersion(ctx, "v1", "PersistentVolumeClaim", b.namespace, "storage-"+name+"-0")
+	}
 	return ignoreNotFound(err)
 }
 

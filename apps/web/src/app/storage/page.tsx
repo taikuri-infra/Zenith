@@ -71,7 +71,7 @@ export default function StoragePage() {
     setCreating(true);
     setCreateError("");
     try {
-      await storageBuckets.create({ name: formName.trim(), access: formAccess });
+      await storageBuckets.create({ name: formName.trim(), access: formAccess, project_id: projectId || undefined });
       setShowCreate(false);
       setFormName("");
       setFormAccess("private");
