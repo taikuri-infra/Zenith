@@ -1,11 +1,9 @@
 name: E2E
 
-# Installs Zenith on a fresh Ubuntu server (Docker-in-Docker) inside the job and
-# drives it through the API and the zen CLI: install, deploy + database + custom
-# domain + HTTPS, reboot, backup/restore, upgrade from the previous release.
-# Runs locally with: act pull_request -W .github/workflows/e2e.yml -j e2e --container-architecture linux/amd64 --privileged
-# Under act the artifact upload is skipped; the artifacts stay in infra/e2e/artifacts/ of the job
-# workspace (add --bind to the act command to have them land in your checkout on the host).
+# Installs Zenith with `zen install` on a fresh k3d (k3s in Docker) cluster inside the job
+# and drives it through the API and the zen CLI: install, deploy + database + custom
+# domain + HTTPS, reboot, backup, upgrade, and a restore into a second fresh cluster.
+# Runs locally with: bash infra/e2e/run.sh (needs docker, helm and kubectl).
 
 on:
   pull_request:
@@ -13,9 +11,8 @@ on:
       - 'services/api/**'
       - 'cli/**'
       - 'apps/web/**'
-      - 'docker-compose.yml'
-      - 'traefik/**'
       - 'infra/scripts/**'
+      - 'infra/helm/**'
       - 'infra/e2e/**'
       - 'VERSION'
       - '.github/workflows/e2e.yml'
@@ -62,7 +59,7 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - name: Run the E2E suite on a fresh server
+      - name: Run the E2E suite on fresh k3d clusters
         if: ${{ !(env.ACT && matrix.arch != 'amd64') }}
         run: bash infra/e2e/run.sh
       - name: Reclaim Docker space (persistent runners)

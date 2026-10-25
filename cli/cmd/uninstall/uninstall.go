@@ -1,82 +1,49 @@
+// Package uninstall implements `zen uninstall`.
 package uninstall
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/dotechhq/zenith/cli/internal/install"
-	"github.com/dotechhq/zenith/cli/internal/installstate"
-	"github.com/dotechhq/zenith/cli/internal/tui"
+	"github.com/dotechhq/zenith/cli/internal/k8sops"
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagLocal         bool
-	flagSSHHost       string
-	flagSSHUser       string
-	flagDir           string
-	flagDryRun        bool
-	flagRegisterURL   string
-	flagRegisterToken string
+	flagKubeconfig string
+	flagYes        bool
 )
 
-// Cmd is the `zen uninstall` command — tears down a compose-edition install.
+// Cmd is the `zen uninstall` command.
 var Cmd = &cobra.Command{
 	Use:   "uninstall",
-	Short: "Tear down a self-host (compose) FreeZenith install",
-	Long: `Stop and remove the self-host (compose) stack and clear local zen state.
+	Short: "Remove Zenith and all of its data from the cluster",
+	Long: `Uninstall the zenith Helm release and delete the zenith-system and zenith-apps
+namespaces: the platform, every app and every managed database, with their volumes.
+k3s, cert-manager and the database operators stay; remove k3s itself with
+/usr/local/bin/k3s-uninstall.sh.
 
-  zen uninstall --local
-  zen uninstall --ssh-host 1.2.3.4 --ssh-user root`,
-	RunE: runUninstall,
+Take a backup first (zen backup). This cannot be undone.`,
+	Args: cobra.NoArgs,
+	RunE: run,
 }
 
 func init() {
-	f := Cmd.Flags()
-	f.BoolVar(&flagLocal, "local", false, "Uninstall from this machine")
-	f.StringVar(&flagSSHHost, "ssh-host", "", "SSH host/IP of the target")
-	f.StringVar(&flagSSHUser, "ssh-user", "root", "SSH user")
-	f.StringVar(&flagDir, "dir", "zenith", "Install directory on the target")
-	f.BoolVar(&flagDryRun, "dry-run", false, "Show what would happen without doing it")
-	f.StringVar(&flagRegisterURL, "register-url", "", "Override the subdomain-registration service URL")
-	f.StringVar(&flagRegisterToken, "register-token", "", "Install token for the registration service (defaults to $FREEZENITH_REGISTER_TOKEN)")
+	Cmd.Flags().StringVar(&flagKubeconfig, "kubeconfig", "", "Kubeconfig of the cluster (default: $KUBECONFIG or k3s)")
+	Cmd.Flags().BoolVar(&flagYes, "yes", false, "Confirm the removal of all data")
 }
 
-func registerToken() string {
-	if flagRegisterToken != "" {
-		return flagRegisterToken
+func run(cmd *cobra.Command, _ []string) error {
+	if !flagYes {
+		return fmt.Errorf("this deletes all Zenith data; re-run with --yes")
 	}
-	return os.Getenv("FREEZENITH_REGISTER_TOKEN")
-}
-
-func runUninstall(cmd *cobra.Command, args []string) error {
-	if !flagLocal && flagSSHHost == "" {
-		return fmt.Errorf("uninstall needs either --local or --ssh-host")
+	runner := k8sops.ExecRunner{}
+	inst, ok := k8sops.Detect(cmd.Context(), runner, flagKubeconfig)
+	if !ok {
+		return fmt.Errorf("no Zenith installation found (use --kubeconfig)")
 	}
-	cfg := &install.Config{
-		Edition:       "compose",
-		ComposeLocal:  flagLocal,
-		SSHHost:       flagSSHHost,
-		SSHUser:       flagSSHUser,
-		InstallDir:    flagDir,
-		RegisterURL:   flagRegisterURL,
-		RegisterToken: registerToken(),
-		DryRun:        flagDryRun,
-	}
-	// Recover the registered domain from saved state so a free subdomain (if any)
-	// gets released via the registration service.
-	if st, err := installstate.Load(); err == nil {
-		cfg.Domain = st.Domain
-	}
-	fmt.Println(lipgloss.NewStyle().Foreground(tui.ColorWarning).Render("Tearing down FreeZenith..."))
-	if err := install.ComposeUninstall(cfg); err != nil {
+	if err := k8sops.Uninstall(cmd.Context(), runner, inst); err != nil {
 		return err
 	}
-	if path, err := installstate.DefaultPath(); err == nil {
-		_ = os.Remove(path)
-	}
-	fmt.Println(lipgloss.NewStyle().Foreground(tui.ColorSuccess).
-		Render("Uninstalled — stack removed and local state cleared."))
+	fmt.Fprintln(cmd.OutOrStdout(), "Zenith removed.")
 	return nil
 }

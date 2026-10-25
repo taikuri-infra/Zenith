@@ -1,545 +1,67 @@
-// Package upgrade provides the `zen upgrade` command for upgrading a Zenith
-// installation via Helm, with automated rollback on failure.
+// Package upgrade implements `zen upgrade`.
 package upgrade
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/dotechhq/zenith/cli/internal/composeops"
-	"github.com/dotechhq/zenith/cli/internal/installstate"
-	semverPkg "github.com/dotechhq/zenith/cli/internal/semver"
-	"github.com/dotechhq/zenith/cli/internal/sshclient"
-	"github.com/dotechhq/zenith/cli/internal/tui"
+	"github.com/dotechhq/zenith/cli/internal/k8sops"
 	"github.com/spf13/cobra"
 )
 
-var versionRe = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]*[0-9A-Za-z])?$`)
-
-func validateVersion(v string) error {
-	if !versionRe.MatchString(v) {
-		return fmt.Errorf("invalid version %q: must be in X.Y.Z format (e.g. 1.5.0 or 0.1.0-alpha.3)", v)
-	}
-	return nil
-}
-
 var (
-	flagVersion    string
-	flagDryRun     bool
-	flagSkipBackup bool
-	flagDir        string
-	flagForce      bool
+	flagVersion, flagKubeconfig, flagBackupDir string
+	flagDryRun, flagSkipBackup, flagForce      bool
 )
 
 // Cmd is the `zen upgrade` command.
 var Cmd = &cobra.Command{
 	Use:   "upgrade",
-	Short: "Upgrade Zenith Mission Control to a new version",
-	Long: `Upgrade the Zenith platform using Helm. The process:
+	Short: "Upgrade Zenith to a new version",
+	Long: `Upgrade the Zenith installation to a new release.
 
-  1. (Optional) Trigger a database backup
-  2. Run helm upgrade for the zenith release
-  3. Wait for all deployments and statefulsets to roll out
-  4. Health-check the Mission Control API
-  5. Roll back automatically if any step fails
-
-On a Docker Compose install, zen upgrade runs on the server in the install
-directory: it backs up, checks out the new release tag, refreshes .env, pulls,
-restarts, health-checks, and rolls back automatically on failure.
+Takes a backup first, upgrades the Helm release with the settings it already
+has, and rolls back automatically if the upgrade fails.
 
 Examples:
   zen upgrade
-  zen upgrade --version 1.5.0
+  zen upgrade --version 0.3.0
   zen upgrade --skip-backup
   zen upgrade --dry-run`,
-	RunE: runUpgrade,
+	Args: cobra.NoArgs,
+	RunE: run,
 }
 
 func init() {
-	Cmd.Flags().StringVar(&flagVersion, "version", "", "Target chart version (uses latest if empty)")
-	Cmd.Flags().BoolVar(&flagDryRun, "dry-run", false, "Print upgrade plan without executing")
-	Cmd.Flags().BoolVar(&flagSkipBackup, "skip-backup", false, "Skip the pre-upgrade database backup")
-	Cmd.Flags().StringVar(&flagDir, "dir", "", "Compose install directory (default: detect)")
-	Cmd.Flags().BoolVar(&flagForce, "force", false, "Compose: allow upgrading to the same or an older version")
+	f := Cmd.Flags()
+	f.StringVar(&flagVersion, "version", "", "Version to upgrade to (default: the latest release)")
+	f.StringVar(&flagKubeconfig, "kubeconfig", "", "Kubeconfig of the cluster (default: $KUBECONFIG or k3s)")
+	f.StringVar(&flagBackupDir, "backup-dir", "", "Where the pre-upgrade backup goes (default ./zenith-backups)")
+	f.BoolVar(&flagDryRun, "dry-run", false, "Show what would happen without doing it")
+	f.BoolVar(&flagSkipBackup, "skip-backup", false, "Do not back up first")
+	f.BoolVar(&flagForce, "force", false, "Allow a downgrade or re-install of the same version")
 }
 
-// stepFuncs are the ordered upgrade steps.
-// Each returns an error; on failure the caller rolls back.
-type stepFunc struct {
-	name string
-	desc string
-	fn   func(cli *sshclient.Client) error
-}
-
-func runUpgrade(cmd *cobra.Command, args []string) error {
-	if inst, ok := composeops.Detect(flagDir); ok {
-		return runComposeUpgrade(cmd, inst)
-	}
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2)
-	muted := lipgloss.NewStyle().Foreground(tui.ColorMuted).PaddingLeft(2)
-	checkStyle := lipgloss.NewStyle().Foreground(tui.ColorSuccess)
-	spinStyle := lipgloss.NewStyle().Foreground(tui.ColorWarning)
-	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError)
-	stepStyle := lipgloss.NewStyle().Foreground(tui.ColorText)
-	timeStyle := lipgloss.NewStyle().Foreground(tui.ColorMuted)
-
-	if flagVersion != "" {
-		if err := validateVersion(flagVersion); err != nil {
-			return err
-		}
-	}
-
-	fmt.Println()
-	fmt.Println(headerStyle.Render("Zenith Upgrade"))
-	if flagVersion != "" {
-		fmt.Println(muted.Render("Target version: " + flagVersion))
-	} else {
-		fmt.Println(muted.Render("Target version: latest"))
-	}
-	if flagDryRun {
-		fmt.Println(muted.Render("(dry-run mode — no changes will be made)"))
-	}
-	fmt.Println()
-
-	// Load install state
-	if !installstate.Exists() {
-		return fmt.Errorf("no Zenith installation state found — run 'zen install' first")
-	}
-	state, err := installstate.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load installation state: %w", err)
-	}
-	if state.ServerIP == "" {
-		return fmt.Errorf("server IP not found in installation state")
-	}
-
-	if flagDryRun {
-		runDryRun(state, flagVersion, flagSkipBackup)
-		return nil
-	}
-
-	// Establish SSH connection
-	fmt.Println(muted.Render(fmt.Sprintf("Connecting to %s...", state.ServerIP)))
-	sshCfg := sshclient.Config{
-		Host:    state.ServerIP,
-		User:    "root",
-		Timeout: 15 * time.Second,
-	}
-	if state.SSHKeyPath != "" {
-		if keyData, readErr := os.ReadFile(state.SSHKeyPath); readErr == nil {
-			sshCfg.PrivateKey = keyData
-		}
-	}
-
-	sshCli, err := sshclient.DialWithRetry(sshCfg, 3, 5*time.Second)
-	if err != nil {
-		return fmt.Errorf("SSH connection failed: %w", err)
-	}
-	defer sshCli.Close()
-	fmt.Println(muted.Render("Connected."))
-
-	// Show current → target version
-	current := currentInstalledVersion(sshCli)
-	tgt := flagVersion
-	if tgt == "" {
-		tgt = "latest"
-	}
-	if current != "" {
-		fmt.Println(muted.Render(fmt.Sprintf("  %s → %s", current, tgt)))
-	} else {
-		fmt.Println(muted.Render(fmt.Sprintf("  current version unknown → %s", tgt)))
-	}
-	fmt.Println()
-
-	// Build the step list dynamically
-	steps := buildSteps(sshCli, state, flagVersion, flagSkipBackup)
-	total := len(steps)
-
-	step := func(num int, name, desc string) {
-		stepNum := fmt.Sprintf("[%d/%d]", num, total)
-		fmt.Printf("  %s %s %s\n",
-			spinStyle.Render("  "+stepNum),
-			stepStyle.Render(name),
-			lipgloss.NewStyle().Foreground(tui.ColorMuted).Render("- "+desc),
-		)
-	}
-	ok := func(num int, name string, elapsed time.Duration) {
-		stepNum := fmt.Sprintf("[%d/%d]", num, total)
-		fmt.Printf("\033[1A\r  %s %s %s\n",
-			checkStyle.Render("v "+stepNum),
-			stepStyle.Render(name),
-			timeStyle.Render(fmt.Sprintf("(%s)", formatDuration(elapsed))),
-		)
-	}
-	fail := func(num int, name, msg string) {
-		stepNum := fmt.Sprintf("[%d/%d]", num, total)
-		fmt.Printf("\033[1A\r  %s %s %s\n",
-			errStyle.Render("x "+stepNum),
-			stepStyle.Render(name),
-			errStyle.Render("- "+msg),
-		)
-	}
-
-	totalStart := time.Now()
-
-	for i, s := range steps {
-		num := i + 1
-		step(num, s.name, s.desc)
-		t := time.Now()
-		if err := s.fn(sshCli); err != nil {
-			fail(num, s.name, err.Error())
-
-			// Attempt Helm rollback for upgrade failure
-			if s.name == "Helm upgrade" {
-				fmt.Println()
-				fmt.Println(errStyle.Render("  Upgrade failed — attempting rollback..."))
-				if rbErr := helmRollback(sshCli); rbErr != nil {
-					fmt.Println(errStyle.Render("  Rollback also failed: " + rbErr.Error()))
-				} else {
-					fmt.Println(checkStyle.Render("  Rollback successful."))
-				}
-			}
-			return fmt.Errorf("upgrade step %q failed: %w", s.name, err)
-		}
-		ok(num, s.name, time.Since(t))
-	}
-
-	totalElapsed := time.Since(totalStart)
-	fmt.Println()
-	fmt.Printf("  %s %s\n",
-		checkStyle.Render("v Upgrade complete"),
-		timeStyle.Render(fmt.Sprintf("in %s", formatDuration(totalElapsed))),
-	)
-	fmt.Println()
-
-	// Persist the installed version to state
-	if savedState, loadErr := installstate.Load(); loadErr == nil {
-		if flagVersion != "" {
-			savedState.ZenithVersion = flagVersion
-		} else {
-			savedState.ZenithVersion = currentInstalledVersion(sshCli)
-		}
-		installstate.Save(savedState) //nolint:errcheck
-	}
-
-	return nil
-}
-
-// currentInstalledVersion reads the chart version of the zenith release via helm list.
-// Returns "" if the version cannot be determined (non-fatal).
-func currentInstalledVersion(cli *sshclient.Client) string {
-	out, err := cli.Run(
-		"KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm list -n zenith-system --filter '^zenith$' -o json 2>/dev/null",
-	)
-	if err != nil || out == "" {
-		return ""
-	}
-	type release struct {
-		Chart string `json:"chart"`
-	}
-	var releases []release
-	if err := json.Unmarshal([]byte(out), &releases); err != nil || len(releases) == 0 {
-		return ""
-	}
-	chart := releases[0].Chart
-	if idx := strings.LastIndex(chart, "-"); idx >= 0 {
-		return chart[idx+1:]
-	}
-	return chart
-}
-
-// parseDiskSpaceFreeGB parses a string like "10G", "512M", "2048K" and returns GB as float64.
-func parseDiskSpaceFreeGB(s string) (float64, bool) {
-	if len(s) < 2 {
-		return 0, false
-	}
-	unit := s[len(s)-1]
-	numStr := s[:len(s)-1]
-	val, err := strconv.ParseFloat(numStr, 64)
-	if err != nil {
-		return 0, false
-	}
-	switch unit {
-	case 'G', 'g':
-		return val, true
-	case 'M', 'm':
-		return val / 1024, true
-	case 'K', 'k':
-		return val / (1000 * 1000), true
-	case 'T', 't':
-		return val * 1024, true
-	}
-	return 0, false
-}
-
-// buildSteps constructs the ordered list of upgrade steps.
-func buildSteps(cli *sshclient.Client, state *installstate.State, version string, skipBackup bool) []stepFunc {
-	var steps []stepFunc
-
-	steps = append(steps, stepFunc{
-		name: "Pre-flight check",
-		desc: "Checking disk space and cluster reachability...",
-		fn: func(cli *sshclient.Client) error {
-			freeStr, err := cli.Run("df -h / | awk 'NR==2{print $4}'")
-			if err != nil {
-				return fmt.Errorf("disk check failed: %w", err)
-			}
-			freeStr = strings.TrimSpace(freeStr)
-			if gb, ok := parseDiskSpaceFreeGB(freeStr); ok && gb < 5.0 {
-				return fmt.Errorf("insufficient disk space: %.1fGB free (need ≥5GB)", gb)
-			}
-			return nil
-		},
-	})
-
-	if version != "" {
-		steps = append(steps, stepFunc{
-			name: "Version compatibility",
-			desc: "Checking semver compatibility...",
-			fn: func(cli *sshclient.Client) error {
-				current := currentInstalledVersion(cli)
-				if current == "" {
-					return nil // cannot determine — allow upgrade
-				}
-				return semverPkg.IsSafeUpgrade(current, version)
-			},
-		})
-	}
-
-	if !skipBackup {
-		steps = append(steps, stepFunc{
-			name: "Pre-upgrade backup",
-			desc: "Triggering immediate CNPG database backup...",
-			fn: func(cli *sshclient.Client) error {
-				return triggerAndWaitBackup(cli)
-			},
-		})
-	}
-
-	steps = append(steps, stepFunc{
-		name: "Helm upgrade",
-		desc: "Running helm upgrade for the zenith release...",
-		fn: func(cli *sshclient.Client) error {
-			return helmUpgrade(cli, version)
-		},
-	})
-
-	steps = append(steps, stepFunc{
-		name: "Wait for rollout",
-		desc: "Waiting for all pods to roll over...",
-		fn: func(cli *sshclient.Client) error {
-			return waitForRollout(cli)
-		},
-	})
-
-	steps = append(steps, stepFunc{
-		name: "Health check",
-		desc: "Verifying Mission Control API is healthy...",
-		fn: func(cli *sshclient.Client) error {
-			return healthCheck(cli, state)
-		},
-	})
-
-	return steps
-}
-
-// buildHelmDiffCmd returns the helm diff upgrade command for the given version.
-func buildHelmDiffCmd(version string) string {
-	cmd := "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm diff upgrade zenith " +
-		"oci://ghcr.io/dotechhq/zenith/charts/zenith " +
-		"-n zenith-system"
-	if version != "" {
-		cmd += " --version " + version
-	}
-	return cmd + " 2>&1"
-}
-
-const helmDiffVersion = "3.9.4"
-
-// ensureHelmDiff installs the helm-diff plugin on the remote server if not present.
-func ensureHelmDiff(cli *sshclient.Client) error {
-	out, _ := cli.Run("helm plugin list 2>/dev/null | grep -c diff")
-	if strings.TrimSpace(out) == "1" {
-		return nil
-	}
-	installOut, err := cli.Run(
-		"helm plugin install https://github.com/databus23/helm-diff --version " + helmDiffVersion + " 2>&1",
-	)
-	if err != nil {
-		return fmt.Errorf("install helm-diff plugin: %w\n%s", err, installOut)
-	}
-	return nil
-}
-
-// buildHelmUpgradeCmd returns the helm upgrade command string for the given version.
-func buildHelmUpgradeCmd(version string) string {
-	cmd := "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade zenith " +
-		"oci://ghcr.io/dotechhq/zenith/charts/zenith " +
-		"-n zenith-system --wait --timeout=10m"
-	if version != "" {
-		cmd += " --version " + version
-	}
-	return cmd + " 2>&1"
-}
-
-// buildHelmRollbackCmd returns the helm rollback command string.
-func buildHelmRollbackCmd() string {
-	return "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm rollback zenith -n zenith-system --wait --timeout=5m 2>&1"
-}
-
-// helmUpgrade runs helm upgrade for the zenith chart.
-func helmUpgrade(cli *sshclient.Client, version string) error {
-	_, err := cli.Run(buildHelmUpgradeCmd(version))
-	return err
-}
-
-// helmRollback rolls back the zenith Helm release.
-func helmRollback(cli *sshclient.Client) error {
-	_, err := cli.Run(buildHelmRollbackCmd())
-	return err
-}
-
-// waitForRollout waits for all deployments and statefulsets in zenith-system to finish rolling out.
-func waitForRollout(cli *sshclient.Client) error {
-	cmd := "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl rollout status deployment -n zenith-system --timeout=10m 2>&1 && " +
-		"KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl rollout status statefulset -n zenith-system --timeout=10m 2>&1"
-	_, err := cli.Run(cmd)
-	return err
-}
-
-// healthCheck verifies the Mission Control API returns a healthy response.
-func healthCheck(cli *sshclient.Client, state *installstate.State) error {
-	url := state.MissionControlURL
-	if url == "" && state.Domain != "" {
-		url = fmt.Sprintf("https://mission.%s", state.Domain)
-	}
-	if url == "" {
-		return fmt.Errorf("cannot health-check: MissionControlURL not set in state (run 'zen install' to populate state)")
-	}
-	cmd := fmt.Sprintf(`curl -sf --max-time 10 "%s/health" -o /dev/null 2>&1`, url)
-	_, err := cli.Run(cmd)
-	return err
-}
-
-// triggerAndWaitBackup triggers a CNPG backup and waits up to 5 minutes for it to complete.
-func triggerAndWaitBackup(cli *sshclient.Client) error {
-	annotateCmd := `KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl annotate cluster.postgresql.cnpg.io/zenith-postgres -n zenith-system backup.cnpg.io/immediate="true" --overwrite 2>&1`
-	if _, err := cli.Run(annotateCmd); err != nil {
-		return fmt.Errorf("trigger backup: %w", err)
-	}
-
-	deadline := time.Now().Add(5 * time.Minute)
-	pollCmd := `KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get backup -n zenith-system --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].status.phase}' 2>/dev/null`
-
-	for time.Now().Before(deadline) {
-		phase, _ := cli.Run(pollCmd)
-		switch phase {
-		case "completed":
-			return nil
-		case "failed":
-			return fmt.Errorf("CNPG backup phase=failed")
-		}
-		time.Sleep(5 * time.Second)
-	}
-	return fmt.Errorf("timed out waiting for pre-upgrade backup")
-}
-
-// runDryRun connects via SSH and runs helm diff upgrade to show what would change.
-// Falls back to printing a static plan if SSH connection fails.
-func runDryRun(state *installstate.State, version string, skipBackup bool) {
-	muted := lipgloss.NewStyle().Foreground(tui.ColorMuted).PaddingLeft(2)
-	info := lipgloss.NewStyle().Foreground(tui.ColorText).PaddingLeft(2)
-	bold := lipgloss.NewStyle().Bold(true).Foreground(tui.ColorPrimary).PaddingLeft(2)
-	errStyle := lipgloss.NewStyle().Foreground(tui.ColorError).PaddingLeft(2)
-
-	fmt.Println(bold.Render("Dry-run plan:"))
-	fmt.Println()
-
-	versionStr := "latest"
-	if version != "" {
-		versionStr = version
-	}
-	if !skipBackup {
-		fmt.Println(info.Render("  1. Pre-upgrade backup — CNPG immediate annotation"))
-	}
-	fmt.Println(info.Render(fmt.Sprintf("  Helm upgrade: zenith@%s in zenith-system", versionStr)))
-	fmt.Println()
-
-	if state.ServerIP == "" {
-		fmt.Println(muted.Render("No server IP in state — skipping helm diff."))
-		return
-	}
-
-	fmt.Println(muted.Render("Connecting to server for helm diff..."))
-	sshCfg := sshclient.Config{
-		Host:    state.ServerIP,
-		User:    "root",
-		Timeout: 15 * time.Second,
-	}
-	if state.SSHKeyPath != "" {
-		if keyData, err := os.ReadFile(state.SSHKeyPath); err == nil {
-			sshCfg.PrivateKey = keyData
-		}
-	}
-	cli, err := sshclient.DialWithRetry(sshCfg, 3, 5*time.Second)
-	if err != nil {
-		fmt.Println(errStyle.Render("  Could not connect: " + err.Error()))
-		fmt.Println(muted.Render("  Showing static plan above only."))
-		return
-	}
-	defer cli.Close()
-
-	if err := ensureHelmDiff(cli); err != nil {
-		fmt.Println(errStyle.Render("  helm-diff not available: " + err.Error()))
-		return
-	}
-
-	fmt.Println(bold.Render("helm diff output:"))
-	fmt.Println()
-	out, _ := cli.Run(buildHelmDiffCmd(version))
-	fmt.Println(out)
-	fmt.Println(muted.Render("No changes made (dry-run)."))
-	fmt.Println()
-}
-
-// formatDuration produces a human-friendly duration string.
-func formatDuration(d time.Duration) string {
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
-	}
-	return fmt.Sprintf("%.1fs", d.Seconds())
-}
-
-// runComposeUpgrade upgrades a Docker Compose install in place.
-func runComposeUpgrade(cmd *cobra.Command, inst composeops.Install) error {
+func run(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
+	runner := k8sops.ExecRunner{}
+	inst, ok := k8sops.Detect(ctx, runner, flagKubeconfig)
+	if !ok {
+		return fmt.Errorf("no Zenith installation found (use --kubeconfig)")
 	}
 	target := strings.TrimPrefix(flagVersion, "v")
 	if target == "" {
-		latest, err := composeops.LatestRelease(ctx, "taikuri-infra/Zenith")
+		latest, err := k8sops.LatestRelease(ctx, "taikuri-infra/Zenith")
 		if err != nil {
 			return fmt.Errorf("resolve latest release: %w", err)
 		}
 		target = latest
 	}
-	if err := validateVersion(target); err != nil {
-		return err
-	}
-	res, err := composeops.Upgrade(ctx, composeops.ExecRunner{}, inst, composeops.UpgradeOptions{
-		Target:     target,
-		Force:      flagForce,
-		SkipBackup: flagSkipBackup,
-		DryRun:     flagDryRun,
-		Now:        time.Now,
+	res, err := k8sops.Upgrade(ctx, runner, inst, k8sops.UpgradeOptions{
+		Target: target, Force: flagForce, SkipBackup: flagSkipBackup, DryRun: flagDryRun,
+		BackupDir: flagBackupDir, Now: time.Now,
 	}, os.Stdout)
 	if res != nil && !flagDryRun {
 		fmt.Printf("%s -> %s\n", res.From, res.To)

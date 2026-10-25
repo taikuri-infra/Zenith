@@ -9,7 +9,7 @@ Thanks for your interest in contributing to Zenith! This guide will help you get
 - Go 1.25+
 - Node.js 20+
 - pnpm 10+
-- Docker and Docker Compose
+- Docker (for a local Postgres and for the k3d-based E2E run)
 
 ### Getting Started
 
@@ -19,7 +19,7 @@ git clone https://github.com/dotechhq/zenith.git
 cd zenith
 
 # Start dependencies
-docker compose up postgres -d
+docker run -d --name zenith-pg -e POSTGRES_USER=zenith -e POSTGRES_PASSWORD=zenith -e POSTGRES_DB=zenith -p 5432:5432 postgres:16-alpine
 
 # Run the API
 cd services/api

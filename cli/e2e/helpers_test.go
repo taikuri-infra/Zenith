@@ -708,8 +708,3 @@ func deployProbe(t *testing.T, c *cliapi.Client, marker string) *state {
 	}
 	return st
 }
-
-// errNotNewer reports whether zen upgrade refused because the target is not newer than the install.
-func errNotNewer(out string, err error) bool {
-	return err != nil && strings.Contains(out, "not newer")
-}

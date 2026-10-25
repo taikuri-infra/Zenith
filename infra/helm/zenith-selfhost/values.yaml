@@ -29,6 +29,13 @@ tls:
   # cert-manager ClusterIssuer used for the Zenith host. The chart creates an
   # HTTP-01 issuer with this name when issuer.create is true.
   issuerName: letsencrypt-http
+  # One certificate per app host (HTTP-01 needs each app name to resolve to this
+  # server). The installer turns it off for shared sslip.io-style domains, where
+  # Let's Encrypt rate limits are shared with everyone.
+  appCerts: true
+  # Secret (key ca.crt) in the release namespace with an extra CA the API trusts when it checks
+  # custom-domain certificates; only needed when the issuer is a private CA.
+  caSecret: ""
   issuer:
     create: true
     email: ""

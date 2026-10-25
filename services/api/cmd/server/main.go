@@ -43,7 +43,6 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/telemetry"
 	zenithTemporal "github.com/dotechhq/zenith/services/api/internal/services/temporal"
 	"github.com/jackc/pgx/v5/pgxpool"
-	dockerclient "github.com/docker/docker/client"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
@@ -531,25 +530,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	logHub := deploy.NewLogHub(500)
 	eventHub := deploy.NewEventHub(50)
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
-	// Select the compute backend: Kubernetes whenever a real cluster client is
-	// configured (K8S_MODE=real, the self-host k3s install and saas). The Docker
-	// deployer remains only for a standalone host without a cluster. The
-	// DockerDeployer's env repos are wired later, alongside the k8s deployer's
-	// setters.
+	deploy.SetCertIssuer(cfg.TLSIssuer)
+	deploy.SetAppCerts(cfg.AppCerts)
+	// Zenith runs on Kubernetes only: the Deployer is the one compute backend.
 	var backend deploy.Backend = deployer
-	var dockerDeployer *deploy.DockerDeployer
-	var dockerDeployerCli *dockerclient.Client
-	if cfg.Mode != "saas" && cfg.K8sMode != "real" {
-		if dockerCli, derr := dockerclient.NewClientWithOpts(dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation()); derr != nil {
-			slog.Warn("docker client unavailable — app deploys will be simulated", "error", derr)
-		} else {
-			dockerDeployer = deploy.NewDockerDeployer(dockerCli, appRepo, nil, planRepo, cfg.BaseDomain, cfg.AppNetwork)
-			dockerDeployer.SetProjectRepo(projectRepo)
-			backend = dockerDeployer
-			dockerDeployerCli = dockerCli
-			slog.Info("using Docker deployer (standalone self-host)", "network", cfg.AppNetwork)
-		}
-	}
 	pipeline := deploy.NewPipeline(backend, appRepo, logHub, eventHub, cfg.MaxConcurrentDeploys)
 	pipeline.SetEventBus(eventBus)
 	// Self-host: one user deploys their whole multi-service stack at once, so
@@ -911,33 +895,19 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 			dbSvc.SetManagedEnv(managedEnv)
 		}
 	}
-	if cfg.Mode != "saas" && dockerDeployerCli != nil {
-		dockerDBBackend := deploy.NewDockerDBBackend(dockerDeployerCli, cfg.AppNetwork)
-		dbRuntime := services.NewDBRuntimeService(dbRepo, dockerDBBackend, envCrypto)
+	if cfg.Mode != "saas" && cfg.K8sMode == "real" {
+		// Self-host on Kubernetes: operator-backed databases (CloudNativePG, mariadb-operator, redis-operator).
+		k8sDBBackend := deploy.NewK8sDBBackend(k8sClient, "zenith-apps")
+		dbRuntime := services.NewDBRuntimeService(dbRepo, k8sDBBackend, envCrypto)
 		dbHandlerV2.SetRuntime(dbRuntime)
-		if dockerDeployer != nil {
-			reconciler := deploy.NewReconciler(appRepo, dbRepo, dockerDeployer, dockerDBBackend, dbRuntime)
-			go func() {
-				time.Sleep(10 * time.Second)
-				reconciler.Run(context.Background())
-			}()
-			go func() {
-				time.Sleep(20 * time.Second)
-				if n, err := services.MigrateManagedEnv(context.Background(), dbRepo, appRepo, managedEnv); err != nil {
-					slog.Warn("managed env migration failed", "error", err)
-				} else if n > 0 {
-					slog.Info("managed env migration done", "moved", n)
-				}
-			}()
-		}
+		// After a restore or a manual delete, recreate what the database says should exist.
+		reconciler := deploy.NewReconciler(appRepo, dbRepo, deployer, k8sDBBackend, dbRuntime)
+		go func() {
+			time.Sleep(10 * time.Second)
+			reconciler.Run(context.Background())
+		}()
 		dbHandlerV2.SetRedeployer(backend)
-		slog.Info("database runtime: Docker containers")
-	} else if cfg.Mode != "saas" && cfg.K8sMode == "real" {
-		// Self-host on Kubernetes: operator-backed databases (CloudNativePG).
-		dbRuntime := services.NewDBRuntimeService(dbRepo, deploy.NewK8sDBBackend(k8sClient, "zenith-apps"), envCrypto)
-		dbHandlerV2.SetRuntime(dbRuntime)
-		dbHandlerV2.SetRedeployer(backend)
-		slog.Info("database runtime: Kubernetes operators (CloudNativePG)")
+		slog.Info("database runtime: Kubernetes operators")
 	}
 	appByID.Post("/databases", handlers.CheckLimit(planRepo, "databases", func(c *fiber.Ctx, userID string) (int, error) {
 		return dbRepo.CountDatabasesByUser(c.Context(), userID)
@@ -1214,9 +1184,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		slog.Info("Loki client configured", "url", cfg.LokiURL)
 	}
 	monitoringSvc := services.NewMonitoringService(promClient, lokiClient, k8sClient, appRepo)
-	if dockerDeployerCli != nil {
-		monitoringSvc.SetLogSource(deploy.NewDockerLogSource(dockerDeployerCli))
-		slog.Info("app logs: Docker container logs")
+	if cfg.K8sMode == "real" {
+		if reader, ok := k8sClient.(k8sclient.PodLogReader); ok {
+			monitoringSvc.SetLogSource(deploy.NewK8sLogSource(reader, "zenith-apps"))
+			slog.Info("app logs: Kubernetes pod logs")
+		}
 	}
 	monitoringHandler := handlers.NewMonitoringHandler(monitoringSvc)
 	appByID.Get("/metrics/overview", monitoringHandler.GetOverview)
@@ -1352,18 +1324,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	deployer.SetEnvVarRepo(envVarRepo)
 	deployer.SetEnvCrypto(envCrypto)
 	deployer.SetEnvRepo(envRepo)
-	if dockerDeployer != nil {
-		dockerDeployer.SetEnvVarRepo(envVarRepo)
-		dockerDeployer.SetEnvCrypto(envCrypto)
-		dockerDeployer.SetDomainRepo(domainRepo)
-		dockerDeployer.SetCertResolver(cfg.CertResolver)
-	}
 	envVarHandler.SetRestarter(backend)
 	domainHandler := handlers.NewDomainHandler(domainRepo, appRepo, planRepo)
 	domainHandler.SetDeployer(backend)
 	domainHandler.SetReservedDomain(cfg.BaseDomain)
 	domainHandler.SetSubdomainsAllowed(cfg.IsStandalone())
-	if cfg.IsStandalone() && dockerDeployer != nil {
+	if cfg.IsStandalone() && cfg.K8sMode == "real" {
 		roots, rerr := services.CertPoolWithFile(cfg.TLSCAFile)
 		if rerr != nil {
 			if cfg.TLSCAFile == "" || errors.Is(rerr, services.ErrSystemRootsUnavailable) {

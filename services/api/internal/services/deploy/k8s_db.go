@@ -52,7 +52,14 @@ func (b *K8sDBBackend) SupportsEngine(e entities.DatabaseEngine) bool {
 	return false
 }
 
-func k8sDBName(db *entities.UserDatabase) string { return "db-" + dbShortID(db) }
+// k8sDBName is the operator resource name: db-<first 8 chars of the database id>.
+func k8sDBName(db *entities.UserDatabase) string {
+	id := db.ID
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	return "db-" + id
+}
 
 // dbKind is the operator custom resource (apiVersion, kind) for an engine.
 func dbKind(e entities.DatabaseEngine) (string, string) {

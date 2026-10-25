@@ -95,6 +95,7 @@ type MemoryClient struct {
 	jobs       map[string]*JobObject
 	namespaces map[string]map[string]string
 	secrets    map[string]map[string][]byte
+	podLogs    map[string]string
 }
 
 func NewMemoryClient() *MemoryClient {

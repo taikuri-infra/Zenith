@@ -11,6 +11,10 @@ set -euo pipefail
 # Env: ZENITH_DOMAIN (default <public-ip>.sslip.io), ZENITH_EMAIL (Let's Encrypt),
 #      ZENITH_VERSION (image tag, default latest), ZENITH_ADMIN_EMAIL, ZENITH_ADMIN_PASSWORD,
 #      ZENITH_REPO_URL / ZENITH_BRANCH, ZENITH_CHART (local chart path, skips git),
+#      ZENITH_TLS_ISSUER (use this existing cert-manager ClusterIssuer instead of Let's Encrypt),
+#      ZENITH_APP_CERTS=true|false (a certificate per app host; default off for sslip.io/nip.io domains),
+#      ZENITH_TLS_CA_SECRET (Secret with ca.crt of a private CA the API should trust),
+#      ZENITH_PULL_POLICY (image pull policy, e.g. Never for pre-loaded images),
 #      ZENITH_DRY_RUN=1 (print the plan, change nothing).
 
 REPO_URL="${ZENITH_REPO_URL:-https://github.com/taikuri-infra/Zenith.git}"
@@ -41,16 +45,19 @@ resolve_domain() {
 
 preflight() {
   [ "$DRY_RUN" = 1 ] && return 0
-  [ "$(id -u)" = 0 ] || { err "Run as root (sudo)."; exit 1; }
   for c in curl openssl; do command -v "$c" >/dev/null || { err "$c is required."; exit 1; }; done
-  if ss -ltn 2>/dev/null | grep -qE ':(80|443) ' && ! command -v k3s >/dev/null; then
-    err "Ports 80/443 are in use; free them before installing (k3s Traefik needs both)."
-    exit 1
+  # Installing k3s needs root and free ports; an existing cluster needs neither.
+  if ! { command -v kubectl >/dev/null && kubectl get nodes >/dev/null 2>&1; }; then
+    [ "$(id -u)" = 0 ] || { err "Run as root (sudo): k3s is not installed yet."; exit 1; }
+    if ss -ltn 2>/dev/null | grep -qE ':(80|443) '; then
+      err "Ports 80/443 are in use; free them before installing (k3s Traefik needs both)."
+      exit 1
+    fi
   fi
 }
 
 install_k3s() {
-  if command -v k3s >/dev/null && kubectl get nodes >/dev/null 2>&1; then log "k3s already running"; return; fi
+  if command -v kubectl >/dev/null && kubectl get nodes >/dev/null 2>&1; then log "Kubernetes cluster already reachable; not installing k3s"; return; fi
   log "Installing k3s"
   if [ "$DRY_RUN" = 1 ]; then echo "[dry-run] curl -sfL https://get.k3s.io | sh -"; return; fi
   curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 0644" sh -
@@ -114,11 +121,25 @@ fetch_chart() {
 
 install_zenith() {
   log "Installing Zenith ($VERSION) at https://$ZENITH_DOMAIN"
+  local extra=()
+  if [ -n "${ZENITH_TLS_ISSUER:-}" ]; then
+    extra+=(--set "tls.issuerName=$ZENITH_TLS_ISSUER" --set tls.issuer.create=false)
+  fi
+  if [ -n "${ZENITH_APP_CERTS:-}" ]; then
+    extra+=(--set "tls.appCerts=$ZENITH_APP_CERTS")
+  else
+    case "$ZENITH_DOMAIN" in
+      *.sslip.io|*.nip.io) extra+=(--set tls.appCerts=false) ;;
+    esac
+  fi
+  if [ -n "${ZENITH_TLS_CA_SECRET:-}" ]; then extra+=(--set "tls.caSecret=$ZENITH_TLS_CA_SECRET"); fi
+  if [ -n "${ZENITH_PULL_POLICY:-}" ]; then extra+=(--set "images.pullPolicy=$ZENITH_PULL_POLICY"); fi
   run helm upgrade --install zenith "$CHART" -n "$NS" --wait --timeout 10m \
     --set domain="$ZENITH_DOMAIN" \
     --set tls.issuer.email="${ZENITH_EMAIL:-admin@${ZENITH_DOMAIN}}" \
     --set images.api="$IMAGE_REPO/zenith-api:$VERSION" \
-    --set images.web="$IMAGE_REPO/zenith-web:$VERSION"
+    --set images.web="$IMAGE_REPO/zenith-web:$VERSION" \
+    "${extra[@]}"
 }
 
 main() {

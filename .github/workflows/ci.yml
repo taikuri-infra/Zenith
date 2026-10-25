@@ -25,10 +25,7 @@ jobs:
           cache-dependency-path: services/api/go.sum
 
       - name: Run install script tests
-        run: |
-          bash infra/scripts/install_test.sh
-          bash infra/scripts/compose_networks_test.sh
-          bash infra/e2e/server_test.sh
+        run: bash infra/scripts/install_k3s_test.sh
 
       - name: Run API tests
         run: cd services/api && go test ./... -race -count=1

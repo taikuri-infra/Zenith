@@ -16,7 +16,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 )
 
-// DBBackend runs database instances (Docker containers in standalone mode).
+// DBBackend runs database instances (Kubernetes operators).
 type DBBackend interface {
 	Provision(ctx context.Context, db *entities.UserDatabase, password string) (host string, port int, err error)
 	WaitReady(ctx context.Context, db *entities.UserDatabase) error
@@ -24,7 +24,7 @@ type DBBackend interface {
 }
 
 // EngineSupporter is an optional DBBackend capability: which engines it can run.
-// Backends without it fall back to SupportedEngine (the Docker set).
+// Backends without it fall back to SupportedEngine (the built-in Postgres/MySQL/Redis set).
 type EngineSupporter interface {
 	SupportsEngine(e entities.DatabaseEngine) bool
 }
@@ -48,7 +48,7 @@ func NewDBRuntimeService(repo ports.DatabaseRepository, backend DBBackend, crypt
 	return &DBRuntimeService{repo: repo, backend: backend, crypto: crypto, provisionTimeout: 5 * time.Minute}
 }
 
-// SupportedEngine reports whether the Docker runtime can run engine.
+// SupportedEngine reports whether the built-in runtime can run engine.
 func SupportedEngine(e entities.DatabaseEngine) bool {
 	switch e {
 	case entities.DatabaseEnginePostgres, entities.DatabaseEngineMySQL, entities.DatabaseEngineRedis:

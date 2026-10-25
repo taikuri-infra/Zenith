@@ -20,6 +20,8 @@ type Config struct {
 	K8sMode      string // K8S_MODE: "memory" (default) or "real"
 	KubeConfig   string
 	CertResolver string
+	AppCerts     bool   // issue a certificate for every app host
+	TLSIssuer    string // cert-manager ClusterIssuer for custom-domain certificates
 	InCluster    bool
 
 	// Auth
@@ -43,7 +45,6 @@ type Config struct {
 	// Deploy
 	BaseDomain       string
 	TLSCAFile        string // ZENITH_TLS_CA_FILE: PEM CA to trust in addition to the system roots (self-signed installs)
-	AppNetwork       string // docker network app containers join (standalone/DockerDeployer)
 	GatewayDomain    string // subdomain for API gateways (e.g. "gw.stage.freezenith.com")
 	Registry         string // container registry host (e.g. "registry.stage.freezenith.com")
 	RegistryProject  string // Harbor project for user images (e.g. "zenith-stage") — robot account must have push access here
@@ -154,6 +155,8 @@ func Load() *Config {
 		LogLevel:              getEnv("LOG_LEVEL", "info"),
 		KubeConfig:            getEnv("KUBECONFIG", ""),
 		CertResolver:          getEnvSet("ZENITH_CERT_RESOLVER", "le"),
+		TLSIssuer:             getEnv("ZENITH_TLS_ISSUER", ""),
+		AppCerts:              getEnv("ZENITH_APP_CERTS", "") == "true",
 		K8sMode:               getEnv("K8S_MODE", "memory"),
 		InCluster:             getEnvBool("IN_CLUSTER", false),
 		JWTSecret:             getEnv("JWT_SECRET", ""),
@@ -170,7 +173,6 @@ func Load() *Config {
 		InternalSecret:        getEnv("INTERNAL_SECRET", ""),
 		BaseDomain:            getEnv("BASE_DOMAIN", "freezenith.com"),
 		TLSCAFile:             getEnv("ZENITH_TLS_CA_FILE", ""),
-		AppNetwork:            getEnv("ZENITH_APP_NETWORK", "zenith_default"),
 		GatewayDomain:         getEnv("GATEWAY_DOMAIN", "gw."+getEnv("BASE_DOMAIN", "freezenith.com")),
 		Registry:              getEnv("REGISTRY", "registry.freezenith.com"),
 		RegistryProject:       getEnv("REGISTRY_PROJECT", ""),
