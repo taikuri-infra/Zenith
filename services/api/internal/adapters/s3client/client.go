@@ -25,6 +25,9 @@ var _ ports.ObjectStorage = (*MemoryS3Client)(nil)
 // Client implements S3API using AWS SDK v2 (Hetzner S3-compatible).
 type Client struct {
 	s3Client *s3.Client
+	// presignClient signs URLs for the address clients reach from outside the
+	// cluster; it equals s3Client when no public endpoint is configured.
+	presignClient *s3.Client
 }
 
 // NewClient creates an S3 client targeting Hetzner Object Storage.
@@ -35,7 +38,22 @@ func NewClient(endpoint, accessKey, secretKey, region string) *Client {
 		Credentials:  credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
 		UsePathStyle: true,
 	})
-	return &Client{s3Client: s3Client}
+	return &Client{s3Client: s3Client, presignClient: s3Client}
+}
+
+// WithPublicEndpoint makes presigned URLs point at the address users reach
+// from outside the cluster instead of the in-cluster service.
+func (c *Client) WithPublicEndpoint(endpoint, accessKey, secretKey, region string) *Client {
+	if endpoint == "" {
+		return c
+	}
+	c.presignClient = s3.New(s3.Options{
+		BaseEndpoint: aws.String(endpoint),
+		Region:       region,
+		Credentials:  credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
+		UsePathStyle: true,
+	})
+	return c
 }
 
 // CreateBucket creates an S3 bucket for a tenant.
@@ -116,7 +134,7 @@ func (c *Client) DeleteObject(ctx context.Context, bucket, key string) error {
 
 // GeneratePresignedUploadURL creates a presigned PUT URL for uploading an object.
 func (c *Client) GeneratePresignedUploadURL(ctx context.Context, bucket, key, contentType string, expiry time.Duration) (string, error) {
-	presignClient := s3.NewPresignClient(c.s3Client)
+	presignClient := s3.NewPresignClient(c.presignClient)
 	input := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -133,7 +151,7 @@ func (c *Client) GeneratePresignedUploadURL(ctx context.Context, bucket, key, co
 
 // GeneratePresignedDownloadURL creates a presigned GET URL for downloading an object.
 func (c *Client) GeneratePresignedDownloadURL(ctx context.Context, bucket, key string, expiry time.Duration) (string, error) {
-	presignClient := s3.NewPresignClient(c.s3Client)
+	presignClient := s3.NewPresignClient(c.presignClient)
 	out, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),

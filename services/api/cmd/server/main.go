@@ -1009,14 +1009,17 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Storage (Phase 3 — per-app S3-compatible storage)
 	var storageRepo ports.StorageRepository
 	if pool != nil {
-		storageRepo = postgres.NewPostgresStorageRepository(pool)
+		pgStorage := postgres.NewPostgresStorageRepository(pool)
+		pgStorage.SetPublicEndpoint(cfg.S3PublicEndpoint)
+		storageRepo = pgStorage
 	} else {
 		storageRepo = memory.NewMemoryStorageRepository()
 	}
 	// S3 client + BucketService (real per-customer S3 buckets)
 	var objStorage ports.ObjectStorage
 	if cfg.S3Endpoint != "" {
-		s3c := s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
+		s3c := s3client.NewClient(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region).
+			WithPublicEndpoint(cfg.S3PublicEndpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Region)
 		objStorage = s3c
 		go func(s3c *s3client.Client) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

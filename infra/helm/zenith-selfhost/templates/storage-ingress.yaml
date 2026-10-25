@@ -1,0 +1,22 @@
+{{- if .Values.storage.publicHost }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zenith-storage
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.tls.issuerName }}
+  labels:
+    {{- include "zenith.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingressClassName }}
+  tls:
+    - hosts: [{{ .Values.storage.publicHost | quote }}]
+      secretName: zenith-storage-tls
+  rules:
+    - host: {{ .Values.storage.publicHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: zenith-storage, port: {number: 9000}}}
+{{- end }}
