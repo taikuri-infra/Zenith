@@ -128,7 +128,8 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 		}
 	}
 
-	// Fetch active custom domains for this app
+	// Fetch the app's custom domains whose DNS is verified. A verified domain
+	// needs its certificate before it can turn active, so it is routed too.
 	var customDomains []string
 	if d.domainRepo != nil {
 		domains, err := d.domainRepo.ListDomainsByApp(ctx, app.ID)
@@ -136,7 +137,7 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 			slog.Error("failed to fetch custom domains", "app_id", app.ID, "error", err)
 		} else {
 			for _, dom := range domains {
-				if dom.Status == entities.DomainStatusActive {
+				if dom.Status == entities.DomainStatusActive || dom.Status == entities.DomainStatusVerified {
 					customDomains = append(customDomains, dom.Domain)
 				}
 			}

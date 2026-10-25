@@ -58,6 +58,23 @@ wait_api() { # wait_api URL CA
   done
 }
 
+# load_images NAME IMAGE... — k3d image import, verified: the import reports errors but can still exit 0.
+load_images() {
+  local name="$1" img try; shift
+  for try in 1 2 3; do
+    k3d image import -c "$(cname "$name")" "$@" >/dev/null 2>&1 || true
+    local missing=0 have
+    have="$(docker exec "$(node "$name")" ctr -n k8s.io images ls -q 2>/dev/null || true)"
+    for img in "$@"; do
+      grep -qxF "$img" <<<"$have" || grep -qxF "docker.io/$img" <<<"$have" || missing=1
+    done
+    [ "$missing" = 0 ] && return 0
+    log "image import attempt $try incomplete; retrying"
+    sleep 3
+  done
+  die "could not load the candidate images into $(cname "$name")"
+}
+
 cmd_new() {
   ensure_k3d
   local name="$1"; mkdir -p "$ART"
@@ -108,17 +125,22 @@ cmd_install() {
   domain="$ip.sslip.io"; pw="$(openssl rand -hex 12)"; ca="$ART/$name-ca.crt"
 
   log "loading images into $(cname "$name")"
-  k3d image import -c "$(cname "$name")" "$IMAGE_REPO/zenith-api:$cand" "$IMAGE_REPO/zenith-web:$cand" "$IMAGE_REPO/e2e-probe:$cand" >/dev/null
+  load_images "$name" "$IMAGE_REPO/zenith-api:$cand" "$IMAGE_REPO/zenith-web:$cand" "$IMAGE_REPO/e2e-probe:$cand"
   install_ca "$kc"
+
+  # The API checks custom-domain certificates, so it must trust the harness CA.
+  kubectl --kubeconfig "$kc" create namespace zenith-system --dry-run=client -o yaml | kubectl --kubeconfig "$kc" apply -f - >/dev/null
+  kubectl --kubeconfig "$kc" -n cert-manager get secret "$ISSUER" -o jsonpath='{.data.ca\.crt}' | base64 -d > "$ca"
+  kubectl --kubeconfig "$kc" -n zenith-system create secret generic zenith-tls-ca --from-file=ca.crt="$ca" --dry-run=client -o yaml \
+    | kubectl --kubeconfig "$kc" apply -f - >/dev/null
 
   log "zen install on $domain"
   start=$SECONDS
   KUBECONFIG="$kc" ZENITH_CHART="$repo/infra/helm/zenith-selfhost" ZENITH_IMAGE_REPO="$IMAGE_REPO" \
-    ZENITH_PULL_POLICY=Never ZENITH_TLS_ISSUER="$ISSUER" ZENITH_APP_CERTS=true \
+    ZENITH_PULL_POLICY=Never ZENITH_TLS_ISSUER="$ISSUER" ZENITH_APP_CERTS=true ZENITH_TLS_CA_SECRET=zenith-tls-ca \
     "$zen" install --domain "$domain" --version "$cand" --admin-email "$ADMIN_EMAIL" --admin-password "$pw"
   local secs=$((SECONDS - start))
 
-  kubectl --kubeconfig "$kc" -n cert-manager get secret "$ISSUER" -o jsonpath='{.data.ca\.crt}' | base64 -d > "$ca"
   wait_api "https://$domain" "$ca"
   cmd_env "$name" "$domain" "$pw" "$secs" "$cand"
 }

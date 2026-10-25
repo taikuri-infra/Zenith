@@ -13,6 +13,7 @@ set -euo pipefail
 #      ZENITH_REPO_URL / ZENITH_BRANCH, ZENITH_CHART (local chart path, skips git),
 #      ZENITH_TLS_ISSUER (use this existing cert-manager ClusterIssuer instead of Let's Encrypt),
 #      ZENITH_APP_CERTS=true|false (a certificate per app host; default off for sslip.io/nip.io domains),
+#      ZENITH_TLS_CA_SECRET (Secret with ca.crt of a private CA the API should trust),
 #      ZENITH_PULL_POLICY (image pull policy, e.g. Never for pre-loaded images),
 #      ZENITH_DRY_RUN=1 (print the plan, change nothing).
 
@@ -131,6 +132,7 @@ install_zenith() {
       *.sslip.io|*.nip.io) extra+=(--set tls.appCerts=false) ;;
     esac
   fi
+  if [ -n "${ZENITH_TLS_CA_SECRET:-}" ]; then extra+=(--set "tls.caSecret=$ZENITH_TLS_CA_SECRET"); fi
   if [ -n "${ZENITH_PULL_POLICY:-}" ]; then extra+=(--set "images.pullPolicy=$ZENITH_PULL_POLICY"); fi
   run helm upgrade --install zenith "$CHART" -n "$NS" --wait --timeout 10m \
     --set domain="$ZENITH_DOMAIN" \

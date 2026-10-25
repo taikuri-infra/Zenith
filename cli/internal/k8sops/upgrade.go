@@ -40,6 +40,7 @@ type helmValues struct {
 	} `json:"images"`
 	TLS struct {
 		IssuerName string `json:"issuerName"`
+		CASecret   string `json:"caSecret"`
 		Issuer     struct {
 			Create *bool  `json:"create"`
 			Email  string `json:"email"`
@@ -76,6 +77,9 @@ func (v *helmValues) scriptEnv(version string) map[string]string {
 	}
 	if v.TLS.Issuer.Create != nil && !*v.TLS.Issuer.Create && v.TLS.IssuerName != "" {
 		env["ZENITH_TLS_ISSUER"] = v.TLS.IssuerName
+	}
+	if v.TLS.CASecret != "" {
+		env["ZENITH_TLS_CA_SECRET"] = v.TLS.CASecret
 	}
 	if v.TLS.Issuer.Email != "" {
 		env["ZENITH_EMAIL"] = v.TLS.Issuer.Email

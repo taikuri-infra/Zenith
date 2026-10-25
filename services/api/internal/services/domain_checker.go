@@ -80,7 +80,7 @@ const (
 
 func NewDomainChecker(repo ports.DomainRepository, resolver DomainResolver, prober TLSProber, dashboardDomain string) *DomainChecker {
 	return &DomainChecker{repo: repo, resolver: resolver, prober: prober, dashboardDomain: dashboardDomain,
-		traefikAddr: "traefik:443", stepTimeout: 5 * time.Second, now: time.Now,
+		traefikAddr: "traefik.kube-system.svc.cluster.local:443", stepTimeout: 5 * time.Second, now: time.Now,
 		refreshSt: map[string]*refreshState{}, refreshing: map[string]bool{}}
 }
 

@@ -33,6 +33,9 @@ tls:
   # server). The installer turns it off for shared sslip.io-style domains, where
   # Let's Encrypt rate limits are shared with everyone.
   appCerts: true
+  # Secret (key ca.crt) in the release namespace with an extra CA the API trusts when it checks
+  # custom-domain certificates; only needed when the issuer is a private CA.
+  caSecret: ""
   issuer:
     create: true
     email: ""

@@ -10,7 +10,7 @@ Brief description of the changes.
 
 - [ ] `go test ./...` passes
 - [ ] `npm run build` succeeds (if frontend changes)
-- [ ] `docker compose config` validates (if compose changes)
+- [ ] `helm template` renders `infra/helm/zenith-selfhost` (if chart changes)
 - [ ] Tested manually in standalone mode
 
 ## Related Issues

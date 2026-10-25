@@ -155,7 +155,7 @@ func TestRestoreRefusesNewerArchive(t *testing.T) {
 
 func TestUpgradeUsesExistingReleaseSettings(t *testing.T) {
 	r := stack()
-	r.answers["helm get values zenith -n zenith-system -o json"] = `{"domain":"z.example.com","images":{"api":"reg.local/zenith-api:0.2.0","pullPolicy":"Never"},"tls":{"issuerName":"ca","issuer":{"create":false,"email":"a@b.c"}}}`
+	r.answers["helm get values zenith -n zenith-system -o json"] = `{"domain":"z.example.com","images":{"api":"reg.local/zenith-api:0.2.0","pullPolicy":"Never"},"tls":{"issuerName":"ca","caSecret":"my-ca-secret","issuer":{"create":false,"email":"a@b.c"}}}`
 	var got map[string]string
 	old := runScript
 	runScript = func(_ context.Context, env map[string]string, _ string, _ io.Writer) error { got = env; return nil }
@@ -170,7 +170,7 @@ func TestUpgradeUsesExistingReleaseSettings(t *testing.T) {
 	}
 	for k, v := range map[string]string{
 		"ZENITH_DOMAIN": "z.example.com", "ZENITH_VERSION": "0.3.0", "ZENITH_BRANCH": "v0.3.0",
-		"ZENITH_IMAGE_REPO": "reg.local", "ZENITH_PULL_POLICY": "Never", "ZENITH_TLS_ISSUER": "ca", "ZENITH_EMAIL": "a@b.c",
+		"ZENITH_IMAGE_REPO": "reg.local", "ZENITH_PULL_POLICY": "Never", "ZENITH_TLS_ISSUER": "ca", "ZENITH_TLS_CA_SECRET": "my-ca-secret", "ZENITH_EMAIL": "a@b.c",
 	} {
 		if got[k] != v {
 			t.Errorf("%s = %q, want %q", k, got[k], v)

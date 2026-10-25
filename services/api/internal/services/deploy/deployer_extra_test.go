@@ -86,6 +86,37 @@ func TestDeployer_DeployApp_WithDomains(t *testing.T) {
 	}
 }
 
+// A domain whose DNS is verified gets its Certificate and route before it is active:
+// it only turns active once the certificate is served.
+func TestDeployer_DeployApp_VerifiedDomainGetsCertificate(t *testing.T) {
+	k8sClient := k8sclient.NewMemoryClient()
+	appRepo := memory.NewMemoryAppRepository()
+	domainRepo := memory.NewMemoryDomainRepository()
+	ctx := context.Background()
+	app := createTestApp(t, ctx, appRepo, "user-1", "verified-app")
+	dom, _ := domainRepo.AddDomain(ctx, app.ID, "user-1", "verified.example.com")
+	domainRepo.UpdateDomainStatus(ctx, dom.ID, entities.DomainStatusVerified, false)
+	pending, _ := domainRepo.AddDomain(ctx, app.ID, "user-1", "pending.example.com")
+	domainRepo.UpdateDomainStatus(ctx, pending.ID, entities.DomainStatusPending, false)
+
+	deployer := NewDeployer(k8sClient, appRepo, memory.NewMemoryUserPlanRepository(), "freezenith.com")
+	deployer.SetDomainRepo(domainRepo)
+	if err := deployer.DeployApp(ctx, app, "verified-app:v1"); err != nil {
+		t.Fatal(err)
+	}
+	cert, err := k8sClient.GetCRD(ctx, "Certificate", "zenith-apps", app.Subdomain+"-custom-tls")
+	if err != nil {
+		t.Fatalf("certificate not created: %v", err)
+	}
+	data, _ := json.Marshal(cert)
+	if !containsStr(string(data), "verified.example.com") {
+		t.Error("certificate must cover the verified domain")
+	}
+	if containsStr(string(data), "pending.example.com") {
+		t.Error("an unverified domain must not be routed")
+	}
+}
+
 func TestDeployer_DeployApp_WithEnvVars(t *testing.T) {
 	k8sClient := k8sclient.NewMemoryClient()
 	appRepo := memory.NewMemoryAppRepository()
