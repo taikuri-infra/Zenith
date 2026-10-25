@@ -300,7 +300,7 @@ function StandaloneDocs() {
             <h1 className="text-lg font-semibold text-white">Deploy an app on your own server</h1>
           </div>
           <p className="text-sm text-neutral-500">
-            Zenith runs on this server's Kubernetes (k3s). Everything below works from the dashboard or the zen CLI.
+            Zenith runs on Kubernetes (k3s) on this server. Everything below works from the dashboard or the zen CLI.
           </p>
         </div>
 
