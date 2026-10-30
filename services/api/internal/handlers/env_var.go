@@ -34,11 +34,29 @@ type EnvVarHandler struct {
 	envCrypto  *crypto.EnvCrypto
 	restarter  AppRestarter
 	namespace  string
+	nsFor      func(ctx context.Context, projectID string) string
 }
 
 // NewEnvVarHandler creates a new EnvVarHandler.
 func NewEnvVarHandler(appRepo ports.AppRepository, envVarRepo ports.EnvVarRepository) *EnvVarHandler {
 	return &EnvVarHandler{appRepo: appRepo, envVarRepo: envVarRepo, namespace: "zenith-apps"}
+}
+
+// SetNamespaceResolver makes env var syncing follow each project's namespace.
+func (h *EnvVarHandler) SetNamespaceResolver(fn func(ctx context.Context, projectID string) string) {
+	h.nsFor = fn
+}
+
+// namespaceOf returns the namespace holding the app's workloads.
+func (h *EnvVarHandler) namespaceOf(ctx context.Context, appID string) string {
+	if h.nsFor == nil {
+		return h.namespace
+	}
+	app, err := h.appRepo.GetApp(ctx, appID)
+	if err != nil || app == nil {
+		return h.namespace
+	}
+	return h.nsFor(ctx, app.ProjectID)
 }
 
 // SetK8sClient sets the K8s client for env var syncing.
@@ -440,18 +458,19 @@ func (h *EnvVarHandler) syncEnvVarsToK8s(ctx context.Context, appID string, vars
 		"app.zenith.dev/type":   "env",
 	}
 
+	ns := h.namespaceOf(ctx, appID)
 	secretName := "env-" + appID + "-secrets"
 	configName := "env-" + appID + "-config"
 
 	if len(secretData) > 0 {
-		if err := h.k8s.CreateSecret(ctx, h.namespace, secretName, secretData, labels); err != nil {
+		if err := h.k8s.CreateSecret(ctx, ns, secretName, secretData, labels); err != nil {
 			slog.Warn("failed to sync env secrets to K8s", "app_id", appID, "error", err)
 			return fmt.Errorf("failed to sync secrets to cluster: %w", err)
 		}
 	}
 
 	if len(configData) > 0 {
-		if err := h.k8s.CreateConfigMap(ctx, h.namespace, configName, configData); err != nil {
+		if err := h.k8s.CreateConfigMap(ctx, ns, configName, configData); err != nil {
 			slog.Warn("failed to sync env config to K8s", "app_id", appID, "error", err)
 			return fmt.Errorf("failed to sync config to cluster: %w", err)
 		}
