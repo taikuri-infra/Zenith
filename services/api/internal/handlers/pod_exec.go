@@ -17,6 +17,7 @@ import (
 	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/scheme"
 )
@@ -113,6 +114,14 @@ func (h *PodExecHandler) HandleExec() fiber.Handler {
 			return
 		}
 
+		// The pod must belong to this app, in the app's own namespace.
+		ns := h.namespaceOf(app)
+		pod, perr := realClient.Clientset().CoreV1().Pods(ns).Get(context.Background(), podName, metav1.GetOptions{})
+		if perr != nil || pod.Labels["zenith.dev/app"] != app.Name {
+			c.WriteMessage(websocket.TextMessage, []byte(`{"error":"pod not found for this app"}`))
+			return
+		}
+
 		// Get user info for audit
 		user, _ := h.userRepo.GetByID(context.Background(), uid)
 		userEmail := ""
@@ -141,7 +150,7 @@ func (h *PodExecHandler) HandleExec() fiber.Handler {
 
 		// Execute pod exec and bridge to WebSocket
 		var recording bytes.Buffer
-		h.execAndBridge(c, realClient, h.namespaceOf(app), podName, &recording)
+		h.execAndBridge(c, realClient, ns, podName, &recording)
 
 		// Session ended — save recording
 		endTime := time.Now()
