@@ -17,6 +17,7 @@ import { SourceCard } from "./source-card";
 import { DeploymentsCard } from "./deployments-card";
 import { EnvironmentCard } from "./environment-card";
 import { ResourcesCard } from "./resources-card";
+import { ContainersCard } from "./containers-card";
 import { DomainsCard } from "./domains-card";
 
 export default function AppDetailPage() {
@@ -63,6 +64,7 @@ export default function AppDetailPage() {
           {isWeb && <DomainsCard app={app} />}
           <DeploymentsCard app={app} />
           <EnvironmentCard key={app.id} app={app} />
+          <ContainersCard app={app} />
           <ResourcesCard app={app} />
         </div>
       </div>
