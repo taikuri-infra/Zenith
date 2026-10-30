@@ -94,3 +94,22 @@ func TestApplyUpdatesExisting(t *testing.T) {
 		t.Fatalf("expected 1 policy, got %d", len(list))
 	}
 }
+
+// flakyProbe is a real-looking client whose Cilium probe fails transiently.
+type flakyProbe struct{ *k8sclient.MemoryClient }
+
+func (flakyProbe) ListCRDsWithVersion(context.Context, string, string, string) ([]*k8sclient.CRDObject, error) {
+	return nil, errors.New("dial tcp: connection refused")
+}
+
+func TestApplyChangesNothingWhenCiliumProbeFails(t *testing.T) {
+	_, repo, mem := setup(t)
+	a := NewApplier(repo, stubApps{testApp.ID: {ID: testApp.ID, ProjectID: "p1"}}, flakyProbe{mem}, func(context.Context, string) string { return testNS })
+	addRule(t, repo, "r1", 80)
+	if err := a.Apply(context.Background(), testApp.ID); err == nil {
+		t.Fatal("expected an error when cilium detection is inconclusive")
+	}
+	if list, _ := mem.ListCRDs(context.Background(), "NetworkPolicy", testNS); len(list) != 0 {
+		t.Fatalf("no policy should be created, got %d", len(list))
+	}
+}

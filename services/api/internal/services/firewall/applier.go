@@ -12,6 +12,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // AppGetter is the part of the app repository the applier needs.
@@ -36,18 +37,24 @@ func NewApplier(repo ports.FirewallRuleRepository, apps AppGetter, k8s k8sclient
 	return &Applier{repo: repo, apps: apps, k8s: k8s, nsFor: nsFor}
 }
 
-// Cilium reports whether the cluster has the CiliumNetworkPolicy CRD. Only a
-// definite answer is cached; a transient API error is retried next time and
-// treated as "no Cilium", the stricter of the two for validation.
+// Cilium reports whether the cluster has the CiliumNetworkPolicy CRD. When the
+// probe is inconclusive it answers false, the stricter choice for validation.
 func (a *Applier) Cilium(ctx context.Context) bool {
+	ok, _ := a.ciliumState()
+	return ok
+}
+
+// ciliumState probes for Cilium once it gets a definite answer; a transient
+// API error is returned (and retried on the next call), never cached.
+func (a *Applier) ciliumState() (bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.ciliumKnown {
-		return a.cilium
+		return a.cilium, nil
 	}
 	if _, mem := a.k8s.(*k8sclient.MemoryClient); mem {
 		a.ciliumKnown, a.cilium = true, false
-		return false
+		return false, nil
 	}
 	cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -57,11 +64,17 @@ func (a *Applier) Cilium(ctx context.Context) bool {
 		a.ciliumKnown, a.cilium = true, true
 	case isNotFound(err):
 		a.ciliumKnown, a.cilium = true, false
+	default:
+		return false, fmt.Errorf("detect cilium: %w", err)
 	}
-	return a.cilium
+	return a.cilium, nil
 }
 
 func isNotFound(err error) bool {
+	if apierrors.IsNotFound(err) {
+		return true
+	}
+	// The memory client and wrapped dynamic-client errors only carry text.
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "could not find the requested resource")
 }
@@ -84,7 +97,11 @@ func (a *Applier) Apply(ctx context.Context, appID string) error {
 	if err != nil {
 		return err
 	}
-	obj, err := Compile(app, ns, rules, a.Cilium(ctx))
+	cilium, err := a.ciliumState()
+	if err != nil {
+		return err // unsure which policy kind applies: change nothing
+	}
+	obj, err := Compile(app, ns, rules, cilium)
 	if err != nil {
 		return err
 	}
@@ -94,13 +111,25 @@ func (a *Applier) Apply(ctx context.Context, appID string) error {
 		a.remove(ctx, ns, name, "cilium.io/v2", "CiliumNetworkPolicy")
 		return nil
 	}
-	// Only one policy kind may exist for the app; drop the other one.
+	if err := a.upsert(ctx, obj); err != nil {
+		return err
+	}
+	// Only one policy kind may exist for the app; drop the other one once the
+	// new policy is in place.
 	if obj.Kind == "NetworkPolicy" {
 		a.remove(ctx, ns, name, "cilium.io/v2", "CiliumNetworkPolicy")
 	} else {
 		a.remove(ctx, ns, name, "networking.k8s.io/v1", "NetworkPolicy")
 	}
-	if _, err := a.k8s.GetCRDWithVersion(ctx, obj.APIVersion, obj.Kind, ns, name); err != nil {
+	return nil
+}
+
+// upsert creates the policy, or merge-patches it when it already exists.
+func (a *Applier) upsert(ctx context.Context, obj *k8sclient.CRDObject) error {
+	if _, err := a.k8s.GetCRDWithVersion(ctx, obj.APIVersion, obj.Kind, obj.Metadata.Namespace, obj.Metadata.Name); err != nil {
+		if !isNotFound(err) {
+			return err
+		}
 		return a.k8s.CreateCRD(ctx, obj)
 	}
 	var spec map[string]any
@@ -113,9 +142,11 @@ func (a *Applier) Apply(ctx context.Context, appID string) error {
 		}
 	}
 	patch := *obj
-	if patch.Spec, err = json.Marshal(spec); err != nil {
+	raw, err := json.Marshal(spec)
+	if err != nil {
 		return err
 	}
+	patch.Spec = raw
 	if _, mem := a.k8s.(*k8sclient.MemoryClient); mem {
 		patch.Spec = obj.Spec // the memory client stores the object as-is
 	}

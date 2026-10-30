@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -82,7 +83,8 @@ func (h *NetworkPolicyHandler) enforce(c *fiber.Ctx, appID string) error {
 		return nil
 	}
 	if err := h.applier.Apply(c.Context(), appID); err != nil {
-		return fiber.NewError(fiber.StatusBadGateway, "firewall rule saved but not applied: "+err.Error())
+		slog.Error("firewall policy not applied", "app_id", appID, "error", err)
+		return fiber.NewError(fiber.StatusBadGateway, "firewall rule saved but could not be applied; it will be retried")
 	}
 	return nil
 }
