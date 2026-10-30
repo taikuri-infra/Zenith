@@ -105,7 +105,6 @@ type DBRef struct{ ID, Engine, Name, DBName, DBUser, Namespace string }
 func (d DBRef) Resource() string { return "db-" + d.ID[:min(8, len(d.ID))] }
 
 var (
-	dbIDPattern = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
 	dbNSPattern = regexp.MustCompile(`^(zenith-apps|zp-[a-z0-9-]{1,58})$`)
 )
 
