@@ -36,8 +36,10 @@ func (r *MemoryProjectRepository) CreateProject(_ context.Context, userID, name,
 	}
 
 	now := time.Now()
+	pid := uuid.New().String()
 	p := &entities.Project{
-		ID:          uuid.New().String(),
+		ID:          pid,
+		Namespace:   entities.ProjectNamespace(pid, slug),
 		UserID:      userID,
 		Name:        name,
 		Slug:        slug,

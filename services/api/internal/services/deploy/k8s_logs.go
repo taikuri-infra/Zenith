@@ -19,6 +19,17 @@ import (
 type K8sLogSource struct {
 	client    k8sclient.PodLogReader
 	namespace string
+	resolve   NamespaceResolver
+}
+
+// SetNamespaceResolver reads each app's logs from its project namespace.
+func (s *K8sLogSource) SetNamespaceResolver(r NamespaceResolver) { s.resolve = r }
+
+func (s *K8sLogSource) nsFor(ctx context.Context, app *entities.App) string {
+	if s.resolve != nil {
+		return s.resolve(ctx, app.ProjectID)
+	}
+	return s.namespace
 }
 
 func NewK8sLogSource(c k8sclient.PodLogReader, namespace string) *K8sLogSource {
@@ -37,7 +48,7 @@ func parseLogLine(line string) dto.MonitoringLogEntry {
 }
 
 func (s *K8sLogSource) Tail(ctx context.Context, app *entities.App, since time.Duration, limit int) ([]dto.MonitoringLogEntry, error) {
-	r, err := s.client.ReadPodLogs(ctx, s.namespace, appPodSelector(app), k8sclient.PodLogOptions{Since: since, TailLines: int64(limit)})
+	r, err := s.client.ReadPodLogs(ctx, s.nsFor(ctx, app), appPodSelector(app), k8sclient.PodLogOptions{Since: since, TailLines: int64(limit)})
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrNoPods) {
 			return []dto.MonitoringLogEntry{}, nil
@@ -53,7 +64,7 @@ func (s *K8sLogSource) Tail(ctx context.Context, app *entities.App, since time.D
 }
 
 func (s *K8sLogSource) Stream(ctx context.Context, app *entities.App, out chan<- dto.MonitoringLogEntry) error {
-	r, err := s.client.ReadPodLogs(ctx, s.namespace, appPodSelector(app), k8sclient.PodLogOptions{Follow: true, TailLines: 50})
+	r, err := s.client.ReadPodLogs(ctx, s.nsFor(ctx, app), appPodSelector(app), k8sclient.PodLogOptions{Follow: true, TailLines: 50})
 	if err != nil {
 		return err
 	}

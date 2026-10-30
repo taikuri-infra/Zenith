@@ -35,8 +35,19 @@ const (
 // Credentials live in a Secret the backend owns; access is in-cluster.
 type K8sDBBackend struct {
 	client    k8sclient.Client
-	namespace string
+	namespace string // fallback when no resolver is set
+	resolve   NamespaceResolver
 	pollEvery time.Duration
+}
+
+// SetNamespaceResolver puts each database in its project's namespace.
+func (b *K8sDBBackend) SetNamespaceResolver(r NamespaceResolver) { b.resolve = r }
+
+func (b *K8sDBBackend) nsFor(ctx context.Context, db *entities.UserDatabase) string {
+	if b.resolve != nil {
+		return b.resolve(ctx, db.ProjectID)
+	}
+	return b.namespace
 }
 
 func NewK8sDBBackend(c k8sclient.Client, namespace string) *K8sDBBackend {
@@ -77,6 +88,10 @@ func (b *K8sDBBackend) Provision(ctx context.Context, db *entities.UserDatabase,
 		return "", 0, fmt.Errorf("engine %s is not available on Kubernetes yet", db.Engine)
 	}
 	name := k8sDBName(db)
+	ns := b.nsFor(ctx, db)
+	if err := EnsureNamespace(ctx, b.client, ns); err != nil {
+		return "", 0, fmt.Errorf("namespace %s: %w", ns, err)
+	}
 	secret := name + "-auth"
 	labels := map[string]string{"zenith.dev/db-id": db.ID, "zenith.dev/engine": string(db.Engine)}
 
@@ -86,19 +101,19 @@ func (b *K8sDBBackend) Provision(ctx context.Context, db *entities.UserDatabase,
 		data["root-password"] = []byte(randomHex(16))
 	}
 	// Idempotent: replace credentials and the resource if a previous attempt left them.
-	_ = b.client.DeleteSecret(ctx, b.namespace, secret)
-	if err := b.client.CreateSecret(ctx, b.namespace, secret, data, labels); err != nil {
+	_ = b.client.DeleteSecret(ctx, ns, secret)
+	if err := b.client.CreateSecret(ctx, ns, secret, data, labels); err != nil {
 		return "", 0, fmt.Errorf("create secret %s: %w", secret, err)
 	}
 
 	apiVersion, kind := dbKind(db.Engine)
-	spec, host, port := b.spec(db, name, secret)
+	spec, host, port := b.spec(db, name, secret, ns)
 	specJSON, _ := json.Marshal(spec)
-	_ = b.client.DeleteCRDWithVersion(ctx, apiVersion, kind, b.namespace, name)
+	_ = b.client.DeleteCRDWithVersion(ctx, apiVersion, kind, ns, name)
 	if err := b.client.CreateCRD(ctx, &k8sclient.CRDObject{
 		APIVersion: apiVersion,
 		Kind:       kind,
-		Metadata:   k8sclient.ObjectMeta{Name: name, Namespace: b.namespace, Labels: labels},
+		Metadata:   k8sclient.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
 		Spec:       specJSON,
 	}); err != nil {
 		return "", 0, fmt.Errorf("create %s %s: %w", kind, name, err)
@@ -107,7 +122,7 @@ func (b *K8sDBBackend) Provision(ctx context.Context, db *entities.UserDatabase,
 }
 
 // spec builds the operator resource spec and the in-cluster address.
-func (b *K8sDBBackend) spec(db *entities.UserDatabase, name, secret string) (map[string]any, string, int) {
+func (b *K8sDBBackend) spec(db *entities.UserDatabase, name, secret, ns string) (map[string]any, string, int) {
 	size := dbStorage(db)
 	switch db.Engine {
 	case entities.DatabaseEngineMySQL:
@@ -118,7 +133,7 @@ func (b *K8sDBBackend) spec(db *entities.UserDatabase, name, secret string) (map
 			"passwordSecretKeyRef":     map[string]any{"name": secret, "key": "password"},
 			"storage":                  map[string]any{"size": size},
 			"replicas":                 1,
-		}, fmt.Sprintf("%s.%s.svc.cluster.local", name, b.namespace), 3306
+		}, fmt.Sprintf("%s.%s.svc.cluster.local", name, ns), 3306
 	case entities.DatabaseEngineRedis:
 		return map[string]any{
 			"kubernetesConfig": map[string]any{
@@ -130,7 +145,7 @@ func (b *K8sDBBackend) spec(db *entities.UserDatabase, name, secret string) (map
 				"accessModes": []string{"ReadWriteOnce"},
 				"resources":   map[string]any{"requests": map[string]any{"storage": size}},
 			}}},
-		}, fmt.Sprintf("%s.%s.svc.cluster.local", name, b.namespace), 6379
+		}, fmt.Sprintf("%s.%s.svc.cluster.local", name, ns), 6379
 	}
 	return map[string]any{
 		"instances": 1,
@@ -140,7 +155,7 @@ func (b *K8sDBBackend) spec(db *entities.UserDatabase, name, secret string) (map
 			"owner":    db.DBUser,
 			"secret":   map[string]any{"name": secret},
 		}},
-	}, fmt.Sprintf("%s-rw.%s.svc.cluster.local", name, b.namespace), 5432
+	}, fmt.Sprintf("%s-rw.%s.svc.cluster.local", name, ns), 5432
 }
 
 func randomHex(n int) string {
@@ -174,13 +189,14 @@ func (b *K8sDBBackend) WaitReady(ctx context.Context, db *entities.UserDatabase)
 }
 
 func (b *K8sDBBackend) ready(ctx context.Context, db *entities.UserDatabase, name string) bool {
+	ns := b.nsFor(ctx, db)
 	if db.Engine == entities.DatabaseEngineRedis {
 		// The Redis resource has no status; its StatefulSet carries readiness.
-		obj, err := b.client.GetCRDWithVersion(ctx, "apps/v1", "StatefulSet", b.namespace, name)
+		obj, err := b.client.GetCRDWithVersion(ctx, "apps/v1", "StatefulSet", ns, name)
 		return err == nil && statefulSetReady(obj.Status)
 	}
 	apiVersion, kind := dbKind(db.Engine)
-	obj, err := b.client.GetCRDWithVersion(ctx, apiVersion, kind, b.namespace, name)
+	obj, err := b.client.GetCRDWithVersion(ctx, apiVersion, kind, ns, name)
 	if err != nil {
 		return false
 	}
@@ -232,12 +248,13 @@ func clusterReady(status []byte) bool {
 // Delete removes the operator resource (the operator drops its volumes) and the credentials.
 func (b *K8sDBBackend) Delete(ctx context.Context, db *entities.UserDatabase, _ bool) error {
 	name := k8sDBName(db)
+	ns := b.nsFor(ctx, db)
 	apiVersion, kind := dbKind(db.Engine)
-	err := b.client.DeleteCRDWithVersion(ctx, apiVersion, kind, b.namespace, name)
-	_ = b.client.DeleteSecret(ctx, b.namespace, name+"-auth")
+	err := b.client.DeleteCRDWithVersion(ctx, apiVersion, kind, ns, name)
+	_ = b.client.DeleteSecret(ctx, ns, name+"-auth")
 	if db.Engine == entities.DatabaseEngineMySQL {
 		// mariadb-operator keeps its data volume after the resource is gone.
-		_ = b.client.DeleteCRDWithVersion(ctx, "v1", "PersistentVolumeClaim", b.namespace, "storage-"+name+"-0")
+		_ = b.client.DeleteCRDWithVersion(ctx, "v1", "PersistentVolumeClaim", ns, "storage-"+name+"-0")
 	}
 	return ignoreNotFound(err)
 }

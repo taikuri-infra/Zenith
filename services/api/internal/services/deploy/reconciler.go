@@ -93,7 +93,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 
 // AppDeployed reports whether the app's Deployment exists.
 func (d *Deployer) AppDeployed(ctx context.Context, app *entities.App) (bool, error) {
-	_, err := d.k8sClient.GetCRDWithVersion(ctx, "apps/v1", "Deployment", "zenith-apps", app.Subdomain)
+	_, err := d.k8sClient.GetCRDWithVersion(ctx, "apps/v1", "Deployment", d.namespaceFor(ctx, app), app.Subdomain)
 	if err != nil {
 		if isNotFound(err) {
 			return false, nil
@@ -106,7 +106,7 @@ func (d *Deployer) AppDeployed(ctx context.Context, app *entities.App) (bool, er
 // Exists reports whether the database's operator resource exists.
 func (b *K8sDBBackend) Exists(ctx context.Context, db *entities.UserDatabase) (bool, error) {
 	apiVersion, kind := dbKind(db.Engine)
-	_, err := b.client.GetCRDWithVersion(ctx, apiVersion, kind, b.namespace, k8sDBName(db))
+	_, err := b.client.GetCRDWithVersion(ctx, apiVersion, kind, b.nsFor(ctx, db), k8sDBName(db))
 	if err != nil {
 		if isNotFound(err) {
 			return false, nil

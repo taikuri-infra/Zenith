@@ -13,7 +13,10 @@ func ShouldScaleToZero(limits *entities.PlanLimits) bool {
 // that makes Traefik → KEDA interceptor → Pod routing work with scale-to-zero.
 func GenerateHTTPScaledObject(app *entities.App, baseDomain string, sleepAfterMins int) map[string]interface{} {
 	host := app.Subdomain + "." + baseDomain
-	namespace := "zenith-apps"
+	namespace := app.Namespace
+	if namespace == "" {
+		namespace = entities.LegacyAppsNamespace
+	}
 
 	scaledownPeriod := sleepAfterMins * 60
 	if scaledownPeriod <= 0 {
