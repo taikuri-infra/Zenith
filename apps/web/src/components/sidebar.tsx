@@ -21,7 +21,6 @@ import {
   LifeBuoy,
   ScrollText,
   History,
-  ListOrdered,
   Plus,
   Check,
   ShieldCheck,
@@ -64,7 +63,6 @@ const navSections: NavSection[] = [
       { name: "Apps", href: "/apps", icon: Boxes },
       { name: "Databases", href: "/databases", icon: Database },
       { name: "Storage", href: "/storage", icon: HardDrive },
-      { name: "Queues", href: "/queues", icon: ListOrdered },
     ],
   },
   {
