@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
@@ -244,5 +245,16 @@ func TestGetPods_WrongUser(t *testing.T) {
 	_, err := svc.GetPods(ctx, "user-2", app.ID)
 	if err == nil {
 		t.Error("Expected error for wrong user")
+	}
+}
+
+func TestAggregatedLogQL(t *testing.T) {
+	got := aggregatedLogQL("zp-ab12cd34-site", []string{"api", "web.v2"}, "error", `x"} |= "y`)
+	want := `{namespace="zp-ab12cd34-site",app=~"api|web\\.v2"} |= "x\"} |= \"y" | logfmt | level="error"`
+	if got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+	if q := aggregatedLogQL("zenith-apps", []string{"a"}, `.*"}`, ""); strings.Contains(q, "level") {
+		t.Fatalf("invalid level must be dropped: %s", q)
 	}
 }

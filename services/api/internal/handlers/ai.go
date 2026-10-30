@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"time"
 
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
@@ -15,6 +17,12 @@ type AIHandler struct {
 	appRepo     ports.AppRepository
 	planRepo    ports.UserPlanRepository
 	aiClient    *services.AIClient
+	nsFor       func(ctx context.Context, projectID string) string
+}
+
+// SetNamespaceResolver reads logs from each app's project namespace.
+func (h *AIHandler) SetNamespaceResolver(fn func(ctx context.Context, projectID string) string) {
+	h.nsFor = fn
 }
 
 // NewAIHandler creates a new AIHandler.
@@ -87,7 +95,11 @@ func (h *AIHandler) AnalyzeError(c *fiber.Ctx) error {
 		req.LogLines = 100
 	}
 
-	analysis, aiResp, err := h.analyzer.AnalyzeError(c.Context(), app.Subdomain, "zenith-apps", req.LogLines)
+	ns := entities.LegacyAppsNamespace
+	if h.nsFor != nil {
+		ns = h.nsFor(c.Context(), app.ProjectID)
+	}
+	analysis, aiResp, err := h.analyzer.AnalyzeError(c.Context(), app.Subdomain, ns, req.LogLines)
 	if err != nil {
 		return NewInternal("AI analysis failed")
 	}
