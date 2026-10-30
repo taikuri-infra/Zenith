@@ -22,6 +22,8 @@ postgres:
   image: ghcr.io/cloudnative-pg/postgresql:16.6
 
 storage:
+  # Public S3 host (needs a DNS record pointing at the node). Empty = S3 stays in-cluster only.
+  publicHost: ""
   size: 10Gi
   platformBucket: zenith-platform-storage
 

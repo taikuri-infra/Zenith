@@ -19,11 +19,18 @@ var bucketNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$`)
 // PostgresStorageRepository is a PostgreSQL-backed StorageRepository.
 type PostgresStorageRepository struct {
 	pool *pgxpool.Pool
+	// publicEndpoint is the S3 address shown to users (path-style).
+	publicEndpoint string
 }
 
 // NewPostgresStorageRepository creates a new PostgreSQL StorageRepository.
 func NewPostgresStorageRepository(pool *pgxpool.Pool) *PostgresStorageRepository {
 	return &PostgresStorageRepository{pool: pool}
+}
+
+// SetPublicEndpoint sets the S3 address reported on new buckets.
+func (r *PostgresStorageRepository) SetPublicEndpoint(endpoint string) {
+	r.publicEndpoint = strings.TrimRight(endpoint, "/")
 }
 
 func (r *PostgresStorageRepository) CreateBucket(ctx context.Context, appID, userID string, input *dto.CreateBucketInput) (*entities.UserBucket, error) {
@@ -56,7 +63,10 @@ func (r *PostgresStorageRepository) CreateBucket(ctx context.Context, appID, use
 	id := uuid.New().String()
 	now := time.Now()
 	s3Prefix := fmt.Sprintf("u/%s/%s/", userID, input.Name)
-	endpoint := fmt.Sprintf("https://%s.s3.zenith.local", input.Name)
+	endpoint := r.publicEndpoint
+	if endpoint == "" {
+		endpoint = fmt.Sprintf("https://%s.s3.zenith.local", input.Name)
+	}
 
 	// Generate real S3 bucket name for per-customer isolation
 	uid := userID

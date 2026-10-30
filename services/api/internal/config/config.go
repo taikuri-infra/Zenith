@@ -92,6 +92,7 @@ type Config struct {
 
 	// S3 / Hetzner Object Storage (tenant bucket provisioning)
 	S3Endpoint       string
+	S3PublicEndpoint string // address users reach S3 at from outside the cluster
 	S3AccessKey      string
 	S3SecretKey      string
 	S3Region         string
@@ -202,6 +203,7 @@ func Load() *Config {
 		KeycloakAdminUser:     getEnv("KEYCLOAK_ADMIN_USER", "admin"),
 		KeycloakAdminPassword: getEnv("KEYCLOAK_ADMIN_PASSWORD", ""),
 		S3Endpoint:            getEnv("S3_ENDPOINT", ""),
+		S3PublicEndpoint:      getEnv("S3_PUBLIC_ENDPOINT", ""),
 		S3AccessKey:           getEnv("S3_ACCESS_KEY", ""),
 		S3SecretKey:           getEnv("S3_SECRET_KEY", ""),
 		S3Region:              getEnv("S3_REGION", "fsn1"),
