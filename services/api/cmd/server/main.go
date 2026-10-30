@@ -1234,6 +1234,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	aiHandler := handlers.NewAIHandler(aiErrorAnalyzer, aiUsageRepo, appRepo, planRepo, aiClient)
+	if cfg.K8sMode == "real" {
+		aiHandler.SetNamespaceResolver(projectNS.For)
+	}
 	appByID.Post("/ai/analyze-error", aiHandler.AnalyzeError)
 	protected.Get("/ai/usage", aiHandler.GetUsage)
 
