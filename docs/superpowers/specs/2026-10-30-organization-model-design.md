@@ -52,7 +52,7 @@ stay at Project level for now), moving resources between Orgs.
 - E2E (k3d): create Org → deploy app + DB in it → verify namespace, NetworkPolicy isolation
   (app in Org A cannot reach Org B), delete Org removes namespace; legacy default Org still works.
 
-## Decisions for you
-1. **Namespace name** `zo-<project8>-<slug>` — OK? (alternative: `<project-slug>-<org-slug>`.)
-2. **Default Org** auto-created per project and used when `org_id` is omitted — OK?
-3. **Quota defaults** — start with none (unlimited) and add later, or a conservative default?
+## Decisions
+1. **Namespace name** `zo-<project8>-<slug>`. (Approved)
+2. **Default Org** auto-created per project, used when `org_id` is omitted. (Approved)
+3. **Quota defaults** — none (unlimited) at first; editable per Org later. (Approved)
