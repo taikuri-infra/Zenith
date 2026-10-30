@@ -33,6 +33,7 @@ import (
 	"github.com/dotechhq/zenith/services/api/internal/config"
 	"github.com/dotechhq/zenith/services/api/internal/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/services/deploy"
+	"github.com/dotechhq/zenith/services/api/internal/services/firewall"
 	pkgCrypto "github.com/dotechhq/zenith/services/api/pkg/crypto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/hetznerclient"
@@ -1533,7 +1534,17 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appByID.Delete("/waf/rules/:ruleId", wafHandler.DeleteRule)
 
 	// Cilium Network Policies (Business+ only)
-	netpolHandler := handlers.NewNetworkPolicyHandler(appRepo, planRepo)
+	var firewallRepo ports.FirewallRuleRepository = memory.NewFirewallRuleRepository()
+	if pool != nil {
+		firewallRepo = postgres.NewFirewallRuleRepository(pool)
+	}
+	netpolHandler := handlers.NewNetworkPolicyHandler(appRepo, planRepo, firewallRepo)
+	netpolHandler.SetSelfHosted(cfg.Mode != "saas")
+	if cfg.K8sMode == "real" {
+		fwApplier := firewall.NewApplier(firewallRepo, appRepo, k8sClient, projectNS.For)
+		netpolHandler.SetApplier(fwApplier)
+		go fwApplier.ReconcileAll(context.Background())
+	}
 	appByID.Get("/network-policies", netpolHandler.ListRules)
 	appByID.Post("/network-policies", netpolHandler.CreateRule)
 	appByID.Put("/network-policies/:ruleId", netpolHandler.UpdateRule)
