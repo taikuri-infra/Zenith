@@ -98,7 +98,7 @@ func (i Install) Version(ctx context.Context, r Runner) string {
 const AppsNamespace = "zenith-apps"
 
 // DBRef is a managed database. Engine: postgresql|mysql|redis.
-type DBRef struct{ ID, Engine, Name, DBName, DBUser string }
+type DBRef struct{ ID, Engine, Name, DBName, DBUser, Namespace string }
 
 // Resource is the name of the database's operator resource and secret prefix.
 func (d DBRef) Resource() string { return "db-" + d.ID[:min(8, len(d.ID))] }
@@ -111,7 +111,8 @@ func (i Install) Databases(ctx context.Context, r Runner) ([]DBRef, error) {
 	}
 	out, err := i.kubectl(ctx, r, nil, "exec", pod, "-c", "postgres", "--", "psql", "-U", "postgres", "-d", "zenith",
 		"-At", "-F", "|", "-c",
-		"SELECT id, engine, name, db_name, db_user FROM user_databases WHERE status = 'ready' ORDER BY created_at")
+		"SELECT d.id, d.engine, d.name, d.db_name, d.db_user, COALESCE(p.namespace, '"+AppsNamespace+"') "+
+			"FROM user_databases d LEFT JOIN projects p ON p.id = d.project_id WHERE d.status = 'ready' ORDER BY d.created_at")
 	if err != nil {
 		return nil, fmt.Errorf("list databases: %w", err)
 	}
@@ -121,11 +122,11 @@ func (i Install) Databases(ctx context.Context, r Runner) ([]DBRef, error) {
 		if line == "" {
 			continue
 		}
-		p := strings.SplitN(line, "|", 5)
-		if len(p) != 5 {
+		p := strings.SplitN(line, "|", 6)
+		if len(p) != 6 {
 			return nil, fmt.Errorf("unexpected database row %q", line)
 		}
-		dbs = append(dbs, DBRef{ID: p[0], Engine: p[1], Name: p[2], DBName: p[3], DBUser: p[4]})
+		dbs = append(dbs, DBRef{ID: p[0], Engine: p[1], Name: p[2], DBName: p[3], DBUser: p[4], Namespace: p[5]})
 	}
 	return dbs, nil
 }
@@ -139,7 +140,14 @@ func Uninstall(ctx context.Context, r Runner, inst Install) error {
 	if _, err := r.Run(ctx, "", nil, "helm", args...); err != nil {
 		return fmt.Errorf("helm uninstall: %w", err)
 	}
-	for _, ns := range []string{inst.Namespace, AppsNamespace} {
+	nss := []string{inst.Namespace, AppsNamespace}
+	// Project namespaces (zp-*) are labelled when Zenith creates them.
+	if out, err := r.Run(ctx, "", nil, "kubectl", kubeArgs(inst, "get", "namespace", "-l", "zenith.dev/managed=true", "-o", "name")...); err == nil {
+		for _, n := range strings.Fields(string(out)) {
+			nss = append(nss, strings.TrimPrefix(n, "namespace/"))
+		}
+	}
+	for _, ns := range nss {
 		a := []string{"delete", "namespace", ns, "--ignore-not-found", "--wait=false"}
 		if inst.Kubeconfig != "" {
 			a = append([]string{"--kubeconfig", inst.Kubeconfig}, a...)
@@ -149,4 +157,11 @@ func Uninstall(ctx context.Context, r Runner, inst Install) error {
 		}
 	}
 	return nil
+}
+
+func kubeArgs(inst Install, args ...string) []string {
+	if inst.Kubeconfig != "" {
+		return append([]string{"--kubeconfig", inst.Kubeconfig}, args...)
+	}
+	return args
 }

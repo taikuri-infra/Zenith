@@ -1202,6 +1202,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 		if reader, ok := k8sClient.(k8sclient.PodLogReader); ok {
 			logSource := deploy.NewK8sLogSource(reader, "zenith-apps")
 			logSource.SetNamespaceResolver(projectNS.For)
+			monitoringSvc.SetNamespaceResolver(projectNS.For)
 			monitoringSvc.SetLogSource(logSource)
 			slog.Info("app logs: Kubernetes pod logs")
 		}

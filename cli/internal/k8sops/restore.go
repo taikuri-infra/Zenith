@@ -180,7 +180,7 @@ func restoreDB(ctx context.Context, r Runner, inst Install, opt RestoreOptions, 
 	if !dbIDPattern.MatchString(db.ID) {
 		return fmt.Errorf("invalid database id %q", db.ID)
 	}
-	apps := inst.apps()
+	apps := inst.apps(db)
 	base := filepath.Join(tmp, "databases", db.ID)
 	switch db.Engine {
 	case "postgresql":

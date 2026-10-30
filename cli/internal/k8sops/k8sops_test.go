@@ -23,7 +23,7 @@ func stack() *fakeRunner {
 	return &fakeRunner{answers: map[string]string{
 		"kubectl -n zenith-system get deploy zenith-api -o jsonpath={.spec.template.spec.containers[0].image}": "ghcr.io/taikuri-infra/zenith-api:0.2.0",
 		"kubectl -n zenith-system get pods -l cnpg.io/cluster=zenith-postgres,cnpg.io/instanceRole=primary":    platformPod,
-		"kubectl -n zenith-system exec " + platformPod + " -c postgres -- psql":                                "11111111-aaaa|postgresql|orders|db_orders|u_orders\n",
+		"kubectl -n zenith-system exec " + platformPod + " -c postgres -- psql":                                "11111111-aaaa|postgresql|orders|db_orders|u_orders|zenith-apps\n",
 		"kubectl -n zenith-system exec " + platformPod + " -c postgres -- pg_dump":                             "-- platform dump\n",
 		"kubectl -n zenith-system exec zenith-storage-0 -- tar":                                                "TARDATA",
 		"kubectl -n zenith-system get secret zenith-secrets -o json":                                           `{"metadata":{"name":"zenith-secrets","resourceVersion":"9","uid":"x"},"type":"Opaque","data":{"jwt-secret":"` + b64("j") + `"}}`,
