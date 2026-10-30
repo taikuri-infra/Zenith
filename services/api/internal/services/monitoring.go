@@ -3,6 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -356,55 +359,68 @@ func (s *MonitoringService) GetAggregatedLogs(ctx context.Context, userID string
 		since = 1 * time.Hour
 	}
 
-	// Resolve all app names and verify ownership
-	appNames := make([]string, 0, len(appIDs))
+	// Resolve app names, verify ownership and group them by namespace, so each
+	// Loki query only matches the user's own apps in their own namespaces.
+	byNS := map[string][]string{}
 	for _, id := range appIDs {
 		name, err := s.resolveApp(ctx, userID, id)
 		if err != nil {
 			continue // skip apps the user doesn't own
 		}
-		appNames = append(appNames, name)
+		ns := s.namespaceOf(ctx, id)
+		byNS[ns] = append(byNS[ns], name)
 	}
-	if len(appNames) == 0 {
+	if len(byNS) == 0 {
 		return &dto.MonitoringLogsResponse{Entries: []dto.MonitoringLogEntry{}, Total: 0}, nil
-	}
-
-	// Build LogQL with regex for multiple apps
-	appRegex := strings.Join(appNames, "|")
-	logQL := fmt.Sprintf(`{namespace="%s",app=~"%s"}`, appsNamespace, appRegex)
-	if search != "" {
-		logQL += fmt.Sprintf(` |= "%s"`, strings.ReplaceAll(search, `"`, `\"`))
-	}
-	if level != "" && level != "all" {
-		logQL += fmt.Sprintf(` | logfmt | level=~"%s"`, level)
 	}
 
 	end := time.Now()
 	start := end.Add(-since)
 
-	entries, err := s.loki.QueryRange(ctx, logQL, start, end, limit)
-	if err != nil {
-		return nil, fmt.Errorf("loki query failed: %w", err)
-	}
-
-	result := make([]dto.MonitoringLogEntry, 0, len(entries))
-	for _, e := range entries {
-		lvl := ""
-		if v, ok := e.Labels["level"]; ok {
-			lvl = v
+	result := make([]dto.MonitoringLogEntry, 0, limit)
+	for ns, names := range byNS {
+		entries, err := s.loki.QueryRange(ctx, aggregatedLogQL(ns, names, level, search), start, end, limit)
+		if err != nil {
+			return nil, fmt.Errorf("loki query failed: %w", err)
 		}
-		result = append(result, dto.MonitoringLogEntry{
-			Timestamp: e.Timestamp,
-			Line:      e.Line,
-			Level:     lvl,
-			Labels:    e.Labels,
-		})
+		for _, e := range entries {
+			result = append(result, dto.MonitoringLogEntry{
+				Timestamp: e.Timestamp,
+				Line:      e.Line,
+				Level:     e.Labels["level"],
+				Labels:    e.Labels,
+			})
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Timestamp.After(result[j].Timestamp) })
+	if len(result) > limit {
+		result = result[:limit]
 	}
 
 	return &dto.MonitoringLogsResponse{
 		Entries: result,
 		Total:   len(result),
 	}, nil
+}
+
+var logLevelPattern = regexp.MustCompile(`^[a-z]+$`)
+
+// aggregatedLogQL builds a LogQL query for several apps in one namespace.
+// App names are regex-quoted and the search text is a quoted string literal,
+// so user input cannot change the query's structure.
+func aggregatedLogQL(ns string, appNames []string, level, search string) string {
+	quoted := make([]string, len(appNames))
+	for i, n := range appNames {
+		quoted[i] = regexp.QuoteMeta(n)
+	}
+	q := fmt.Sprintf(`{namespace=%s,app=~%s}`, strconv.Quote(ns), strconv.Quote(strings.Join(quoted, "|")))
+	if search != "" {
+		q += " |= " + strconv.Quote(search)
+	}
+	if level != "" && level != "all" && logLevelPattern.MatchString(level) {
+		q += fmt.Sprintf(` | logfmt | level=%s`, strconv.Quote(level))
+	}
+	return q
 }
 
 // GetPods returns pod list with status and resource usage.
