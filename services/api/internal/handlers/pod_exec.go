@@ -117,7 +117,7 @@ func (h *PodExecHandler) HandleExec() fiber.Handler {
 		// The pod must belong to this app, in the app's own namespace.
 		ns := h.namespaceOf(app)
 		pod, perr := realClient.Clientset().CoreV1().Pods(ns).Get(context.Background(), podName, metav1.GetOptions{})
-		if perr != nil || pod.Labels["zenith.dev/app"] != app.Name {
+		if perr != nil || pod.Labels["zenith.dev/app-id"] != app.ID || pod.Labels["zenith.dev/managed-by"] != "zenith" {
 			c.WriteMessage(websocket.TextMessage, []byte(`{"error":"pod not found for this app"}`))
 			return
 		}
