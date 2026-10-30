@@ -605,6 +605,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	msHandler.SetService(msSvc)
 	projectHandlerV2.SetManagedServiceDeleter(msRepo, msSvc)
 	envVarHandler.SetK8sClient(k8sClient)
+	if cfg.K8sMode == "real" {
+		envVarHandler.SetNamespaceResolver(projectNS.For)
+	}
 
 	// Image status + project deploy handlers are wired after harborClient is initialized (see below)
 
