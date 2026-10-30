@@ -573,6 +573,15 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	}
 
 	envHandler := handlers.NewEnvironmentHandler(envRepo, projectRepo)
+
+	// Organization repo + handler (Org = isolated namespace inside a project)
+	var orgRepo ports.OrgRepository
+	if pool != nil {
+		orgRepo = postgres.NewPostgresOrgRepository(pool)
+	} else {
+		orgRepo = memory.NewMemoryOrgRepository()
+	}
+	orgHandler := handlers.NewOrgHandler(orgRepo, projectRepo)
 	projectHandlerV2.SetEnvironmentHandler(envHandler)
 	projectHandlerV2.SetPlanRepo(planRepo)
 
@@ -777,6 +786,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	projectByID := projects.Group("/:projectId")
 	projectByID.Post("/import-compose", composeHandler.ImportCompose)
 	projectByID.Post("/format-compose", composeHandler.FormatCompose)
+	projectByID.Get("/orgs", orgHandler.List)
+	projectByID.Post("/orgs", orgHandler.Create)
+	protected.Get("/orgs/:orgId", orgHandler.Get)
+	protected.Patch("/orgs/:orgId", orgHandler.Rename)
+	protected.Delete("/orgs/:orgId", orgHandler.Delete)
 	projectByID.Get("/environments", envHandler.List)
 	projectByID.Get("/environments/:envId", envHandler.Get)
 	// Deploy tokens (under /projects/:projectId/deploy-tokens)

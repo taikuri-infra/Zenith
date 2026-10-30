@@ -1,0 +1,4 @@
+ALTER TABLE user_buckets   DROP COLUMN IF EXISTS org_id;
+ALTER TABLE user_databases DROP COLUMN IF EXISTS org_id;
+ALTER TABLE apps           DROP COLUMN IF EXISTS org_id;
+DROP TABLE IF EXISTS orgs;

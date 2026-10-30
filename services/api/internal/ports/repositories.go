@@ -534,3 +534,14 @@ type ReferralRepository interface {
 	GetSummary(ctx context.Context, userID, baseURL string) (*entities.ReferralSummary, error)
 	ListAll(ctx context.Context, limit, offset int) ([]entities.ReferralReward, error)
 }
+
+// OrgRepository defines Organization persistence operations.
+type OrgRepository interface {
+	CreateOrg(ctx context.Context, projectID, name string) (*entities.Org, error)
+	GetOrg(ctx context.Context, id string) (*entities.Org, error)
+	ListOrgsByProject(ctx context.Context, projectID string) ([]entities.Org, error)
+	RenameOrg(ctx context.Context, id, name string) (*entities.Org, error)
+	DeleteOrg(ctx context.Context, id string) error
+	// GetDefaultOrg returns the project's default Org, creating it on first use.
+	GetDefaultOrg(ctx context.Context, projectID string) (*entities.Org, error)
+}
