@@ -23,12 +23,19 @@ type PgwebSession struct {
 	ReadOnly   bool      `json:"readonly"`
 	Status     string    `json:"status"` // "starting", "running"
 	CreatedAt  time.Time `json:"created_at"`
+	Namespace  string    `json:"-"`
+}
+
+// SetNamespaceResolver runs each explorer next to its database, in the project namespace.
+func (s *PgwebService) SetNamespaceResolver(fn func(ctx context.Context, projectID string) string) {
+	s.nsFor = fn
 }
 
 // PgwebService manages on-demand pgweb pods for database exploration.
 type PgwebService struct {
 	dbRepo     ports.DatabaseRepository
 	k8sClient  k8sclient.Client
+	nsFor      func(ctx context.Context, projectID string) string
 	namespace  string // K8s namespace for pgweb pods (e.g. "zenith-staging")
 	baseDomain string // e.g. "apps.stage.freezenith.com"
 	sessions   sync.Map
@@ -65,6 +72,11 @@ func (s *PgwebService) StartSession(ctx context.Context, dbID, userID string, re
 		return nil, fmt.Errorf("explorer only supports PostgreSQL databases")
 	}
 
+	ns := s.namespace
+	if s.nsFor != nil {
+		ns = s.nsFor(ctx, db.ProjectID)
+	}
+
 	// Generate random token for subdomain
 	tokenBytes := make([]byte, 6)
 	if _, err := rand.Read(tokenBytes); err != nil {
@@ -79,6 +91,7 @@ func (s *PgwebService) StartSession(ctx context.Context, dbID, userID string, re
 		URL:        "https://pgweb-" + token + "." + s.baseDomain,
 		ReadOnly:   readOnly,
 		Status:     "starting",
+		Namespace:  ns,
 		CreatedAt:  time.Now(),
 	}
 
@@ -92,21 +105,21 @@ func (s *PgwebService) StartSession(ctx context.Context, dbID, userID string, re
 	}
 
 	// 1. Deployment
-	if err := s.createDeployment(ctx, resourceName, secretName, labels, readOnly); err != nil {
+	if err := s.createDeployment(ctx, ns, resourceName, secretName, labels, readOnly); err != nil {
 		return nil, fmt.Errorf("create pgweb deployment: %w", err)
 	}
 
 	// 2. Service
-	if err := s.createService(ctx, resourceName, labels); err != nil {
+	if err := s.createService(ctx, ns, resourceName, labels); err != nil {
 		// Cleanup deployment on failure
-		s.k8sClient.DeleteCRD(ctx, "Deployment", s.namespace, resourceName)
+		s.k8sClient.DeleteCRD(ctx, "Deployment", ns, resourceName)
 		return nil, fmt.Errorf("create pgweb service: %w", err)
 	}
 
 	// 3. IngressRoute
-	if err := s.createIngressRoute(ctx, resourceName, labels); err != nil {
-		s.k8sClient.DeleteCRD(ctx, "Service", s.namespace, resourceName)
-		s.k8sClient.DeleteCRD(ctx, "Deployment", s.namespace, resourceName)
+	if err := s.createIngressRoute(ctx, ns, resourceName, labels); err != nil {
+		s.k8sClient.DeleteCRD(ctx, "Service", ns, resourceName)
+		s.k8sClient.DeleteCRD(ctx, "Deployment", ns, resourceName)
 		return nil, fmt.Errorf("create pgweb ingress: %w", err)
 	}
 
@@ -136,13 +149,13 @@ func (s *PgwebService) StopSession(ctx context.Context, dbID string) error {
 	resourceName := "pgweb-" + session.Token
 
 	// Delete in reverse order: IngressRoute -> Service -> Deployment
-	if err := s.k8sClient.DeleteCRD(ctx, "IngressRoute", s.namespace, resourceName); err != nil {
+	if err := s.k8sClient.DeleteCRD(ctx, "IngressRoute", session.Namespace, resourceName); err != nil {
 		slog.Error("failed to delete IngressRoute", "resource_name", resourceName, "error", err)
 	}
-	if err := s.k8sClient.DeleteCRD(ctx, "Service", s.namespace, resourceName); err != nil {
+	if err := s.k8sClient.DeleteCRD(ctx, "Service", session.Namespace, resourceName); err != nil {
 		slog.Error("failed to delete Service", "resource_name", resourceName, "error", err)
 	}
-	if err := s.k8sClient.DeleteCRD(ctx, "Deployment", s.namespace, resourceName); err != nil {
+	if err := s.k8sClient.DeleteCRD(ctx, "Deployment", session.Namespace, resourceName); err != nil {
 		slog.Error("failed to delete Deployment", "resource_name", resourceName, "error", err)
 	}
 
@@ -174,7 +187,7 @@ func (s *PgwebService) CleanupExpired(ctx context.Context) {
 }
 
 // createDeployment creates a pgweb Deployment that reads DATABASE_URL from the existing credentials secret.
-func (s *PgwebService) createDeployment(ctx context.Context, name, secretName string, labels map[string]string, readOnly bool) error {
+func (s *PgwebService) createDeployment(ctx context.Context, ns, name, secretName string, labels map[string]string, readOnly bool) error {
 	args := []string{"--bind=0.0.0.0", "--listen=8081"}
 	if readOnly {
 		args = append(args, "--readonly")
@@ -249,7 +262,7 @@ func (s *PgwebService) createDeployment(ctx context.Context, name, secretName st
 		Kind:       "Deployment",
 		Metadata: k8sclient.ObjectMeta{
 			Name:      name,
-			Namespace: s.namespace,
+			Namespace: ns,
 			Labels:    labels,
 		},
 		Spec: specJSON,
@@ -257,7 +270,7 @@ func (s *PgwebService) createDeployment(ctx context.Context, name, secretName st
 }
 
 // createService creates a ClusterIP Service for the pgweb pod.
-func (s *PgwebService) createService(ctx context.Context, name string, labels map[string]string) error {
+func (s *PgwebService) createService(ctx context.Context, ns, name string, labels map[string]string) error {
 	spec := map[string]interface{}{
 		"selector": map[string]string{
 			"app": name,
@@ -281,7 +294,7 @@ func (s *PgwebService) createService(ctx context.Context, name string, labels ma
 		Kind:       "Service",
 		Metadata: k8sclient.ObjectMeta{
 			Name:      name,
-			Namespace: s.namespace,
+			Namespace: ns,
 			Labels:    labels,
 		},
 		Spec: specJSON,
@@ -289,7 +302,7 @@ func (s *PgwebService) createService(ctx context.Context, name string, labels ma
 }
 
 // createIngressRoute creates a Traefik IngressRoute for the pgweb session.
-func (s *PgwebService) createIngressRoute(ctx context.Context, name string, labels map[string]string) error {
+func (s *PgwebService) createIngressRoute(ctx context.Context, ns, name string, labels map[string]string) error {
 	host := name + "." + s.baseDomain
 
 	spec := map[string]interface{}{
@@ -321,7 +334,7 @@ func (s *PgwebService) createIngressRoute(ctx context.Context, name string, labe
 		Kind:       "IngressRoute",
 		Metadata: k8sclient.ObjectMeta{
 			Name:      name,
-			Namespace: s.namespace,
+			Namespace: ns,
 			Labels:    labels,
 		},
 		Spec: specJSON,

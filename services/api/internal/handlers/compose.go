@@ -3,6 +3,7 @@ package handlers
 import (
 	"log/slog"
 
+	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/ports"
 	"github.com/dotechhq/zenith/services/api/internal/services"
 	"github.com/gofiber/fiber/v2"
@@ -100,7 +101,7 @@ func (h *ComposeHandler) ImportCompose(c *fiber.Ctx) error {
 	}
 
 	// Parse compose (Layer 1)
-	parsed, err := services.ParseCompose(req.ComposeContent, project.Slug, "zenith-apps", h.baseDomain, h.standalone)
+	parsed, err := services.ParseCompose(req.ComposeContent, project.Slug, projectNamespace(project), h.baseDomain, h.standalone)
 	if err != nil {
 		slog.Error("failed to parse compose", "error", err)
 		return NewInternal("failed to parse compose file")
@@ -195,3 +196,11 @@ func (h *ComposeHandler) FormatCompose(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"formatted": formatted})
 }
 
+
+// projectNamespace is the namespace a project's workloads run in.
+func projectNamespace(p *entities.Project) string {
+	if p.Namespace != "" {
+		return p.Namespace
+	}
+	return entities.LegacyAppsNamespace
+}

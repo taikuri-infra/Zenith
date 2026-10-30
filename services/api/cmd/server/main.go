@@ -939,6 +939,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 
 	// Database Explorer (pgweb — on-demand database browser)
 	pgwebSvc := services.NewPgwebService(dbRepo, k8sClient, "zenith-apps", cfg.BaseDomain)
+	if cfg.K8sMode == "real" {
+		pgwebSvc.SetNamespaceResolver(projectNS.For)
+	}
 	go pgwebSvc.CleanupExpired(context.Background())
 	pgwebHandler := handlers.NewPgwebHandler(pgwebSvc, dbRepo)
 	protected.Post("/databases/:dbId/explorer", pgwebHandler.Start)
@@ -1508,6 +1511,9 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	// Pod Exec — SSH-to-pod terminal access (Business+ only)
 	podSessionRepo := memory.NewMemoryPodExecSessionRepository()
 	podExecHandler := handlers.NewPodExecHandler(k8sClient, appRepo, planRepo, userRepo, podSessionRepo, objStorage, cfg.S3PlatformBucket, "zenith-apps")
+	if cfg.K8sMode == "real" {
+		podExecHandler.SetNamespaceResolver(projectNS.For)
+	}
 	appByID.Use("/pods/:podName/exec", podExecHandler.UpgradeCheck)
 	appByID.Get("/pods/:podName/exec", podExecHandler.HandleExec())
 	protected.Get("/pod-sessions", podExecHandler.ListSessions)

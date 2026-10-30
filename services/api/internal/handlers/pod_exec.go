@@ -31,6 +31,7 @@ type PodExecHandler struct {
 	s3          ports.ObjectStorage
 	s3Bucket    string
 	namespace   string
+	nsFor       func(ctx context.Context, projectID string) string
 }
 
 // NewPodExecHandler creates a new PodExecHandler.
@@ -54,6 +55,18 @@ func NewPodExecHandler(
 		s3Bucket:    s3Bucket,
 		namespace:   namespace,
 	}
+}
+
+// SetNamespaceResolver makes exec follow each project's namespace.
+func (h *PodExecHandler) SetNamespaceResolver(fn func(ctx context.Context, projectID string) string) {
+	h.nsFor = fn
+}
+
+func (h *PodExecHandler) namespaceOf(app *entities.App) string {
+	if h.nsFor == nil {
+		return h.namespace
+	}
+	return h.nsFor(context.Background(), app.ProjectID)
 }
 
 // UpgradeCheck is Fiber middleware that pre-checks WebSocket upgrade eligibility.
@@ -128,7 +141,7 @@ func (h *PodExecHandler) HandleExec() fiber.Handler {
 
 		// Execute pod exec and bridge to WebSocket
 		var recording bytes.Buffer
-		h.execAndBridge(c, realClient, podName, &recording)
+		h.execAndBridge(c, realClient, h.namespaceOf(app), podName, &recording)
 
 		// Session ended — save recording
 		endTime := time.Now()
@@ -149,11 +162,11 @@ func (h *PodExecHandler) HandleExec() fiber.Handler {
 }
 
 // execAndBridge bridges a WebSocket connection to a k8s pod exec SPDY stream.
-func (h *PodExecHandler) execAndBridge(ws *websocket.Conn, client *k8sclient.RealClient, podName string, recording *bytes.Buffer) {
+func (h *PodExecHandler) execAndBridge(ws *websocket.Conn, client *k8sclient.RealClient, ns, podName string, recording *bytes.Buffer) {
 	req := client.Clientset().CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
-		Namespace(h.namespace).
+		Namespace(ns).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Command: []string{"/bin/sh"},
