@@ -3,6 +3,7 @@ package k8sops
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -114,31 +115,34 @@ func (i Install) Databases(ctx context.Context, r Runner) ([]DBRef, error) {
 	if err != nil {
 		return nil, err
 	}
+	// JSON keeps user-controlled names from shifting columns or splitting rows.
 	out, err := i.kubectl(ctx, r, nil, "exec", pod, "-c", "postgres", "--", "psql", "-U", "postgres", "-d", "zenith",
-		"-At", "-F", "|", "-c",
-		"SELECT d.id, d.engine, d.name, d.db_name, d.db_user, COALESCE(p.namespace, '"+AppsNamespace+"') "+
-			"FROM user_databases d LEFT JOIN projects p ON p.id = d.project_id WHERE d.status = 'ready' ORDER BY d.created_at")
+		"-At", "-c",
+		"SELECT COALESCE(json_agg(json_build_object('ID', d.id, 'Engine', d.engine, 'Name', d.name, "+
+			"'DBName', d.db_name, 'DBUser', d.db_user, 'Namespace', COALESCE(p.namespace, '"+AppsNamespace+"')) ORDER BY d.created_at), '[]'::json) "+
+			"FROM user_databases d LEFT JOIN projects p ON p.id = d.project_id WHERE d.status = 'ready'")
 	if err != nil {
 		return nil, fmt.Errorf("list databases: %w", err)
 	}
 	var dbs []DBRef
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &dbs); err != nil {
+		return nil, fmt.Errorf("list databases: unexpected output: %w", err)
+	}
+	for _, d := range dbs {
+		if err := d.Validate(); err != nil {
+			return nil, err
 		}
-		p := strings.SplitN(line, "|", 6)
-		if len(p) != 6 {
-			return nil, fmt.Errorf("unexpected database row %q", line)
-		}
-		if !dbIDPattern.MatchString(p[0]) || !dbNSPattern.MatchString(p[5]) ||
-			(p[1] != "postgresql" && p[1] != "mysql" && p[1] != "redis") {
-			// A field containing the delimiter shifts the columns; never pass such a row to kubectl.
-			return nil, fmt.Errorf("unexpected database row %q", line)
-		}
-		dbs = append(dbs, DBRef{ID: p[0], Engine: p[1], Name: p[2], DBName: p[3], DBUser: p[4], Namespace: p[5]})
 	}
 	return dbs, nil
+}
+
+// Validate rejects database records whose identifiers could reach kubectl or SQL in a surprising way.
+func (d DBRef) Validate() error {
+	if !dbIDPattern.MatchString(d.ID) || !dbNSPattern.MatchString(d.Namespace) ||
+		(d.Engine != "postgresql" && d.Engine != "mysql" && d.Engine != "redis") {
+		return fmt.Errorf("invalid database record %q (engine %q, namespace %q)", d.ID, d.Engine, d.Namespace)
+	}
+	return nil
 }
 
 // Uninstall removes the Helm release and the platform and apps namespaces.

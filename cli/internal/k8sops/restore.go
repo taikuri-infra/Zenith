@@ -49,6 +49,14 @@ func readManifest(dir string) (*Manifest, error) {
 	if m.Format != 2 {
 		return nil, fmt.Errorf("unsupported archive format %d (this zen restores format 2, written on Kubernetes)", m.Format)
 	}
+	for i := range m.Databases {
+		if m.Databases[i].Namespace == "" { // archives written before projects had namespaces
+			m.Databases[i].Namespace = AppsNamespace
+		}
+		if err := m.Databases[i].Validate(); err != nil {
+			return nil, fmt.Errorf("manifest.json: %w", err)
+		}
+	}
 	return &m, nil
 }
 
