@@ -17,6 +17,7 @@ import (
 	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/scheme"
 )
@@ -31,6 +32,7 @@ type PodExecHandler struct {
 	s3          ports.ObjectStorage
 	s3Bucket    string
 	namespace   string
+	nsFor       func(ctx context.Context, projectID string) string
 }
 
 // NewPodExecHandler creates a new PodExecHandler.
@@ -54,6 +56,18 @@ func NewPodExecHandler(
 		s3Bucket:    s3Bucket,
 		namespace:   namespace,
 	}
+}
+
+// SetNamespaceResolver makes exec follow each project's namespace.
+func (h *PodExecHandler) SetNamespaceResolver(fn func(ctx context.Context, projectID string) string) {
+	h.nsFor = fn
+}
+
+func (h *PodExecHandler) namespaceOf(app *entities.App) string {
+	if h.nsFor == nil {
+		return h.namespace
+	}
+	return h.nsFor(context.Background(), app.ProjectID)
 }
 
 // UpgradeCheck is Fiber middleware that pre-checks WebSocket upgrade eligibility.
@@ -100,6 +114,14 @@ func (h *PodExecHandler) HandleExec() fiber.Handler {
 			return
 		}
 
+		// The pod must belong to this app, in the app's own namespace.
+		ns := h.namespaceOf(app)
+		pod, perr := realClient.Clientset().CoreV1().Pods(ns).Get(context.Background(), podName, metav1.GetOptions{})
+		if perr != nil || pod.Labels["zenith.dev/app-id"] != app.ID || pod.Labels["zenith.dev/managed-by"] != "zenith" {
+			c.WriteMessage(websocket.TextMessage, []byte(`{"error":"pod not found for this app"}`))
+			return
+		}
+
 		// Get user info for audit
 		user, _ := h.userRepo.GetByID(context.Background(), uid)
 		userEmail := ""
@@ -128,7 +150,7 @@ func (h *PodExecHandler) HandleExec() fiber.Handler {
 
 		// Execute pod exec and bridge to WebSocket
 		var recording bytes.Buffer
-		h.execAndBridge(c, realClient, podName, &recording)
+		h.execAndBridge(c, realClient, ns, podName, &recording)
 
 		// Session ended — save recording
 		endTime := time.Now()
@@ -149,11 +171,11 @@ func (h *PodExecHandler) HandleExec() fiber.Handler {
 }
 
 // execAndBridge bridges a WebSocket connection to a k8s pod exec SPDY stream.
-func (h *PodExecHandler) execAndBridge(ws *websocket.Conn, client *k8sclient.RealClient, podName string, recording *bytes.Buffer) {
+func (h *PodExecHandler) execAndBridge(ws *websocket.Conn, client *k8sclient.RealClient, ns, podName string, recording *bytes.Buffer) {
 	req := client.Clientset().CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
-		Namespace(h.namespace).
+		Namespace(ns).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Command: []string{"/bin/sh"},
