@@ -1,4 +1,4 @@
-# Edge and security — design (sub-project 3 of 7) — DRAFT for approval
+# Edge and security — design (sub-project 3 of 7)
 
 Depends on: project = namespace (sub-project 2). Feeds: observability (4).
 
@@ -41,7 +41,7 @@ Service mesh, mTLS between pods, rate limiting beyond what APISIX plugins give, 
   a normal one passes; a firewall rule blocks pod→pod across projects; SSO login via a test
   Keycloak user. Heavy components run only in a separate E2E job.
 
-## Decisions for you
-1. Firewall as NetworkPolicy (+Cilium bonus) instead of requiring Cilium everywhere — OK?
-2. APISIX next to Traefik (optional), not replacing it — OK?
-3. Keycloak optional at install (SSO off by default) — OK?
+## Decisions (approved 2026-10-30)
+1. Firewall compiles to NetworkPolicy; CiliumNetworkPolicy only when Cilium is present. Cilium is not required.
+2. APISIX runs next to Traefik as an optional component; it does not replace Traefik.
+3. Keycloak is optional at install; SSO is off by default.
