@@ -53,7 +53,10 @@ func PerAppResources(tier entities.PlanTier) (cpuLimit, memLimit, cpuReq, memReq
 // starts at 0 replicas and an HTTPScaledObject CRD is included for KEDA.
 // customDomains is a list of verified custom domain hostnames to add to the IngressRoute.
 func GenerateK8sResources(app *entities.App, imageTag, baseDomain string, envVars []entities.EnvVar, planLimits *entities.PlanLimits, tier entities.PlanTier, customDomains []string, isStaging ...bool) *K8sResources {
-	namespace := "zenith-apps"
+	namespace := app.Namespace
+	if namespace == "" {
+		namespace = entities.LegacyAppsNamespace
+	}
 	labels := map[string]string{
 		"app":                   app.Subdomain,
 		"zenith.dev/app":        app.Name,

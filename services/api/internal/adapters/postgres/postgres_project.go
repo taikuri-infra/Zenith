@@ -21,13 +21,13 @@ func NewPostgresProjectRepository(pool *pgxpool.Pool) *PostgresProjectRepository
 	return &PostgresProjectRepository{pool: pool}
 }
 
-const projectSelectCols = `id, user_id, name, slug, description, COALESCE(status, 'active'), COALESCE(harbor_project_name, ''), COALESCE(harbor_robot_user, ''), COALESCE(harbor_robot_pass, ''), created_at, updated_at`
+const projectSelectCols = `id, user_id, name, slug, description, COALESCE(status, 'active'), COALESCE(harbor_project_name, ''), COALESCE(harbor_robot_user, ''), COALESCE(harbor_robot_pass, ''), COALESCE(namespace, 'zenith-apps'), created_at, updated_at`
 
 func scanProject(scanner interface{ Scan(dest ...any) error }) (*entities.Project, error) {
 	var p entities.Project
 	err := scanner.Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Slug, &p.Description,
-		&p.Status, &p.HarborProjectName, &p.HarborRobotUser, &p.HarborRobotPass,
+		&p.Status, &p.HarborProjectName, &p.HarborRobotUser, &p.HarborRobotPass, &p.Namespace,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -39,11 +39,12 @@ func scanProject(scanner interface{ Scan(dest ...any) error }) (*entities.Projec
 func (r *PostgresProjectRepository) CreateProject(ctx context.Context, userID, name, slug, description string) (*entities.Project, error) {
 	id := uuid.New().String()
 	now := time.Now()
+	namespace := entities.ProjectNamespace(id, slug)
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO projects (id, user_id, name, slug, description, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		id, userID, name, slug, description, entities.ProjectStatusDraft, now, now,
+		`INSERT INTO projects (id, user_id, name, slug, description, status, namespace, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		id, userID, name, slug, description, entities.ProjectStatusDraft, namespace, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_projects_user_slug") {
@@ -59,6 +60,7 @@ func (r *PostgresProjectRepository) CreateProject(ctx context.Context, userID, n
 		Slug:        slug,
 		Description: description,
 		Status:      entities.ProjectStatusDraft,
+		Namespace:   namespace,
 		Timestamps:  entities.Timestamps{CreatedAt: now, UpdatedAt: now},
 	}, nil
 }

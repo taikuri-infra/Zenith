@@ -19,6 +19,9 @@ type Project struct {
 	Description string        `json:"description"`
 	Status      ProjectStatus `json:"status"`
 
+	// Namespace is the Kubernetes namespace the project's workloads run in.
+	Namespace string `json:"namespace"`
+
 	// Harbor integration (populated when project has a registry)
 	HarborProjectName string `json:"-"`
 	HarborRobotUser   string `json:"harbor_robot_user,omitempty"`

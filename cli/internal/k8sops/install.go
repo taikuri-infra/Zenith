@@ -3,8 +3,10 @@ package k8sops
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -98,10 +100,14 @@ func (i Install) Version(ctx context.Context, r Runner) string {
 const AppsNamespace = "zenith-apps"
 
 // DBRef is a managed database. Engine: postgresql|mysql|redis.
-type DBRef struct{ ID, Engine, Name, DBName, DBUser string }
+type DBRef struct{ ID, Engine, Name, DBName, DBUser, Namespace string }
 
 // Resource is the name of the database's operator resource and secret prefix.
 func (d DBRef) Resource() string { return "db-" + d.ID[:min(8, len(d.ID))] }
+
+var (
+	dbNSPattern = regexp.MustCompile(`^(zenith-apps|zp-[a-z0-9-]{1,58})$`)
+)
 
 // Databases lists ready managed databases from the control-plane Postgres.
 func (i Install) Databases(ctx context.Context, r Runner) ([]DBRef, error) {
@@ -109,25 +115,34 @@ func (i Install) Databases(ctx context.Context, r Runner) ([]DBRef, error) {
 	if err != nil {
 		return nil, err
 	}
+	// JSON keeps user-controlled names from shifting columns or splitting rows.
 	out, err := i.kubectl(ctx, r, nil, "exec", pod, "-c", "postgres", "--", "psql", "-U", "postgres", "-d", "zenith",
-		"-At", "-F", "|", "-c",
-		"SELECT id, engine, name, db_name, db_user FROM user_databases WHERE status = 'ready' ORDER BY created_at")
+		"-At", "-c",
+		"SELECT COALESCE(json_agg(json_build_object('ID', d.id, 'Engine', d.engine, 'Name', d.name, "+
+			"'DBName', d.db_name, 'DBUser', d.db_user, 'Namespace', COALESCE(p.namespace, '"+AppsNamespace+"')) ORDER BY d.created_at), '[]'::json) "+
+			"FROM user_databases d LEFT JOIN projects p ON p.id = d.project_id WHERE d.status = 'ready'")
 	if err != nil {
 		return nil, fmt.Errorf("list databases: %w", err)
 	}
 	var dbs []DBRef
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &dbs); err != nil {
+		return nil, fmt.Errorf("list databases: unexpected output: %w", err)
+	}
+	for _, d := range dbs {
+		if err := d.Validate(); err != nil {
+			return nil, err
 		}
-		p := strings.SplitN(line, "|", 5)
-		if len(p) != 5 {
-			return nil, fmt.Errorf("unexpected database row %q", line)
-		}
-		dbs = append(dbs, DBRef{ID: p[0], Engine: p[1], Name: p[2], DBName: p[3], DBUser: p[4]})
 	}
 	return dbs, nil
+}
+
+// Validate rejects database records whose identifiers could reach kubectl or SQL in a surprising way.
+func (d DBRef) Validate() error {
+	if !dbIDPattern.MatchString(d.ID) || !dbNSPattern.MatchString(d.Namespace) ||
+		(d.Engine != "postgresql" && d.Engine != "mysql" && d.Engine != "redis") {
+		return fmt.Errorf("invalid database record %q (engine %q, namespace %q)", d.ID, d.Engine, d.Namespace)
+	}
+	return nil
 }
 
 // Uninstall removes the Helm release and the platform and apps namespaces.
@@ -139,7 +154,14 @@ func Uninstall(ctx context.Context, r Runner, inst Install) error {
 	if _, err := r.Run(ctx, "", nil, "helm", args...); err != nil {
 		return fmt.Errorf("helm uninstall: %w", err)
 	}
-	for _, ns := range []string{inst.Namespace, AppsNamespace} {
+	nss := []string{inst.Namespace, AppsNamespace}
+	// Project namespaces (zp-*) are labelled when Zenith creates them.
+	if out, err := r.Run(ctx, "", nil, "kubectl", kubeArgs(inst, "get", "namespace", "-l", "zenith.dev/managed=true", "-o", "name")...); err == nil {
+		for _, n := range strings.Fields(string(out)) {
+			nss = append(nss, strings.TrimPrefix(n, "namespace/"))
+		}
+	}
+	for _, ns := range nss {
 		a := []string{"delete", "namespace", ns, "--ignore-not-found", "--wait=false"}
 		if inst.Kubeconfig != "" {
 			a = append([]string{"--kubeconfig", inst.Kubeconfig}, a...)
@@ -149,4 +171,11 @@ func Uninstall(ctx context.Context, r Runner, inst Install) error {
 		}
 	}
 	return nil
+}
+
+func kubeArgs(inst Install, args ...string) []string {
+	if inst.Kubeconfig != "" {
+		return append([]string{"--kubeconfig", inst.Kubeconfig}, args...)
+	}
+	return args
 }

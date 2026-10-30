@@ -25,6 +25,21 @@ type Deployer struct {
 	envRepo    ports.EnvironmentRepository
 	envCrypto  *crypto.EnvCrypto
 	baseDomain string
+	resolveNS  NamespaceResolver
+}
+
+// SetNamespaceResolver runs each app in its project's namespace.
+func (d *Deployer) SetNamespaceResolver(r NamespaceResolver) { d.resolveNS = r }
+
+// namespaceFor returns the namespace of the app's project.
+func (d *Deployer) namespaceFor(ctx context.Context, app *entities.App) string {
+	if app.Namespace != "" {
+		return app.Namespace
+	}
+	if d.resolveNS != nil {
+		return d.resolveNS(ctx, app.ProjectID)
+	}
+	return entities.LegacyAppsNamespace
 }
 
 // NewDeployer creates a new Deployer.
@@ -62,6 +77,10 @@ func (d *Deployer) SetEnvRepo(repo ports.EnvironmentRepository) {
 // optionally the KEDA HTTPScaledObject for free-tier scale-to-zero.
 func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag string) error {
 	slog.Info("deploying app", "app", app.Name, "image", imageTag)
+	app.Namespace = d.namespaceFor(ctx, app)
+	if err := EnsureNamespace(ctx, d.k8sClient, app.Namespace); err != nil {
+		return fmt.Errorf("namespace %s: %w", app.Namespace, err)
+	}
 
 	// Get env vars for the app.
 	// V2: use per-environment vars when envVarRepo is set (app.EnvironmentID="" = production/default).
@@ -162,7 +181,7 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 			regServer = regServer[:idx]
 		}
 		secretName := "regcred-" + app.Subdomain
-		if upsertErr := d.k8sClient.UpsertDockerRegistrySecret(ctx, "zenith-apps", secretName, regServer, app.RegistryUser, password); upsertErr != nil {
+		if upsertErr := d.k8sClient.UpsertDockerRegistrySecret(ctx, app.Namespace, secretName, regServer, app.RegistryUser, password); upsertErr != nil {
 			slog.Error("failed to upsert registry pull secret", "app_id", app.ID, "error", upsertErr)
 		}
 	}
@@ -179,37 +198,37 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 	resources := GenerateK8sResources(app, imageTag, d.baseDomain, envVars, planLimits, tier, customDomains, isStaging)
 
 	// Apply Deployment
-	if err := d.applyCRD(ctx, "Deployment", "zenith-apps", app.Subdomain, resources.Deployment); err != nil {
+	if err := d.applyCRD(ctx, "Deployment", app.Namespace, app.Subdomain, resources.Deployment); err != nil {
 		return fmt.Errorf("failed to apply Deployment: %w", err)
 	}
 
 	// Apply Service
-	if err := d.applyCRD(ctx, "Service", "zenith-apps", app.Subdomain, resources.Service); err != nil {
+	if err := d.applyCRD(ctx, "Service", app.Namespace, app.Subdomain, resources.Service); err != nil {
 		return fmt.Errorf("failed to apply Service: %w", err)
 	}
 
 	// Apply IngressRoute
-	if err := d.applyCRD(ctx, "IngressRoute", "zenith-apps", app.Subdomain, resources.IngressRoute); err != nil {
+	if err := d.applyCRD(ctx, "IngressRoute", app.Namespace, app.Subdomain, resources.IngressRoute); err != nil {
 		return fmt.Errorf("failed to apply IngressRoute: %w", err)
 	}
 
 	// Apply Certificate CRD for custom domains (before NetworkPolicy)
 	if resources.Certificate != nil {
-		if err := d.applyCRD(ctx, "Certificate", "zenith-apps", app.Subdomain+"-custom-tls", resources.Certificate); err != nil {
+		if err := d.applyCRD(ctx, "Certificate", app.Namespace, app.Subdomain+"-custom-tls", resources.Certificate); err != nil {
 			return fmt.Errorf("failed to apply Certificate: %w", err)
 		}
 	}
 
 	// Apply NetworkPolicy for tenant isolation
 	if resources.NetworkPolicy != nil {
-		if err := d.applyCRD(ctx, "NetworkPolicy", "zenith-apps", app.Subdomain+"-netpol", resources.NetworkPolicy); err != nil {
+		if err := d.applyCRD(ctx, "NetworkPolicy", app.Namespace, app.Subdomain+"-netpol", resources.NetworkPolicy); err != nil {
 			return fmt.Errorf("failed to apply NetworkPolicy: %w", err)
 		}
 	}
 
 	// Apply KEDA HTTPScaledObject if scale-to-zero is enabled
 	if resources.HTTPScaledObject != nil {
-		if err := d.applyCRD(ctx, "HTTPScaledObject", "zenith-apps", app.Subdomain, resources.HTTPScaledObject); err != nil {
+		if err := d.applyCRD(ctx, "HTTPScaledObject", app.Namespace, app.Subdomain, resources.HTTPScaledObject); err != nil {
 			return fmt.Errorf("failed to apply HTTPScaledObject: %w", err)
 		}
 		// KEDA-managed: starts sleeping, will wake on first request
@@ -234,7 +253,7 @@ func (d *Deployer) DeployApp(ctx context.Context, app *entities.App, imageTag st
 func (d *Deployer) DeleteApp(ctx context.Context, app *entities.App) error {
 	slog.Info("deleting K8s resources for app", "app", app.Name, "subdomain", app.Subdomain)
 
-	namespace := "zenith-apps"
+	namespace := d.namespaceFor(ctx, app)
 
 	// Each resource type has its own apiVersion — must use DeleteCRDWithVersion
 	// to correctly resolve the GroupVersionResource.

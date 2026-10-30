@@ -102,7 +102,13 @@ func Backup(ctx context.Context, r Runner, inst Install, outDir string, now time
 }
 
 // appsKubectl runs kubectl against the apps namespace.
-func (i Install) apps() Install { return Install{Kubeconfig: i.Kubeconfig, Namespace: AppsNamespace} }
+func (i Install) apps(db DBRef) Install {
+	ns := db.Namespace
+	if ns == "" {
+		ns = AppsNamespace
+	}
+	return Install{Kubeconfig: i.Kubeconfig, Namespace: ns}
+}
 
 // dbSecret reads one key of the database's credentials Secret.
 func dbSecret(ctx context.Context, apps Install, r Runner, db DBRef, key string) (string, error) {
@@ -114,7 +120,7 @@ func dbSecret(ctx context.Context, apps Install, r Runner, db DBRef, key string)
 }
 
 func backupDB(ctx context.Context, inst Install, r Runner, tmp string, db DBRef) error {
-	apps := inst.apps()
+	apps := inst.apps(db)
 	base := filepath.Join(tmp, "databases", db.ID)
 	switch db.Engine {
 	case "postgresql":

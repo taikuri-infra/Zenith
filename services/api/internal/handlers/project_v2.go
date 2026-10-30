@@ -26,6 +26,8 @@ type ProjectHandlerV2 struct {
 	onAppDeleted func(ctx context.Context, appID string)
 	envHandler  *EnvironmentHandler
 	planRepo    ports.UserPlanRepository
+	ensureNS    func(ctx context.Context, namespace string) error
+	removeNS    func(ctx context.Context, namespace string) error
 }
 
 // NewProjectHandlerV2 creates a new ProjectHandlerV2.
@@ -47,6 +49,12 @@ func (h *ProjectHandlerV2) SetOnAppDeleted(fn func(ctx context.Context, appID st
 // SetEnvironmentHandler sets the environment handler for auto-creating environments on project creation.
 func (h *ProjectHandlerV2) SetEnvironmentHandler(eh *EnvironmentHandler) {
 	h.envHandler = eh
+}
+
+// SetNamespaceHooks wires Kubernetes namespace creation and removal to the
+// project lifecycle. Either may be nil.
+func (h *ProjectHandlerV2) SetNamespaceHooks(ensure, remove func(ctx context.Context, namespace string) error) {
+	h.ensureNS, h.removeNS = ensure, remove
 }
 
 // SetPlanRepo sets the plan repo for checking user tier on project creation.
@@ -94,6 +102,12 @@ func (h *ProjectHandlerV2) Create(c *fiber.Ctx) error {
 		}
 		slog.Error("failed to create project", "error", err)
 		return NewInternal("failed to create project")
+	}
+
+	if h.ensureNS != nil {
+		if err := h.ensureNS(c.Context(), project.Namespace); err != nil {
+			slog.Error("failed to create project namespace", "namespace", project.Namespace, "error", err)
+		}
 	}
 
 	// Auto-create environments (production always, staging for Pro+)
@@ -277,6 +291,14 @@ func (h *ProjectHandlerV2) Delete(c *fiber.Ctx) error {
 	// CASCADE delete (project + all resources via FK)
 	if err := h.projectRepo.DeleteProject(c.Context(), projectID); err != nil {
 		return NewInternal("failed to delete project")
+	}
+
+	// A project's own namespace takes its databases, volumes and secrets with it.
+	// The shared legacy namespace is never removed.
+	if h.removeNS != nil && strings.HasPrefix(project.Namespace, "zp-") {
+		if err := h.removeNS(context.Background(), project.Namespace); err != nil {
+			slog.Warn("failed to delete project namespace", "namespace", project.Namespace, "error", err)
+		}
 	}
 
 	return c.JSON(fiber.Map{"message": "project deleted"})

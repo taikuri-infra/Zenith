@@ -22,6 +22,24 @@ type MonitoringService struct {
 	k8s     ports.KubernetesClient
 	appRepo ports.AppRepository
 	logs    AppLogSource
+	nsFor   func(ctx context.Context, projectID string) string
+}
+
+// SetNamespaceResolver reads each app's pods and metrics from its project namespace.
+func (s *MonitoringService) SetNamespaceResolver(r func(ctx context.Context, projectID string) string) {
+	s.nsFor = r
+}
+
+// namespaceOf returns the namespace an app's workloads run in.
+func (s *MonitoringService) namespaceOf(ctx context.Context, appID string) string {
+	if s.nsFor == nil {
+		return appsNamespace
+	}
+	app, err := s.appRepo.GetApp(ctx, appID)
+	if err != nil {
+		return appsNamespace
+	}
+	return s.nsFor(ctx, app.ProjectID)
 }
 
 // AppLogSource supplies app logs from the runtime (e.g. Docker) instead of Loki.
@@ -76,6 +94,7 @@ func podRegex(appName string) string {
 
 // GetOverview returns key stats: CPU%, mem, request rate, error rate, p95, pod count.
 func (s *MonitoringService) GetOverview(ctx context.Context, userID, appID string) (*dto.MetricsOverview, error) {
+	ns := s.namespaceOf(ctx, appID)
 	appName, err := s.resolveApp(ctx, userID, appID)
 	if err != nil {
 		return nil, err
@@ -84,12 +103,12 @@ func (s *MonitoringService) GetOverview(ctx context.Context, userID, appID strin
 	overview := &dto.MetricsOverview{}
 
 	// Pod count + metrics from k8s
-	pods, err := s.k8s.ListPods(ctx, appsNamespace, podSelector(appName))
+	pods, err := s.k8s.ListPods(ctx, ns, podSelector(appName))
 	if err == nil {
 		overview.PodCount = len(pods)
 	}
 
-	podMetrics, err := s.k8s.GetPodMetrics(ctx, appsNamespace, podSelector(appName))
+	podMetrics, err := s.k8s.GetPodMetrics(ctx, ns, podSelector(appName))
 	if err == nil && len(podMetrics) > 0 {
 		var totalCPU int64
 		var totalMem int64
@@ -153,6 +172,7 @@ func timeRangeParams(rangeStr string) (start time.Time, step time.Duration) {
 
 // GetTimeSeries returns a time series for a specific metric.
 func (s *MonitoringService) GetTimeSeries(ctx context.Context, userID, appID, metric, timeRange string) (*dto.TimeSeriesResponse, error) {
+	ns := s.namespaceOf(ctx, appID)
 	appName, err := s.resolveApp(ctx, userID, appID)
 	if err != nil {
 		return nil, err
@@ -169,9 +189,9 @@ func (s *MonitoringService) GetTimeSeries(ctx context.Context, userID, appID, me
 	regex := podRegex(appName)
 	switch metric {
 	case "cpu":
-		promQL = fmt.Sprintf(`sum(rate(container_cpu_usage_seconds_total{namespace="%s",pod=~"%s",container!=""}[5m])) * 100`, appsNamespace, regex)
+		promQL = fmt.Sprintf(`sum(rate(container_cpu_usage_seconds_total{namespace="%s",pod=~"%s",container!=""}[5m])) * 100`, ns, regex)
 	case "memory":
-		promQL = fmt.Sprintf(`sum(container_memory_working_set_bytes{namespace="%s",pod=~"%s",container!=""}) / (1024*1024)`, appsNamespace, regex)
+		promQL = fmt.Sprintf(`sum(container_memory_working_set_bytes{namespace="%s",pod=~"%s",container!=""}) / (1024*1024)`, ns, regex)
 	case "requests":
 		promQL = fmt.Sprintf(`sum(rate(apisix_http_status{matched_route=~".*%s.*"}[5m])) * 60`, appName)
 	case "latency":
@@ -202,6 +222,7 @@ func (s *MonitoringService) GetTimeSeries(ctx context.Context, userID, appID, me
 
 // GetLogs queries Loki for log entries from an app.
 func (s *MonitoringService) GetLogs(ctx context.Context, userID, appID string, level, search string, limit int, since time.Duration) (*dto.MonitoringLogsResponse, error) {
+	ns := s.namespaceOf(ctx, appID)
 	appName, err := s.resolveApp(ctx, userID, appID)
 	if err != nil {
 		return nil, err
@@ -238,7 +259,7 @@ func (s *MonitoringService) GetLogs(ctx context.Context, userID, appID string, l
 	}
 
 	// Build LogQL query
-	logQL := fmt.Sprintf(`{namespace="%s",app="%s"}`, appsNamespace, appName)
+	logQL := fmt.Sprintf(`{namespace="%s",app="%s"}`, ns, appName)
 	if search != "" {
 		logQL += fmt.Sprintf(` |= "%s"`, strings.ReplaceAll(search, `"`, `\"`))
 	}
@@ -276,6 +297,7 @@ func (s *MonitoringService) GetLogs(ctx context.Context, userID, appID string, l
 
 // StreamLogs sends log entries from Loki tail to the out channel.
 func (s *MonitoringService) StreamLogs(ctx context.Context, userID, appID string, out chan<- dto.MonitoringLogEntry) error {
+	ns := s.namespaceOf(ctx, appID)
 	appName, err := s.resolveApp(ctx, userID, appID)
 	if err != nil {
 		return err
@@ -293,7 +315,7 @@ func (s *MonitoringService) StreamLogs(ctx context.Context, userID, appID string
 		return fmt.Errorf("loki not configured")
 	}
 
-	logQL := fmt.Sprintf(`{namespace="%s",app="%s"}`, appsNamespace, appName)
+	logQL := fmt.Sprintf(`{namespace="%s",app="%s"}`, ns, appName)
 
 	lokiCh := make(chan lokiclient.LogEntry, 100)
 	go func() {
@@ -387,20 +409,21 @@ func (s *MonitoringService) GetAggregatedLogs(ctx context.Context, userID string
 
 // GetPods returns pod list with status and resource usage.
 func (s *MonitoringService) GetPods(ctx context.Context, userID, appID string) (*dto.PodsResponse, error) {
+	ns := s.namespaceOf(ctx, appID)
 	appName, err := s.resolveApp(ctx, userID, appID)
 	if err != nil {
 		return nil, err
 	}
 
 	selector := podSelector(appName)
-	pods, err := s.k8s.ListPods(ctx, appsNamespace, selector)
+	pods, err := s.k8s.ListPods(ctx, ns, selector)
 	if err != nil {
 		return nil, fmt.Errorf("list pods: %w", err)
 	}
 
 	// Get metrics
 	metricsMap := make(map[string]ports.K8sPodMetrics)
-	metrics, _ := s.k8s.GetPodMetrics(ctx, appsNamespace, selector)
+	metrics, _ := s.k8s.GetPodMetrics(ctx, ns, selector)
 	for _, m := range metrics {
 		metricsMap[m.Name] = m
 	}

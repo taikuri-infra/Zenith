@@ -530,6 +530,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	logHub := deploy.NewLogHub(500)
 	eventHub := deploy.NewEventHub(50)
 	deployer := deploy.NewDeployer(k8sClient, appRepo, planRepo, cfg.BaseDomain)
+	projectNS := deploy.NewProjectNamespaces(projectRepo)
+	if cfg.K8sMode == "real" {
+		deployer.SetNamespaceResolver(projectNS.For)
+	}
 	deploy.SetCertIssuer(cfg.TLSIssuer)
 	deploy.SetAppCerts(cfg.AppCerts)
 	// Zenith runs on Kubernetes only: the Deployer is the one compute backend.
@@ -547,6 +551,12 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	appHandlerV2.SetPlanRepo(planRepo)
 	appHandlerV2.SetEventRepo(eventRepo)
 	projectHandlerV2 := handlers.NewProjectHandlerV2(projectRepo, appRepo, deployer)
+	if cfg.K8sMode == "real" {
+		projectHandlerV2.SetNamespaceHooks(
+			func(ctx context.Context, ns string) error { return deploy.EnsureNamespace(ctx, k8sClient, ns) },
+			func(ctx context.Context, ns string) error { return k8sClient.DeleteNamespace(ctx, ns) },
+		)
+	}
 
 	// Managed services repo
 	var msRepo ports.ManagedServiceRepository
@@ -898,6 +908,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	if cfg.Mode != "saas" && cfg.K8sMode == "real" {
 		// Self-host on Kubernetes: operator-backed databases (CloudNativePG, mariadb-operator, redis-operator).
 		k8sDBBackend := deploy.NewK8sDBBackend(k8sClient, "zenith-apps")
+		k8sDBBackend.SetNamespaceResolver(projectNS.For)
 		dbRuntime := services.NewDBRuntimeService(dbRepo, k8sDBBackend, envCrypto)
 		dbHandlerV2.SetRuntime(dbRuntime)
 		// After a restore or a manual delete, recreate what the database says should exist.
@@ -1189,7 +1200,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config, userRepo ports.UserReposito
 	monitoringSvc := services.NewMonitoringService(promClient, lokiClient, k8sClient, appRepo)
 	if cfg.K8sMode == "real" {
 		if reader, ok := k8sClient.(k8sclient.PodLogReader); ok {
-			monitoringSvc.SetLogSource(deploy.NewK8sLogSource(reader, "zenith-apps"))
+			logSource := deploy.NewK8sLogSource(reader, "zenith-apps")
+			logSource.SetNamespaceResolver(projectNS.For)
+			monitoringSvc.SetNamespaceResolver(projectNS.For)
+			monitoringSvc.SetLogSource(logSource)
 			slog.Info("app logs: Kubernetes pod logs")
 		}
 	}

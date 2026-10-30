@@ -23,7 +23,7 @@ func stack() *fakeRunner {
 	return &fakeRunner{answers: map[string]string{
 		"kubectl -n zenith-system get deploy zenith-api -o jsonpath={.spec.template.spec.containers[0].image}": "ghcr.io/taikuri-infra/zenith-api:0.2.0",
 		"kubectl -n zenith-system get pods -l cnpg.io/cluster=zenith-postgres,cnpg.io/instanceRole=primary":    platformPod,
-		"kubectl -n zenith-system exec " + platformPod + " -c postgres -- psql":                                "11111111-aaaa|postgresql|orders|db_orders|u_orders\n",
+		"kubectl -n zenith-system exec " + platformPod + " -c postgres -- psql":                                `[{"ID":"11111111-aaaa","Engine":"postgresql","Name":"orders","DBName":"db_orders","DBUser":"u_orders","Namespace":"zenith-apps"}]` + "\n",
 		"kubectl -n zenith-system exec " + platformPod + " -c postgres -- pg_dump":                             "-- platform dump\n",
 		"kubectl -n zenith-system exec zenith-storage-0 -- tar":                                                "TARDATA",
 		"kubectl -n zenith-system get secret zenith-secrets -o json":                                           `{"metadata":{"name":"zenith-secrets","resourceVersion":"9","uid":"x"},"type":"Opaque","data":{"jwt-secret":"` + b64("j") + `"}}`,
@@ -211,6 +211,38 @@ func TestCompareVersions(t *testing.T) {
 	}{{"0.1.0", "0.1.0", 0}, {"0.2.0", "0.1.9", 1}, {"v0.1.0-alpha.1", "0.1.0", -1}, {"0.1.0-alpha.2", "0.1.0-alpha.10", -1}} {
 		if got := CompareVersions(c.a, c.b); got != c.want {
 			t.Errorf("CompareVersions(%s,%s) = %d, want %d", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestDatabaseRowPatternsRejectInjection(t *testing.T) {
+	for _, ns := range []string{"zenith-system", "kube-system", "zp-a|zenith-apps", "zp-", "ZP-x"} {
+		if dbNSPattern.MatchString(ns) {
+			t.Errorf("namespace %q must be rejected", ns)
+		}
+	}
+	for _, ns := range []string{"zenith-apps", "zp-1a2b3c4d-site"} {
+		if !dbNSPattern.MatchString(ns) {
+			t.Errorf("namespace %q must be accepted", ns)
+		}
+	}
+	if dbIDPattern.MatchString("abc; rm -rf") {
+		t.Error("bad id accepted")
+	}
+}
+
+func TestDBRefValidate(t *testing.T) {
+	ok := DBRef{ID: "11111111-aaaa", Engine: "mysql", Namespace: "zp-1a2b-site"}
+	if err := ok.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []DBRef{
+		{ID: "11111111-aaaa", Engine: "mysql", Namespace: "zenith-system"},
+		{ID: "x;y", Engine: "mysql", Namespace: "zenith-apps"},
+		{ID: "11111111-aaaa", Engine: "oracle", Namespace: "zenith-apps"},
+	} {
+		if bad.Validate() == nil {
+			t.Errorf("%+v must be rejected", bad)
 		}
 	}
 }
