@@ -144,7 +144,36 @@ func TestValidate(t *testing.T) {
 			t.Errorf("%s: expected error", name)
 		}
 	}
+	if err := Validate(rule(entities.NetworkPolicyEgress, entities.NetworkPolicyAllow, entities.NetworkPolicyConfig{FQDNs: []string{"bad fqdn"}}), true); err == nil {
+		t.Error("bad fqdn: expected error")
+	}
+	if err := Validate(rule(entities.NetworkPolicyEgress, entities.NetworkPolicyAllow, entities.NetworkPolicyConfig{FQDNs: []string{"*.googleapis.com"}}), true); err != nil {
+		t.Errorf("wildcard fqdn: %v", err)
+	}
 	if err := Validate(cases["deny no cilium"], false); err == nil || err.Error() != ErrNeedsCilium.Error() {
 		t.Errorf("deny message = %v", err)
+	}
+}
+
+func TestCompileCiliumSplitsSelectorTypes(t *testing.T) {
+	obj, err := Compile(testApp, "ns", []entities.NetworkPolicyRule{
+		rule(entities.NetworkPolicyIngress, entities.NetworkPolicyAllow, entities.NetworkPolicyConfig{
+			CIDRs: []string{"10.0.0.0/8"}, Namespaces: []string{"other"},
+		}),
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	_ = json.Unmarshal(obj.Spec, &m)
+	in := m["ingress"].([]any)
+	if len(in) != 2 {
+		t.Fatalf("expected one entry per selector type, got %v", in)
+	}
+	for _, e := range in {
+		em := e.(map[string]any)
+		if em["fromCIDR"] != nil && em["fromEndpoints"] != nil {
+			t.Fatalf("CIDR and endpoints combined in one entry: %v", em)
+		}
 	}
 }

@@ -113,3 +113,53 @@ func TestApplyChangesNothingWhenCiliumProbeFails(t *testing.T) {
 		t.Fatalf("no policy should be created, got %d", len(list))
 	}
 }
+
+// failingDelete makes policy deletes fail with a non-NotFound error.
+type failingDelete struct{ *k8sclient.MemoryClient }
+
+func (failingDelete) DeleteCRDWithVersion(context.Context, string, string, string, string) error {
+	return errors.New("etcd timeout")
+}
+
+func TestApplyReportsDeleteFailure(t *testing.T) {
+	a, repo, mem := setup(t)
+	ctx := context.Background()
+	addRule(t, repo, "r1", 80)
+	_ = a.Apply(ctx, testApp.ID)
+	_ = repo.Delete(ctx, "r1")
+	b := NewApplier(repo, stubApps{testApp.ID: {ID: testApp.ID, ProjectID: "p1"}}, failingDelete{mem}, func(context.Context, string) string { return testNS })
+	b.ciliumKnown = true
+	if err := b.Apply(ctx, testApp.ID); err == nil {
+		t.Fatal("a failed delete must be reported")
+	}
+}
+
+func TestReconcileRemovesOrphanPolicies(t *testing.T) {
+	a, repo, k8s := setup(t)
+	ctx := context.Background()
+	addRule(t, repo, "r1", 80)
+	_ = a.Apply(ctx, testApp.ID)
+	_ = repo.Delete(ctx, "r1") // rule gone, but the policy was left behind
+	a.ReconcileAll(ctx)
+	if _, err := k8s.GetCRD(ctx, "NetworkPolicy", testNS, "zenith-fw-ab12cd34"); err == nil {
+		t.Fatal("orphan policy should be removed by reconcile")
+	}
+}
+
+func TestApplyConcurrentCreatesOnePolicy(t *testing.T) {
+	a, repo, k8s := setup(t)
+	ctx := context.Background()
+	addRule(t, repo, "r1", 80)
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		go func() { errs <- a.Apply(ctx, testApp.ID) }()
+	}
+	for i := 0; i < 8; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent apply: %v", err)
+		}
+	}
+	if list, _ := k8s.ListCRDs(ctx, "NetworkPolicy", testNS); len(list) != 1 {
+		t.Fatalf("expected 1 policy, got %d", len(list))
+	}
+}

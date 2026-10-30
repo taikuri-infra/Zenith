@@ -8,9 +8,11 @@ import (
 	"net"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // ErrNeedsCilium is returned for rules standard NetworkPolicy cannot express.
@@ -18,7 +20,10 @@ var ErrNeedsCilium = errors.New("deny rules and FQDN egress need Cilium")
 
 const appIDLabel = "zenith.dev/app-id"
 
-var namespacePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
+var (
+	namespacePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
+	fqdnPattern      = regexp.MustCompile(`^(\*\.)?([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
+)
 
 // PolicyName is the name of the app's firewall policy.
 func PolicyName(appID string) string {
@@ -50,6 +55,28 @@ func Validate(r entities.NetworkPolicyRule, cilium bool) error {
 		if !namespacePattern.MatchString(ns) {
 			return fmt.Errorf("invalid namespace %q", ns)
 		}
+	}
+	for k, v := range r.Config.PodLabels {
+		if errs := validation.IsQualifiedName(k); len(errs) > 0 {
+			return fmt.Errorf("invalid label key %q", k)
+		}
+		if errs := validation.IsValidLabelValue(v); len(errs) > 0 {
+			return fmt.Errorf("invalid label value %q", v)
+		}
+	}
+	egress := r.Direction == entities.NetworkPolicyEgress
+	if !egress && len(r.Config.FQDNs) > 0 {
+		return errors.New("FQDNs only apply to egress rules")
+	}
+	for _, f := range r.Config.FQDNs {
+		if !fqdnPattern.MatchString(strings.ToLower(f)) {
+			return fmt.Errorf("invalid FQDN %q", f)
+		}
+	}
+	// A rule without a peer would match every source/destination, which in a
+	// standard NetworkPolicy opens the app to the whole cluster and internet.
+	if len(r.Config.CIDRs)+len(r.Config.Namespaces)+len(r.Config.PodLabels)+len(r.Config.FQDNs) == 0 {
+		return errors.New("a rule needs at least one CIDR, namespace, pod label or FQDN")
 	}
 	return nil
 }
@@ -164,9 +191,25 @@ func compileCilium(app *entities.App, rules []entities.NetworkPolicyRule) map[st
 		if egress {
 			cidrKey, epKey = "toCIDR", "toEndpoints"
 		}
-		entry := map[string]any{}
+		var ports []map[string]any
+		if len(r.Config.Ports) > 0 {
+			pp := make([]map[string]any, 0, len(r.Config.Ports))
+			for _, p := range r.Config.Ports {
+				pp = append(pp, map[string]any{"protocol": protocol(p), "port": fmt.Sprint(p.Port)})
+			}
+			ports = []map[string]any{{"ports": pp}}
+		}
+		// Cilium rejects rules that mix selector types, so each type gets its own entry.
+		var entries []map[string]any
+		add := func(k string, v any) {
+			e := map[string]any{k: v}
+			if ports != nil {
+				e["toPorts"] = ports
+			}
+			entries = append(entries, e)
+		}
 		if len(r.Config.CIDRs) > 0 {
-			entry[cidrKey] = r.Config.CIDRs
+			add(cidrKey, r.Config.CIDRs)
 		}
 		var eps []map[string]any
 		for _, ns := range r.Config.Namespaces {
@@ -176,22 +219,15 @@ func compileCilium(app *entities.App, rules []entities.NetworkPolicyRule) map[st
 			eps = append(eps, map[string]any{"matchLabels": r.Config.PodLabels})
 		}
 		if len(eps) > 0 {
-			entry[epKey] = eps
+			add(epKey, eps)
 		}
 		if egress && len(r.Config.FQDNs) > 0 {
 			fq := make([]map[string]any, 0, len(r.Config.FQDNs))
 			for _, f := range r.Config.FQDNs {
 				fq = append(fq, map[string]any{"matchPattern": f})
 			}
-			entry["toFQDNs"] = fq
+			add("toFQDNs", fq)
 			needDNSProxy = true
-		}
-		if len(r.Config.Ports) > 0 {
-			ports := make([]map[string]any, 0, len(r.Config.Ports))
-			for _, p := range r.Config.Ports {
-				ports = append(ports, map[string]any{"protocol": protocol(p), "port": fmt.Sprint(p.Port)})
-			}
-			entry["toPorts"] = []map[string]any{{"ports": ports}}
 		}
 		key := "ingress"
 		if egress {
@@ -200,7 +236,7 @@ func compileCilium(app *entities.App, rules []entities.NetworkPolicyRule) map[st
 		if r.Action == entities.NetworkPolicyDeny {
 			key += "Deny"
 		}
-		buckets[key] = append(buckets[key], entry)
+		buckets[key] = append(buckets[key], entries...)
 	}
 	spec := map[string]any{"endpointSelector": map[string]any{"matchLabels": map[string]string{appIDLabel: app.ID}}}
 	if len(buckets["egress"]) > 0 || len(buckets["egressDeny"]) > 0 {

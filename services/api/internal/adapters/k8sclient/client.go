@@ -192,6 +192,9 @@ func (c *MemoryClient) ListCRDs(ctx context.Context, kind, namespace string) ([]
 
 	var result []*CRDObject
 	prefix := kind + "/" + namespace + "/"
+	if namespace == "" {
+		prefix = kind + "/" // all namespaces, like the real client
+	}
 
 	for key, obj := range c.objects {
 		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {

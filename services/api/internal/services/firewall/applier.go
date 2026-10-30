@@ -30,6 +30,8 @@ type Applier struct {
 	mu          sync.Mutex
 	ciliumKnown bool
 	cilium      bool
+
+	appLocks sync.Map // appID -> *sync.Mutex; serialises Apply per app
 }
 
 // NewApplier creates an Applier.
@@ -56,9 +58,16 @@ func (a *Applier) ciliumState() (bool, error) {
 		a.ciliumKnown, a.cilium = true, false
 		return false, nil
 	}
-	cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err := a.k8s.ListCRDsWithVersion(cctx, "cilium.io/v2", "CiliumNetworkPolicy", "kube-system")
+	var err error
+	if rc, ok := a.k8s.(*k8sclient.RealClient); ok {
+		// Discovery is readable by every authenticated user, unlike listing
+		// the CRD, which RBAC would refuse with 403 on clusters without Cilium.
+		_, err = rc.Clientset().Discovery().ServerResourcesForGroupVersion("cilium.io/v2")
+	} else {
+		cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, err = a.k8s.ListCRDsWithVersion(cctx, "cilium.io/v2", "CiliumNetworkPolicy", "kube-system")
+	}
 	switch {
 	case err == nil:
 		a.ciliumKnown, a.cilium = true, true
@@ -88,6 +97,11 @@ var policyKeys = map[string][]string{
 
 // Apply compiles the app's rules and creates, updates or deletes its policy.
 func (a *Applier) Apply(ctx context.Context, appID string) error {
+	l, _ := a.appLocks.LoadOrStore(appID, &sync.Mutex{})
+	mu := l.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+
 	app, err := a.apps.GetApp(ctx, appID)
 	if err != nil {
 		return fmt.Errorf("app not found: %w", err)
@@ -107,9 +121,10 @@ func (a *Applier) Apply(ctx context.Context, appID string) error {
 	}
 	name := PolicyName(app.ID)
 	if obj == nil {
-		a.remove(ctx, ns, name, "networking.k8s.io/v1", "NetworkPolicy")
-		a.remove(ctx, ns, name, "cilium.io/v2", "CiliumNetworkPolicy")
-		return nil
+		if err := a.remove(ctx, ns, name, "networking.k8s.io/v1", "NetworkPolicy"); err != nil {
+			return err
+		}
+		return a.remove(ctx, ns, name, "cilium.io/v2", "CiliumNetworkPolicy")
 	}
 	if err := a.upsert(ctx, obj); err != nil {
 		return err
@@ -117,11 +132,12 @@ func (a *Applier) Apply(ctx context.Context, appID string) error {
 	// Only one policy kind may exist for the app; drop the other one once the
 	// new policy is in place.
 	if obj.Kind == "NetworkPolicy" {
-		a.remove(ctx, ns, name, "cilium.io/v2", "CiliumNetworkPolicy")
-	} else {
-		a.remove(ctx, ns, name, "networking.k8s.io/v1", "NetworkPolicy")
+		if cilium {
+			return a.remove(ctx, ns, name, "cilium.io/v2", "CiliumNetworkPolicy")
+		}
+		return nil // without Cilium no CiliumNetworkPolicy can exist
 	}
-	return nil
+	return a.remove(ctx, ns, name, "networking.k8s.io/v1", "NetworkPolicy")
 }
 
 // upsert creates the policy, or merge-patches it when it already exists.
@@ -130,7 +146,10 @@ func (a *Applier) upsert(ctx context.Context, obj *k8sclient.CRDObject) error {
 		if !isNotFound(err) {
 			return err
 		}
-		return a.k8s.CreateCRD(ctx, obj)
+		if err := a.k8s.CreateCRD(ctx, obj); err == nil || !isAlreadyExists(err) {
+			return err
+		}
+		// Created meanwhile (e.g. by another API replica): patch it instead.
 	}
 	var spec map[string]any
 	if err := json.Unmarshal(obj.Spec, &spec); err != nil {
@@ -153,14 +172,21 @@ func (a *Applier) upsert(ctx context.Context, obj *k8sclient.CRDObject) error {
 	return a.k8s.PatchCRD(ctx, &patch)
 }
 
-func (a *Applier) remove(ctx context.Context, ns, name, apiVersion, kind string) {
-	err := a.k8s.DeleteCRDWithVersion(ctx, apiVersion, kind, ns, name)
-	if err != nil && !isNotFound(err) {
-		slog.Warn("firewall policy not deleted", "namespace", ns, "name", name, "kind", kind, "error", err)
-	}
+func isAlreadyExists(err error) bool {
+	return apierrors.IsAlreadyExists(err) || strings.Contains(strings.ToLower(err.Error()), "already exists")
 }
 
-// ReconcileAll re-applies the policy of every app that has firewall rules.
+// remove deletes a policy; a missing policy is not an error.
+func (a *Applier) remove(ctx context.Context, ns, name, apiVersion, kind string) error {
+	err := a.k8s.DeleteCRDWithVersion(ctx, apiVersion, kind, ns, name)
+	if err != nil && !isNotFound(err) {
+		return fmt.Errorf("delete %s %s/%s: %w", kind, ns, name, err)
+	}
+	return nil
+}
+
+// ReconcileAll re-applies the policy of every app that has firewall rules and
+// removes firewall policies left behind for apps that no longer have any.
 func (a *Applier) ReconcileAll(ctx context.Context) {
 	rules, err := a.repo.ListAll(ctx)
 	if err != nil {
@@ -175,6 +201,21 @@ func (a *Applier) ReconcileAll(ctx context.Context) {
 		seen[r.AppID] = true
 		if err := a.Apply(ctx, r.AppID); err != nil {
 			slog.Warn("firewall reconcile: apply", "app_id", r.AppID, "error", err)
+		}
+	}
+	for _, kind := range [][2]string{{"networking.k8s.io/v1", "NetworkPolicy"}, {"cilium.io/v2", "CiliumNetworkPolicy"}} {
+		objs, err := a.k8s.ListCRDsWithVersion(ctx, kind[0], kind[1], "")
+		if err != nil {
+			continue // e.g. no Cilium
+		}
+		for _, o := range objs {
+			appID := o.Metadata.Labels[appIDLabel]
+			if !strings.HasPrefix(o.Metadata.Name, "zenith-fw-") || appID == "" || seen[appID] {
+				continue
+			}
+			if err := a.remove(ctx, o.Metadata.Namespace, o.Metadata.Name, kind[0], kind[1]); err != nil {
+				slog.Warn("firewall reconcile: remove orphan", "app_id", appID, "error", err)
+			}
 		}
 	}
 }

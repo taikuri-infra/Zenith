@@ -78,7 +78,7 @@ func TestNetworkPolicyCreateRule(t *testing.T) {
 
 	app.Post("/api/v1/apps/:appId/network-policies", injectUserID("user-1"), handler.CreateRule)
 
-	body := `{"name":"Allow DB","direction":"egress","action":"allow","priority":10}`
+	body := `{"name":"Allow DB","direction":"egress","action":"allow","priority":10,"config":{"namespaces":["other"]}}`
 	req := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -156,7 +156,7 @@ func TestNetworkPolicyUpdateRule(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/network-policies", injectUserID("user-1"), handler.CreateRule)
 	app.Put("/api/v1/apps/:appId/network-policies/:ruleId", injectUserID("user-1"), handler.UpdateRule)
 
-	createBody := `{"name":"Original","direction":"ingress","action":"allow","priority":1}`
+	createBody := `{"name":"Original","direction":"ingress","action":"allow","priority":1,"config":{"namespaces":["other"]}}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp, _ := app.Test(createReq, -1)
@@ -206,7 +206,7 @@ func TestNetworkPolicyDeleteRule(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/network-policies", injectUserID("user-1"), handler.CreateRule)
 	app.Delete("/api/v1/apps/:appId/network-policies/:ruleId", injectUserID("user-1"), handler.DeleteRule)
 
-	createBody := `{"name":"ToDelete","direction":"ingress","action":"allow"}`
+	createBody := `{"name":"ToDelete","direction":"ingress","action":"allow","config":{"namespaces":["other"]}}`
 	createReq := httptest.NewRequest("POST", "/api/v1/apps/"+testApp.ID+"/network-policies", bytes.NewBufferString(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp, _ := app.Test(createReq, -1)
@@ -295,7 +295,7 @@ func TestFirewallOtherUsersApp404(t *testing.T) {
 	a := createNetPolTestApp(appRepo, "user-1")
 	app.Post("/api/v1/apps/:appId/network-policies", injectUserID("user-2"), handler.CreateRule)
 
-	resp := postRule(t, app, a.ID, `{"name":"x","direction":"ingress","action":"allow"}`)
+	resp := postRule(t, app, a.ID, `{"name":"x","direction":"ingress","action":"allow","config":{"namespaces":["other"]}}`)
 	if resp.StatusCode != 404 {
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
 	}
@@ -312,7 +312,7 @@ func TestFirewallRuleFromOtherApp404(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/network-policies/:ruleId", injectUserID("user-1"), handler.DeleteRule)
 
 	var created map[string]any
-	json.NewDecoder(postRule(t, app, a.ID, `{"name":"x","direction":"ingress","action":"allow"}`).Body).Decode(&created)
+	json.NewDecoder(postRule(t, app, a.ID, `{"name":"x","direction":"ingress","action":"allow","config":{"namespaces":["other"]}}`).Body).Decode(&created)
 	id := created["id"].(string)
 
 	put := httptest.NewRequest("PUT", "/api/v1/apps/"+b.ID+"/network-policies/"+id, bytes.NewBufferString(`{"name":"y"}`))
@@ -335,7 +335,7 @@ func TestFirewallCRUDRoundTrip(t *testing.T) {
 	app.Delete("/api/v1/apps/:appId/network-policies/:ruleId", injectUserID("user-1"), handler.DeleteRule)
 
 	var created map[string]any
-	resp := postRule(t, app, a.ID, `{"name":"web","direction":"ingress","action":"allow","config":{"ports":[{"protocol":"TCP","port":443}]}}`)
+	resp := postRule(t, app, a.ID, `{"name":"web","direction":"ingress","action":"allow","config":{"cidrs":["10.0.0.0/8"],"ports":[{"protocol":"TCP","port":443}]}}`)
 	if resp.StatusCode != 201 {
 		t.Fatalf("create: %d", resp.StatusCode)
 	}
@@ -361,5 +361,15 @@ func TestFirewallNoPlanGateWhenSelfHosted(t *testing.T) {
 	resp, _ := app.Test(httptest.NewRequest("GET", "/api/v1/apps/"+a.ID+"/network-policies", nil), -1)
 	if resp.StatusCode != 200 {
 		t.Fatalf("expected 200 without a plan in self-host, got %d", resp.StatusCode)
+	}
+}
+
+func TestFirewallRuleWithoutPeer400(t *testing.T) {
+	app, handler, appRepo, planRepo := setupNetworkPolicyTest()
+	planRepo.SetUserPlan(nil, "user-1", entities.PlanBusiness)
+	a := createNetPolTestApp(appRepo, "user-1")
+	app.Post("/api/v1/apps/:appId/network-policies", injectUserID("user-1"), handler.CreateRule)
+	if resp := postRule(t, app, a.ID, `{"name":"open","direction":"ingress","action":"allow"}`); resp.StatusCode != 400 {
+		t.Fatalf("a rule with no peer would open the app to everything; expected 400, got %d", resp.StatusCode)
 	}
 }
