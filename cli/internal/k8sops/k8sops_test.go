@@ -214,3 +214,19 @@ func TestCompareVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestDatabaseRowPatternsRejectInjection(t *testing.T) {
+	for _, ns := range []string{"zenith-system", "kube-system", "zp-a|zenith-apps", "zp-", "ZP-x"} {
+		if dbNSPattern.MatchString(ns) {
+			t.Errorf("namespace %q must be rejected", ns)
+		}
+	}
+	for _, ns := range []string{"zenith-apps", "zp-1a2b3c4d-site"} {
+		if !dbNSPattern.MatchString(ns) {
+			t.Errorf("namespace %q must be accepted", ns)
+		}
+	}
+	if dbIDPattern.MatchString("abc; rm -rf") || dbIDPattern.MatchString("x") {
+		t.Error("bad id accepted")
+	}
+}

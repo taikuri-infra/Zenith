@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -103,6 +104,11 @@ type DBRef struct{ ID, Engine, Name, DBName, DBUser, Namespace string }
 // Resource is the name of the database's operator resource and secret prefix.
 func (d DBRef) Resource() string { return "db-" + d.ID[:min(8, len(d.ID))] }
 
+var (
+	dbIDPattern = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
+	dbNSPattern = regexp.MustCompile(`^(zenith-apps|zp-[a-z0-9-]{1,58})$`)
+)
+
 // Databases lists ready managed databases from the control-plane Postgres.
 func (i Install) Databases(ctx context.Context, r Runner) ([]DBRef, error) {
 	pod, err := i.primaryPod(ctx, r, "zenith-postgres")
@@ -124,6 +130,11 @@ func (i Install) Databases(ctx context.Context, r Runner) ([]DBRef, error) {
 		}
 		p := strings.SplitN(line, "|", 6)
 		if len(p) != 6 {
+			return nil, fmt.Errorf("unexpected database row %q", line)
+		}
+		if !dbIDPattern.MatchString(p[0]) || !dbNSPattern.MatchString(p[5]) ||
+			(p[1] != "postgresql" && p[1] != "mysql" && p[1] != "redis") {
+			// A field containing the delimiter shifts the columns; never pass such a row to kubectl.
 			return nil, fmt.Errorf("unexpected database row %q", line)
 		}
 		dbs = append(dbs, DBRef{ID: p[0], Engine: p[1], Name: p[2], DBName: p[3], DBUser: p[4], Namespace: p[5]})
