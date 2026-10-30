@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
@@ -25,8 +26,9 @@ type Applier struct {
 	k8s   k8sclient.Client
 	nsFor func(ctx context.Context, projectID string) string
 
-	ciliumOnce sync.Once
-	cilium     bool
+	mu          sync.Mutex
+	ciliumKnown bool
+	cilium      bool
 }
 
 // NewApplier creates an Applier.
@@ -34,16 +36,34 @@ func NewApplier(repo ports.FirewallRuleRepository, apps AppGetter, k8s k8sclient
 	return &Applier{repo: repo, apps: apps, k8s: k8s, nsFor: nsFor}
 }
 
-// Cilium reports whether the cluster has the CiliumNetworkPolicy CRD.
+// Cilium reports whether the cluster has the CiliumNetworkPolicy CRD. Only a
+// definite answer is cached; a transient API error is retried next time and
+// treated as "no Cilium", the stricter of the two for validation.
 func (a *Applier) Cilium(ctx context.Context) bool {
-	a.ciliumOnce.Do(func() {
-		_, err := a.k8s.ListCRDsWithVersion(ctx, "cilium.io/v2", "CiliumNetworkPolicy", "kube-system")
-		a.cilium = err == nil
-		if _, mem := a.k8s.(*k8sclient.MemoryClient); mem {
-			a.cilium = false
-		}
-	})
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.ciliumKnown {
+		return a.cilium
+	}
+	if _, mem := a.k8s.(*k8sclient.MemoryClient); mem {
+		a.ciliumKnown, a.cilium = true, false
+		return false
+	}
+	cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := a.k8s.ListCRDsWithVersion(cctx, "cilium.io/v2", "CiliumNetworkPolicy", "kube-system")
+	switch {
+	case err == nil:
+		a.ciliumKnown, a.cilium = true, true
+	case isNotFound(err):
+		a.ciliumKnown, a.cilium = true, false
+	}
 	return a.cilium
+}
+
+func isNotFound(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "could not find the requested resource")
 }
 
 // policyKeys lists every rule section a policy may have; absent ones are sent
@@ -74,6 +94,12 @@ func (a *Applier) Apply(ctx context.Context, appID string) error {
 		a.remove(ctx, ns, name, "cilium.io/v2", "CiliumNetworkPolicy")
 		return nil
 	}
+	// Only one policy kind may exist for the app; drop the other one.
+	if obj.Kind == "NetworkPolicy" {
+		a.remove(ctx, ns, name, "cilium.io/v2", "CiliumNetworkPolicy")
+	} else {
+		a.remove(ctx, ns, name, "networking.k8s.io/v1", "NetworkPolicy")
+	}
 	if _, err := a.k8s.GetCRDWithVersion(ctx, obj.APIVersion, obj.Kind, ns, name); err != nil {
 		return a.k8s.CreateCRD(ctx, obj)
 	}
@@ -98,7 +124,7 @@ func (a *Applier) Apply(ctx context.Context, appID string) error {
 
 func (a *Applier) remove(ctx context.Context, ns, name, apiVersion, kind string) {
 	err := a.k8s.DeleteCRDWithVersion(ctx, apiVersion, kind, ns, name)
-	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "not found") {
+	if err != nil && !isNotFound(err) {
 		slog.Warn("firewall policy not deleted", "namespace", ns, "name", name, "kind", kind, "error", err)
 	}
 }
