@@ -282,7 +282,7 @@ func (h *AdminPlatformOpsHandler) ListRegistryRepos(c *fiber.Ctx) error {
 func (h *AdminPlatformOpsHandler) ListDatabaseClusters(c *fiber.Ctx) error {
 	var clusters []entities.AdminDatabaseCluster
 
-	for _, ns := range []string{"zenith-staging", "zenith-shared", "keycloak", "zenith-apps"} {
+	for _, ns := range withProjectNamespaces(c.Context(), h.pool, "zenith-staging", "zenith-shared", "keycloak", "zenith-apps") {
 		crds, err := h.k8s.ListCRDsWithVersion(c.Context(), cnpgAPI, "Cluster", ns)
 		if err != nil {
 			continue
@@ -403,7 +403,7 @@ func (h *AdminPlatformOpsHandler) ListVolumes(c *fiber.Ctx) error {
 
 func (h *AdminPlatformOpsHandler) ListDNSRecords(c *fiber.Ctx) error {
 	var records []entities.AdminDNSRecord
-	for _, ns := range []string{"zenith-staging", "zenith-apps", "argocd", "harbor", "keycloak"} {
+	for _, ns := range withProjectNamespaces(c.Context(), h.pool, "zenith-staging", "zenith-apps", "argocd", "harbor", "keycloak") {
 		routes, err := h.k8s.ListCRDsWithVersion(c.Context(), traefikAPI, "IngressRoute", ns)
 		if err != nil {
 			continue
@@ -458,7 +458,7 @@ func extractIngressRouteHosts(route *k8sclient.CRDObject) []string {
 
 func (h *AdminPlatformOpsHandler) ListRoutes(c *fiber.Ctx) error {
 	var routes []entities.AdminRoute
-	for _, ns := range []string{"zenith-staging", "zenith-apps", "argocd", "harbor", "keycloak", "kube-system"} {
+	for _, ns := range withProjectNamespaces(c.Context(), h.pool, "zenith-staging", "zenith-apps", "argocd", "harbor", "keycloak", "kube-system") {
 		crds, err := h.k8s.ListCRDsWithVersion(c.Context(), traefikAPI, "IngressRoute", ns)
 		if err != nil {
 			continue
@@ -489,7 +489,7 @@ func (h *AdminPlatformOpsHandler) ListRoutes(c *fiber.Ctx) error {
 
 func (h *AdminPlatformOpsHandler) ListCertificates(c *fiber.Ctx) error {
 	var certs []entities.AdminCertificate
-	for _, ns := range []string{"zenith-staging", "zenith-apps", "argocd", "harbor", "keycloak", "cert-manager"} {
+	for _, ns := range withProjectNamespaces(c.Context(), h.pool, "zenith-staging", "zenith-apps", "argocd", "harbor", "keycloak", "cert-manager") {
 		crds, err := h.k8s.ListCRDsWithVersion(c.Context(), certManagerAPI, "Certificate", ns)
 		if err != nil {
 			continue
@@ -552,7 +552,7 @@ func (h *AdminPlatformOpsHandler) GetDatabaseStats(c *fiber.Ctx) error {
 	stats := entities.DatabaseStats{}
 	var totalStorageGi float64
 
-	for _, ns := range []string{"zenith-staging", "zenith-shared", "keycloak", "zenith-apps"} {
+	for _, ns := range withProjectNamespaces(c.Context(), h.pool, "zenith-staging", "zenith-shared", "keycloak", "zenith-apps") {
 		crds, err := h.k8s.ListCRDsWithVersion(c.Context(), cnpgAPI, "Cluster", ns)
 		if err != nil {
 			continue

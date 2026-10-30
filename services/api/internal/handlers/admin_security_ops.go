@@ -47,7 +47,7 @@ func (h *AdminSecurityHandler) GetPosture(c *fiber.Ctx) error {
 	}
 
 	// Check certificates for expiry warnings
-	for _, ns := range []string{"zenith-staging", "zenith-apps", "argocd", "harbor", "keycloak"} {
+	for _, ns := range withProjectNamespaces(c.Context(), h.pool, "zenith-staging", "zenith-apps", "argocd", "harbor", "keycloak") {
 		certs, err := h.k8s.ListCRDsWithVersion(c.Context(), certManagerAPI, "Certificate", ns)
 		if err != nil {
 			continue
@@ -158,7 +158,7 @@ func (h *AdminSecurityHandler) ListPolicies(c *fiber.Ctx) error {
 	}
 
 	// Namespace-scoped policies
-	for _, ns := range []string{"zenith-staging", "zenith-apps", "zenith-shared"} {
+	for _, ns := range withProjectNamespaces(c.Context(), h.pool, "zenith-staging", "zenith-apps", "zenith-shared") {
 		nsPolicies, err := h.k8s.ListCRDsWithVersion(c.Context(), "kyverno.io/v1", "Policy", ns)
 		if err == nil {
 			for _, crd := range nsPolicies {
