@@ -75,7 +75,7 @@ rules:
   # Tenant provisioning: network policies (tenant isolation)
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
-    verbs: ["get", "create", "delete"]
+    verbs: ["get", "list", "create", "patch", "delete"]
   # APISIX routes (tenant provisioning + customer API gateways)
   - apiGroups: ["apisix.apache.org"]
     resources: ["apisixroutes"]

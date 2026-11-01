@@ -6,6 +6,7 @@ import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { useApi } from "@/hooks/use-api";
 import {
+  ApiError,
   type NetworkPolicyRule,
   type NetworkPolicyDirection,
   type NetworkPolicyAction,
@@ -13,7 +14,7 @@ import {
   type DeployApp,
 } from "@/lib/api";
 import { getApi, isDemoMode } from "@/lib/get-api";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import {
   Wifi,
   Plus,
@@ -25,6 +26,20 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
 } from "lucide-react";
+
+/** The API's error message, or a generic fallback. */
+function errorText(e: unknown): string {
+  if (e instanceof ApiError) {
+    const body = e.body as { message?: string } | null | undefined;
+    if (body?.message) return body.message;
+  }
+  return "Request failed";
+}
+
+/** A 502 means the rule was saved but the cluster policy was not updated. */
+function isNotApplied(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 502;
+}
 
 function configSummary(rule: NetworkPolicyRule): string {
   const parts: string[] = [];
@@ -70,6 +85,27 @@ export default function FirewallPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const refetchRef = useRef<(() => void) | null>(null);
+
+  /** Routes an API error: "saved but not applied" closes the form with a warning. */
+  const reportError = useCallback(
+    (e: unknown, inForm: boolean) => {
+      if (isNotApplied(e)) {
+        setWarning(errorText(e));
+        setShowModal(false);
+        setEditingRule(null);
+        setForm(EMPTY_FORM);
+        refetchRef.current?.();
+      } else if (inForm) {
+        setFormError(errorText(e));
+      } else {
+        setWarning(errorText(e));
+      }
+    },
+    []
+  );
 
   const { data: appsData, loading: appsLoading } = useApi(() => appsDeploy.list(), []);
   const appList: DeployApp[] = useMemo(() => appsData?.items ?? [], [appsData]);
@@ -87,6 +123,8 @@ export default function FirewallPage() {
         : Promise.resolve({ rules: [], total: 0 }),
     [effectiveAppId]
   );
+
+  refetchRef.current = refetch;
 
   const rules: NetworkPolicyRule[] = useMemo(
     () => (rulesData?.rules ?? []).sort((a, b) => a.priority - b.priority),
@@ -107,13 +145,14 @@ export default function FirewallPage() {
       });
       setShowModal(false);
       setForm(EMPTY_FORM);
+      setFormError(null);
       refetch();
-    } catch {
-      // silent
+    } catch (e) {
+      reportError(e, true);
     } finally {
       setSaving(false);
     }
-  }, [effectiveAppId, form, networkPolicies, refetch]);
+  }, [effectiveAppId, form, networkPolicies, refetch, reportError]);
 
   const handleUpdate = useCallback(async () => {
     if (!effectiveAppId || !editingRule) return;
@@ -127,13 +166,14 @@ export default function FirewallPage() {
       });
       setEditingRule(null);
       setForm(EMPTY_FORM);
+      setFormError(null);
       refetch();
-    } catch {
-      // silent
+    } catch (e) {
+      reportError(e, true);
     } finally {
       setSaving(false);
     }
-  }, [effectiveAppId, editingRule, form, networkPolicies, refetch]);
+  }, [effectiveAppId, editingRule, form, networkPolicies, refetch, reportError]);
 
   const handleDelete = useCallback(
     async (ruleId: string) => {
@@ -142,13 +182,13 @@ export default function FirewallPage() {
       try {
         await networkPolicies.deleteRule(effectiveAppId, ruleId);
         refetch();
-      } catch {
-        // silent
+      } catch (e) {
+        reportError(e, false);
       } finally {
         setDeletingId(null);
       }
     },
-    [effectiveAppId, networkPolicies, refetch, deletingId]
+    [effectiveAppId, networkPolicies, refetch, deletingId, reportError]
   );
 
   const handleToggle = useCallback(
@@ -160,13 +200,13 @@ export default function FirewallPage() {
           enabled: !rule.enabled,
         });
         refetch();
-      } catch {
-        // silent
+      } catch (e) {
+        reportError(e, false);
       } finally {
         setTogglingId(null);
       }
     },
-    [effectiveAppId, networkPolicies, refetch, togglingId]
+    [effectiveAppId, networkPolicies, refetch, togglingId, reportError]
   );
 
   const openEdit = (rule: NetworkPolicyRule) => {
@@ -202,6 +242,15 @@ export default function FirewallPage() {
   return (
     <Shell>
       <div className="space-y-6">
+        {warning && (
+          <div role="alert" className="flex items-start justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            <span>{warning}</span>
+            <button onClick={() => setWarning(null)} aria-label="Dismiss" className="text-amber-300/70 hover:text-amber-200">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -212,7 +261,7 @@ export default function FirewallPage() {
               </h1>
             </div>
             <p className="mt-1 text-sm text-neutral-500">
-              Cilium-based network firewall rules per app
+              Firewall rules per app, enforced as Kubernetes network policies in the app&apos;s project
             </p>
           </div>
           {!demo && effectiveAppId && (
@@ -376,8 +425,10 @@ export default function FirewallPage() {
           setForm={setForm}
           saving={saving}
           isEdit={!!editingRule}
+          error={formError}
           onSave={editingRule ? handleUpdate : handleCreate}
           onClose={() => {
+            setFormError(null);
             setShowModal(false);
             setEditingRule(null);
             setForm(EMPTY_FORM);
@@ -394,6 +445,7 @@ function PolicyModal({
   setForm,
   saving,
   isEdit,
+  error,
   onSave,
   onClose,
 }: {
@@ -402,6 +454,7 @@ function PolicyModal({
   setForm: (f: RuleForm) => void;
   saving: boolean;
   isEdit: boolean;
+  error?: string | null;
   onSave: () => void;
   onClose: () => void;
 }) {
@@ -620,6 +673,12 @@ function PolicyModal({
             </div>
           </div>
         </div>
+
+        {error && (
+          <p role="alert" className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </p>
+        )}
 
         {/* Actions */}
         <div className="mt-6 flex justify-end gap-2">

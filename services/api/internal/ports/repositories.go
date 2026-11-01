@@ -321,6 +321,16 @@ type IPWhitelistRepository interface {
 	IsIPAllowed(ctx context.Context, userID, ip string) (bool, error)
 }
 
+// FirewallRuleRepository stores per-app firewall rules.
+type FirewallRuleRepository interface {
+	ListByApp(ctx context.Context, appID string) ([]entities.NetworkPolicyRule, error)
+	ListAll(ctx context.Context) ([]entities.NetworkPolicyRule, error)
+	Get(ctx context.Context, id string) (*entities.NetworkPolicyRule, error)
+	Create(ctx context.Context, r *entities.NetworkPolicyRule) error
+	Update(ctx context.Context, r *entities.NetworkPolicyRule) error
+	Delete(ctx context.Context, id string) error
+}
+
 // SSORepository defines SSO configuration operations.
 type SSORepository interface {
 	CreateConfig(ctx context.Context, userID string, provider entities.SSOProvider, config *entities.SSOConfig) (*entities.SSOConfig, error)
