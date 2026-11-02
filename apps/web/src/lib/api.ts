@@ -2430,7 +2430,7 @@ export interface NetworkPolicyRule {
 
 export const networkPolicies = {
   listRules: (appId: string) =>
-    apiFetch<{ rules: NetworkPolicyRule[]; total: number }>(`/api/v1/apps/${appId}/network-policies`),
+    apiFetch<{ rules: NetworkPolicyRule[]; total: number; cilium?: boolean }>(`/api/v1/apps/${appId}/network-policies`),
   createRule: (appId: string, data: { name: string; direction: NetworkPolicyDirection; action: NetworkPolicyAction; enabled?: boolean; priority?: number; config: NetworkPolicyConfig }) =>
     apiFetch<NetworkPolicyRule>(`/api/v1/apps/${appId}/network-policies`, { method: "POST", body: JSON.stringify(data) }),
   updateRule: (appId: string, ruleId: string, data: { name?: string; enabled?: boolean; priority?: number; config?: NetworkPolicyConfig }) =>

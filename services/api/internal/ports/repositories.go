@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/dotechhq/zenith/services/api/internal/dto"
@@ -321,6 +322,9 @@ type IPWhitelistRepository interface {
 	IsIPAllowed(ctx context.Context, userID, ip string) (bool, error)
 }
 
+// ErrFirewallRuleNotFound is returned by FirewallRuleRepository.Get for an unknown id.
+var ErrFirewallRuleNotFound = errors.New("firewall rule not found")
+
 // FirewallRuleRepository stores per-app firewall rules.
 type FirewallRuleRepository interface {
 	ListByApp(ctx context.Context, appID string) ([]entities.NetworkPolicyRule, error)
@@ -380,7 +384,7 @@ type GatewayRepository interface {
 	DeleteRoute(ctx context.Context, id string) error
 	CountRoutesByGateway(ctx context.Context, gatewayID string) (int, error)
 	CountRoutesByUser(ctx context.Context, userID string) (int, error)
-	StopRoutesByApp(ctx context.Context, appID string) ([]string, error) // returns affected gateway IDs
+	StopRoutesByApp(ctx context.Context, appID string) ([]string, error)              // returns affected gateway IDs
 	ClearAuthPoolFromRoutes(ctx context.Context, authPoolID string) ([]string, error) // returns affected gateway IDs
 	ListRoutesByAuthPool(ctx context.Context, authPoolID string) ([]entities.GatewayRoute, error)
 

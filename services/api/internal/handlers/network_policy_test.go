@@ -2,17 +2,22 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/dotechhq/zenith/services/api/internal/adapters/k8sclient"
 	"github.com/dotechhq/zenith/services/api/internal/adapters/memory"
 	"github.com/dotechhq/zenith/services/api/internal/dto"
 	"github.com/dotechhq/zenith/services/api/internal/entities"
 	"github.com/dotechhq/zenith/services/api/internal/handlers"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/dotechhq/zenith/services/api/internal/services/firewall"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -371,5 +376,52 @@ func TestFirewallRuleWithoutPeer400(t *testing.T) {
 	app.Post("/api/v1/apps/:appId/network-policies", injectUserID("user-1"), handler.CreateRule)
 	if resp := postRule(t, app, a.ID, `{"name":"open","direction":"ingress","action":"allow"}`); resp.StatusCode != 400 {
 		t.Fatalf("a rule with no peer would open the app to everything; expected 400, got %d", resp.StatusCode)
+	}
+}
+
+// brokenRuleRepo fails every Get with a storage error, not a missing rule.
+type brokenRuleRepo struct{ ports.FirewallRuleRepository }
+
+func (brokenRuleRepo) Get(context.Context, string) (*entities.NetworkPolicyRule, error) {
+	return nil, errors.New("connection refused")
+}
+
+func TestFirewallRuleStorageError500(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	appRepo := memory.NewMemoryAppRepository()
+	handler := handlers.NewNetworkPolicyHandler(appRepo, memory.NewMemoryUserPlanRepository(),
+		brokenRuleRepo{memory.NewFirewallRuleRepository()})
+	handler.SetSelfHosted(true)
+	a := createNetPolTestApp(appRepo, "user-1")
+	app.Delete("/api/v1/apps/:appId/network-policies/:ruleId", injectUserID("user-1"), handler.DeleteRule)
+	resp, _ := app.Test(httptest.NewRequest("DELETE", "/api/v1/apps/"+a.ID+"/network-policies/r1", nil), -1)
+	if resp.StatusCode != 500 {
+		t.Fatalf("a storage error is not a missing rule; expected 500, got %d", resp.StatusCode)
+	}
+}
+
+type noApps struct{}
+
+func (noApps) GetApp(context.Context, string) (*entities.App, error) { return nil, errors.New("boom") }
+
+func TestFirewallNotAppliedHasReason(t *testing.T) {
+	app := fiber.New(fiber.Config{ErrorHandler: handlers.ErrorHandler})
+	appRepo := memory.NewMemoryAppRepository()
+	rules := memory.NewFirewallRuleRepository()
+	handler := handlers.NewNetworkPolicyHandler(appRepo, memory.NewMemoryUserPlanRepository(), rules)
+	handler.SetSelfHosted(true)
+	handler.SetApplier(firewall.NewApplier(rules, noApps{}, k8sclient.NewMemoryClient(),
+		func(context.Context, string) string { return "ns" }))
+	a := createNetPolTestApp(appRepo, "user-1")
+	app.Post("/api/v1/apps/:appId/network-policies", injectUserID("user-1"), handler.CreateRule)
+
+	resp := postRule(t, app, a.ID, `{"name":"x","direction":"ingress","action":"allow","config":{"namespaces":["other"]}}`)
+	if resp.StatusCode != 502 {
+		t.Fatalf("expected 502, got %d", resp.StatusCode)
+	}
+	var body struct{ Reason string }
+	json.NewDecoder(resp.Body).Decode(&body)
+	if body.Reason != "not_applied" {
+		t.Fatalf("reason = %q, want not_applied", body.Reason)
 	}
 }

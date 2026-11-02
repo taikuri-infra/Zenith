@@ -36,9 +36,12 @@ function errorText(e: unknown): string {
   return "Request failed";
 }
 
-/** A 502 means the rule was saved but the cluster policy was not updated. */
+/** The API tags a 502 when the rule was saved but the cluster policy was not
+ * updated; an untagged 502 comes from a proxy and means nothing was saved. */
 function isNotApplied(e: unknown): boolean {
-  return e instanceof ApiError && e.status === 502;
+  if (!(e instanceof ApiError) || e.status !== 502) return false;
+  const body = e.body as { reason?: string } | null | undefined;
+  return body?.reason === "not_applied";
 }
 
 function configSummary(rule: NetworkPolicyRule): string {
@@ -120,11 +123,13 @@ export default function FirewallPage() {
     () =>
       effectiveAppId
         ? networkPolicies.listRules(effectiveAppId)
-        : Promise.resolve({ rules: [], total: 0 }),
+        : Promise.resolve({ rules: [], total: 0, cilium: false }),
     [effectiveAppId]
   );
 
   refetchRef.current = refetch;
+
+  const cilium = rulesData?.cilium ?? false;
 
   const rules: NetworkPolicyRule[] = useMemo(
     () => (rulesData?.rules ?? []).sort((a, b) => a.priority - b.priority),
@@ -146,6 +151,7 @@ export default function FirewallPage() {
       setShowModal(false);
       setForm(EMPTY_FORM);
       setFormError(null);
+      setWarning(null);
       refetch();
     } catch (e) {
       reportError(e, true);
@@ -167,6 +173,7 @@ export default function FirewallPage() {
       setEditingRule(null);
       setForm(EMPTY_FORM);
       setFormError(null);
+      setWarning(null);
       refetch();
     } catch (e) {
       reportError(e, true);
@@ -181,6 +188,7 @@ export default function FirewallPage() {
       setDeletingId(ruleId);
       try {
         await networkPolicies.deleteRule(effectiveAppId, ruleId);
+        setWarning(null);
         refetch();
       } catch (e) {
         reportError(e, false);
@@ -199,6 +207,7 @@ export default function FirewallPage() {
         await networkPolicies.updateRule(effectiveAppId, rule.id, {
           enabled: !rule.enabled,
         });
+        setWarning(null);
         refetch();
       } catch (e) {
         reportError(e, false);
@@ -210,6 +219,7 @@ export default function FirewallPage() {
   );
 
   const openEdit = (rule: NetworkPolicyRule) => {
+    setFormError(null);
     setEditingRule(rule);
     setForm({
       name: rule.name,
@@ -268,6 +278,7 @@ export default function FirewallPage() {
             <button
               onClick={() => {
                 setForm(EMPTY_FORM);
+                setFormError(null);
                 setShowModal(true);
               }}
               className="flex items-center gap-1.5 rounded-lg bg-accent-500 px-3 py-2 text-sm font-medium text-white hover:bg-accent-400 transition-colors"
@@ -426,6 +437,7 @@ export default function FirewallPage() {
           saving={saving}
           isEdit={!!editingRule}
           error={formError}
+          cilium={cilium}
           onSave={editingRule ? handleUpdate : handleCreate}
           onClose={() => {
             setFormError(null);
@@ -446,6 +458,7 @@ function PolicyModal({
   saving,
   isEdit,
   error,
+  cilium,
   onSave,
   onClose,
 }: {
@@ -455,6 +468,7 @@ function PolicyModal({
   saving: boolean;
   isEdit: boolean;
   error?: string | null;
+  cilium: boolean;
   onSave: () => void;
   onClose: () => void;
 }) {
@@ -465,6 +479,7 @@ function PolicyModal({
           <h2 className="text-lg font-semibold text-white">{title}</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="rounded p-1 text-neutral-400 hover:text-white hover:bg-surface-300 transition-colors"
           >
             <X className="h-5 w-5" />
@@ -522,7 +537,9 @@ function PolicyModal({
                   className="w-full rounded-lg border border-border bg-surface-100 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-none"
                 >
                   <option value="allow">Allow</option>
-                  <option value="deny">Deny</option>
+                  <option value="deny" disabled={!cilium}>
+                    {cilium ? "Deny" : "Deny (needs Cilium)"}
+                  </option>
                 </select>
               </div>
             </div>
@@ -623,29 +640,31 @@ function PolicyModal({
               />
             </div>
 
-            {/* FQDNs */}
-            <div className="mb-3">
-              <label className="block text-xs text-neutral-400 mb-1">
-                FQDNs (one per line, for egress)
-              </label>
-              <textarea
-                value={(form.config.fqdns ?? []).join("\n")}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    config: {
-                      ...form.config,
-                      fqdns: e.target.value
-                        .split("\n")
-                        .filter(Boolean),
-                    },
-                  })
-                }
-                rows={2}
-                placeholder="api.stripe.com&#10;*.googleapis.com"
-                className="w-full rounded-lg border border-border bg-surface-100 px-3 py-2 text-sm text-white font-mono placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
-              />
-            </div>
+            {/* FQDNs: egress only, enforced by Cilium */}
+            {cilium && form.direction === "egress" && (
+              <div className="mb-3">
+                <label className="block text-xs text-neutral-400 mb-1">
+                  FQDNs (one per line, for egress)
+                </label>
+                <textarea
+                  value={(form.config.fqdns ?? []).join("\n")}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      config: {
+                        ...form.config,
+                        fqdns: e.target.value
+                          .split("\n")
+                          .filter(Boolean),
+                      },
+                    })
+                  }
+                  rows={2}
+                  placeholder="api.stripe.com&#10;*.googleapis.com"
+                  className="w-full rounded-lg border border-border bg-surface-100 px-3 py-2 text-sm text-white font-mono placeholder:text-neutral-600 focus:border-accent-500 focus:outline-none"
+                />
+              </div>
+            )}
 
             {/* Namespaces */}
             <div>
