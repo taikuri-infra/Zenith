@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -66,8 +67,11 @@ func (h *NetworkPolicyHandler) ownedApp(c *fiber.Ctx) (*entities.App, error) {
 // ownedRule returns the rule in the URL if it belongs to the app in the URL.
 func (h *NetworkPolicyHandler) ownedRule(c *fiber.Ctx, appID string) (*entities.NetworkPolicyRule, error) {
 	rule, err := h.repo.Get(c.Context(), c.Params("ruleId"))
-	if err != nil || rule.AppID != appID {
+	if errors.Is(err, ports.ErrFirewallRuleNotFound) || (err == nil && rule.AppID != appID) {
 		return nil, fiber.NewError(fiber.StatusNotFound, "rule not found")
+	}
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "could not load rule")
 	}
 	return rule, nil
 }
@@ -76,17 +80,27 @@ func (h *NetworkPolicyHandler) cilium(ctx context.Context) bool {
 	return h.applier != nil && h.applier.Cilium(ctx)
 }
 
-// enforce applies the app's policy; the rule is already stored, so a failure
-// is reported but not rolled back (startup reconcile retries it).
-func (h *NetworkPolicyHandler) enforce(c *fiber.Ctx, appID string) error {
+// enforce applies the app's policy and reports whether it succeeded; the rule
+// is already stored, so a failure is not rolled back (startup reconcile retries it).
+func (h *NetworkPolicyHandler) enforce(c *fiber.Ctx, appID string) bool {
 	if h.applier == nil {
-		return nil
+		return true
 	}
 	if err := h.applier.Apply(c.Context(), appID); err != nil {
 		slog.Error("firewall policy not applied", "app_id", appID, "error", err)
-		return fiber.NewError(fiber.StatusBadGateway, "firewall rule saved but could not be applied; it will be retried")
+		return false
 	}
-	return nil
+	return true
+}
+
+// notApplied answers 502 with a reason, so clients can tell it apart from a
+// 502 returned by a proxy in front of the API.
+func notApplied(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+		"code":    fiber.StatusBadGateway,
+		"message": "firewall rule saved but could not be applied; it will be retried",
+		"reason":  "not_applied",
+	})
 }
 
 // ListRules returns all network policy rules for an app.
@@ -156,8 +170,8 @@ func (h *NetworkPolicyHandler) CreateRule(c *fiber.Ctx) error {
 	if err := h.repo.Create(c.Context(), &rule); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "could not save rule")
 	}
-	if err := h.enforce(c, app.ID); err != nil {
-		return err
+	if !h.enforce(c, app.ID) {
+		return notApplied(c)
 	}
 	return c.Status(fiber.StatusCreated).JSON(rule)
 }
@@ -202,8 +216,8 @@ func (h *NetworkPolicyHandler) UpdateRule(c *fiber.Ctx) error {
 	if err := h.repo.Update(c.Context(), rule); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "could not save rule")
 	}
-	if err := h.enforce(c, app.ID); err != nil {
-		return err
+	if !h.enforce(c, app.ID) {
+		return notApplied(c)
 	}
 	return c.JSON(rule)
 }
@@ -222,8 +236,8 @@ func (h *NetworkPolicyHandler) DeleteRule(c *fiber.Ctx) error {
 	if err := h.repo.Delete(c.Context(), rule.ID); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "could not delete rule")
 	}
-	if err := h.enforce(c, app.ID); err != nil {
-		return err
+	if !h.enforce(c, app.ID) {
+		return notApplied(c)
 	}
 	return c.JSON(fiber.Map{"message": "rule deleted"})
 }

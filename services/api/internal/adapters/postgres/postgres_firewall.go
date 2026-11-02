@@ -3,9 +3,12 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/dotechhq/zenith/services/api/internal/entities"
+	"github.com/dotechhq/zenith/services/api/internal/ports"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -59,7 +62,11 @@ func (r *FirewallRuleRepository) ListAll(ctx context.Context) ([]entities.Networ
 }
 
 func (r *FirewallRuleRepository) Get(ctx context.Context, id string) (*entities.NetworkPolicyRule, error) {
-	return scanFirewallRule(r.pool.QueryRow(ctx, `SELECT `+firewallCols+` FROM firewall_rules WHERE id = $1`, id))
+	rule, err := scanFirewallRule(r.pool.QueryRow(ctx, `SELECT `+firewallCols+` FROM firewall_rules WHERE id = $1`, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ports.ErrFirewallRuleNotFound
+	}
+	return rule, err
 }
 
 func (r *FirewallRuleRepository) Create(ctx context.Context, rule *entities.NetworkPolicyRule) error {

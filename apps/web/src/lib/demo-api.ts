@@ -1719,7 +1719,7 @@ const demoNetworkPolicyRules: NetworkPolicyRule[] = [
 ];
 
 export const demoNetworkPolicies = {
-  listRules: async (appId: string): Promise<{ rules: NetworkPolicyRule[]; total: number }> => {
+  listRules: async (appId: string): Promise<{ rules: NetworkPolicyRule[]; total: number; cilium?: boolean }> => {
     await delay();
     const rules = demoNetworkPolicyRules.filter((r) => r.app_id === appId || appId === "da-1");
     return { rules, total: rules.length };

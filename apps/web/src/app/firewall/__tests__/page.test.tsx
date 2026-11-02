@@ -48,11 +48,38 @@ describe("FirewallPage", () => {
   it("warns when a rule is saved but not applied", async () => {
     listRules.mockResolvedValue({ rules: [rule], total: 1 });
     updateRule.mockRejectedValue(
-      new ApiError(502, "Bad Gateway", { code: 502, message: "firewall rule saved but not applied: timeout" })
+      new ApiError(502, "Bad Gateway", { code: 502, message: "firewall rule saved but not applied: timeout", reason: "not_applied" })
     );
     render(<FirewallPage />);
     await screen.findByText("web-in");
     fireEvent.click(screen.getByTitle(/disable|enable|toggle/i));
     expect(await screen.findByText("firewall rule saved but not applied: timeout")).toBeInTheDocument();
+  });
+
+  it("keeps the form open on a proxy 502 without a reason", async () => {
+    listRules.mockResolvedValue({ rules: [], total: 0 });
+    createRule.mockRejectedValue(new ApiError(502, "Bad Gateway", null));
+    await openForm();
+    fireEvent.click(screen.getByRole("button", { name: "Create Rule" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Rule" })).toBeInTheDocument();
+  });
+
+  it("offers deny and FQDNs only with Cilium", async () => {
+    listRules.mockResolvedValue({ rules: [], total: 0, cilium: false });
+    await openForm();
+    expect((screen.getByRole("option", { name: /deny/i }) as HTMLOptionElement).disabled).toBe(true);
+    expect(screen.queryByText(/FQDNs/)).not.toBeInTheDocument();
+  });
+
+  it("clears an old form error when the form is opened again", async () => {
+    listRules.mockResolvedValue({ rules: [], total: 0 });
+    createRule.mockRejectedValue(new ApiError(400, "Bad Request", { code: 400, message: "invalid CIDR" }));
+    await openForm();
+    fireEvent.click(screen.getByRole("button", { name: "Create Rule" }));
+    await screen.findByText("invalid CIDR");
+    fireEvent.click(screen.getByLabelText("Close"));
+    fireEvent.click(screen.getByText("Add Rule"));
+    expect(screen.queryByText("invalid CIDR")).not.toBeInTheDocument();
   });
 });

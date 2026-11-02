@@ -59,7 +59,7 @@ func (r *FirewallRuleRepository) Get(_ context.Context, id string) (*entities.Ne
 	defer r.mu.RUnlock()
 	rule, ok := r.rules[id]
 	if !ok {
-		return nil, fmt.Errorf("firewall rule not found")
+		return nil, ports.ErrFirewallRuleNotFound
 	}
 	return &rule, nil
 }
